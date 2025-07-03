@@ -1,0 +1,44 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Journal entries
+      match /journalEntries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Kill list targets
+      match /killTargets/{targetId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Black mirror entries
+      match /blackMirrorEntries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Relapse radar entries
+      match /relapseEntries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Compass checks
+      match /compassChecks/{checkId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Black mirror collection (alternative structure)
+    match /blackMirror/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      match /entries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}

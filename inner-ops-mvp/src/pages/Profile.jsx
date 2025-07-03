@@ -1,0 +1,82 @@
+
+import React, { useState, useEffect } from 'react';
+import { auth } from '../firebase';
+import { updateProfile } from 'firebase/auth';
+
+export default function Profile() {
+  const [displayName, setDisplayName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (auth.currentUser) {
+      setDisplayName(auth.currentUser.displayName || '');
+    }
+  }, []);
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+
+    try {
+      await updateProfile(auth.currentUser, {
+        displayName: displayName
+      });
+      setMessage('Profile updated successfully!');
+    } catch (error) {
+      setMessage('Error updating profile: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h1 className="text-2xl font-bold text-white mb-6">Profile Settings</h1>
+        
+        <form onSubmit={handleUpdateProfile} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Display Name
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-full p-2 bg-gray-700 text-white rounded border border-gray-600"
+              placeholder="Enter your display name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={auth.currentUser?.email || ''}
+              disabled
+              className="w-full p-2 bg-gray-600 text-gray-400 rounded border border-gray-600"
+            />
+          </div>
+
+          {message && (
+            <div className={`text-sm ${message.includes('Error') ? 'text-red-400' : 'text-green-400'}`}>
+              {message}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white py-2 px-4 rounded"
+          >
+            {loading ? 'Updating...' : 'Update Profile'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
