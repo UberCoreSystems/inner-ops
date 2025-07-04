@@ -1,0 +1,63 @@
+// === FRONTEND (React) ===
+// components/ClarityKillList.jsx
+
+import React, { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { saveAs } from 'file-saver';
+
+const ClarityKillList = ({ userId }) => {
+  const [kills, setKills] = useState([]);
+
+  useEffect(() => {
+    const fetchKills = async () => {
+      const q = query(
+        collection(db, 'clarityKills'),
+        where('userId', '==', userId),
+        orderBy('timestamp', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setKills(data);
+    };
+
+    fetchKills();
+  }, [userId]);
+
+  const generateMarkdown = () => {
+    let md = `# 🧠 Clarity Kill List – Inner Ops Protocol\n**Date:** ${new Date().toISOString().split('T')[0]}\n**Operator:** ${userId}\n**Mission:** Eliminate threats to identity, discipline, and clarity.\n\n---\n`;
+    kills.forEach(kill => {
+      md += `## ☠️ Target: ${kill.name}\n`;
+      md += `**Threat Profile:** ${kill.profile}\n\n`;
+      md += `**Clarity Damage:** ${kill.damage}\n\n`;
+      md += `**Elimination Plan:** ${kill.plan}\n\n`;
+      md += `**Status:** ${kill.status}\n\n---\n`;
+    });
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    saveAs(blob, 'clarity_kill_list.md');
+  };
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">Clarity Kill List</h2>
+      <ul>
+        {kills.map(kill => (
+          <li key={kill.id} className="mb-4 p-4 border rounded">
+            <h3 className="text-lg font-semibold">☠️ {kill.name}</h3>
+            <p><strong>Threat:</strong> {kill.profile}</p>
+            <p><strong>Damage:</strong> {kill.damage}</p>
+            <p><strong>Plan:</strong> {kill.plan}</p>
+            <p><strong>Status:</strong> {kill.status}</p>
+          </li>
+        ))}
+      </ul>
+      <button 
+        onClick={generateMarkdown} 
+        className="mt-4 bg-black text-white px-4 py-2 rounded hover:bg-gray-800">
+        Export as Markdown
+      </button>
+    </div>
+  );
+};
+
+export default ClarityKillList;

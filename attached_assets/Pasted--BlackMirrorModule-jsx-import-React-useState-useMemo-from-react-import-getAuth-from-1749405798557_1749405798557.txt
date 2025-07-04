@@ -1,0 +1,125 @@
+// BlackMirrorModule.jsx
+import React, { useState, useMemo } from 'react';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
+
+const philosophers = [
+  "Nietzsche", "Camus", "Watts", "Krishnamurti", "Seneca", "Epictetus", "Lao Tzu"
+];
+
+function getRandomPhilosopherQuote() {
+  const quotes = [
+    "To live is to suffer, to survive is to find meaning in the suffering. - Nietzsche",
+    "The plague is not the phone. It is choosing illusion over absurdity. - Camus (adapted)",
+    "You are under no obligation to be the self your feed suggests. - Alan Watts (adapted)",
+    "To be well-adjusted to a sick society is not sanity. - Krishnamurti",
+    "He who is brave is free. - Seneca",
+    "Man is not worried by real problems so much as by his imagined anxieties. - Epictetus",
+    "When I let go of what I am, I become what I might be. - Lao Tzu"
+  ];
+  return quotes[Math.floor(Math.random() * quotes.length)];
+}
+
+export default function BlackMirrorModule() {
+  const [screenTime, setScreenTime] = useState('');
+  const [mentalFog, setMentalFog] = useState(5);
+  const [interactionLevel, setInteractionLevel] = useState(5);
+  const [unintentionalCheck, setUnintentionalCheck] = useState(false);
+  const auth = getAuth();
+  const db = getFirestore();
+  const navigate = useNavigate();
+
+  const blackMirrorIndex = useMemo(() => {
+    const fogWeight = 2;
+    const screenWeight = 3;
+    const interactionWeight = -2;
+    const checkPenalty = unintentionalCheck ? 5 : 0;
+    return screenWeight * parseInt(screenTime || 0) + fogWeight * mentalFog + interactionWeight * interactionLevel + checkPenalty;
+  }, [screenTime, mentalFog, interactionLevel, unintentionalCheck]);
+
+  const philosophicalInsight = useMemo(() => getRandomPhilosopherQuote(), []);
+
+  const saveData = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const summaryRef = doc(db, `blackMirror/${user.uid}_${Date.now()}`);
+    try {
+      await setDoc(summaryRef, {
+        timestamp: Date.now(),
+        screenTime,
+        mentalFog,
+        interactionLevel,
+        unintentionalCheck,
+        blackMirrorIndex,
+        philosophicalInsight
+      });
+      alert('Black Mirror entry saved. Stay conscious.');
+    } catch (error) {
+      console.error("Save failed:", error);
+    }
+  };
+
+  return (
+    <div className="p-6 text-white bg-gray-900 min-h-screen">
+      <h1 className="text-3xl font-bold mb-4">📱 Black Mirror: Reclaim the Mind</h1>
+
+      <div className="mb-4">
+        <label className="block mb-1">Daily Screen Time (hours)</label>
+        <input
+          type="number"
+          value={screenTime}
+          onChange={(e) => setScreenTime(e.target.value)}
+          className="w-full p-2 bg-gray-800 rounded"
+        />
+      </div>
+
+      <div className="mb-4">
+        <label className="block mb-1">Mental Fog (1–10)</label>
+        <input
+          type="range"
+          min="1"
+          max="10"
+          value={mentalFog}
+          onChange={(e) => setMentalFog(Number(e.target.value))}
+          className="w-full"
+        />
+        <p className="text-sm">Clarity: {11 - mentalFog}</p>
+      </div>
+
+      <div className="mb-4">
+        <label className="block mb-1">Real Social Interactions (1–10)</label>
+        <input
+          type="range"
+          min="1"
+          max="10"
+          value={interactionLevel}
+          onChange={(e) => setInteractionLevel(Number(e.target.value))}
+          className="w-full"
+        />
+      </div>
+
+      <div className="mb-4">
+        <label className="block mb-1">Did you check your phone unintentionally in the last 5 min?</label>
+        <input
+          type="checkbox"
+          checked={unintentionalCheck}
+          onChange={(e) => setUnintentionalCheck(e.target.checked)}
+          className="mr-2"
+        /> Yes
+      </div>
+
+      <div className="mb-4 p-4 bg-black border-l-4 border-red-500">
+        <p className="text-lg">🧠 Black Mirror Index: <span className="font-bold">{blackMirrorIndex}</span></p>
+        <p className="italic text-sm mt-2">Insight: “{philosophicalInsight}”</p>
+      </div>
+
+      <button
+        onClick={saveData}
+        className="mt-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+      >
+        Save Black Mirror Entry
+      </button>
+    </div>
+  );
+}
