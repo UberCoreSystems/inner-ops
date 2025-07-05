@@ -9,7 +9,7 @@ import Relapse from './pages/Relapse';
 import Profile from './pages/Profile';
 import Onboarding from './pages/Onboarding';
 import Navbar from './components/Navbar';
-import BlackMirror from './components/BlackMirror'; // Assuming BlackMirror component exists
+import BlackMirror from './components/BlackMirror';
 import './App.css';
 
 function App() {
@@ -17,7 +17,9 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing user in localStorage
+    // Log API key to confirm Vite environment variables are loading
+    console.log("🔥 VITE_FIREBASE_API_KEY:", import.meta.env.VITE_FIREBASE_API_KEY);
+
     const storedUser = localStorageUtils.getUser();
     if (storedUser) {
       setUser(storedUser);
@@ -52,42 +54,15 @@ function App() {
       <div className="min-h-screen bg-gray-900 text-white">
         {user && <Navbar onLogout={handleLogout} />}
         <Routes>
-          <Route 
-            path="/login" 
-            element={user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />} 
-          />
-          <Route 
-            path="/onboarding" 
-            element={user ? <Onboarding /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/dashboard" 
-            element={user ? <Dashboard /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/journal" 
-            element={user ? <Journal /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/relapse" 
-            element={user ? <Relapse /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/profile" 
-            element={user ? <Profile /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/killlist" 
-            element={user ? <KillList /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/blackmirror" 
-            element={user ? <BlackMirror /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/" 
-            element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} 
-          />
+          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />} />
+          <Route path="/onboarding" element={user ? <Onboarding /> : <Navigate to="/login" />} />
+          <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
+          <Route path="/journal" element={user ? <Journal /> : <Navigate to="/login" />} />
+          <Route path="/relapse" element={user ? <Relapse /> : <Navigate to="/login" />} />
+          <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
+          <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/login" />} />
+          <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/login" />} />
+          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
         </Routes>
       </div>
     </Router>
