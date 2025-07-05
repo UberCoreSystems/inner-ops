@@ -1,31 +1,26 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-// Only import analytics if needed
-// import { getAnalytics } from 'firebase/analytics';
 
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getAnalytics } from "firebase/analytics";
+
+// Firebase configuration for inner-ops project
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  // 🔥 Commented out to suppress analytics errors
-  // measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyCNO79Mw06MClVux9Fg1qC2-n1sj8mcyqI",
+  authDomain: "inner-ops.firebaseapp.com",
+  projectId: "inner-ops",
+  storageBucket: "inner-ops.firebasestorage.app",
+  messagingSenderId: "196049580582",
+  appId: "1:196049580582:web:fcd232716e233951946ce7",
+  measurementId: "G-K2L34NYKW5"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
+const analytics = getAnalytics(app);
 
-// Optional Analytics Init (disabled unless needed)
-// if (firebaseConfig.measurementId) {
-//   try {
-//     getAnalytics(app);
-//   } catch (err) {
-//     console.warn("⚠️ Analytics init failed:", err.message);
-//   }
-// }
-
-export { app, db, auth };
+export { auth, db, analytics };
+export default app;

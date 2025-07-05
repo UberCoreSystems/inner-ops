@@ -4,10 +4,6 @@ import { aiUtils } from '../utils/aiUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
-import { createJournalEntry, getJournalEntries } from '../utils/journalUtils';
-
-
-
 
 const moodOptions = [
   { emoji: '😊', label: 'Happy', value: 'happy' },
@@ -44,11 +40,10 @@ export default function Journal() {
     loadJournalEntries();
   }, []);
 
- const loadJournalEntries = async () => {
-  const savedEntries = await getJournalEntries();
-  setEntries(savedEntries);
-};
-  
+  const loadJournalEntries = async () => {
+    const savedEntries = await readUserData('journalEntries');
+    setEntries(savedEntries);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
