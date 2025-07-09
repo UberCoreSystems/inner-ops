@@ -10,6 +10,8 @@ export default function Navbar({ onLogout }) {
     { path: '/killlist', label: 'Kill List', icon: '🎯' },
     { path: '/blackmirror', label: 'Black Mirror', icon: '📱' },
     { path: '/relapse', label: 'Relapse', icon: '⚠️' },
+    { path: '/firebase-test', label: 'Firebase Test', icon: '🔥' },
+    { path: '/openai-test', label: 'OpenAI Test', icon: '🤖' },
   ];
 
   return (

@@ -2,7 +2,24 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow authenticated users to read/write their own data
+    
+    // TESTING RULES - Allow all reads and writes for development
+    // WARNING: These rules are for development only!
+    // Remove or restrict these rules before going to production
+    match /testCollection/{document=**} {
+      allow read, write: if true; // Allow all operations for testing (no auth required)
+    }
+    
+    // Allow any read/write to test collections without authentication
+    match /test/{document=**} {
+      allow read, write: if true;
+    }
+    
+    match /dev/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Allow authenticated users (including anonymous) to read/write their own data
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
       
@@ -32,13 +49,37 @@ service cloud.firestore {
       }
     }
     
-    // Black mirror collection (alternative structure)
+    // Black mirror collection (alternative structure) - allow anonymous users for testing
     match /blackMirror/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == userId || request.auth.token.firebase.sign_in_provider == 'anonymous');
       
       match /entries/{entryId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && 
+          (request.auth.uid == userId || request.auth.token.firebase.sign_in_provider == 'anonymous');
       }
+    }
+    
+    // Allow any authenticated user (including anonymous) to read/write main collections for testing
+    // Remove these rules in production and implement proper user-based security
+    match /journalEntries/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /killTargets/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /blackMirrorEntries/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /relapseEntries/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /compassChecks/{document=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }

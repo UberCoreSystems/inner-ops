@@ -10,6 +10,9 @@ import Profile from './pages/Profile';
 import Onboarding from './pages/Onboarding';
 import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
+import FirestoreTest from './components/FirestoreTest';
+import OpenAITest from './components/OpenAITest';
+import { checkFirebaseConnection } from './firebase';
 import './App.css';
 
 function App() {
@@ -18,7 +21,11 @@ function App() {
 
   useEffect(() => {
     // Log API key to confirm Vite environment variables are loading
-    console.log("🔥 VITE_FIREBASE_API_KEY:", import.meta.env.VITE_FIREBASE_API_KEY);
+    console.log("🔥 VITE_FIREBASE_API_KEY:", import.meta.env.VITE_FIREBASE_API_KEY ? "✅ Present" : "❌ Missing");
+    
+    // Check Firebase connection status
+    const firebaseStatus = checkFirebaseConnection();
+    console.log("🔍 Firebase Status on App Load:", firebaseStatus);
 
     const storedUser = localStorageUtils.getUser();
     if (storedUser) {
@@ -62,6 +69,8 @@ function App() {
           <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
           <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/login" />} />
           <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/login" />} />
+          <Route path="/firebase-test" element={<FirestoreTest />} />
+          <Route path="/openai-test" element={<OpenAITest />} />
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
         </Routes>
       </div>
