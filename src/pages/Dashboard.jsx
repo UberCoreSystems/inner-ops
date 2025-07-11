@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { readUserData } from '../utils/firebaseUtils';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
+import KillListDashboard from '../components/KillListDashboard';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -191,6 +192,13 @@ export default function Dashboard() {
             </div>
             <div className="text-3xl">🔥</div>
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        {/* Kill List Dashboard - Full Width */}
+        <div className="lg:col-span-3">
+          <KillListDashboard />
         </div>
       </div>
 

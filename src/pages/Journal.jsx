@@ -31,10 +31,7 @@ export default function Journal() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [aiReflections, setAiReflections] = useState([]);
-  const [aiFeedback, setAiFeedback] = useState('');
-  const [loadingFeedback, setLoadingFeedback] = useState(false);
-  const [showOracleModal, setShowOracleModal] = useState(false);
-  const [pendingOracleFeedback, setPendingOracleFeedback] = useState('');
+  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
 
   useEffect(() => {
     loadJournalEntries();
@@ -50,19 +47,20 @@ export default function Journal() {
     if (!entry.trim()) return;
 
     setLoading(true);
-    setLoadingFeedback(true);
 
     try {
-      // Generate AI feedback
+      // Generate AI feedback first
       const moodLabel = moodOptions.find(m => m.value === mood)?.label || mood;
       const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}`;
       const pastEntries = entries.slice(-3).map(e => e.content);
-      const feedback = await generateAIFeedback('Journal', inputText, pastEntries);
-      setLoadingFeedback(false);
+      
+      // Show Oracle modal with loading state
+      setOracleModal({ isOpen: true, content: '', isLoading: true });
 
-      // Show oracle modal with mystical presentation
-      setPendingOracleFeedback(feedback);
-      setShowOracleModal(true);
+      const feedback = await generateAIFeedback('journal', inputText, pastEntries);
+      
+      // Show Oracle feedback in modal
+      setOracleModal({ isOpen: true, content: feedback, isLoading: false });
 
       // Save entry with Oracle feedback
       const newEntry = await writeData('journalEntries', {
@@ -73,9 +71,19 @@ export default function Journal() {
       });
       setEntries(prev => [newEntry, ...prev]);
 
+      // Clear form
+      setEntry('');
+      setMood(moodOptions[0].value);
+      setIntensity(3);
+      setAiReflections([]);
+
     } catch (error) {
       console.error("Error saving journal entry:", error);
-      setLoadingFeedback(false);
+      setOracleModal({ 
+        isOpen: true, 
+        content: "The Oracle encounters interference in the cosmic currents... Your thoughts are still sacred. Please try again in a moment.", 
+        isLoading: false 
+      });
     } finally {
       setLoading(false);
     }
@@ -105,78 +113,6 @@ export default function Journal() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Oracle Judgment Modal */}
-          {showOracleModal && (
-            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 backdrop-blur-sm">
-              <div className="relative max-w-2xl mx-4 w-full">
-                {/* Mystical background effects */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-900/30 via-gray-900/50 to-black/70 rounded-lg animate-pulse"></div>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-500/10 to-transparent rounded-lg animate-pulse delay-1000"></div>
-
-                {/* Main modal content */}
-                <div className="relative bg-gray-900 border-2 border-blue-500/50 rounded-lg p-8 shadow-2xl">
-                  {/* Mystical header */}
-                  <div className="text-center mb-6">
-                    <div className="text-6xl mb-4 animate-bounce">📜</div>
-                    <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                      THE ORACLE'S WISDOM
-                    </h2>
-                    <div className="text-blue-300 text-sm mb-4 italic">
-                      "Your soul's journey echoes through the ages..."
-                    </div>
-                    <div className="w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent mb-6"></div>
-                  </div>
-
-                  {/* Oracle's wisdom */}
-                  <div className="mb-8">
-                    <div className="bg-black/50 border border-blue-500/30 rounded-lg p-6 relative overflow-hidden">
-                      {/* Mystical corner decorations */}
-                      <div className="absolute top-2 left-2 text-blue-400 text-xs">◢</div>
-                      <div className="absolute top-2 right-2 text-blue-400 text-xs">◣</div>
-                      <div className="absolute bottom-2 left-2 text-blue-400 text-xs">◥</div>
-                      <div className="absolute bottom-2 right-2 text-blue-400 text-xs">◤</div>
-
-                      <div className="text-blue-200 leading-relaxed whitespace-pre-line text-center font-medium">
-                        {pendingOracleFeedback}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Accept judgment button */}
-                  <div className="text-center">
-                    <button
-                      onClick={() => {
-                        setAiFeedback(pendingOracleFeedback);
-                        setShowOracleModal(false);
-                        setPendingOracleFeedback('');
-                      }}
-                      className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold px-8 py-3 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-blue-400/50"
-                    >
-                      Receive the Oracle's Wisdom
-                    </button>
-                    <div className="text-blue-400 text-xs mt-2 italic">
-                      "Truth illuminates the path of growth"
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* AI Philosophical Feedback */}
-          {(aiFeedback || loadingFeedback) && (
-            <div className="mt-4 p-4 bg-gray-900/50 border border-gray-600 rounded-lg">
-              <h3 className="text-gray-300 font-medium mb-3">📜 Oracle's Judgment</h3>
-              {loadingFeedback ? (
-                <div className="text-gray-400 italic">Consulting ancient wisdom...</div>
-              ) : (
-                <div className="text-gray-200 text-sm leading-relaxed whitespace-pre-line">
-                  {aiFeedback}
-                </div>
-              )}
             </div>
           )}
 
@@ -280,20 +216,6 @@ export default function Journal() {
             </div>
           </div>
 
-          {/* AI Philosophical Feedback near save button */}
-          {(aiFeedback || loadingFeedback) && (
-            <div className="mt-4 p-4 bg-gray-900/50 border border-gray-600 rounded-lg">
-              <h3 className="text-gray-300 font-medium mb-3">📜 Oracle's Judgment</h3>
-              {loadingFeedback ? (
-                <div className="text-gray-400 italic">Consulting ancient wisdom...</div>
-              ) : (
-                <div className="text-gray-200 text-sm leading-relaxed whitespace-pre-line">
-                  {aiFeedback}
-                </div>
-              )}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={loading || !entry.trim()}
@@ -347,12 +269,12 @@ export default function Journal() {
         )}
       </div>
 
-       {/* Oracle Modal */}
-       <OracleModal
-        isOpen={showOracleModal}
-        onClose={() => setShowOracleModal(false)}
-        feedback={aiFeedback}
-        loading={loadingFeedback}
+      {/* Oracle Modal */}
+      <OracleModal
+        isOpen={oracleModal.isOpen}
+        onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
+        content={oracleModal.content}
+        isLoading={oracleModal.isLoading}
       />
     </div>
   );

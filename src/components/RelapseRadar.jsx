@@ -49,9 +49,7 @@ const RelapseRadar = () => {
   const [loading, setLoading] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [aiInsights, setAiInsights] = useState([]);
-  const [aiFeedback, setAiFeedback] = useState('');
-  const [loadingFeedback, setLoadingFeedback] = useState(false);
-  const [showOracleModal, setShowOracleModal] = useState(false);
+  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -97,60 +95,45 @@ const RelapseRadar = () => {
     try {
       setLoading(true);
       
-      // Generate AI feedback first
-      setLoadingFeedback(true);
-      setShowOracleModal(true);
+      // Show Oracle modal with loading state
+      setOracleModal({ isOpen: true, content: '', isLoading: true });
+      
       const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}`;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
-      const oracleFeedback = await generateAIFeedback('Relapse', entryText, pastReflections);
-      setAiFeedback(oracleFeedback);
-      setLoadingFeedback(false);
+      const oracleFeedback = await generateAIFeedback('relapse', entryText, pastReflections);
       
-      // Wait for user to close the modal before saving
-      // We'll handle saving in the modal close handler
-      
-    } catch (error) {
-      console.error("Error generating Oracle feedback:", error);
-      setLoadingFeedback(false);
-      setLoading(false);
-    }
-  };
+      // Show Oracle feedback in modal
+      setOracleModal({ isOpen: true, content: oracleFeedback, isLoading: false });
 
-  const handleOracleModalClose = async () => {
-    try {
-      // Save the entry with Oracle feedback
+      // Save the entry with Oracle feedback immediately
       const entry = {
         selectedSelf,
         selectedHabits,
         substanceUse,
         reflection,
-        oracleFeedback: aiFeedback
+        oracleFeedback
       };
 
       await writeData('relapseEntries', entry);
+      setRelapseEntries(prev => [entry, ...prev]);
 
-      // Show success message
+      // Clear form
+      setSelectedSelf('');
+      setSelectedHabits([]);
+      setSubstanceUse([]);
+      setReflection('');
       setSubmitSuccess(true);
-
-      // Reload entries
-      await loadRelapseEntries();
-
-      // Reset form after delay
-      setTimeout(() => {
-        setStep(1);
-        setSelectedSelf('');
-        setSelectedHabits([]);
-        setSubstanceUse([]);
-        setReflection('');
-        setSubmitSuccess(false);
-        setAiFeedback('');
-      }, 2000);
-
+      setTimeout(() => setSubmitSuccess(false), 3000);
+      
     } catch (error) {
-      console.error("Error saving relapse entry:", error);
+      console.error("Error generating Oracle feedback:", error);
+      setOracleModal({ 
+        isOpen: true, 
+        content: "The Oracle senses disturbance in the spiritual realm... Your journey is still witnessed. Please try again in a moment.", 
+        isLoading: false 
+      });
     } finally {
       setLoading(false);
-      setShowOracleModal(false);
     }
   };
 
@@ -338,10 +321,10 @@ const RelapseRadar = () => {
 
       {/* Oracle Modal */}
       <OracleModal
-        isOpen={showOracleModal}
-        onClose={handleOracleModalClose}
-        feedback={aiFeedback}
-        loading={loadingFeedback}
+        isOpen={oracleModal.isOpen}
+        onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
+        content={oracleModal.content}
+        isLoading={oracleModal.isLoading}
       />
     </div>
   );
