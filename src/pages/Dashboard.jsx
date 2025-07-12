@@ -1,12 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getAuth } from 'firebase/auth';
 import { readUserData } from '../utils/firebaseUtils';
+import { enableAnonymousAuth } from '../firebase';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
 
 export default function Dashboard() {
+  const [user, setUser] = useState(null);
   const [stats, setStats] = useState({
     journalEntries: 0,
     relapseEntries: 0,
@@ -24,20 +27,126 @@ export default function Dashboard() {
     breakdown: {}
   });
 
+  const auth = getAuth();
+
+  // Authentication effect
   useEffect(() => {
-    loadDashboardData();
+    const authenticateUser = async () => {
+      if (!auth.currentUser) {
+        try {
+          console.log("🔐 Dashboard: No user found, attempting anonymous authentication...");
+          const authenticatedUser = await enableAnonymousAuth();
+          setUser(authenticatedUser);
+          console.log("✅ Dashboard: Anonymous authentication successful:", authenticatedUser.uid);
+        } catch (error) {
+          console.error("❌ Dashboard: Authentication failed:", error);
+        }
+      } else {
+        setUser(auth.currentUser);
+      }
+    };
+
+    authenticateUser();
+
+    // Listen for auth state changes
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      setUser(user);
+      if (user) {
+        console.log("👤 Dashboard: User authenticated:", user.uid);
+      }
+    });
+
+    // Add window debugging functions
+    window.debugDashboard = {
+      user: () => user,
+      auth: () => auth.currentUser,
+      reload: loadDashboardData,
+      testData: async () => {
+        console.log("🧪 Creating test data...");
+        try {
+          const { writeData } = await import('../utils/firebaseUtils.js');
+          const testEntry = await writeData('journalEntries', {
+            content: "Test entry from Dashboard debug",
+            mood: "🔥 Burning",
+            intensity: 8,
+            oracleJudgment: "This is a test Oracle judgment from the dashboard."
+          });
+          console.log("✅ Test entry created:", testEntry.id);
+          loadDashboardData(); // Reload dashboard after creating test data
+        } catch (error) {
+          console.error("❌ Test data creation failed:", error);
+        }
+      }
+    };
+
+    return () => {
+      unsubscribeAuth();
+      delete window.debugDashboard;
+    };
   }, []);
 
+  // Load data when user is authenticated
+  useEffect(() => {
+    if (user) {
+      loadDashboardData();
+    }
+  }, [user]);
+
   const loadDashboardData = async () => {
+    if (!user) {
+      console.log("⏳ Dashboard: Waiting for user authentication...");
+      return;
+    }
+
     try {
+      console.log("📡 Dashboard: Loading data for user:", user.uid);
+      
       // Load data in parallel for better performance
       const [journalEntries, relapseEntries, killTargets, compassChecks, blackMirrorEntries] = await Promise.all([
-        readUserData('journalEntries'),
-        readUserData('relapseEntries'),
-        readUserData('killTargets'),
-        readUserData('compassChecks'),
-        readUserData('blackMirrorEntries')
+        readUserData('journalEntries').then(data => {
+          console.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
+          if (data && data.length > 0) {
+            console.log("📔 Sample journal entry:", data[0]);
+          }
+          return data || [];
+        }),
+        readUserData('relapseEntries').then(data => {
+          console.log("⚠️ Dashboard: Relapse entries loaded:", data?.length || 0);
+          if (data && data.length > 0) {
+            console.log("⚠️ Sample relapse entry:", data[0]);
+          }
+          return data || [];
+        }),
+        readUserData('killTargets').then(data => {
+          console.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
+          if (data && data.length > 0) {
+            console.log("🎯 Sample kill target:", data[0]);
+          }
+          return data || [];
+        }),
+        readUserData('compassChecks').then(data => {
+          console.log("🧭 Dashboard: Compass checks loaded:", data?.length || 0);
+          if (data && data.length > 0) {
+            console.log("🧭 Sample compass check:", data[0]);
+          }
+          return data || [];
+        }),
+        readUserData('blackMirrorEntries').then(data => {
+          console.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
+          if (data && data.length > 0) {
+            console.log("📱 Sample black mirror entry:", data[0]);
+          }
+          return data || [];
+        })
       ]);
+
+      console.log("📊 Dashboard: Data loaded:", {
+        journalEntries: journalEntries.length,
+        relapseEntries: relapseEntries.length,
+        killTargets: killTargets.length,
+        compassChecks: compassChecks.length,
+        blackMirrorEntries: blackMirrorEntries.length
+      });
 
       // Calculate realistic streak days based on actual data
       let streakDays = 0;
@@ -90,16 +199,21 @@ export default function Dashboard() {
       const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
       setClarityScore({ ...scoreData, rank });
     } catch (error) {
-      console.error("Error loading dashboard data:", error);
+      console.error("❌ Dashboard: Error loading data:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
+  if (loading || !user) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">
+            {!user ? "Authenticating..." : "Loading dashboard..."}
+          </p>
+        </div>
       </div>
     );
   }
@@ -140,9 +254,46 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      </div>
+      </div>        {/* Firebase Status Debug Info */}
+        {user && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-blue-500/30">
+            <h2 className="text-lg font-bold text-blue-400 mb-3">🔧 Firebase Connection Status</h2>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-400">User:</span>
+                <span className="text-green-400 ml-2">{user.uid}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Auth Type:</span>
+                <span className="text-blue-400 ml-2">{user.isAnonymous ? 'Anonymous' : 'Authenticated'}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Project:</span>
+                <span className="text-purple-400 ml-2">{getAuth().app.options.projectId}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Loading:</span>
+                <span className="text-yellow-400 ml-2">{loading ? 'Yes' : 'No'}</span>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button 
+                onClick={() => window.debugDashboard?.reload()}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+              >
+                Reload Data
+              </button>
+              <button 
+                onClick={() => window.debugDashboard?.testData()}
+                className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+              >
+                Create Test Entry
+              </button>
+            </div>
+          </div>
+        )}
 
-      {/* Stats Grid */}
+        {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <div className="bg-gray-800 rounded-lg p-6">
           <div className="flex items-center justify-between">

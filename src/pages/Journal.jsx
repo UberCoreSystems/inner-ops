@@ -169,12 +169,14 @@ export default function Journal() {
               <label className="block text-gray-400 mb-2">Journal Prompts (click to use)</label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
                 {[
-                  "What illusion did I mistake for reality today?",
-                  "Which of my reactions revealed a hidden weakness?",
-                  "What fear am I feeding that keeps me small?",
-                  "Where did I betray my own standards today?",
-                  "What pattern keeps repeating that I refuse to see?",
-                  "If I could rebuild today with no excuses, what would change?"
+                  "What am I most grateful for today?",
+                  "What challenged me and how did I handle it?",
+                  "What patterns am I noticing in my behavior?",
+                  "What triggered strong emotions today?",
+                  "What would I do differently if I could replay today?",
+                  "What small win can I celebrate today?",
+                  "What fear held me back today?",
+                  "What am I learning about myself?"
                 ].map((prompt, idx) => (
                   <button
                     key={idx}
