@@ -6,14 +6,16 @@ import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 
 const moodOptions = [
-  { emoji: '😊', label: 'Happy', value: 'happy' },
-  { emoji: '😔', label: 'Sad', value: 'sad' },
-  { emoji: '😠', label: 'Angry', value: 'angry' },
-  { emoji: '😰', label: 'Anxious', value: 'anxious' },
-  { emoji: '😴', label: 'Tired', value: 'tired' },
-  { emoji: '😌', label: 'Calm', value: 'calm' },
-  { emoji: '🤔', label: 'Thoughtful', value: 'thoughtful' },
-  { emoji: '😕', label: 'Confused', value: 'confused' }
+  { emoji: '🔥', label: 'Burning', value: 'burning' },
+  { emoji: '🌊', label: 'Drowning', value: 'drowning' },
+  { emoji: '⚡', label: 'Electric', value: 'electric' },
+  { emoji: '🌫️', label: 'Foggy', value: 'foggy' },
+  { emoji: '🗡️', label: 'Sharp', value: 'sharp' },
+  { emoji: '🕳️', label: 'Hollow', value: 'hollow' },
+  { emoji: '🌪️', label: 'Chaotic', value: 'chaotic' },
+  { emoji: '🌑', label: 'Void', value: 'void' },
+  { emoji: '👑', label: 'Triumphant', value: 'triumphant' },
+  { emoji: '🌌', label: 'Transcendent', value: 'transcendent' }
 ];
 
 const intensityLevels = [
@@ -118,7 +120,7 @@ export default function Journal() {
 
           <div>
             <label className="block text-gray-400 mb-3">How are you feeling?</label>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               {moodOptions.map((option) => (
                 <button
                   key={option.value}
@@ -167,14 +169,12 @@ export default function Journal() {
               <label className="block text-gray-400 mb-2">Journal Prompts (click to use)</label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
                 {[
-                  "What am I most grateful for today?",
-                  "What challenged me and how did I handle it?",
-                  "What patterns am I noticing in my behavior?",
-                  "What triggered strong emotions today?",
-                  "What would I do differently if I could replay today?",
-                  "What small win can I celebrate today?",
-                  "What fear held me back today?",
-                  "What am I learning about myself?"
+                  "What illusion did I mistake for reality today?",
+                  "Which of my reactions revealed a hidden weakness?",
+                  "What fear am I feeding that keeps me small?",
+                  "Where did I betray my own standards today?",
+                  "What pattern keeps repeating that I refuse to see?",
+                  "If I could rebuild today with no excuses, what would change?"
                 ].map((prompt, idx) => (
                   <button
                     key={idx}
