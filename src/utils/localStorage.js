@@ -1,16 +1,47 @@
 export const localStorageUtils = {
+  // Helper function to safely parse JSON from localStorage
+  safeGetItem: (key, defaultValue = null) => {
+    try {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : defaultValue;
+    } catch (error) {
+      console.warn(`Failed to read ${key} from localStorage:`, error);
+      // Clear corrupted data
+      try {
+        localStorage.removeItem(key);
+      } catch (clearError) {
+        console.warn(`Failed to clear corrupted key ${key}:`, clearError);
+      }
+      return defaultValue;
+    }
+  },
+
+  // Helper function to safely set items in localStorage
+  safeSetItem: (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (error) {
+      console.warn(`Failed to write ${key} to localStorage:`, error);
+      return false;
+    }
+  },
+
   // User authentication
   setUser: (user) => {
-    localStorage.setItem('inner_ops_user', JSON.stringify(user));
+    return localStorageUtils.safeSetItem('inner_ops_user', user);
   },
 
   getUser: () => {
-    const user = localStorage.getItem('inner_ops_user');
-    return user ? JSON.parse(user) : null;
+    return localStorageUtils.safeGetItem('inner_ops_user', null);
   },
 
   removeUser: () => {
-    localStorage.removeItem('inner_ops_user');
+    try {
+      localStorage.removeItem('inner_ops_user');
+    } catch (error) {
+      console.warn('Failed to remove user from localStorage:', error);
+    }
   },
 
   // Kill targets
@@ -23,13 +54,12 @@ export const localStorageUtils = {
       userId: 'local_user'
     };
     targets.push(newTarget);
-    localStorage.setItem('inner_ops_kill_targets', JSON.stringify(targets));
-    return newTarget;
+    const success = localStorageUtils.safeSetItem('inner_ops_kill_targets', targets);
+    return success ? newTarget : null;
   },
 
   getKillTargets: () => {
-    const targets = localStorage.getItem('inner_ops_kill_targets');
-    return targets ? JSON.parse(targets) : [];
+    return localStorageUtils.safeGetItem('inner_ops_kill_targets', []);
   },
 
   updateKillTarget: (targetId, updates) => {
@@ -37,14 +67,15 @@ export const localStorageUtils = {
     const index = targets.findIndex(t => t.id === targetId);
     if (index !== -1) {
       targets[index] = { ...targets[index], ...updates };
-      localStorage.setItem('inner_ops_kill_targets', JSON.stringify(targets));
+      return localStorageUtils.safeSetItem('inner_ops_kill_targets', targets);
     }
+    return false;
   },
 
   deleteKillTarget: (targetId) => {
     const targets = localStorageUtils.getKillTargets();
     const filtered = targets.filter(t => t.id !== targetId);
-    localStorage.setItem('inner_ops_kill_targets', JSON.stringify(filtered));
+    return localStorageUtils.safeSetItem('inner_ops_kill_targets', filtered);
   },
 
   // Journal entries
