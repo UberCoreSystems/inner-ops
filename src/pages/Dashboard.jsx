@@ -105,37 +105,22 @@ export default function Dashboard() {
       const [journalEntries, relapseEntries, killTargets, compassChecks, blackMirrorEntries] = await Promise.all([
         readUserData('journalEntries').then(data => {
           console.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
-          if (data && data.length > 0) {
-            console.log("📔 Sample journal entry:", data[0]);
-          }
           return data || [];
         }),
         readUserData('relapseEntries').then(data => {
           console.log("⚠️ Dashboard: Relapse entries loaded:", data?.length || 0);
-          if (data && data.length > 0) {
-            console.log("⚠️ Sample relapse entry:", data[0]);
-          }
           return data || [];
         }),
         readUserData('killTargets').then(data => {
           console.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
-          if (data && data.length > 0) {
-            console.log("🎯 Sample kill target:", data[0]);
-          }
           return data || [];
         }),
         readUserData('compassChecks').then(data => {
           console.log("🧭 Dashboard: Compass checks loaded:", data?.length || 0);
-          if (data && data.length > 0) {
-            console.log("🧭 Sample compass check:", data[0]);
-          }
           return data || [];
         }),
         readUserData('blackMirrorEntries').then(data => {
           console.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
-          if (data && data.length > 0) {
-            console.log("📱 Sample black mirror entry:", data[0]);
-          }
           return data || [];
         })
       ]);

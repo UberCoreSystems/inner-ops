@@ -88,13 +88,12 @@ export const localStorageUtils = {
       userId: 'local_user'
     };
     entries.unshift(newEntry);
-    localStorage.setItem('inner_ops_journal_entries', JSON.stringify(entries));
-    return newEntry;
+    const success = localStorageUtils.safeSetItem('inner_ops_journal_entries', entries);
+    return success ? newEntry : null;
   },
 
   getJournalEntries: () => {
-    const entries = localStorage.getItem('inner_ops_journal_entries');
-    return entries ? JSON.parse(entries) : [];
+    return localStorageUtils.safeGetItem('inner_ops_journal_entries', []);
   },
 
   // Relapse entries
@@ -107,19 +106,17 @@ export const localStorageUtils = {
       userId: 'local_user'
     };
     entries.unshift(newEntry);
-    localStorage.setItem('inner_ops_relapse_entries', JSON.stringify(entries));
-    return newEntry;
+    const success = localStorageUtils.safeSetItem('inner_ops_relapse_entries', entries);
+    return success ? newEntry : null;
   },
 
   getRelapseEntries: () => {
-    const entries = localStorage.getItem('inner_ops_relapse_entries');
-    return entries ? JSON.parse(entries) : [];
+    return localStorageUtils.safeGetItem('inner_ops_relapse_entries', []);
   },
 
   // Compass checks
   getCompassChecks: () => {
-    const checks = localStorage.getItem('inner_ops_compass_checks');
-    return checks ? JSON.parse(checks) : [];
+    return localStorageUtils.safeGetItem('inner_ops_compass_checks', []);
   },
 
   saveCompassCheck: (check) => {
@@ -131,14 +128,13 @@ export const localStorageUtils = {
       userId: 'local_user'
     };
     checks.unshift(newCheck);
-    localStorage.setItem('inner_ops_compass_checks', JSON.stringify(checks));
-    return newCheck;
+    const success = localStorageUtils.safeSetItem('inner_ops_compass_checks', checks);
+    return success ? newCheck : null;
   },
 
   // Black Mirror methods
   getBlackMirrorEntries: () => {
-    const entries = localStorage.getItem('inner_ops_black_mirror_entries');
-    return entries ? JSON.parse(entries) : [];
+    return localStorageUtils.safeGetItem('inner_ops_black_mirror_entries', []);
   },
 
   saveBlackMirrorEntry: (data) => {
@@ -151,8 +147,7 @@ export const localStorageUtils = {
     };
 
     const updatedEntries = [newEntry, ...entries];
-    localStorage.setItem('inner_ops_black_mirror_entries', JSON.stringify(updatedEntries));
-
-    return newEntry;
+    const success = localStorageUtils.safeSetItem('inner_ops_black_mirror_entries', updatedEntries);
+    return success ? newEntry : null;
   },
 };
