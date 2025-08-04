@@ -165,6 +165,32 @@ export default function Dashboard() {
     }
   };
 
+  // Manual data migration function
+  const handleDataMigration = async () => {
+    if (!user) {
+      console.error("❌ No user found for migration");
+      return;
+    }
+
+    try {
+      console.log("🚀 Starting manual data migration...");
+      const migrationReport = await migrateLocalStorageToFirebase(user.uid);
+      
+      if (migrationReport.success.length > 0) {
+        console.log("✅ Migration successful:", migrationReport);
+        alert(`✅ Successfully migrated ${migrationReport.success.length} data types!`);
+        // Reload dashboard to show migrated data
+        loadDashboardData();
+      } else {
+        console.log("⚠️ No data to migrate:", migrationReport);
+        alert("No data found in localStorage to migrate.");
+      }
+    } catch (error) {
+      console.error("❌ Migration failed:", error);
+      alert(`❌ Migration failed: ${error.message}`);
+    }
+  };
+
   if (loading || !user) {
     return (
       <div className="flex items-center justify-center h-64">
