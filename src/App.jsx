@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { localStorageUtils } from './utils/localStorage';
+import { authService } from './utils/authService';
+import { getLocalStorageDataSummary } from './utils/dataRecovery';
 import KillList from './pages/KillList';
 import Journal from './pages/Journal';
 import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';
 import Relapse from './pages/Relapse';
 import Profile from './pages/Profile';
 import Onboarding from './pages/Onboarding';
@@ -12,12 +12,14 @@ import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
 import FirestoreTest from './components/FirestoreTest';
 import OpenAITest from './components/OpenAITest';
+import AuthForm from './components/AuthForm';
 import { checkFirebaseConnection } from './firebase';
 import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hasLocalData, setHasLocalData] = useState(false);
 
   useEffect(() => {
     // Log API key to confirm Vite environment variables are loading
@@ -27,30 +29,47 @@ function App() {
     const firebaseStatus = checkFirebaseConnection();
     console.log("🔍 Firebase Status on App Load:", firebaseStatus);
 
-    const storedUser = localStorageUtils.getUser();
-    if (storedUser) {
-      setUser(storedUser);
+    // Check for existing localStorage data
+    const dataSummary = getLocalStorageDataSummary();
+    if (dataSummary.hasData) {
+      console.log(`🎯 Found ${dataSummary.totalEntries} entries in localStorage that can be migrated`);
+      setHasLocalData(true);
     }
-    setLoading(false);
+
+    // Listen for authentication state changes
+    const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
+      console.log("🔐 Auth state changed:", firebaseUser?.uid || 'No user');
+      setUser(firebaseUser);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const handleLogin = (userData) => {
-    const user = { id: 'local_user', email: userData.email, ...userData };
-    localStorageUtils.setUser(user);
-    setUser(user);
+  const handleAuthSuccess = (authResult) => {
+    console.log("✅ Authentication successful:", authResult);
+    // User state will be updated automatically by onAuthStateChanged listener
+    
+    if (authResult.migrationReport?.success?.length > 0) {
+      console.log("🚀 Data migration completed during authentication");
+    }
   };
 
-  const handleLogout = () => {
-    localStorageUtils.removeUser();
-    setUser(null);
+  const handleLogout = async () => {
+    try {
+      await authService.signOut();
+      console.log("✅ Logged out successfully");
+    } catch (error) {
+      console.error("❌ Logout failed:", error);
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+      <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-lg">Loading...</p>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-500 mx-auto"></div>
+          <p className="mt-4 text-lg">Initializing Inner Ops...</p>
         </div>
       </div>
     );
@@ -59,19 +78,31 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-900 text-white">
-        {user && <Navbar onLogout={handleLogout} />}
+        {user && <Navbar onLogout={handleLogout} user={user} />}
         <Routes>
-          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />} />
-          <Route path="/onboarding" element={user ? <Onboarding /> : <Navigate to="/login" />} />
-          <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-          <Route path="/journal" element={user ? <Journal /> : <Navigate to="/login" />} />
-          <Route path="/relapse" element={user ? <Relapse /> : <Navigate to="/login" />} />
-          <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
-          <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/login" />} />
-          <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/login" />} />
+          <Route 
+            path="/auth" 
+            element={
+              user ? 
+                <Navigate to="/dashboard" /> : 
+                <AuthForm onAuthSuccess={handleAuthSuccess} hasLocalData={hasLocalData} />
+            } 
+          />
+          <Route path="/onboarding" element={user ? <Onboarding /> : <Navigate to="/auth" />} />
+          <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/auth" />} />
+          <Route path="/journal" element={user ? <Journal /> : <Navigate to="/auth" />} />
+          <Route path="/relapse" element={user ? <Relapse /> : <Navigate to="/auth" />} />
+          <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
+          <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/auth" />} />
+          <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/auth" />} />
+          
+          {/* Dev/Test Routes */}
           <Route path="/firebase-test" element={<FirestoreTest />} />
           <Route path="/openai-test" element={<OpenAITest />} />
-          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
+          
+          {/* Default Routes */}
+          <Route path="/login" element={<Navigate to="/auth" />} />
+          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/auth" />} />
         </Routes>
       </div>
     </Router>

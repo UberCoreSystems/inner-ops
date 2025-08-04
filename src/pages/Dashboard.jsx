@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getAuth } from 'firebase/auth';
 import { readUserData } from '../utils/firebaseUtils';
-import { enableAnonymousAuth } from '../firebase';
+import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
+import { inspectLocalStorageData, getLocalStorageDataSummary } from '../utils/dataRecovery';
+import { migrateLocalStorageToFirebase } from '../utils/dataMigration';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -27,61 +28,35 @@ export default function Dashboard() {
     breakdown: {}
   });
 
-  const auth = getAuth();
-
-  // Authentication effect
+  // Get current user from auth service
   useEffect(() => {
-    const authenticateUser = async () => {
-      if (!auth.currentUser) {
-        try {
-          console.log("🔐 Dashboard: No user found, attempting anonymous authentication...");
-          const authenticatedUser = await enableAnonymousAuth();
-          setUser(authenticatedUser);
-          console.log("✅ Dashboard: Anonymous authentication successful:", authenticatedUser.uid);
-        } catch (error) {
-          console.error("❌ Dashboard: Authentication failed:", error);
-        }
-      } else {
-        setUser(auth.currentUser);
-      }
-    };
+    const currentUser = authService.getCurrentUser();
+    setUser(currentUser);
+    console.log("👤 Dashboard: Current user:", currentUser?.uid);
+    
+    if (currentUser) {
+      loadDashboardData();
+    }
+  }, []);
 
-    authenticateUser();
-
-    // Listen for auth state changes
-    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
-      setUser(user);
-      if (user) {
-        console.log("👤 Dashboard: User authenticated:", user.uid);
-      }
-    });
-
-    // Add window debugging functions
-    window.debugDashboard = {
-      user: () => user,
-      auth: () => auth.currentUser,
-      reload: loadDashboardData,
-      testData: async () => {
-        console.log("🧪 Creating test data...");
-        try {
-          const { writeData } = await import('../utils/firebaseUtils.js');
-          const testEntry = await writeData('journalEntries', {
-            content: "Test entry from Dashboard debug",
-            mood: "🔥 Burning",
-            intensity: 8,
-            oracleJudgment: "This is a test Oracle judgment from the dashboard."
-          });
-          console.log("✅ Test entry created:", testEntry.id);
-          loadDashboardData(); // Reload dashboard after creating test data
-        } catch (error) {
-          console.error("❌ Test data creation failed:", error);
-        }
-      }
-    };
-
-    return () => {
-      unsubscribeAuth();
-      delete window.debugDashboard;
+  // Add debugging functions and check localStorage data
+  useEffect(() => {
+    console.log("🔍 Checking localStorage for existing data...");
+    const dataSummary = getLocalStorageDataSummary();
+    console.log("📊 Data Summary:", dataSummary);
+    
+    if (dataSummary.hasData) {
+      console.log(`✅ Found ${dataSummary.totalEntries} entries in localStorage!`);
+      console.log("📋 Data types found:", dataSummary.dataTypes);
+      console.log("💡 Your data is recoverable!");
+    } else {
+      console.log("❌ No data found in localStorage");
+    }
+    
+    // Add to window for manual inspection
+    window.dataRecovery = {
+      inspect: inspectLocalStorageData,
+      summary: getLocalStorageDataSummary
     };
   }, []);
 
