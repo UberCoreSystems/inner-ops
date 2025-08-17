@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './utils/authService';
-import { getLocalStorageDataSummary } from './utils/dataRecovery';
 import KillList from './pages/KillList';
 import Journal from './pages/Journal';
 import Dashboard from './pages/Dashboard';
@@ -19,7 +18,6 @@ import './App.css';
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [hasLocalData, setHasLocalData] = useState(false);
 
   useEffect(() => {
     // Log API key to confirm Vite environment variables are loading
@@ -28,13 +26,6 @@ function App() {
     // Check Firebase connection status
     const firebaseStatus = checkFirebaseConnection();
     console.log("🔍 Firebase Status on App Load:", firebaseStatus);
-
-    // Check for existing localStorage data
-    const dataSummary = getLocalStorageDataSummary();
-    if (dataSummary.hasData) {
-      console.log(`🎯 Found ${dataSummary.totalEntries} entries in localStorage that can be migrated`);
-      setHasLocalData(true);
-    }
 
     // Listen for authentication state changes
     const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
@@ -85,7 +76,7 @@ function App() {
             element={
               user ? 
                 <Navigate to="/dashboard" /> : 
-                <AuthForm onAuthSuccess={handleAuthSuccess} hasLocalData={hasLocalData} />
+                <AuthForm onAuthSuccess={handleAuthSuccess} />
             } 
           />
           <Route path="/onboarding" element={user ? <Onboarding /> : <Navigate to="/auth" />} />

@@ -9,7 +9,6 @@ import {
   updateProfile 
 } from 'firebase/auth';
 import { auth } from '../firebase';
-import { migrateLocalStorageToFirebase } from './dataMigration';
 
 export const authService = {
   // Register new user
@@ -27,17 +26,8 @@ export const authService = {
       
       console.log("✅ User registered successfully:", user.uid);
       
-      // Check if there's localStorage data to migrate
-      console.log("🔍 Checking for data to migrate...");
-      const migrationReport = await migrateLocalStorageToFirebase(user.uid);
-      
-      if (migrationReport.success.length > 0) {
-        console.log("🚀 Successfully migrated existing data to new account!");
-      }
-      
       return { 
         user, 
-        migrationReport,
         isNewUser: true 
       };
     } catch (error) {
@@ -117,15 +107,4 @@ export const authService = {
       message: errorMessages[error.code] || error.message || 'Authentication failed'
     };
   }
-};
-
-// Helper to check if we should migrate data for a new user
-export const shouldMigrateData = () => {
-  const hasLocalData = ['journalEntries', 'killTargets', 'relapseEntries']
-    .some(key => {
-      const data = localStorage.getItem(key);
-      return data && JSON.parse(data).length > 0;
-    });
-  
-  return hasLocalData;
 };

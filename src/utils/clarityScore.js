@@ -10,8 +10,6 @@ export const clarityScoreUtils = {
     KILL_TARGET_ADDED: 1, // Very low - just for tracking
     KILL_TARGET_PROGRESS: 2, // per 10% progress - actual work matters
     KILL_TARGET_COMPLETED: 25, // Completion is what really counts
-    COMPASS_CHECK: 5, // weekly bonus
-    COMPASS_HIGH_SCORE: 3, // bonus for 8+ average
     RELAPSE_AWARENESS: 8, // bonus for self-awareness and honesty
     RELAPSE_REFLECTION: 5, // additional bonus for detailed reflection
     BLACK_MIRROR_CHECK: 5, // weekly bonus
@@ -24,11 +22,10 @@ export const clarityScoreUtils = {
     const cacheKey = JSON.stringify({
       journalCount: userData.journalEntries?.length || 0,
       killCount: userData.killTargets?.length || 0,
-      compassCount: userData.compassChecks?.length || 0,
       relapseCount: userData.relapseEntries?.length || 0,
       blackMirrorCount: userData.blackMirrorEntries?.length || 0,
       lastUpdate: Math.max(
-        ...[userData.journalEntries, userData.killTargets, userData.compassChecks, userData.relapseEntries, userData.blackMirrorEntries]
+        ...[userData.journalEntries, userData.killTargets, userData.relapseEntries, userData.blackMirrorEntries]
           .filter(arr => arr && arr.length > 0)
           .map(arr => new Date(arr[0].createdAt).getTime())
       )
@@ -40,7 +37,7 @@ export const clarityScoreUtils = {
       return cached.result;
     }
 
-    const { journalEntries = [], killTargets = [], compassChecks = [], relapseEntries = [], blackMirrorEntries = [] } = userData;
+    const { journalEntries = [], killTargets = [], relapseEntries = [], blackMirrorEntries = [] } = userData;
     
     let totalScore = 0;
 
@@ -82,10 +79,6 @@ export const clarityScoreUtils = {
     killListScore = Math.floor(killListScore * completionMultiplier);
     totalScore += killListScore;
 
-    // Compass Check scoring (weekly bonus system)
-    const weeklyCompassBonuses = clarityScoreUtils.calculateWeeklyCompassBonuses(compassChecks);
-    totalScore += weeklyCompassBonuses;
-
     // Black Mirror scoring (weekly bonus system)
     const weeklyBlackMirrorBonuses = clarityScoreUtils.calculateWeeklyBlackMirrorBonuses(blackMirrorEntries);
     totalScore += weeklyBlackMirrorBonuses;
@@ -107,13 +100,11 @@ export const clarityScoreUtils = {
       totalScore: Math.floor(totalScore),
       journalStreak,
       killTargetsCompleted: killTargets.filter(t => t.progress === 100).length,
-      weeklyCompassChecks: Math.floor(compassChecks.length / 7),
       weeklyBlackMirrorChecks: Math.floor(blackMirrorEntries.length / 7),
       relapseAwarenessEntries: relapseEntries.length,
       breakdown: {
         journal: journalEntries.length * clarityScoreUtils.SCORING.JOURNAL_ENTRY,
         killList: killListScore,
-        compass: weeklyCompassBonuses,
         blackMirror: weeklyBlackMirrorBonuses,
         relapseAwareness: relapseAwarenessBonus,
         bonuses: journalStreak >= 7 ? (journalStreak >= 90 ? 130 : (journalStreak >= 30 ? 55 : 15)) : 0,
@@ -161,29 +152,6 @@ export const clarityScoreUtils = {
     }
     
     return streak;
-  },
-
-  // Calculate compass check weekly bonuses
-  calculateWeeklyCompassBonuses: (compassChecks) => {
-    let totalBonus = 0;
-    const weeksWithChecks = new Set();
-    
-    compassChecks.forEach(check => {
-      const checkDate = new Date(check.createdAt);
-      const weekKey = `${checkDate.getFullYear()}-${Math.floor(checkDate.getTime() / (7 * 24 * 60 * 60 * 1000))}`;
-      
-      if (!weeksWithChecks.has(weekKey)) {
-        weeksWithChecks.add(weekKey);
-        totalBonus += clarityScoreUtils.SCORING.COMPASS_CHECK;
-        
-        // Bonus for high scores (8+ average)
-        if (check.overallScore >= 8) {
-          totalBonus += clarityScoreUtils.SCORING.COMPASS_HIGH_SCORE;
-        }
-      }
-    });
-    
-    return totalBonus;
   },
 
   // Calculate black mirror check weekly bonuses

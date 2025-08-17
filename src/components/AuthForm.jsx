@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { authService } from '../utils/authService';
 
-export default function AuthForm({ onAuthSuccess, hasLocalData = false }) {
+export default function AuthForm({ onAuthSuccess }) {
   const [isSignIn, setIsSignIn] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
@@ -67,14 +67,6 @@ export default function AuthForm({ onAuthSuccess, hasLocalData = false }) {
               : 'Create your account to begin the inner war'
             }
           </p>
-          
-          {hasLocalData && !isSignIn && (
-            <div className="mt-4 p-3 bg-green-900/50 border border-green-500 rounded-lg">
-              <p className="text-green-400 text-sm">
-                🎯 We found your existing data! Creating an account will preserve all your entries.
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Form */}

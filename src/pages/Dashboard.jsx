@@ -6,8 +6,6 @@ import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
-import { inspectLocalStorageData, getLocalStorageDataSummary } from '../utils/dataRecovery';
-import { migrateLocalStorageToFirebase } from '../utils/dataMigration';
 import { auth } from '../firebase';
 
 export default function Dashboard() {
@@ -36,27 +34,20 @@ export default function Dashboard() {
     
     if (currentUser) {
       loadDashboardData();
-    }
-  }, []);
-
-  // Add debugging functions and check localStorage data
-  useEffect(() => {
-    console.log("🔍 Checking localStorage for existing data...");
-    const dataSummary = getLocalStorageDataSummary();
-    console.log("📊 Data Summary:", dataSummary);
-    
-    if (dataSummary.hasData) {
-      console.log(`✅ Found ${dataSummary.totalEntries} entries in localStorage!`);
-      console.log("📋 Data types found:", dataSummary.dataTypes);
-      console.log("💡 Your data is recoverable!");
     } else {
-      console.log("❌ No data found in localStorage");
+      setLoading(false); // Stop loading if no user
     }
-    
-    // Add to window for manual inspection
-    window.dataRecovery = {
-      inspect: inspectLocalStorageData,
-      summary: getLocalStorageDataSummary
+
+    // Add debugging function to window
+    window.debugDashboard = {
+      reloadData: () => loadDashboardData(),
+      checkAuth: () => ({
+        currentUser: authService.getCurrentUser(),
+        hasUser: !!authService.getCurrentUser()
+      }),
+      getStats: () => stats,
+      getRecentEntries: () => recentEntries,
+      getClarityScore: () => clarityScore
     };
   }, []);
 
@@ -100,7 +91,6 @@ export default function Dashboard() {
         journalEntries: journalEntries.length,
         relapseEntries: relapseEntries.length,
         killTargets: killTargets.length,
-        compassChecks: compassChecks.length,
         blackMirrorEntries: blackMirrorEntries.length
       });
 
@@ -139,7 +129,7 @@ export default function Dashboard() {
       // Generate AI action steps based on user data
       const userData = {
         recentMood: journalEntries[0]?.mood || 'neutral',
-        killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'completed').length / killTargets.length * 100) : 0
+        killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'killed').length / killTargets.length * 100) : 0
       };
       
       const actionSteps = aiUtils.generateActionSteps(userData);
@@ -150,36 +140,23 @@ export default function Dashboard() {
       const scoreData = await clarityScoreUtils.calculateClarityScore(allUserData);
       const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
       setClarityScore({ ...scoreData, rank });
+
+      console.log("✅ Dashboard: All data processing complete", {
+        stats: { 
+          journalEntries: journalEntries.length,
+          relapseEntries: relapseEntries.length,
+          killTargets: killTargets.length,
+          blackMirrorEntries: blackMirrorEntries.length,
+          streakDays: Math.max(0, streakDays)
+        },
+        recentEntries: allEntries.length,
+        clarityScore: scoreData.totalScore,
+        rank: rank.rank
+      });
     } catch (error) {
       console.error("❌ Dashboard: Error loading data:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Manual data migration function
-  const handleDataMigration = async () => {
-    if (!user) {
-      console.error("❌ No user found for migration");
-      return;
-    }
-
-    try {
-      console.log("🚀 Starting manual data migration...");
-      const migrationReport = await migrateLocalStorageToFirebase(user.uid);
-      
-      if (migrationReport.success.length > 0) {
-        console.log("✅ Migration successful:", migrationReport);
-        alert(`✅ Successfully migrated ${migrationReport.success.length} data types!`);
-        // Reload dashboard to show migrated data
-        loadDashboardData();
-      } else {
-        console.log("⚠️ No data to migrate:", migrationReport);
-        alert("No data found in localStorage to migrate.");
-      }
-    } catch (error) {
-      console.error("❌ Migration failed:", error);
-      alert(`❌ Migration failed: ${error.message}`);
     }
   };
 
@@ -256,16 +233,16 @@ export default function Dashboard() {
             </div>
             <div className="mt-3 flex gap-2">
               <button 
-                onClick={() => window.debugDashboard?.reload()}
+                onClick={() => window.debugDashboard?.reloadData()}
                 className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
               >
                 Reload Data
               </button>
               <button 
-                onClick={() => window.debugDashboard?.testData()}
+                onClick={() => console.log('Debug Info:', window.debugDashboard?.checkAuth(), window.debugDashboard?.getStats())}
                 className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
               >
-                Create Test Entry
+                Debug Info
               </button>
             </div>
           </div>
