@@ -147,6 +147,40 @@ export const readTestData = async (collectionName) => {
 
 export const readData = readUserData;
 
+// Write user data (for collections like arrays of entries)
+export const writeUserData = async (collectionName, dataArray) => {
+  try {
+    const user = await ensureAuthenticated();
+    console.log(`📝 Writing user data collection: ${collectionName} with ${Array.isArray(dataArray) ? dataArray.length : 1} items`);
+    
+    if (Array.isArray(dataArray)) {
+      // Write each item in the array as a separate document
+      const writePromises = dataArray.map(item => {
+        const payload = {
+          ...item,
+          userId: user.uid,
+          timestamp: item.timestamp || serverTimestamp(),
+          isAnonymous: user.isAnonymous || false
+        };
+        return addDoc(collection(db, collectionName), payload);
+      });
+      
+      const results = await Promise.all(writePromises);
+      console.log(`✅ Successfully wrote ${results.length} documents to ${collectionName}`);
+      return results.map((docRef, index) => ({
+        id: docRef.id,
+        ...dataArray[index]
+      }));
+    } else {
+      // Single object - write as one document
+      return await writeData(collectionName, dataArray);
+    }
+  } catch (error) {
+    console.error(`❌ Failed to write user data to ${collectionName}:`, error);
+    throw error;
+  }
+};
+
 // Simple write test that doesn't require any authentication
 export const writeTestDataNoAuth = async (collectionName, data) => {
   try {

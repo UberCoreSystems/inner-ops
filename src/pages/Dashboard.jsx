@@ -8,6 +8,7 @@ import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
 import { inspectLocalStorageData, getLocalStorageDataSummary } from '../utils/dataRecovery';
 import { migrateLocalStorageToFirebase } from '../utils/dataMigration';
+import { auth } from '../firebase';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -15,8 +16,7 @@ export default function Dashboard() {
     journalEntries: 0,
     relapseEntries: 0,
     streakDays: 0,
-    killTargets: 0,
-    compassChecks: 0
+    killTargets: 0
   });
   const [recentEntries, setRecentEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +77,7 @@ export default function Dashboard() {
       console.log("📡 Dashboard: Loading data for user:", user.uid);
       
       // Load data in parallel for better performance
-      const [journalEntries, relapseEntries, killTargets, compassChecks, blackMirrorEntries] = await Promise.all([
+      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries] = await Promise.all([
         readUserData('journalEntries').then(data => {
           console.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
@@ -88,10 +88,6 @@ export default function Dashboard() {
         }),
         readUserData('killTargets').then(data => {
           console.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
-          return data || [];
-        }),
-        readUserData('compassChecks').then(data => {
-          console.log("🧭 Dashboard: Compass checks loaded:", data?.length || 0);
           return data || [];
         }),
         readUserData('blackMirrorEntries').then(data => {
@@ -128,7 +124,6 @@ export default function Dashboard() {
         relapseEntries: relapseEntries.length,
         streakDays: Math.max(0, streakDays),
         killTargets: killTargets.length,
-        compassChecks: compassChecks.length,
         blackMirrorEntries: blackMirrorEntries.length
       });
 
@@ -136,7 +131,6 @@ export default function Dashboard() {
       const allEntries = [
         ...journalEntries.slice(0, 3).map(e => ({ ...e, type: 'journal' })),
         ...relapseEntries.slice(0, 2).map(e => ({ ...e, type: 'relapse' })),
-        ...compassChecks.slice(0, 2).map(e => ({ ...e, type: 'compass' })),
         ...blackMirrorEntries.slice(0, 2).map(e => ({ ...e, type: 'blackmirror' }))
       ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
 
@@ -145,16 +139,14 @@ export default function Dashboard() {
       // Generate AI action steps based on user data
       const userData = {
         recentMood: journalEntries[0]?.mood || 'neutral',
-        killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'completed').length / killTargets.length * 100) : 0,
-        compassOverall: compassChecks.length > 0 ? 
-          (Object.values(compassChecks[0]).filter(v => typeof v === 'number').reduce((a, b) => a + b, 0) / 5) : 5
+        killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'completed').length / killTargets.length * 100) : 0
       };
       
       const actionSteps = aiUtils.generateActionSteps(userData);
       setAiActionSteps(actionSteps);
 
-      // Calculate clarity score
-      const allUserData = { journalEntries, relapseEntries, killTargets, compassChecks, blackMirrorEntries };
+      // Calculate clarity score  
+      const allUserData = { journalEntries, relapseEntries, killTargets, blackMirrorEntries };
       const scoreData = await clarityScoreUtils.calculateClarityScore(allUserData);
       const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
       setClarityScore({ ...scoreData, rank });
@@ -255,7 +247,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <span className="text-gray-400">Project:</span>
-                <span className="text-purple-400 ml-2">{getAuth().app.options.projectId}</span>
+                <span className="text-purple-400 ml-2">{auth.app?.options?.projectId || 'Not connected'}</span>
               </div>
               <div>
                 <span className="text-gray-400">Loading:</span>

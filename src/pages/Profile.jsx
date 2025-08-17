@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { auth } from '../firebase';
+import { authService } from '../utils/authService';
 import { updateProfile } from 'firebase/auth';
 
 export default function Profile() {
@@ -9,8 +9,9 @@ export default function Profile() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (auth.currentUser) {
-      setDisplayName(auth.currentUser.displayName || '');
+    const currentUser = authService.getCurrentUser();
+    if (currentUser) {
+      setDisplayName(currentUser.displayName || '');
     }
   }, []);
 
@@ -20,10 +21,15 @@ export default function Profile() {
     setMessage('');
 
     try {
-      await updateProfile(auth.currentUser, {
-        displayName: displayName
-      });
-      setMessage('Profile updated successfully!');
+      const currentUser = authService.getCurrentUser();
+      if (currentUser) {
+        await updateProfile(currentUser, {
+          displayName: displayName
+        });
+        setMessage('Profile updated successfully!');
+      } else {
+        setMessage('Error: No user is currently signed in');
+      }
     } catch (error) {
       setMessage('Error updating profile: ' + error.message);
     } finally {
@@ -56,7 +62,7 @@ export default function Profile() {
             </label>
             <input
               type="email"
-              value={auth.currentUser?.email || ''}
+              value={authService.getCurrentUser()?.email || ''}
               disabled
               className="w-full p-2 bg-gray-600 text-gray-400 rounded border border-gray-600"
             />

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { getAuth } from 'firebase/auth';
 import { 
   collection, 
   addDoc, 
@@ -12,7 +11,8 @@ import {
   updateDoc,
   deleteDoc
 } from 'firebase/firestore';
-import { db, enableAnonymousAuth } from '../firebase';
+import { db } from '../firebase';
+import { authService } from '../utils/authService';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
@@ -32,9 +32,7 @@ const KillList = () => {
   const [reflectionNotes, setReflectionNotes] = useState({});
   const [showReflection, setShowReflection] = useState({});
   const [updatingReflection, setUpdatingReflection] = useState({});
-
-  const auth = getAuth();
-  const [user, setUser] = useState(auth.currentUser);
+  const [user, setUser] = useState(null);
 
   // Kill target categories
   const categories = [
@@ -47,34 +45,15 @@ const KillList = () => {
     { value: 'other', label: '🎯 Other', color: 'text-gray-400' }
   ];
 
-  // Authentication effect
+  // Get current user from auth service
   useEffect(() => {
-    const authenticateUser = async () => {
-      if (!auth.currentUser) {
-        try {
-          console.log("🔐 No user found, attempting anonymous authentication...");
-          const authenticatedUser = await enableAnonymousAuth();
-          setUser(authenticatedUser);
-          console.log("✅ Anonymous authentication successful:", authenticatedUser.uid);
-        } catch (error) {
-          console.error("❌ Authentication failed:", error);
-        }
-      } else {
-        setUser(auth.currentUser);
-      }
-    };
-
-    authenticateUser();
-
-    // Listen for auth state changes
-    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
-      setUser(user);
-      if (user) {
-        console.log("👤 User authenticated:", user.uid);
-      }
-    });
-
-    return () => unsubscribeAuth();
+    const currentUser = authService.getCurrentUser();
+    setUser(currentUser);
+    console.log("👤 KillList: Current user:", currentUser?.uid);
+    
+    if (currentUser) {
+      loadTargets();
+    }
   }, []);
 
   // Get today's date in YYYY-MM-DD format
@@ -83,7 +62,7 @@ const KillList = () => {
   };
 
   // Load targets from Firebase with real-time updates
-  useEffect(() => {
+  const loadTargets = () => {
     if (!user) {
       console.log("⏳ Waiting for user authentication...");
       return;
@@ -113,6 +92,14 @@ const KillList = () => {
     });
 
     return () => unsubscribe();
+  };
+
+  // Set up real-time listener when user changes
+  useEffect(() => {
+    if (user) {
+      const unsubscribe = loadTargets();
+      return unsubscribe;
+    }
   }, [user]);
 
   const addTarget = async () => {

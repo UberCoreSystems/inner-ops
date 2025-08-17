@@ -1,7 +1,7 @@
 // Data Migration Utility for Inner Ops
 // Migrates data from localStorage to Firebase with proper user authentication
 
-import { writeUserData, readUserData } from './firebaseUtils';
+import { writeData, writeUserData, readUserData } from './firebaseUtils';
 import { getLocalStorageDataSummary, exportLocalStorageData } from './dataRecovery';
 
 export const migrateLocalStorageToFirebase = async (userId) => {
