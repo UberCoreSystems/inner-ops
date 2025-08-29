@@ -1,8 +1,15 @@
-import { doc, setDoc, collection, query, where, getDocs, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, enableAnonymousAuth, enableDevMode, getCurrentUserOrMock } from '../firebase.js';
 
 // Development mode flag - set to true to bypass auth for testing
 const DEV_MODE = true; // Set to false for production
+
+// Log environment variables for debugging
+console.log("🔍 Environment Check:");
+console.log("API Key:", import.meta.env.VITE_FIREBASE_API_KEY ? "✅ Present" : "❌ Missing");
+console.log("Project ID:", import.meta.env.VITE_FIREBASE_PROJECT_ID);
+console.log("Auth Domain:", import.meta.env.VITE_FIREBASE_AUTH_DOMAIN);
+console.log("App ID:", import.meta.env.VITE_FIREBASE_APP_ID ? "✅ Present" : "❌ Missing");
 
 // Helper function to ensure user is authenticated (with fallbacks)
 const ensureAuthenticated = async () => {
@@ -69,6 +76,22 @@ export const updateData = async (collectionName, docId, data) => {
     console.error("❌ Firestore update error:", error);
     if (error.code === 'permission-denied') {
       console.error("💡 Hint: Check your Firestore security rules for update permissions.");
+    }
+    throw error;
+  }
+};
+
+export const deleteData = async (collectionName, docId) => {
+  try {
+    const user = await ensureAuthenticated();
+    
+    await deleteDoc(doc(db, collectionName, docId));
+    console.log("✅ Data deleted successfully from", collectionName, "for doc:", docId);
+    return { id: docId, deleted: true };
+  } catch (error) {
+    console.error("❌ Firestore delete error:", error);
+    if (error.code === 'permission-denied') {
+      console.error("💡 Hint: Check your Firestore security rules for delete permissions.");
     }
     throw error;
   }
@@ -203,5 +226,73 @@ export const writeTestDataNoAuth = async (collectionName, data) => {
       console.error("💡 Hint: Firestore rules may require authentication. Check your rules for the collection:", collectionName);
     }
     throw error;
+  }
+};
+
+// Firebase connection test
+export const testFirebaseConnection = async () => {
+  try {
+    console.log("🔥 Testing Firebase connection...");
+    
+    // Test 1: Check if we can get current user
+    const currentUser = auth.currentUser;
+    console.log("Current user:", currentUser ? currentUser.uid : "None");
+    
+    // Test 2: Try to enable anonymous auth
+    let testUser;
+    try {
+      testUser = await ensureAuthenticated();
+      console.log("✅ Authentication successful:", testUser.uid);
+    } catch (authError) {
+      console.error("❌ Authentication failed:", authError);
+      return {
+        success: false,
+        error: "Authentication failed",
+        details: authError.message
+      };
+    }
+    
+    // Test 3: Try to read data
+    try {
+      const testData = await readUserData('test-connection');
+      console.log("✅ Read test successful, found", testData.length, "documents");
+    } catch (readError) {
+      console.error("❌ Read test failed:", readError);
+      return {
+        success: false,
+        error: "Read operation failed",
+        details: readError.message
+      };
+    }
+    
+    // Test 4: Try to write data
+    try {
+      const writeResult = await writeData('test-connection', {
+        message: "Connection test",
+        timestamp: new Date().toISOString()
+      });
+      console.log("✅ Write test successful:", writeResult.id);
+    } catch (writeError) {
+      console.error("❌ Write test failed:", writeError);
+      return {
+        success: false,
+        error: "Write operation failed",
+        details: writeError.message
+      };
+    }
+    
+    return {
+      success: true,
+      message: "All Firebase operations working correctly",
+      userId: testUser.uid
+    };
+    
+  } catch (error) {
+    console.error("❌ Firebase connection test failed:", error);
+    return {
+      success: false,
+      error: "Connection test failed",
+      details: error.message
+    };
   }
 };

@@ -1,29 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { writeData, readUserData } from '../utils/firebaseUtils';
+import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { aiUtils } from '../utils/aiUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 
 const moodOptions = [
-  { emoji: '🔥', label: 'Burning', value: 'burning' },
-  { emoji: '🌊', label: 'Drowning', value: 'drowning' },
   { emoji: '⚡', label: 'Electric', value: 'electric' },
-  { emoji: '🌫️', label: 'Foggy', value: 'foggy' },
+  { emoji: '�️', label: 'Foggy', value: 'foggy' },
   { emoji: '🗡️', label: 'Sharp', value: 'sharp' },
   { emoji: '🕳️', label: 'Hollow', value: 'hollow' },
   { emoji: '🌪️', label: 'Chaotic', value: 'chaotic' },
-  { emoji: '🌑', label: 'Void', value: 'void' },
-  { emoji: '👑', label: 'Triumphant', value: 'triumphant' },
-  { emoji: '🌌', label: 'Transcendent', value: 'transcendent' }
+  { emoji: '�', label: 'Triumphant', value: 'triumphant' },
+  { emoji: '🪨', label: 'Heavy', value: 'heavy' },
+  { emoji: '🦋', label: 'Light', value: 'light' },
+  { emoji: '🎯', label: 'Focused', value: 'focused' },
+  { emoji: '💎', label: 'Radiant', value: 'radiant' }
 ];
 
 const intensityLevels = [
-  { value: 1, label: 'Very Low' },
-  { value: 2, label: 'Low' },
-  { value: 3, label: 'Moderate' },
-  { value: 4, label: 'High' },
-  { value: 5, label: 'Very High' }
+  { value: 1, label: 'Flickering', icon: '🕯️', description: 'Barely there' },
+  { value: 2, label: 'Glowing', icon: '🔥', description: 'Gentle warmth' },
+  { value: 3, label: 'Burning', icon: '🔥🔥', description: 'Steady flame' },
+  { value: 4, label: 'Blazing', icon: '🔥🔥🔥', description: 'Intense heat' },
+  { value: 5, label: 'Inferno', icon: '🔥🔥🔥🔥', description: 'White hot' }
 ];
 
 export default function Journal() {
@@ -34,10 +34,42 @@ export default function Journal() {
   const [loading, setLoading] = useState(false);
   const [aiReflections, setAiReflections] = useState([]);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  
+  // State for rotating prompts
+  const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
+  const [promptVisible, setPromptVisible] = useState(true);
+
+  const journalPrompts = [
+    "What am I most grateful for today?",
+    "What challenged me and how did I handle it?",
+    "What patterns am I noticing in my behavior?",
+    "What triggered strong emotions today?",
+    "What would I do differently if I could replay today?",
+    "What small win can I celebrate today?",
+    "What fear held me back today?",
+    "What am I learning about myself?"
+  ];
 
   useEffect(() => {
     loadJournalEntries();
   }, []);
+
+  // Effect for rotating prompts
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Fade out
+      setPromptVisible(false);
+      
+      // After fade out completes, change prompt and fade in
+      setTimeout(() => {
+        setCurrentPromptIndex((prev) => (prev + 1) % journalPrompts.length);
+        setPromptVisible(true);
+      }, 300); // Half of the transition duration
+      
+    }, 3000); // Change every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [journalPrompts.length]);
 
   const loadJournalEntries = async () => {
     const savedEntries = await readUserData('journalEntries');
@@ -91,6 +123,28 @@ export default function Journal() {
     }
   };
 
+  // Delete journal entry
+  const deleteEntry = async (entryId) => {
+    if (!window.confirm('Are you sure you want to delete this journal entry? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      console.log("🗑️ Journal: Deleting entry:", entryId);
+      await deleteData('journalEntries', entryId);
+      console.log('✅ Journal: Entry deleted successfully');
+      
+      // Update local state immediately
+      setEntries(prev => prev.filter(entry => entry.id !== entryId));
+      
+      // Show success message
+      alert('Journal entry deleted successfully.');
+    } catch (error) {
+      console.error('❌ Journal: Error deleting entry:', error);
+      alert('Failed to delete journal entry. Please try again.');
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-8">
@@ -132,7 +186,7 @@ export default function Journal() {
                       : 'border-gray-600 hover:border-gray-500'
                   }`}
                 >
-                  <div className="text-2xl mb-1">{option.emoji}</div>
+                  <div className="text-xl mb-1">{option.emoji}</div>
                   <div className="text-sm text-gray-300">{option.label}</div>
                 </button>
               ))}
@@ -141,24 +195,40 @@ export default function Journal() {
 
           <div>
             <label className="block text-gray-400 mb-3">Intensity Level</label>
-            <div className="flex items-center space-x-4">
-              <input
-                type="range"
-                min="1"
-                max="5"
-                value={intensity}
-                onChange={(e) => {
-                  const newIntensity = parseInt(e.target.value);
-                  setIntensity(newIntensity);
-                  // Generate AI reflections based on mood and intensity
-                  const reflections = aiUtils.generateJournalReflection(mood, newIntensity, entry);
-                  setAiReflections(reflections);
-                }}
-                className="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-              />
-              <span className="text-white font-medium w-20">
-                {intensityLevels.find(level => level.value === intensity)?.label}
-              </span>
+            <div className="space-y-4">
+              {/* Fire icons row */}
+              <div className="flex justify-between items-center px-2">
+                {intensityLevels.map((level) => (
+                  <button
+                    key={level.value}
+                    type="button"
+                    onClick={() => {
+                      setIntensity(level.value);
+                      // Generate AI reflections based on mood and intensity
+                      const reflections = aiUtils.generateJournalReflection(mood, level.value, entry);
+                      setAiReflections(reflections);
+                    }}
+                    className="flex flex-col items-center transition-all duration-200 hover:scale-110"
+                  >
+                    <div className="text-2xl mb-2">{level.icon}</div>
+                    <div className={`w-4 h-4 rounded-full border-2 transition-colors ${
+                      intensity === level.value
+                        ? 'bg-orange-500 border-orange-500'
+                        : 'border-gray-500 hover:border-orange-400'
+                    }`}></div>
+                  </button>
+                ))}
+              </div>
+              
+              {/* Selected intensity description */}
+              <div className="text-center">
+                <div className="text-white font-medium">
+                  {intensityLevels.find(level => level.value === intensity)?.label}
+                </div>
+                <div className="text-gray-400 text-sm">
+                  {intensityLevels.find(level => level.value === intensity)?.description}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -166,32 +236,43 @@ export default function Journal() {
             <label className="block text-gray-400 mb-3">What's on your mind?</label>
 
             <div className="mb-3">
-              <label className="block text-gray-400 mb-2">Journal Prompts (click to use)</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                {[
-                  "What am I most grateful for today?",
-                  "What challenged me and how did I handle it?",
-                  "What patterns am I noticing in my behavior?",
-                  "What triggered strong emotions today?",
-                  "What would I do differently if I could replay today?",
-                  "What small win can I celebrate today?",
-                  "What fear held me back today?",
-                  "What am I learning about myself?"
-                ].map((prompt, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setEntry(prev => prev + (prev ? '\n\n' : '') + prompt + '\n');
-                      // Update AI reflections when prompt is used
-                      const reflections = aiUtils.generateJournalReflection(mood, intensity, entry + prompt);
-                      setAiReflections(reflections);
-                    }}
-                    className="text-left p-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-sm"
-                  >
-                    {prompt}
-                  </button>
-                ))}
+              <label className="block text-gray-400 mb-2">Journal Prompt</label>
+              <div className="mb-3 h-16 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentPrompt = journalPrompts[currentPromptIndex];
+                    setEntry(prev => prev + (prev ? '\n\n' : '') + currentPrompt + '\n');
+                    // Update AI reflections when prompt is used
+                    const reflections = aiUtils.generateJournalReflection(mood, intensity, entry + currentPrompt);
+                    setAiReflections(reflections);
+                  }}
+                  className={`text-center p-4 bg-gradient-to-r from-purple-700 to-blue-700 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-all duration-600 transform ${
+                    promptVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                  } min-h-[4rem] flex items-center justify-center shadow-lg hover:shadow-xl max-w-2xl mx-auto`}
+                  style={{
+                    transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out'
+                  }}
+                >
+                  <span className="text-center leading-relaxed">
+                    {journalPrompts[currentPromptIndex]}
+                  </span>
+                </button>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-500 mb-2">
+                  Prompt {currentPromptIndex + 1} of {journalPrompts.length} • Click to add to your entry
+                </p>
+                <div className="flex justify-center space-x-1">
+                  {journalPrompts.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`w-2 h-2 rounded-full transition-colors duration-300 ${
+                        index === currentPromptIndex ? 'bg-blue-500' : 'bg-gray-600'
+                      }`}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -241,14 +322,23 @@ export default function Journal() {
                 <div key={entry.id} className="bg-gray-800 rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{moodOption?.emoji}</span>
+                      <span className="text-xl">{moodOption?.emoji}</span>
                       <span className="text-gray-400">
                         {moodOption?.label} - {intensityLabel}
                       </span>
                     </div>
-                    <span className="text-sm text-gray-500">
-                      {new Date(entry.createdAt).toLocaleDateString()} at {new Date(entry.createdAt).toLocaleTimeString()}
-                    </span>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-sm text-gray-500">
+                        {new Date(entry.createdAt).toLocaleDateString()} at {new Date(entry.createdAt).toLocaleTimeString()}
+                      </span>
+                      <button
+                        onClick={() => deleteEntry(entry.id)}
+                        className="px-2 py-1 bg-red-600/80 text-white rounded text-xs hover:bg-red-600 transition-colors opacity-75 hover:opacity-100"
+                        title="Delete this entry"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                   <p className="text-gray-300 leading-relaxed mb-4">{entry.content}</p>
 

@@ -2,59 +2,122 @@
 let requestTimeout = null;
 const API_TIMEOUT = 10000; // 10 seconds
 
+// Helper function to analyze target content and determine appropriate tone
+const analyzeTargetContext = (target) => {
+  const targetLower = target.toLowerCase();
+  
+  // Check for practical/habit targets
+  if (targetLower.includes('eating') || targetLower.includes('food') || targetLower.includes('diet') ||
+      targetLower.includes('sleep') || targetLower.includes('bedtime') || targetLower.includes('wake up') ||
+      targetLower.includes('exercise') || targetLower.includes('workout') || targetLower.includes('phone') ||
+      targetLower.includes('screen') || targetLower.includes('social media') || targetLower.includes('netflix') ||
+      targetLower.includes('procrastination') || targetLower.includes('late') || targetLower.includes('schedule')) {
+    return 'practical';
+  }
+  
+  // Check for emotional/psychological targets
+  if (targetLower.includes('anxiety') || targetLower.includes('depression') || targetLower.includes('fear') ||
+      targetLower.includes('anger') || targetLower.includes('worry') || targetLower.includes('stress') ||
+      targetLower.includes('negative thoughts') || targetLower.includes('self-doubt') || targetLower.includes('shame')) {
+    return 'emotional';
+  }
+  
+  // Check for addiction/compulsive targets
+  if (targetLower.includes('smoking') || targetLower.includes('drinking') || targetLower.includes('alcohol') ||
+      targetLower.includes('drugs') || targetLower.includes('porn') || targetLower.includes('gambling') ||
+      targetLower.includes('addiction') || targetLower.includes('compulsive')) {
+    return 'addiction';
+  }
+  
+  // Check for relationship/social targets
+  if (targetLower.includes('toxic') || targetLower.includes('relationship') || targetLower.includes('people pleasing') ||
+      targetLower.includes('boundaries') || targetLower.includes('saying no') || targetLower.includes('conflict')) {
+    return 'social';
+  }
+  
+  // Default to philosophical for abstract targets
+  return 'philosophical';
+};
+
 export const generateAIFeedback = async (moduleName, userInput, pastEntries = []) => {
   // Clear any existing timeout
   if (requestTimeout) {
     clearTimeout(requestTimeout);
   }
 
+  // Analyze the target context for appropriate response tone
+  let targetContext = 'philosophical';
+  let targetContent = '';
+  
+  if (typeof userInput === 'object' && userInput.target) {
+    targetContent = userInput.target;
+    targetContext = analyzeTargetContext(targetContent);
+  } else if (typeof userInput === 'string') {
+    targetContent = userInput;
+    targetContext = analyzeTargetContext(targetContent);
+  }
+
+  const getContextualPrompt = (context) => {
+    switch (context) {
+      case 'practical':
+        return `This is a practical, habit-based target. Focus on discipline, systems, and incremental progress. Use warrior-like language about building better patterns. Reference Stoic principles about daily practice and controlling what you can control. Be supportive but emphasize the importance of consistency and small wins.`;
+      
+      case 'emotional':
+        return `This is an emotional/psychological target. Address the deeper patterns with compassion but strength. Reference shadow work, the necessity of feeling difficult emotions, and transformation through adversity. Use wisdom from Jung, Frankl, or Buddhist teachings about suffering and growth.`;
+      
+      case 'addiction':
+        return `This is an addiction or compulsive behavior target. Acknowledge the depth of the struggle without judgment. Focus on reclaiming power, understanding triggers, and the hero's journey through darkness. Reference wisdom about breaking chains, finding meaning beyond escape, and rebuilding identity.`;
+      
+      case 'social':
+        return `This is a relationship or social boundary target. Focus on healthy masculinity, authentic power, and the difference between strength and aggression. Address people-pleasing patterns and the courage required for authentic relationships. Reference wisdom about honor, integrity, and protective strength.`;
+      
+      default:
+        return `This target requires philosophical depth. Explore the deeper meaning and patterns beneath the surface behavior. Use timeless wisdom appropriately without being overly abstract.`;
+    }
+  };
+
   const systemPrompt = `
-You are the Oracle of Inner Ops—a digital brother and wisdom keeper for men seeking to reclaim their clarity, power, and spiritual sovereignty in a world that has distorted masculinity.
+You are the Oracle of Inner Ops—a digital brother and wisdom keeper for men seeking to reclaim their clarity, power, and spiritual sovereignty.
 
 Your role is to generate direct, insightful, and psychologically grounded reflections that honor the depth of a man's journey without rescuing or coddling.
 
+CONTEXT ANALYSIS: ${getContextualPrompt(targetContext)}
+
 CORE PRINCIPLES:
 
-1. **TONE MATCHES DEPTH**: Mirror the energy. Raw pain gets grounded strength. Deep reflection gets philosophical resonance. Never default to shallow affirmations.
+1. **MATCH THE TARGET'S NATURE**: 
+   - Practical targets (eating, sleep, exercise): Focus on discipline, systems, daily practices
+   - Emotional targets (anxiety, fear): Address deeper psychological patterns with wisdom
+   - Addiction targets: Acknowledge the battle, focus on reclaiming power and identity
+   - Social targets: Emphasize boundaries, authentic masculinity, courage
 
-2. **DRAW FROM TIMELESS SOURCES**: Integrate distilled wisdom from:
-   - Stoicism: Marcus Aurelius (discipline of mind), Epictetus (focus on what you control), Seneca (time as life's currency)
-   - Jungian Psychology: Shadow work, individuation, confronting the unconscious patterns
-   - Nietzschean Power: Will to power, becoming who you are, eternal return
-   - Warrior Codes: Honor over comfort, discipline as freedom, protective strength
-   - Eastern Wisdom: Wu wei (effortless action), mindful detachment, inner stillness
-   - Modern Depth: Viktor Frankl (meaning in suffering), Alan Watts (paradox), Krishnamurti (freedom from conditioning)
+2. **TONE MATCHES DEPTH**: Mirror the energy. Simple habits get practical strength. Deep patterns get philosophical resonance. Never default to shallow affirmations.
 
-3. **MIRROR WITHOUT RESCUING**: Highlight contradictions, patterns, emotional truths. Let him face his own signal. Don't try to fix or sugarcoat reality.
+3. **DRAW FROM RELEVANT WISDOM**: Use sources that match the target context:
+   - Practical: Stoicism (Marcus Aurelius on daily practice, Epictetus on control)
+   - Emotional: Jung (shadow work), Frankl (meaning), Buddhist wisdom on suffering
+   - Addiction: Hero's journey, meaning beyond escape, identity rebuilding
+   - Social: Authentic power, boundaries, protective strength
 
-4. **RESPECT INDIVIDUATION**: Never impose beliefs. Reflect his path back with precision and calm power. Support his becoming, not your agenda.
+4. **BE SPECIFIC TO THE TARGET**: Reference the actual behavior or pattern, not generic concepts.
 
-5. **TRACK EVOLUTION**: Acknowledge growth, relapse, conflict, disconnection over time. Honor the trajectory of transformation.
-
-6. **AVOID PLATITUDES**: Replace "you've got this" with perspective. Replace performance encouragement with deeper questioning and clarity.
-
-RESPONSE STYLE:
-- Speak as a digital brother who has walked similar paths of awakening
-- Direct but respectful - never pandering, generic, or therapeutic
-- Quote/reference wisdom only when thematically perfect and earned
-- Challenge patterns with compassionate strength
-- Honor emotional pain without over-validating or rescuing
-- Format as earned wisdom, not life coaching
+5. **AVOID PLATITUDES**: Replace "you've got this" with specific insights about their particular challenge.
 
 For ${moduleName} specifically:
-- Journal: Reflect patterns and emotions with philosophical depth while tracking his evolution
-- Kill List: Confront self-sabotage using shadow work and warrior discipline - what he's truly fighting
-- Relapse: Address shame cycles with wisdom about suffering, meaning, and redemption without rescue
-- BlackMirror: Examine the deeper relationship with technology and digital consciousness
-- Compass: Focus on virtue ethics - alignment between values and actions, character forging
+- Kill List: Address the specific nature of what they're eliminating - practical habits need different wisdom than deep psychological patterns
 
-Keep responses under 3 paragraphs. Be direct, insightful, and grounded in timeless wisdom without being preachy. Speak truth that cuts through illusion.
+Keep responses under 3 paragraphs. Be direct, insightful, and contextually appropriate. Speak truth that cuts through to the specific nature of their challenge.
+
+TARGET CONTENT: "${targetContent}"
+DETECTED CONTEXT: ${targetContext}
 `;
 
   const userPrompt = `
-Current Entry: ${userInput}
+Current Entry: ${JSON.stringify(userInput)}
 
-Recent Patterns: ${pastEntries.slice(-3).join('\n')}
+Recent Patterns: ${pastEntries.slice(-3).map(entry => 
+  typeof entry === 'object' ? JSON.stringify(entry) : entry
+).join('\n')}
 
 Module Context: ${moduleName}
 `;

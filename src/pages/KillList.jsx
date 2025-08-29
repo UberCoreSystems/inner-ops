@@ -1,18 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-  collection, 
-  addDoc, 
-  serverTimestamp,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  doc,
-  updateDoc,
-  deleteDoc
-} from 'firebase/firestore';
-import { db } from '../firebase';
 import { authService } from '../utils/authService';
+import { writeData, readUserData, updateData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
@@ -61,44 +49,28 @@ const KillList = () => {
     return new Date().toISOString().split('T')[0];
   };
 
-  // Load targets from Firebase with real-time updates
-  const loadTargets = () => {
+  // Load targets from Firebase
+  const loadTargets = async () => {
     if (!user) {
-      console.log("⏳ Waiting for user authentication...");
+      console.log("⏳ KillList: Waiting for user authentication...");
       return;
     }
 
-    console.log("📡 Setting up real-time listener for user:", user.uid);
-
-    const q = query(
-      collection(db, 'killTargets'),
-      where('userId', '==', user.uid || 'anonymous'),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const targetsData = [];
-      querySnapshot.forEach((doc) => {
-        targetsData.push({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt)
-        });
-      });
-      console.log(`📋 Loaded ${targetsData.length} kill targets for user ${user.uid}`);
+    try {
+      console.log("📡 KillList: Loading targets for user:", user.uid);
+      const targetsData = await readUserData('killTargets');
+      console.log(`📋 KillList: Loaded ${targetsData.length} kill targets`);
       setTargets(targetsData);
-    }, (error) => {
-      console.error('❌ Error loading targets:', error);
-    });
-
-    return () => unsubscribe();
+    } catch (error) {
+      console.error('❌ KillList: Error loading targets:', error);
+      setTargets([]);
+    }
   };
 
   // Set up real-time listener when user changes
   useEffect(() => {
     if (user) {
-      const unsubscribe = loadTargets();
-      return unsubscribe;
+      loadTargets();
     }
   }, [user]);
 
@@ -106,6 +78,8 @@ const KillList = () => {
     if (!newTarget.trim() || loading) return;
 
     setLoading(true);
+    console.log("🎯 Adding new kill target:", newTarget.trim());
+    
     try {
       const targetData = {
         title: newTarget.trim(),
@@ -114,14 +88,19 @@ const KillList = () => {
         status: 'active',
         priority: 'medium',
         progress: 0,
-        userId: user?.uid || 'anonymous',
         targetDate: getTodaysDate(),
-        createdAt: serverTimestamp(),
-        lastUpdated: serverTimestamp()
+        createdAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString()
       };
 
-      const docRef = await addDoc(collection(db, 'killTargets'), targetData);
-      console.log('✅ Kill target added:', docRef.id);
+      console.log("📝 Target data to save:", targetData);
+
+      // Use writeData from firebaseUtils for consistent saving
+      const savedTarget = await writeData('killTargets', targetData);
+      console.log('✅ Kill target saved successfully:', savedTarget.id);
+      
+      // Update local state immediately for better UX
+      setTargets(prev => [savedTarget, ...prev]);
       
       setNewTarget('');
       setNewTargetCategory('bad-habit');
@@ -147,7 +126,8 @@ const KillList = () => {
         });
       }
     } catch (error) {
-      console.error('Error adding target:', error);
+      console.error('❌ Error adding target:', error);
+      alert(`Failed to save kill target: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -155,19 +135,28 @@ const KillList = () => {
 
   const updateProgress = async (targetId, newProgress) => {
     try {
-      const targetRef = doc(db, 'killTargets', targetId);
-      const updateData = {
+      console.log("📊 KillList: Updating progress for target:", targetId, "to", newProgress);
+      
+      const targetUpdate = {
         progress: newProgress,
-        lastUpdated: serverTimestamp()
+        lastUpdated: new Date()
       };
 
       // If progress reaches 100%, mark as killed
       if (newProgress >= 100) {
-        updateData.status = 'killed';
-        updateData.completedAt = serverTimestamp();
+        targetUpdate.status = 'killed';
+        targetUpdate.completedAt = new Date();
       }
 
-      await updateDoc(targetRef, updateData);
+      await updateData('killTargets', targetId, targetUpdate);
+      console.log("✅ KillList: Progress updated successfully");
+
+      // Update local state immediately
+      setTargets(prev => prev.map(target => 
+        target.id === targetId 
+          ? { ...target, ...targetUpdate }
+          : target
+      ));
 
       // Show Oracle feedback for completion
       if (newProgress >= 100) {
@@ -199,10 +188,80 @@ const KillList = () => {
 
   const deleteTarget = async (targetId) => {
     try {
-      await deleteDoc(doc(db, 'killTargets', targetId));
-      console.log('✅ Target deleted:', targetId);
+      console.log("🗑️ KillList: Deleting target:", targetId);
+      await deleteData('killTargets', targetId);
+      console.log('✅ KillList: Target deleted successfully');
+      
+      // Update local state immediately
+      setTargets(prev => prev.filter(target => target.id !== targetId));
     } catch (error) {
-      console.error('Error deleting target:', error);
+      console.error('❌ KillList: Error deleting target:', error);
+      alert('Failed to delete target. Please try again.');
+    }
+  };
+
+  const markAsEscaped = async (targetId) => {
+    try {
+      console.log("🏃 KillList: Marking target as escaped:", targetId);
+      
+      const targetUpdate = {
+        status: 'escaped',
+        escapedAt: new Date(),
+        lastUpdated: new Date()
+      };
+
+      await updateData('killTargets', targetId, targetUpdate);
+      console.log("✅ KillList: Target marked as escaped");
+
+      // Update local state immediately
+      setTargets(prev => prev.map(target => 
+        target.id === targetId 
+          ? { ...target, ...targetUpdate }
+          : target
+      ));
+
+      // Show Oracle feedback for escaped target
+      const escapedTarget = targets.find(t => t.id === targetId);
+      setOracleModal({ isOpen: true, content: '', isLoading: true });
+      
+      try {
+        const feedback = await getAIFeedback(
+          `The user has marked "${escapedTarget?.title}" as escaped. This target proved too difficult to eliminate right now. Provide encouraging wisdom about strategic retreat, regrouping, and future attempts. Keep it under 100 words.`,
+          { targetTitle: escapedTarget?.title, targetType: 'escaped' }
+        );
+        setOracleModal({ isOpen: true, content: feedback, isLoading: false });
+      } catch (error) {
+        console.error('Error getting Oracle feedback for escaped target:', error);
+        setOracleModal({ isOpen: false, content: '', isLoading: false });
+      }
+    } catch (error) {
+      console.error('❌ KillList: Error marking target as escaped:', error);
+      alert('Failed to mark target as escaped. Please try again.');
+    }
+  };
+
+  const reactivateTarget = async (targetId) => {
+    try {
+      console.log("🎯 KillList: Reactivating escaped target:", targetId);
+      
+      const targetUpdate = {
+        status: 'active',
+        reactivatedAt: new Date(),
+        lastUpdated: new Date()
+      };
+
+      await updateData('killTargets', targetId, targetUpdate);
+      console.log("✅ KillList: Target reactivated successfully");
+
+      // Update local state immediately
+      setTargets(prev => prev.map(target => 
+        target.id === targetId 
+          ? { ...target, ...targetUpdate }
+          : target
+      ));
+    } catch (error) {
+      console.error('❌ KillList: Error reactivating target:', error);
+      alert('Failed to reactivate target. Please try again.');
     }
   };
 
@@ -215,16 +274,25 @@ const KillList = () => {
     if (!editValue.trim()) return;
 
     try {
-      const targetRef = doc(db, 'killTargets', editingTarget);
-      await updateDoc(targetRef, {
+      console.log("✏️ KillList: Saving edit for target:", editingTarget);
+      await updateData('killTargets', editingTarget, {
         title: editValue.trim(),
-        lastUpdated: serverTimestamp()
+        lastUpdated: new Date()
       });
+
+      // Update local state immediately
+      setTargets(prev => prev.map(target => 
+        target.id === editingTarget 
+          ? { ...target, title: editValue.trim(), lastUpdated: new Date() }
+          : target
+      ));
 
       setEditingTarget(null);
       setEditValue('');
+      console.log("✅ KillList: Target title updated successfully");
     } catch (error) {
-      console.error('Error updating target:', error);
+      console.error('❌ KillList: Error updating target:', error);
+      alert('Failed to update target. Please try again.');
     }
   };
 
@@ -372,13 +440,37 @@ const KillList = () => {
                   )}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => startEditing(target)}
                   className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
                 >
                   Edit
                 </button>
+                {target.status !== 'killed' && target.status !== 'escaped' && (
+                  <>
+                    <button
+                      onClick={() => updateProgress(target.id, 100)}
+                      className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 font-medium"
+                    >
+                      ⚡ Kill Now
+                    </button>
+                    <button
+                      onClick={() => markAsEscaped(target.id)}
+                      className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+                    >
+                      🏃 Escaped
+                    </button>
+                  </>
+                )}
+                {target.status === 'escaped' && (
+                  <button
+                    onClick={() => reactivateTarget(target.id)}
+                    className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+                  >
+                    🎯 Reactivate
+                  </button>
+                )}
                 <button
                   onClick={() => deleteTarget(target.id)}
                   className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
@@ -391,26 +483,71 @@ const KillList = () => {
         </div>
 
         {editingTarget !== target.id && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-400">Progress</span>
               <span className="text-sm font-medium text-white">{target.progress || 0}%</span>
             </div>
-            <div className="w-full bg-gray-700 rounded-full h-2">
+            
+            {/* Visual Progress Bar */}
+            <div className="w-full bg-gray-700 rounded-full h-3 border border-gray-600">
               <div
-                className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(target.progress || 0)}`}
+                className={`h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(target.progress || 0)}`}
                 style={{ width: `${target.progress || 0}%` }}
               ></div>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={target.progress || 0}
-              onChange={(e) => updateProgress(target.id, parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-              disabled={target.status === 'killed'}
-            />
+            
+            {/* Interactive Range Slider */}
+            {target.status !== 'killed' && (
+              <div className="relative">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={target.progress || 0}
+                  onChange={(e) => updateProgress(target.id, parseInt(e.target.value))}
+                  className="w-full h-3 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                  style={{
+                    background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${target.progress || 0}%, #374151 ${target.progress || 0}%, #374151 100%)`
+                  }}
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>0%</span>
+                  <span>25%</span>
+                  <span>50%</span>
+                  <span>75%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            )}
+
+            {/* Killed Status Message */}
+            {target.status === 'killed' && (
+              <div className="text-center p-3 bg-green-900/20 border border-green-500/30 rounded-lg">
+                <span className="text-green-400 font-medium">🎯 TARGET ELIMINATED</span>
+                {target.completedAt && (
+                  <div className="text-xs text-green-300 mt-1">
+                    Completed: {new Date(target.completedAt).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Escaped Status Message */}
+            {target.status === 'escaped' && (
+              <div className="text-center p-3 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+                <span className="text-yellow-400 font-medium">🏃 TARGET ESCAPED</span>
+                {target.escapedAt && (
+                  <div className="text-xs text-yellow-300 mt-1">
+                    Escaped: {new Date(target.escapedAt).toLocaleDateString()}
+                  </div>
+                )}
+                <div className="text-xs text-yellow-200 mt-1">
+                  Sometimes strategic retreat is necessary. Regroup and try again when ready.
+                </div>
+              </div>
+            )}
 
             {/* Reflection Notes Section */}
             <div className="border-t border-gray-600 pt-3 mt-3">
@@ -461,7 +598,7 @@ const KillList = () => {
         )}
       </div>
     );
-  }, [editingTarget, editValue, updateProgress, startEditing, saveEdit, cancelEdit, deleteTarget, categories, 
+  }, [editingTarget, editValue, updateProgress, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, categories, 
       reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote]);
 
   return (
@@ -574,7 +711,7 @@ const KillList = () => {
           <VirtualizedList
             items={filteredTargets}
             renderItem={renderTargetItem}
-            itemHeight={150}
+            itemHeight={220}
             maxHeight={600}
           />
         ) : (

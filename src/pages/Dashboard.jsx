@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { readUserData } from '../utils/firebaseUtils';
+import { readUserData, testFirebaseConnection } from '../utils/firebaseUtils';
 import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [recentEntries, setRecentEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aiActionSteps, setAiActionSteps] = useState([]);
+  const [firebaseTestResult, setFirebaseTestResult] = useState(null);
   const [clarityScore, setClarityScore] = useState({
     totalScore: 0,
     rank: { rank: 'Clarity Novice', icon: '🌱', color: 'text-gray-500' },
@@ -57,6 +58,34 @@ export default function Dashboard() {
       loadDashboardData();
     }
   }, [user]);
+
+  // Test Firebase connection
+  const runFirebaseTest = async () => {
+    console.log("🔥 Running Firebase connection test...");
+    setFirebaseTestResult({ testing: true });
+    
+    try {
+      const result = await testFirebaseConnection();
+      setFirebaseTestResult(result);
+      console.log("Firebase test result:", result);
+      
+      if (result.success) {
+        alert("✅ Firebase connection successful! Check console for details.");
+        // Reload data after successful test
+        loadDashboardData();
+      } else {
+        alert(`❌ Firebase connection failed: ${result.error}\n${result.details}`);
+      }
+    } catch (error) {
+      console.error("Firebase test error:", error);
+      setFirebaseTestResult({
+        success: false,
+        error: "Test failed",
+        details: error.message
+      });
+      alert(`❌ Firebase test failed: ${error.message}`);
+    }
+  };
 
   const loadDashboardData = async () => {
     if (!user) {
@@ -244,7 +273,19 @@ export default function Dashboard() {
               >
                 Debug Info
               </button>
+              <button 
+                onClick={runFirebaseTest}
+                className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                disabled={firebaseTestResult?.testing}
+              >
+                {firebaseTestResult?.testing ? 'Testing...' : 'Test Firebase'}
+              </button>
             </div>
+            {firebaseTestResult && !firebaseTestResult.testing && (
+              <div className={`mt-2 p-2 rounded text-xs ${firebaseTestResult.success ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                {firebaseTestResult.success ? '✅ Connection successful' : `❌ ${firebaseTestResult.error}: ${firebaseTestResult.details}`}
+              </div>
+            )}
           </div>
         )}
 
