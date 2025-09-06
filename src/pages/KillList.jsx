@@ -15,6 +15,8 @@ const KillList = () => {
   const [loading, setLoading] = useState(false);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedTargets, setSelectedTargets] = useState(new Set());
+  const [bulkActionMode, setBulkActionMode] = useState(false);
   
   // Reflection notes state
   const [reflectionNotes, setReflectionNotes] = useState({});
@@ -83,14 +85,15 @@ const KillList = () => {
     try {
       const targetData = {
         title: newTarget.trim(),
-        description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label.split(' ')[1] || 'target'}`,
+        description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label.split(' ').slice(1).join(' ') || 'target'}`,
         category: newTargetCategory,
         status: 'active',
         priority: 'medium',
         progress: 0,
         targetDate: getTodaysDate(),
         createdAt: new Date().toISOString(),
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
+        reflectionNotes: ''
       };
 
       console.log("📝 Target data to save:", targetData);
@@ -225,14 +228,20 @@ const KillList = () => {
       setOracleModal({ isOpen: true, content: '', isLoading: true });
       
       try {
-        const feedback = await getAIFeedback(
-          `The user has marked "${escapedTarget?.title}" as escaped. This target proved too difficult to eliminate right now. Provide encouraging wisdom about strategic retreat, regrouping, and future attempts. Keep it under 100 words.`,
-          { targetTitle: escapedTarget?.title, targetType: 'escaped' }
-        );
+        const feedback = await generateAIFeedback('killList', {
+          action: 'targetEscaped',
+          target: escapedTarget?.title || 'target',
+          category: escapedTarget?.category,
+          escapedTargets: targets.filter(t => t.status === 'escaped').length + 1
+        }, targets);
         setOracleModal({ isOpen: true, content: feedback, isLoading: false });
       } catch (error) {
-        console.error('Error getting Oracle feedback for escaped target:', error);
-        setOracleModal({ isOpen: false, content: '', isLoading: false });
+        console.error('Oracle feedback error:', error);
+        setOracleModal({ 
+          isOpen: true, 
+          content: "The Oracle recognizes the strategic value of retreat. Sometimes the warrior must withdraw to fight another day. Study your patterns and return stronger.", 
+          isLoading: false 
+        });
       }
     } catch (error) {
       console.error('❌ KillList: Error marking target as escaped:', error);
@@ -309,15 +318,15 @@ const KillList = () => {
     setUpdatingReflection(prev => ({ ...prev, [targetId]: true }));
 
     try {
-      const targetRef = doc(db, 'killTargets', targetId);
-      await updateDoc(targetRef, {
+      await updateData('killTargets', targetId, {
         reflectionNotes: notes.trim(),
-        lastUpdated: serverTimestamp()
+        lastUpdated: new Date()
       });
 
       console.log(`✅ Reflection notes saved for target: ${targetId}`);
     } catch (error) {
       console.error("Error saving reflection notes:", error);
+      alert('Failed to save reflection notes. Please try again.');
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
     }
@@ -327,16 +336,16 @@ const KillList = () => {
     setUpdatingReflection(prev => ({ ...prev, [targetId]: true }));
 
     try {
-      const targetRef = doc(db, 'killTargets', targetId);
-      await updateDoc(targetRef, {
+      await updateData('killTargets', targetId, {
         reflectionNotes: '',
-        lastUpdated: serverTimestamp()
+        lastUpdated: new Date()
       });
 
       setReflectionNotes(prev => ({ ...prev, [targetId]: '' }));
       console.log(`✅ Reflection notes cleared for target: ${targetId}`);
     } catch (error) {
       console.error("Error clearing reflection notes:", error);
+      alert('Failed to clear reflection notes. Please try again.');
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
     }

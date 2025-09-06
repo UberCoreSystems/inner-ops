@@ -1,8 +1,8 @@
 import { doc, setDoc, collection, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, enableAnonymousAuth, enableDevMode, getCurrentUserOrMock } from '../firebase.js';
 
-// Development mode flag - set to true to bypass auth for testing
-const DEV_MODE = true; // Set to false for production
+// Development mode flag - set to false to use real authentication and preserve user data
+const DEV_MODE = false; // Set to true only for testing without real user accounts
 
 // Log environment variables for debugging
 console.log("🔍 Environment Check:");
@@ -18,7 +18,7 @@ const ensureAuthenticated = async () => {
   }
 
   if (DEV_MODE) {
-    console.log("� DEV MODE: Attempting anonymous authentication...");
+    console.log("🚧 DEV MODE: Attempting anonymous authentication...");
     try {
       const user = await enableAnonymousAuth();
       console.log("✅ Anonymous authentication successful:", user.uid);
@@ -31,7 +31,9 @@ const ensureAuthenticated = async () => {
       throw error;
     }
   } else {
-    throw new Error("Authentication required but user not authenticated");
+    // In production mode, require proper authentication
+    console.error("❌ User must be authenticated to access data");
+    throw new Error("Please sign in to continue using the app");
   }
 };
 
