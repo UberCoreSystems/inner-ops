@@ -47,13 +47,17 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       );
 
       const querySnapshot = await getDocs(q);
-      const fetchedTargets = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        lastUpdated: doc.data().lastUpdated?.toDate() || new Date(),
-        completedAt: doc.data().completedAt?.toDate() || null
-      }));
+      const fetchedTargets = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          // Handle both Firebase Timestamp objects and regular dates
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
+          lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
+          completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null)
+        };
+      });
 
       // Sort by priority and creation time
       fetchedTargets.sort((a, b) => {
@@ -80,7 +84,9 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 
   // Setup real-time listener or one-time fetch
   useEffect(() => {
-    if (!auth.currentUser) {
+    const userId = auth.currentUser?.uid;
+    
+    if (!userId) {
       setLoading(false);
       setTargets([]);
       return;
@@ -90,20 +96,24 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       // Real-time listener with simple query (no orderBy to avoid composite index requirement)
       const q = query(
         collection(db, 'killTargets'),
-        where('userId', '==', auth.currentUser.uid),
+        where('userId', '==', userId),
         where('targetDate', '==', queryDateString)
       );
 
       const unsubscribe = onSnapshot(
         q,
         (querySnapshot) => {
-          const fetchedTargets = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate() || new Date(),
-            lastUpdated: doc.data().lastUpdated?.toDate() || new Date(),
-            completedAt: doc.data().completedAt?.toDate() || null
-          }));
+          const fetchedTargets = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              // Handle both Firebase Timestamp objects and regular dates
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
+              lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
+              completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null)
+            };
+          });
 
           // Sort by priority and creation time
           fetchedTargets.sort((a, b) => {
@@ -131,7 +141,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       // One-time fetch
       fetchTargets();
     }
-  }, [auth.currentUser, queryDateString, realtime]);
+  }, [auth.currentUser?.uid, queryDateString, realtime]);
 
   // Manual refetch function
   const refetch = () => {

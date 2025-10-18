@@ -28,12 +28,20 @@ const KillListDashboard = () => {
   const [updating, setUpdating] = useState({});
   const [reflectionNotes, setReflectionNotes] = useState({});
   const [showReflection, setShowReflection] = useState({});
+  const [initialLoad, setInitialLoad] = useState(true); // Track if this is the first load
   const [oracleModal, setOracleModal] = useState({ 
     isOpen: false, 
     target: null, 
     feedback: '' 
   });
   const [oracleFeedbacks, setOracleFeedbacks] = useState({}); // Store Oracle feedbacks
+
+  // Mark initial load as complete once data is loaded
+  useEffect(() => {
+    if (!loading) {
+      setInitialLoad(false);
+    }
+  }, [loading]);
 
   // Initialize reflection notes when targets load
   useEffect(() => {
@@ -201,7 +209,7 @@ const KillListDashboard = () => {
     }
   };
 
-  if (loading) {
+  if (initialLoad && loading) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex items-center justify-center h-32">
