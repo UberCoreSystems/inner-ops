@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
-import { aiUtils } from '../utils/aiUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
@@ -32,7 +31,7 @@ export default function Journal() {
   const [intensity, setIntensity] = useState(3);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [aiReflections, setAiReflections] = useState([]);
+  const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   
   // State for rotating prompts
@@ -70,6 +69,119 @@ export default function Journal() {
 
     return () => clearInterval(interval);
   }, [journalPrompts.length]);
+
+  // Dynamic AI insights generation
+  useEffect(() => {
+    const generateDynamicInsights = async () => {
+      // Only generate if we have meaningful content and haven't generated recently
+      if (entry.length < 50 || 
+          (aiInsights.lastUpdated && Date.now() - aiInsights.lastUpdated < 5000)) {
+        return;
+      }
+
+      setAiInsights(prev => ({ ...prev, isGenerating: true }));
+
+      try {
+        // Create context from current entry state
+        const currentContext = {
+          mood: moodOptions.find(m => m.value === mood)?.label || mood,
+          intensity,
+          content: entry,
+          wordCount: entry.trim().split(/\s+/).length
+        };
+
+        // Get recent entries for pattern analysis
+        const recentEntries = entries.slice(0, 3);
+        
+        // Generate contextual insights
+        const insights = await generateContextualInsights(currentContext, recentEntries);
+        
+        setAiInsights({
+          reflections: insights,
+          isGenerating: false,
+          lastUpdated: Date.now()
+        });
+      } catch (error) {
+        console.error('Error generating dynamic insights:', error);
+        setAiInsights(prev => ({ 
+          ...prev, 
+          isGenerating: false,
+          reflections: ['Insights are temporarily unavailable. Continue writing to explore your thoughts.']
+        }));
+      }
+    };
+
+    // Debounce the insight generation
+    const timeoutId = setTimeout(generateDynamicInsights, 2000);
+    return () => clearTimeout(timeoutId);
+  }, [entry, mood, intensity, entries]);
+
+  // Generate contextual insights based on current writing
+  const generateContextualInsights = async (currentContext, recentEntries) => {
+    const { mood, intensity, content, wordCount } = currentContext;
+    
+    // Analyze writing patterns
+    const insights = [];
+    
+    // Content-based insights
+    if (content.toLowerCase().includes('stress') || content.toLowerCase().includes('overwhelm')) {
+      insights.push("Consider: What specific stressors can you control vs. accept?");
+    }
+    
+    if (content.toLowerCase().includes('angry') || content.toLowerCase().includes('frustrated')) {
+      insights.push("Reflection: What boundary or value might have been crossed?");
+    }
+    
+    if (content.toLowerCase().includes('grateful') || content.toLowerCase().includes('thankful')) {
+      insights.push("Expansion: How can you build on this gratitude throughout your day?");
+    }
+    
+    // Mood and intensity insights
+    if (mood === 'chaotic' && intensity >= 4) {
+      insights.push("High chaos energy detected. Consider grounding techniques or channeling this into creative work.");
+    }
+    
+    if (mood === 'hollow' || mood === 'heavy') {
+      insights.push("These feelings often signal unmet needs. What might your soul be asking for?");
+    }
+    
+    // Pattern analysis with recent entries
+    if (recentEntries.length > 0) {
+      const recentMoods = recentEntries.map(e => e.mood);
+      const isRepeatingPattern = recentMoods.filter(m => m === mood).length >= 2;
+      
+      if (isRepeatingPattern) {
+        insights.push(`Pattern notice: This is your ${recentMoods.filter(m => m === mood).length + 1}rd time feeling ${mood} recently. What's the common thread?`);
+      }
+    }
+    
+    // Writing depth insights
+    if (wordCount > 200) {
+      insights.push("Deep dive detected. You're processing something significant. Trust the writing process.");
+    } else if (wordCount < 50 && content.length > 0) {
+      insights.push("Short and sweet. Sometimes the most powerful insights come in few words.");
+    }
+    
+    // Default insight if none triggered
+    if (insights.length === 0) {
+      const moodInsights = {
+        electric: "This energy is powerful. How can you direct it toward your goals?",
+        foggy: "Clarity will come. Sometimes we need to sit in the fog to appreciate the sunshine.",
+        sharp: "Your focus is cutting through noise. What truth is emerging?",
+        hollow: "Empty spaces create room for new growth. What wants to fill this space?",
+        chaotic: "Chaos precedes creation. What is trying to be born from this turbulence?",
+        triumphant: "Victory tastes sweet. How will you build on this success?",
+        heavy: "Heavy feelings often carry important messages. What is yours telling you?",
+        light: "Lightness is a gift. How can you share this feeling with others?",
+        focused: "Your concentration is a superpower. What deserves this level of attention?",
+        radiant: "Your inner light is shining. Let others feel this warmth."
+      };
+      
+      insights.push(moodInsights[mood] || "What patterns are you noticing in your inner world today?");
+    }
+    
+    return insights.slice(0, 3); // Limit to 3 insights max
+  };
 
   const loadJournalEntries = async () => {
     const savedEntries = await readUserData('journalEntries');
@@ -109,7 +221,7 @@ export default function Journal() {
       setEntry('');
       setMood(moodOptions[0].value);
       setIntensity(3);
-      setAiReflections([]);
+      setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
 
     } catch (error) {
       console.error("Error saving journal entry:", error);
@@ -158,17 +270,36 @@ export default function Journal() {
       {/* Entry Form */}
       <div className="bg-gray-800 rounded-lg p-6 mb-8">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* AI Reflections */}
-          {aiReflections.length > 0 && (
+          {/* Dynamic AI Insights */}
+          {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
             <div className="mb-6 p-4 bg-purple-900/30 border border-purple-500/30 rounded-lg">
-              <h3 className="text-purple-300 font-medium mb-3">🤖 AI Reflection Insights</h3>
-              <div className="space-y-2">
-                {aiReflections.map((reflection, idx) => (
-                  <div key={idx} className="text-purple-200 text-sm bg-purple-800/20 p-2 rounded">
-                    {reflection}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-purple-300 font-medium">🧠 Live Insights</h3>
+                {aiInsights.isGenerating && (
+                  <div className="flex items-center text-purple-400 text-xs">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-400 mr-2"></div>
+                    Analyzing...
                   </div>
-                ))}
+                )}
               </div>
+              <div className="space-y-2">
+                {aiInsights.isGenerating && aiInsights.reflections.length === 0 ? (
+                  <div className="text-purple-200 text-sm bg-purple-800/20 p-2 rounded animate-pulse">
+                    Generating contextual insights based on your writing...
+                  </div>
+                ) : (
+                  aiInsights.reflections.map((insight, idx) => (
+                    <div key={`${aiInsights.lastUpdated}-${idx}`} className="text-purple-200 text-sm bg-purple-800/20 p-2 rounded transition-all duration-300 ease-in-out">
+                      {insight}
+                    </div>
+                  ))
+                )}
+              </div>
+              {aiInsights.reflections.length > 0 && (
+                <div className="mt-2 text-xs text-purple-400 opacity-75">
+                  💡 Insights update as you write • Based on mood, content, and patterns
+                </div>
+              )}
             </div>
           )}
 
@@ -202,12 +333,7 @@ export default function Journal() {
                   <button
                     key={level.value}
                     type="button"
-                    onClick={() => {
-                      setIntensity(level.value);
-                      // Generate AI reflections based on mood and intensity
-                      const reflections = aiUtils.generateJournalReflection(mood, level.value, entry);
-                      setAiReflections(reflections);
-                    }}
+                    onClick={() => setIntensity(level.value)}
                     className="flex flex-col items-center transition-all duration-200 hover:scale-110"
                   >
                     <div className="text-2xl mb-2">{level.icon}</div>
@@ -243,9 +369,6 @@ export default function Journal() {
                   onClick={() => {
                     const currentPrompt = journalPrompts[currentPromptIndex];
                     setEntry(prev => prev + (prev ? '\n\n' : '') + currentPrompt + '\n');
-                    // Update AI reflections when prompt is used
-                    const reflections = aiUtils.generateJournalReflection(mood, intensity, entry + currentPrompt);
-                    setAiReflections(reflections);
                   }}
                   className={`text-center p-4 bg-gradient-to-r from-purple-700 to-blue-700 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-all duration-600 transform ${
                     promptVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
@@ -289,9 +412,6 @@ export default function Journal() {
                 <VoiceInputButton
                   onTranscript={(transcript) => {
                     setEntry(prev => prev + (prev ? ' ' : '') + transcript);
-                    // Update AI reflections when voice input is used
-                    const reflections = aiUtils.generateJournalReflection(mood, intensity, entry + transcript);
-                    setAiReflections(reflections);
                   }}
                   disabled={loading}
                 />
