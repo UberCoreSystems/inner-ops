@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Relapse from './pages/Relapse';
 import Profile from './pages/Profile';
 import Onboarding from './pages/Onboarding';
+import HardLessons from './pages/HardLessons';
 import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
 import FirestoreTest from './components/FirestoreTest';
@@ -83,6 +84,7 @@ function App() {
           <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/auth" />} />
           <Route path="/journal" element={user ? <Journal /> : <Navigate to="/auth" />} />
           <Route path="/relapse" element={user ? <Relapse /> : <Navigate to="/auth" />} />
+          <Route path="/hardlessons" element={user ? <HardLessons /> : <Navigate to="/auth" />} />
           <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
           <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/auth" />} />
           <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/auth" />} />

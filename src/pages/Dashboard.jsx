@@ -14,7 +14,8 @@ export default function Dashboard() {
     journalEntries: 0,
     relapseEntries: 0,
     streakDays: 0,
-    killTargets: 0
+    killTargets: 0,
+    hardLessons: 0
   });
   const [recentEntries, setRecentEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -97,7 +98,7 @@ export default function Dashboard() {
       console.log("📡 Dashboard: Loading data for user:", user.uid);
       
       // Load data in parallel for better performance
-      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries] = await Promise.all([
+      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons] = await Promise.all([
         readUserData('journalEntries').then(data => {
           console.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
@@ -113,6 +114,10 @@ export default function Dashboard() {
         readUserData('blackMirrorEntries').then(data => {
           console.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
           return data || [];
+        }),
+        readUserData('hardLessons').then(data => {
+          console.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
+          return data || [];
         })
       ]);
 
@@ -120,7 +125,8 @@ export default function Dashboard() {
         journalEntries: journalEntries.length,
         relapseEntries: relapseEntries.length,
         killTargets: killTargets.length,
-        blackMirrorEntries: blackMirrorEntries.length
+        blackMirrorEntries: blackMirrorEntries.length,
+        hardLessons: hardLessons.length
       });
 
       // Calculate realistic streak days based on actual data
@@ -143,6 +149,7 @@ export default function Dashboard() {
         relapseEntries: relapseEntries.length,
         streakDays: Math.max(0, streakDays),
         killTargets: killTargets.length,
+        hardLessons: hardLessons.length,
         blackMirrorEntries: blackMirrorEntries.length
       });
 
@@ -150,6 +157,7 @@ export default function Dashboard() {
       const allEntries = [
         ...journalEntries.slice(0, 3).map(e => ({ ...e, type: 'journal' })),
         ...relapseEntries.slice(0, 2).map(e => ({ ...e, type: 'relapse' })),
+        ...hardLessons.slice(0, 2).map(e => ({ ...e, type: 'hardlesson' })),
         ...blackMirrorEntries.slice(0, 2).map(e => ({ ...e, type: 'blackmirror' }))
       ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
 
@@ -158,14 +166,16 @@ export default function Dashboard() {
       // Generate AI action steps based on user data
       const userData = {
         recentMood: journalEntries[0]?.mood || 'neutral',
-        killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'killed').length / killTargets.length * 100) : 0
+        killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'killed').length / killTargets.length * 100) : 0,
+        hardLessonsCount: hardLessons.length,
+        hardLessonsFinalized: hardLessons.filter(l => l.isFinalized).length
       };
       
       const actionSteps = aiUtils.generateActionSteps(userData);
       setAiActionSteps(actionSteps);
 
       // Calculate clarity score  
-      const allUserData = { journalEntries, relapseEntries, killTargets, blackMirrorEntries };
+      const allUserData = { journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons };
       const scoreData = await clarityScoreUtils.calculateClarityScore(allUserData);
       const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
       setClarityScore({ ...scoreData, rank });
@@ -175,6 +185,7 @@ export default function Dashboard() {
           journalEntries: journalEntries.length,
           relapseEntries: relapseEntries.length,
           killTargets: killTargets.length,
+          hardLessons: hardLessons.length,
           blackMirrorEntries: blackMirrorEntries.length,
           streakDays: Math.max(0, streakDays)
         },
@@ -367,6 +378,13 @@ export default function Dashboard() {
             >
               <span className="text-2xl mr-3">🎯</span>
               <span className="text-white">Add Kill Target</span>
+            </Link>
+            <Link
+              to="/hardlessons"
+              className="flex items-center p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <span className="text-2xl mr-3">⚡</span>
+              <span className="text-white">Extract Hard Lesson</span>
             </Link>
             <Link
               to="/blackmirror"

@@ -9,6 +9,7 @@ export default function Navbar({ onLogout, user }) {
     { path: '/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/journal', label: 'Journal', icon: '📝' },
     { path: '/killlist', label: 'Kill List', icon: '🎯' },
+    { path: '/hardlessons', label: 'Hard Lessons', icon: '⚡' },
     { path: '/blackmirror', label: 'Black Mirror', icon: '📱' },
     { path: '/relapse', label: 'Relapse', icon: '⚠️' },
     { path: '/firebase-test', label: 'Firebase Test', icon: '🔥' },

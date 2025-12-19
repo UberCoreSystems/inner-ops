@@ -49,7 +49,10 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
   let targetContext = 'philosophical';
   let targetContent = '';
   
-  if (typeof userInput === 'object' && userInput.target) {
+  if (moduleName === 'hardLessons') {
+    targetContext = 'hardLessons';
+    targetContent = userInput;
+  } else if (typeof userInput === 'object' && userInput.target) {
     targetContent = userInput.target;
     targetContext = analyzeTargetContext(targetContent);
   } else if (typeof userInput === 'string') {
@@ -70,6 +73,15 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
       
       case 'social':
         return `This is a relationship or social boundary target. Focus on healthy masculinity, authentic power, and the difference between strength and aggression. Address people-pleasing patterns and the courage required for authentic relationships. Reference wisdom about honor, integrity, and protective strength.`;
+      
+      case 'hardLessons':
+        return `This is a Hard Lessons extraction request. Your role is forensic analysis - extract the irreversible signal from irreversible pain. Focus on:
+        1. Identifying the false assumption that led to the event
+        2. Recognizing the ignored signal/warning that was discounted  
+        3. Articulating the precise lesson without emotion or judgment
+        4. Creating an enforceable rule/constraint for future behavior
+        
+        Use direct, non-moral language. No "should" or "deserve" framing. Only cause, effect, and correction. The goal is to ensure this lesson is never paid for twice. Be brutally precise and strategically focused.`;
       
       default:
         return `This target requires philosophical depth. Explore the deeper meaning and patterns beneath the surface behavior. Use timeless wisdom appropriately without being overly abstract.`;
@@ -105,6 +117,7 @@ CORE PRINCIPLES:
 
 For ${moduleName} specifically:
 - Kill List: Address the specific nature of what they're eliminating - practical habits need different wisdom than deep psychological patterns
+- Hard Lessons: Provide forensic extraction - identify false assumptions, ignored signals, and create enforceable rules. No emotion, just strategic clarity.
 
 Keep responses under 3 paragraphs. Be direct, insightful, and contextually appropriate. Speak truth that cuts through to the specific nature of their challenge.
 
