@@ -10,14 +10,109 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #111827;
+  background-color: #000000;
   color: #ffffff;
 }
+
+/* Oura-style Circular Progress Ring */
+.oura-ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.oura-ring svg {
+  transform: rotate(-90deg);
+}
+
+.oura-ring-track {
+  stroke: #1a1a1a;
+  fill: none;
+}
+
+.oura-ring-progress {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s ease-out;
+}
+
+.oura-ring-glow {
+  filter: blur(8px);
+  opacity: 0.5;
+}
+
+/* Oura Card Styles */
+.oura-card {
+  background: linear-gradient(180deg, #0a0a0a 0%, #050505 100%);
+  border: 1px solid #1a1a1a;
+  border-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.oura-card:hover {
+  border-color: #2a2a2a;
+  transform: translateY(-2px);
+}
+
+.oura-card-elevated {
+  background: linear-gradient(180deg, #111111 0%, #0a0a0a 100%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Score Display */
+.oura-score {
+  font-weight: 700;
+  font-feature-settings: 'tnum' on, 'lnum' on;
+  letter-spacing: -0.02em;
+}
+
+.oura-score-large {
+  font-size: 4rem;
+  line-height: 1;
+}
+
+.oura-score-medium {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+/* Oura Gradient Text */
+.oura-gradient-text {
+  background: linear-gradient(135deg, #00d4aa 0%, #4da6ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Subtle Glow Effects */
+.glow-cyan {
+  box-shadow: 0 0 30px rgba(0, 212, 170, 0.2);
+}
+
+.glow-blue {
+  box-shadow: 0 0 30px rgba(77, 166, 255, 0.2);
+}
+
+.glow-purple {
+  box-shadow: 0 0 30px rgba(168, 85, 247, 0.2);
+}
+
+.glow-amber {
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.2);
+}
+
+/* Staggered Animation Delays */
+.animate-delay-100 { animation-delay: 0.1s; }
+.animate-delay-200 { animation-delay: 0.2s; }
+.animate-delay-300 { animation-delay: 0.3s; }
+.animate-delay-400 { animation-delay: 0.4s; }
+.animate-delay-500 { animation-delay: 0.5s; }
 
 /* Custom Range Slider Styles for Kill List */
 .slider {
@@ -35,34 +130,34 @@ body {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #ef4444;
+  background: #00d4aa;
   cursor: pointer;
-  border: 2px solid #1f2937;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 2px solid #000000;
+  box-shadow: 0 2px 8px rgba(0, 212, 170, 0.4);
   transition: all 0.2s ease;
 }
 
 .slider::-webkit-slider-thumb:hover {
-  background: #dc2626;
+  background: #00e6b8;
   transform: scale(1.1);
-  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 212, 170, 0.5);
 }
 
 .slider::-moz-range-thumb {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #ef4444;
+  background: #00d4aa;
   cursor: pointer;
-  border: 2px solid #1f2937;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 2px solid #000000;
+  box-shadow: 0 2px 8px rgba(0, 212, 170, 0.4);
   transition: all 0.2s ease;
 }
 
 .slider::-moz-range-thumb:hover {
-  background: #dc2626;
+  background: #00e6b8;
   transform: scale(1.1);
-  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 212, 170, 0.5);
 }
 
 code {
@@ -81,4 +176,28 @@ code {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar - Oura style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
 }

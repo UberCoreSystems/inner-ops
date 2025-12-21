@@ -211,58 +211,72 @@ Please help extract the core lesson and rule from this experience.
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">⚡ Hard Lessons</h1>
-        <p className="text-gray-400 mb-2">
-          Forensic extraction of irreversible signal from irreversible pain
-        </p>
-        <div className="text-sm text-red-300 bg-red-900/20 p-3 rounded border border-red-500/30">
-          <strong>Purpose:</strong> Ensure the same lesson is never paid for twice. Memory with teeth.
+    <div className="min-h-screen bg-black">
+      <div className="max-w-6xl mx-auto p-6">
+        {/* Header */}
+        <div className="mb-8 animate-fade-in-up">
+          <h1 className="text-4xl font-bold text-white mb-3">⚡ Hard Lessons</h1>
+          <p className="text-[#8a8a8a] text-lg mb-4">
+            Forensic extraction of irreversible signal from irreversible pain
+          </p>
+          <div className="oura-card p-4 border-l-4 border-[#f59e0b]">
+            <p className="text-sm text-[#8a8a8a]">
+              <span className="text-[#f59e0b] font-semibold">Purpose:</span> Ensure the same lesson is never paid for twice. Memory with teeth.
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-4 mb-8">
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-        >
-          {showForm ? 'Cancel' : '⚡ Extract New Lesson'}
-        </button>
-        
-        <div className="text-sm text-gray-400 flex items-center">
-          <span className="mr-4">Total Lessons: {lessons.length}</span>
-          <span className="mr-4">Finalized: {lessons.filter(l => l.isFinalized).length}</span>
-          <span>Draft: {lessons.filter(l => !l.isFinalized).length}</span>
+        {/* Stats Overview */}
+        <div className="grid grid-cols-3 gap-4 mb-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <div className="oura-card p-6 text-center">
+            <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Total Lessons</div>
+            <div className="oura-score text-white">{lessons.length}</div>
+          </div>
+          <div className="oura-card p-6 text-center">
+            <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Finalized</div>
+            <div className="oura-score text-[#22c55e]">{lessons.filter(l => l.isFinalized).length}</div>
+          </div>
+          <div className="oura-card p-6 text-center">
+            <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Draft</div>
+            <div className="oura-score text-[#f59e0b]">{lessons.filter(l => !l.isFinalized).length}</div>
+          </div>
         </div>
-      </div>
+
+        {/* Action Button */}
+        <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
+          >
+            {showForm ? 'Cancel' : '⚡ Extract New Lesson'}
+          </button>
+        </div>
 
       {/* Lesson Extraction Form */}
       {showForm && (
-        <div className="bg-gray-800 rounded-lg p-6 mb-8 border border-red-500/30">
-          <h2 className="text-xl font-bold text-white mb-4">
+        <div className="oura-card p-8 mb-8 border-l-4 border-[#f59e0b] animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <h2 className="text-2xl font-bold text-white mb-6">
             {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
           </h2>
           
           <div className="space-y-6">
             {/* Event Category */}
             <div>
-              <label className="block text-gray-400 mb-2 font-medium">Event Category</label>
+              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-4">Event Category</label>
               <div className="grid grid-cols-3 gap-3">
                 {eventCategories.map(cat => (
                   <button
                     key={cat.value}
                     type="button"
                     onClick={() => setNewLesson(prev => ({ ...prev, eventCategory: cat.value }))}
-                    className={`p-3 rounded border-2 transition-colors text-left ${
+                    className={`p-4 rounded-2xl border transition-all duration-300 text-left ${
                       newLesson.eventCategory === cat.value
-                        ? 'border-red-500 bg-red-500/20'
-                        : 'border-gray-600 hover:border-gray-500'
+                        ? 'border-[#f59e0b] bg-[#f59e0b]/10 scale-105'
+                        : 'border-[#1a1a1a] hover:border-[#2a2a2a] bg-[#0a0a0a]'
                     }`}
                   >
-                    <div className="text-lg mb-1">{cat.icon}</div>
-                    <div className="text-sm text-gray-300">{cat.label}</div>
+                    <div className="text-xl mb-2">{cat.icon}</div>
+                    <div className="text-xs text-[#8a8a8a]">{cat.label}</div>
                   </button>
                 ))}
               </div>
@@ -270,66 +284,66 @@ Please help extract the core lesson and rule from this experience.
 
             {/* The Event */}
             <div>
-              <label className="block text-gray-400 mb-2 font-medium">
-                The Event <span className="text-red-400">*</span>
+              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                The Event <span className="text-[#f59e0b]">*</span>
               </label>
-              <p className="text-xs text-gray-500 mb-2">What actually happened (no interpretation, just facts)</p>
+              <p className="text-xs text-[#5a5a5a] mb-3">What actually happened (no interpretation, just facts)</p>
               <textarea
                 value={newLesson.eventDescription}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, eventDescription: e.target.value }))}
                 rows={3}
-                className="w-full p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 focus:outline-none"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
                 placeholder="Describe the concrete event that occurred..."
               />
             </div>
 
             {/* My Assumption */}
             <div>
-              <label className="block text-gray-400 mb-2 font-medium">
-                My Assumption <span className="text-red-400">*</span>
+              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                My Assumption <span className="text-[#f59e0b]">*</span>
               </label>
-              <p className="text-xs text-gray-500 mb-2">What you believed that turned out to be false</p>
+              <p className="text-xs text-[#5a5a5a] mb-3">What you believed that turned out to be false</p>
               <textarea
                 value={newLesson.myAssumption}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, myAssumption: e.target.value }))}
                 rows={2}
-                className="w-full p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 focus:outline-none"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
                 placeholder="I assumed that..."
               />
             </div>
 
             {/* The Signal I Ignored */}
             <div>
-              <label className="block text-gray-400 mb-2 font-medium">
-                The Signal I Ignored <span className="text-red-400">*</span>
+              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                The Signal I Ignored <span className="text-[#f59e0b]">*</span>
               </label>
-              <p className="text-xs text-gray-500 mb-2">The warning you noticed but discounted</p>
+              <p className="text-xs text-[#5a5a5a] mb-3">The warning you noticed but discounted</p>
               <textarea
                 value={newLesson.signalIgnored}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, signalIgnored: e.target.value }))}
                 rows={2}
-                className="w-full p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 focus:outline-none"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
                 placeholder="I ignored the signal that..."
               />
             </div>
 
             {/* The Cost */}
             <div>
-              <label className="block text-gray-400 mb-2 font-medium">
-                The Cost <span className="text-red-400">*</span>
+              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                The Cost <span className="text-[#f59e0b]">*</span>
               </label>
-              <p className="text-xs text-gray-500 mb-2">Real consequences (select all that apply)</p>
+              <p className="text-xs text-[#5a5a5a] mb-3">Real consequences (select all that apply)</p>
               
-              <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="grid grid-cols-3 gap-2 mb-4">
                 {costCategories.map(cost => (
                   <button
                     key={cost.value}
                     type="button"
                     onClick={() => handleCostToggle(cost.value)}
-                    className={`p-2 rounded border text-left transition-colors ${
+                    className={`p-3 rounded-xl border text-left text-sm transition-all duration-300 ${
                       newLesson.costs.includes(cost.value)
-                        ? 'border-red-500 bg-red-500/20 text-white'
-                        : 'border-gray-600 hover:border-gray-500 text-gray-300'
+                        ? 'border-[#f59e0b] bg-[#f59e0b]/10 text-white scale-105'
+                        : 'border-[#1a1a1a] hover:border-[#2a2a2a] text-[#8a8a8a] bg-[#0a0a0a]'
                     }`}
                   >
                     <span className="mr-2">{cost.icon}</span>
@@ -342,47 +356,47 @@ Please help extract the core lesson and rule from this experience.
                 value={newLesson.costDescription}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, costDescription: e.target.value }))}
                 rows={2}
-                className="w-full p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 focus:outline-none"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
                 placeholder="Describe the specific costs you paid..."
               />
             </div>
 
             {/* The Lesson */}
             <div>
-              <label className="block text-gray-400 mb-2 font-medium">
-                The Lesson <span className="text-red-400">*</span>
+              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                The Lesson <span className="text-[#f59e0b]">*</span>
               </label>
-              <p className="text-xs text-gray-500 mb-2">One sentence. Brutally precise.</p>
+              <p className="text-xs text-[#5a5a5a] mb-3">One sentence. Brutally precise.</p>
               <input
                 type="text"
                 value={newLesson.extractedLesson}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, extractedLesson: e.target.value }))}
-                className="w-full p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 focus:outline-none"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
                 placeholder="The core lesson is..."
               />
             </div>
 
             {/* The Rule Going Forward */}
             <div>
-              <label className="block text-gray-400 mb-2 font-medium">
-                The Rule Going Forward <span className="text-red-400">*</span>
+              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                The Rule Going Forward <span className="text-[#f59e0b]">*</span>
               </label>
-              <p className="text-xs text-gray-500 mb-2">An enforceable constraint, not advice</p>
+              <p className="text-xs text-[#5a5a5a] mb-3">An enforceable constraint, not advice</p>
               <input
                 type="text"
                 value={newLesson.ruleGoingForward}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, ruleGoingForward: e.target.value }))}
-                className="w-full p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 focus:outline-none"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
                 placeholder='If... then... / Always... / Never...'
               />
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-4 pt-4 border-t border-gray-600">
+            <div className="flex flex-wrap gap-3 pt-6 border-t border-[#1a1a1a]">
               <button
                 onClick={() => submitLesson(false)}
                 disabled={loading}
-                className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-white rounded transition-colors"
+                className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-2xl transition-all duration-300 font-medium"
               >
                 {loading ? 'Saving...' : 'Save Draft'}
               </button>
@@ -390,7 +404,7 @@ Please help extract the core lesson and rule from this experience.
               <button
                 onClick={() => submitLesson(true)}
                 disabled={loading}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded transition-colors"
+                className="px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-2xl transition-all duration-300 font-medium"
               >
                 {loading ? 'Finalizing...' : 'Finalize Lesson'}
               </button>
@@ -398,14 +412,14 @@ Please help extract the core lesson and rule from this experience.
               <button
                 onClick={seekOracleExtraction}
                 disabled={loading}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded transition-colors"
+                className="px-6 py-3 bg-[#a855f7] hover:bg-[#9333ea] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-2xl transition-all duration-300 font-medium"
               >
                 🔮 Seek Oracle Extraction
               </button>
 
               <button
                 onClick={resetForm}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+                className="px-6 py-3 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-[#8a8a8a] rounded-2xl transition-all duration-300 font-medium border border-[#1a1a1a]"
               >
                 Cancel
               </button>
@@ -415,8 +429,8 @@ Please help extract the core lesson and rule from this experience.
       )}
 
       {/* Lessons List */}
-      <div>
-        <h2 className="text-xl font-bold text-white mb-4">Extracted Lessons</h2>
+      <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Extracted Lessons</h3>
         
         {lessons.length > 0 ? (
           <div className="space-y-6">
@@ -425,22 +439,24 @@ Please help extract the core lesson and rule from this experience.
               const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
 
               return (
-                <div key={lesson.id} className={`rounded-lg p-6 border-2 ${
+                <div key={lesson.id} className={`oura-card p-6 ${
                   lesson.isFinalized 
-                    ? 'bg-gray-900/50 border-red-500/50' 
-                    : 'bg-gray-800 border-yellow-500/50'
+                    ? 'border-[#f59e0b]/50' 
+                    : 'border-[#f59e0b]/20'
                 }`}>
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{category?.icon}</span>
+                      <div className="w-12 h-12 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
+                        <span className="text-2xl">{category?.icon}</span>
+                      </div>
                       <div>
-                        <h3 className="text-white font-semibold">{category?.label}</h3>
-                        <div className="flex items-center space-x-4 text-sm text-gray-400">
+                        <h3 className="text-white font-medium">{category?.label}</h3>
+                        <div className="flex items-center space-x-3 text-xs text-[#5a5a5a] mt-1">
                           <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
-                          <span className={`px-2 py-1 rounded text-xs ${
+                          <span className={`px-2 py-1 rounded-lg ${
                             lesson.isFinalized 
-                              ? 'bg-red-900/30 text-red-300 border border-red-500/30' 
-                              : 'bg-yellow-900/30 text-yellow-300 border border-yellow-500/30'
+                              ? 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30' 
+                              : 'bg-[#8a8a8a]/10 text-[#8a8a8a] border border-[#2a2a2a]'
                           }`}>
                             {lesson.isFinalized ? '🔒 FINALIZED' : '📝 DRAFT'}
                           </span>
@@ -452,58 +468,58 @@ Please help extract the core lesson and rule from this experience.
                       {!lesson.isFinalized && (
                         <button
                           onClick={() => editLesson(lesson)}
-                          className="px-2 py-1 bg-blue-600/80 text-white rounded text-xs hover:bg-blue-600 transition-colors"
+                          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#4da6ff]/10 text-[#4da6ff] hover:bg-[#4da6ff]/20 transition-colors"
                         >
-                          Edit
+                          ✏️
                         </button>
                       )}
                       {!lesson.isFinalized && (
                         <button
                           onClick={() => deleteLesson(lesson.id)}
-                          className="px-2 py-1 bg-red-600/80 text-white rounded text-xs hover:bg-red-600 transition-colors"
+                          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
                         >
-                          Delete
+                          🗑️
                         </button>
                       )}
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <div>
-                      <h4 className="text-gray-300 font-medium mb-1">The Event</h4>
-                      <p className="text-gray-200">{lesson.eventDescription}</p>
+                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Event</h4>
+                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.eventDescription}</p>
                     </div>
 
                     <div>
-                      <h4 className="text-gray-300 font-medium mb-1">My Assumption</h4>
-                      <p className="text-gray-200">{lesson.myAssumption}</p>
+                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">My Assumption</h4>
+                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.myAssumption}</p>
                     </div>
 
                     <div>
-                      <h4 className="text-gray-300 font-medium mb-1">The Signal I Ignored</h4>
-                      <p className="text-gray-200">{lesson.signalIgnored}</p>
+                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Signal I Ignored</h4>
+                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.signalIgnored}</p>
                     </div>
 
                     <div>
-                      <h4 className="text-gray-300 font-medium mb-1">The Cost</h4>
-                      <div className="flex items-center gap-2 mb-2">
+                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Cost</h4>
+                      <div className="flex items-center gap-2 mb-3">
                         {selectedCosts.map(cost => (
-                          <span key={cost.value} className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">
+                          <span key={cost.value} className="px-2 py-1 bg-[#0a0a0a] text-[#8a8a8a] rounded-lg text-xs border border-[#1a1a1a]">
                             {cost.icon} {cost.label}
                           </span>
                         ))}
                       </div>
-                      <p className="text-gray-200">{lesson.costDescription}</p>
+                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.costDescription}</p>
                     </div>
 
-                    <div className="border-t border-gray-600 pt-4">
-                      <h4 className="text-white font-medium mb-1">The Lesson</h4>
-                      <p className="text-red-300 font-medium">{lesson.extractedLesson}</p>
+                    <div className="border-t border-[#1a1a1a] pt-5">
+                      <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Lesson</h4>
+                      <p className="text-[#f59e0b] font-medium leading-relaxed">{lesson.extractedLesson}</p>
                     </div>
 
                     <div>
-                      <h4 className="text-white font-medium mb-1">The Rule Going Forward</h4>
-                      <p className="text-red-200 font-medium border-l-4 border-red-500 pl-4 bg-red-900/20 py-2">
+                      <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Rule Going Forward</h4>
+                      <p className="text-[#fbbf24] font-medium border-l-4 border-[#f59e0b] pl-4 bg-[#f59e0b]/10 py-3 rounded-r-xl leading-relaxed">
                         {lesson.ruleGoingForward}
                       </p>
                     </div>
@@ -513,21 +529,21 @@ Please help extract the core lesson and rule from this experience.
             })}
           </div>
         ) : (
-          <div className="text-center py-12 text-gray-400">
-            <div className="text-6xl mb-4">⚡</div>
-            <h3 className="text-lg font-semibold mb-2">No Hard Lessons Extracted Yet</h3>
-            <p className="text-gray-500 mb-4">
+          <div className="oura-card p-12 text-center">
+            <div className="text-6xl mb-4 opacity-30">⚡</div>
+            <h3 className="text-lg font-semibold text-[#8a8a8a] mb-2">No Hard Lessons Extracted Yet</h3>
+            <p className="text-[#5a5a5a] mb-6 text-sm">
               When pain demands wisdom, extract the lesson here.
             </p>
             <button
               onClick={() => setShowForm(true)}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+              className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
             >
               Extract Your First Lesson
             </button>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Oracle Modal */}
       <OracleModal
@@ -537,6 +553,7 @@ Please help extract the core lesson and rule from this experience.
         isLoading={oracleModal.isLoading}
         title="Oracle's Extraction Wisdom"
       />
+      </div>
     </div>
   );
 }

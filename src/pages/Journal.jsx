@@ -258,227 +258,241 @@ export default function Journal() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">📝 Journal</h1>
-        <p className="text-gray-400">Capture your thoughts and reflect on your journey</p>
-        <div className="mt-2 text-sm text-green-300">
-          ✍️ Each entry: +10 clarity points | 7-day streak: +50 bonus | 30-day streak: +200 bonus
-        </div>
-      </div>
+    <div className="min-h-screen bg-black">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Oura-style Header */}
+        <header className="mb-10 animate-fade-in-up">
+          <p className="text-[#5a5a5a] text-sm uppercase tracking-widest mb-2">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+          <h1 className="text-3xl font-bold text-white mb-2">Journal</h1>
+          <p className="text-[#8a8a8a]">Capture your thoughts and reflect on your journey</p>
+          <div className="mt-3 flex items-center gap-2 text-xs text-[#5a5a5a]">
+            <span className="px-2 py-1 bg-[#0a0a0a] rounded-lg border border-[#1a1a1a]">+2 pts per entry</span>
+            <span className="px-2 py-1 bg-[#0a0a0a] rounded-lg border border-[#1a1a1a]">7-day: +15 pts</span>
+            <span className="px-2 py-1 bg-[#0a0a0a] rounded-lg border border-[#1a1a1a]">30-day: +40 pts</span>
+          </div>
+        </header>
 
-      {/* Entry Form */}
-      <div className="bg-gray-800 rounded-lg p-6 mb-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Dynamic AI Insights */}
-          {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
-            <div className="mb-6 p-4 bg-purple-900/30 border border-purple-500/30 rounded-lg">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-purple-300 font-medium">🧠 Live Insights</h3>
-                {aiInsights.isGenerating && (
-                  <div className="flex items-center text-purple-400 text-xs">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-400 mr-2"></div>
-                    Analyzing...
+        {/* Entry Form */}
+        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <div className="oura-card p-6 mb-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Dynamic AI Insights */}
+              {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
+                <div className="mb-6 p-5 bg-[#0a0a0a] border border-[#a855f7]/20 rounded-2xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[#a855f7] font-medium text-sm uppercase tracking-wider">🧠 Live Insights</h3>
+                    {aiInsights.isGenerating && (
+                      <div className="flex items-center text-[#a855f7] text-xs">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b border-[#a855f7] mr-2"></div>
+                        Analyzing...
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                {aiInsights.isGenerating && aiInsights.reflections.length === 0 ? (
-                  <div className="text-purple-200 text-sm bg-purple-800/20 p-2 rounded animate-pulse">
-                    Generating contextual insights based on your writing...
+                  <div className="space-y-2">
+                    {aiInsights.isGenerating && aiInsights.reflections.length === 0 ? (
+                      <div className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl animate-pulse">
+                        Generating contextual insights based on your writing...
+                      </div>
+                    ) : (
+                      aiInsights.reflections.map((insight, idx) => (
+                        <div key={`${aiInsights.lastUpdated}-${idx}`} className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl transition-all duration-300 ease-in-out">
+                          {insight}
+                        </div>
+                      ))
+                    )}
                   </div>
-                ) : (
-                  aiInsights.reflections.map((insight, idx) => (
-                    <div key={`${aiInsights.lastUpdated}-${idx}`} className="text-purple-200 text-sm bg-purple-800/20 p-2 rounded transition-all duration-300 ease-in-out">
-                      {insight}
-                    </div>
-                  ))
-                )}
-              </div>
-              {aiInsights.reflections.length > 0 && (
-                <div className="mt-2 text-xs text-purple-400 opacity-75">
-                  💡 Insights update as you write • Based on mood, content, and patterns
+                  {aiInsights.reflections.length > 0 && (
+                    <div className="mt-3 text-xs text-[#8a8a8a]">
+                      💡 Insights update as you write • Based on mood, content, and patterns
                 </div>
               )}
             </div>
           )}
 
-          <div>
-            <label className="block text-gray-400 mb-3">How are you feeling?</label>
-            <div className="grid grid-cols-5 gap-3">
-              {moodOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setMood(option.value)}
-                  className={`p-3 rounded-lg border-2 transition-colors ${
-                    mood === option.value
-                      ? 'border-blue-500 bg-blue-500/20'
-                      : 'border-gray-600 hover:border-gray-500'
-                  }`}
-                >
-                  <div className="text-xl mb-1">{option.emoji}</div>
-                  <div className="text-sm text-gray-300">{option.label}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-gray-400 mb-3">Intensity Level</label>
-            <div className="space-y-4">
-              {/* Fire icons row */}
-              <div className="flex justify-between items-center px-2">
-                {intensityLevels.map((level) => (
-                  <button
-                    key={level.value}
-                    type="button"
-                    onClick={() => setIntensity(level.value)}
-                    className="flex flex-col items-center transition-all duration-200 hover:scale-110"
-                  >
-                    <div className="text-2xl mb-2">{level.icon}</div>
-                    <div className={`w-4 h-4 rounded-full border-2 transition-colors ${
-                      intensity === level.value
-                        ? 'bg-orange-500 border-orange-500'
-                        : 'border-gray-500 hover:border-orange-400'
-                    }`}></div>
-                  </button>
-                ))}
-              </div>
-              
-              {/* Selected intensity description */}
-              <div className="text-center">
-                <div className="text-white font-medium">
-                  {intensityLevels.find(level => level.value === intensity)?.label}
-                </div>
-                <div className="text-gray-400 text-sm">
-                  {intensityLevels.find(level => level.value === intensity)?.description}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-gray-400 mb-3">What's on your mind?</label>
-
-            <div className="mb-3">
-              <label className="block text-gray-400 mb-2">Journal Prompt</label>
-              <div className="mb-3 h-16 flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const currentPrompt = journalPrompts[currentPromptIndex];
-                    setEntry(prev => prev + (prev ? '\n\n' : '') + currentPrompt + '\n');
-                  }}
-                  className={`text-center p-4 bg-gradient-to-r from-purple-700 to-blue-700 hover:from-purple-600 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-all duration-600 transform ${
-                    promptVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                  } min-h-[4rem] flex items-center justify-center shadow-lg hover:shadow-xl max-w-2xl mx-auto`}
-                  style={{
-                    transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out'
-                  }}
-                >
-                  <span className="text-center leading-relaxed">
-                    {journalPrompts[currentPromptIndex]}
-                  </span>
-                </button>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-500 mb-2">
-                  Prompt {currentPromptIndex + 1} of {journalPrompts.length} • Click to add to your entry
-                </p>
-                <div className="flex justify-center space-x-1">
-                  {journalPrompts.map((_, index) => (
-                    <div
-                      key={index}
-                      className={`w-2 h-2 rounded-full transition-colors duration-300 ${
-                        index === currentPromptIndex ? 'bg-blue-500' : 'bg-gray-600'
+              <div>
+                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-4">How are you feeling?</label>
+                <div className="grid grid-cols-5 gap-3">
+                  {moodOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setMood(option.value)}
+                      className={`p-4 rounded-2xl border transition-all duration-300 ${
+                        mood === option.value
+                          ? 'border-[#00d4aa] bg-[#00d4aa]/10 scale-105'
+                          : 'border-[#1a1a1a] hover:border-[#2a2a2a] bg-[#0a0a0a]'
                       }`}
-                    />
+                    >
+                      <div className="text-2xl mb-2">{option.emoji}</div>
+                      <div className="text-xs text-[#8a8a8a]">{option.label}</div>
+                    </button>
                   ))}
                 </div>
               </div>
-            </div>
 
-            <div className="relative">
-              <textarea
-                value={entry}
-                onChange={(e) => setEntry(e.target.value)}
-                rows={6}
-                className="w-full p-4 pr-14 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none resize-none"
-                placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
-                required
-              />
-              <div className="absolute right-2 top-2">
-                <VoiceInputButton
-                  onTranscript={(transcript) => {
-                    setEntry(prev => prev + (prev ? ' ' : '') + transcript);
-                  }}
-                  disabled={loading}
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || !entry.trim()}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white py-3 rounded-lg transition-colors"
-          >
-            {loading ? 'Saving...' : 'Save Entry'}
-          </button>
-        </form>
-      </div>
-
-      {/* Previous Entries */}
-      <div>
-        <h2 className="text-xl font-bold text-white mb-4">Previous Entries</h2>
-        {entries.length > 0 ? (
-          <div className="space-y-4">
-            {entries.map((entry) => {
-              const moodOption = moodOptions.find(m => m.value === entry.mood);
-              const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
-
-              return (
-                <div key={entry.id} className="bg-gray-800 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-xl">{moodOption?.emoji}</span>
-                      <span className="text-gray-400">
-                        {moodOption?.label} - {intensityLabel}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <span className="text-sm text-gray-500">
-                        {new Date(entry.createdAt).toLocaleDateString()} at {new Date(entry.createdAt).toLocaleTimeString()}
-                      </span>
+              <div>
+                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-4">Intensity Level</label>
+                <div className="space-y-4">
+                  {/* Fire icons row */}
+                  <div className="flex justify-between items-center px-2">
+                    {intensityLevels.map((level) => (
                       <button
-                        onClick={() => deleteEntry(entry.id)}
-                        className="px-2 py-1 bg-red-600/80 text-white rounded text-xs hover:bg-red-600 transition-colors opacity-75 hover:opacity-100"
-                        title="Delete this entry"
+                        key={level.value}
+                        type="button"
+                        onClick={() => setIntensity(level.value)}
+                        className="flex flex-col items-center transition-all duration-200 hover:scale-110"
                       >
-                        🗑️
+                        <div className="text-2xl mb-2">{level.icon}</div>
+                        <div className={`w-4 h-4 rounded-full border-2 transition-colors ${
+                          intensity === level.value
+                            ? 'bg-[#f59e0b] border-[#f59e0b]'
+                            : 'border-[#2a2a2a] hover:border-[#f59e0b]/50'
+                        }`}></div>
                       </button>
+                    ))}
+                  </div>
+                  
+                  {/* Selected intensity description */}
+                  <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
+                    <div className="text-white font-medium">
+                      {intensityLevels.find(level => level.value === intensity)?.label}
+                    </div>
+                    <div className="text-[#5a5a5a] text-sm">
+                      {intensityLevels.find(level => level.value === intensity)?.description}
                     </div>
                   </div>
-                  <p className="text-gray-300 leading-relaxed mb-4">{entry.content}</p>
+                </div>
+              </div>
 
-                  {entry.oracleJudgment && (
-                    <div className="mt-4 p-4 bg-gray-900/50 border border-gray-600 rounded-lg">
-                      <h4 className="text-gray-300 font-medium mb-2">📜 Oracle's Judgment</h4>
-                      <div className="text-gray-200 text-sm leading-relaxed whitespace-pre-line">
-                        {entry.oracleJudgment}
+              <div>
+                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-4">What's on your mind?</label>
+
+                <div className="mb-6">
+                  <div className="mb-4 h-20 flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentPrompt = journalPrompts[currentPromptIndex];
+                        setEntry(prev => prev + (prev ? '\n\n' : '') + currentPrompt + '\n');
+                      }}
+                      className={`text-center p-5 bg-gradient-to-r from-[#a855f7] to-[#4da6ff] hover:from-[#9333ea] hover:to-[#3b82f6] text-white rounded-2xl text-sm font-medium transition-all duration-600 transform ${
+                        promptVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                      } min-h-[5rem] flex items-center justify-center shadow-lg hover:shadow-xl max-w-2xl mx-auto w-full`}
+                      style={{
+                        transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out'
+                      }}
+                    >
+                      <span className="text-center leading-relaxed px-4">
+                        {journalPrompts[currentPromptIndex]}
+                      </span>
+                    </button>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-[#5a5a5a] mb-2">
+                      Prompt {currentPromptIndex + 1} of {journalPrompts.length} • Click to add to your entry
+                    </p>
+                    <div className="flex justify-center space-x-1">
+                      {journalPrompts.map((_, index) => (
+                        <div
+                          key={index}
+                          className={`w-2 h-2 rounded-full transition-colors duration-300 ${
+                            index === currentPromptIndex ? 'bg-[#4da6ff]' : 'bg-[#2a2a2a]'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    value={entry}
+                    onChange={(e) => setEntry(e.target.value)}
+                    rows={6}
+                    className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#00d4aa] focus:outline-none resize-none transition-colors"
+                    placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
+                    required
+                  />
+                  <div className="absolute right-2 top-2">
+                    <VoiceInputButton
+                      onTranscript={(transcript) => {
+                        setEntry(prev => prev + (prev ? ' ' : '') + transcript);
+                      }}
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !entry.trim()}
+                className="w-full bg-[#00d4aa] hover:bg-[#00e6b8] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-black font-medium py-3 rounded-2xl transition-all duration-300"
+              >
+                {loading ? 'Saving...' : 'Save Entry'}
+              </button>
+            </form>
+          </div>
+        </section>
+
+        {/* Previous Entries */}
+        <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Previous Entries</h3>
+          {entries.length > 0 ? (
+            <div className="space-y-4">
+              {entries.map((entry) => {
+                const moodOption = moodOptions.find(m => m.value === entry.mood);
+                const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
+
+                return (
+                  <div key={entry.id} className="oura-card p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
+                          <span className="text-xl">{moodOption?.emoji}</span>
+                        </div>
+                        <div>
+                          <p className="text-white text-sm font-medium">{moodOption?.label}</p>
+                          <p className="text-[#5a5a5a] text-xs">{intensityLabel}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-xs text-[#5a5a5a]">
+                          {new Date(entry.createdAt).toLocaleDateString()}
+                        </span>
+                        <button
+                          onClick={() => deleteEntry(entry.id)}
+                          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
+                          title="Delete this entry"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">No journal entries yet. Start writing!</p>
-          </div>
-        )}
+                    <p className="text-[#d1d1d1] leading-relaxed mb-4">{entry.content}</p>
+
+                    {entry.oracleJudgment && (
+                      <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#a855f7]/20 rounded-2xl">
+                        <h4 className="text-[#a855f7] font-medium text-sm mb-3 uppercase tracking-wider">📜 Oracle's Judgment</h4>
+                        <div className="text-[#d8b4fe] text-sm leading-relaxed whitespace-pre-line">
+                          {entry.oracleJudgment}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="oura-card p-12 text-center">
+              <div className="text-4xl mb-4 opacity-30">📝</div>
+              <p className="text-[#5a5a5a]">No journal entries yet</p>
+              <p className="text-[#3a3a3a] text-sm mt-1">Start writing to track your journey</p>
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Oracle Modal */}

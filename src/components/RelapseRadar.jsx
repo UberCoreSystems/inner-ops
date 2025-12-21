@@ -152,23 +152,23 @@ const RelapseRadar = () => {
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-white">Relapse Radar</h2>
-          <div className="text-sm text-gray-400">Step {step} of 4</div>
+    <div className="oura-card p-6">
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-3xl font-light text-white tracking-tight">Relapse Radar</h2>
+          <div className="text-sm text-gray-500">Step {step} of 4</div>
         </div>
-        <div className="mb-4 p-3 bg-green-900/30 border border-green-500/30 rounded-lg">
-          <p className="text-green-300 text-sm">✨ Self-awareness bonus: Submitting entries rewards your honesty and growth mindset (+30 points, +20 for detailed reflection)</p>
+        <div className="mb-6 oura-card border-l-4 border-oura-amber p-4">
+          <p className="text-gray-300 text-sm leading-relaxed">✨ Self-awareness bonus: Submitting entries rewards your honesty and growth mindset (+30 points, +20 for detailed reflection)</p>
         </div>
         
         {/* AI Insights */}
         {aiInsights.length > 0 && step === 1 && (
-          <div className="mb-4 p-4 bg-orange-900/30 border border-orange-500/30 rounded-lg">
-            <h3 className="text-orange-300 font-medium mb-3">🤖 AI Recovery Insights</h3>
+          <div className="mb-6 oura-card border-l-4 border-oura-purple p-5">
+            <h3 className="text-oura-purple font-light text-base mb-4 tracking-wide">AI RECOVERY INSIGHTS</h3>
             <div className="space-y-2">
               {aiInsights.map((insight, idx) => (
-                <div key={idx} className="text-orange-200 text-sm bg-orange-800/20 p-2 rounded">
+                <div key={idx} className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl leading-relaxed">
                   {insight}
                 </div>
               ))}
@@ -176,26 +176,26 @@ const RelapseRadar = () => {
           </div>
         )}
 
-        <div className="w-full bg-gray-700 rounded-full h-2">
+        <div className="w-full bg-oura-border rounded-full h-2">
           <div 
-            className="bg-red-500 h-2 rounded-full transition-all duration-300"
+            className="bg-oura-amber h-2 rounded-full transition-all duration-300"
             style={{ width: `${(step / 4) * 100}%` }}
           ></div>
         </div>
       </div>
 
       {step === 1 && (
-        <div className="space-y-4">
-          <h3 className="text-xl text-white mb-4">Which self showed up today?</h3>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-6 animate-fade-in-up">
+          <h3 className="text-xl font-light text-white tracking-tight">Which self showed up today?</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {relapseSelves.map((self) => (
               <button
                 key={self}
                 onClick={() => setSelectedSelf(self)}
-                className={`p-3 rounded-lg text-left transition-colors ${
+                className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedSelf === self
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-oura-amber text-black font-medium shadow-oura-glow-amber'
+                    : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
                 {self}
@@ -206,17 +206,17 @@ const RelapseRadar = () => {
       )}
 
       {step === 2 && (
-        <div className="space-y-4">
-          <h3 className="text-xl text-white mb-4">What patterns emerged?</h3>
+        <div className="space-y-6 animate-fade-in-up">
+          <h3 className="text-xl font-light text-white tracking-tight">What patterns emerged?</h3>
           <div className="grid grid-cols-1 gap-3">
             {relapseHabits.map((habit) => (
               <button
                 key={habit}
                 onClick={() => handleHabitToggle(habit)}
-                className={`p-3 rounded-lg text-left transition-colors ${
+                className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedHabits.includes(habit)
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-oura-amber text-black font-medium shadow-oura-glow-amber'
+                    : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
                 {habit}
@@ -227,17 +227,17 @@ const RelapseRadar = () => {
       )}
 
       {step === 3 && (
-        <div className="space-y-4">
-          <h3 className="text-xl text-white mb-4">Any substance use?</h3>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-6 animate-fade-in-up">
+          <h3 className="text-xl font-light text-white tracking-tight">Any substance use?</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {substanceOptions.map((substance) => (
               <button
                 key={substance}
                 onClick={() => handleSubstanceToggle(substance)}
-                className={`p-3 rounded-lg text-left transition-colors ${
+                className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   substanceUse.includes(substance)
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-oura-amber text-black font-medium shadow-oura-glow-amber'
+                    : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
                 {substance}
@@ -248,14 +248,14 @@ const RelapseRadar = () => {
       )}
 
       {step === 4 && (
-        <div className="space-y-4">
-          <h3 className="text-xl text-white mb-4">Reflection</h3>
+        <div className="space-y-6 animate-fade-in-up">
+          <h3 className="text-xl font-light text-white tracking-tight">Reflection</h3>
           <div className="relative">
             <textarea
               value={reflection}
               onChange={(e) => setReflection(e.target.value)}
               placeholder="What led to this? What can you learn? How will you recover?"
-              className="w-full h-32 p-3 pr-14 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-red-500 focus:outline-none"
+              className="w-full h-32 p-4 pr-14 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-amber focus:outline-none resize-none transition-all duration-200"
             />
             <div className="absolute right-2 top-2">
               <VoiceInputButton
@@ -270,45 +270,47 @@ const RelapseRadar = () => {
       )}
 
       {submitSuccess && (
-        <div className="mb-6 p-4 bg-green-600 text-white rounded-lg">
-          ✅ Relapse entry submitted successfully! Resetting form...
+        <div className="mb-6 oura-card border-l-4 border-oura-cyan p-4 animate-fade-in-up">
+          <p className="text-gray-300 text-sm">✅ Relapse entry submitted successfully! Resetting form...</p>
         </div>
       )}
 
-      <div className="flex justify-between mt-6">
+      <div className="flex justify-between mt-8 gap-4">
         <button
           onClick={prevStep}
           disabled={step === 1 || submitSuccess}
-          className="px-4 py-2 bg-gray-600 text-white rounded-lg disabled:opacity-50"
+          className="px-6 py-3 bg-oura-card text-white rounded-2xl disabled:opacity-30 hover:bg-oura-darker transition-all duration-200 border border-oura-border"
         >
           Previous
         </button>
         <button
           onClick={nextStep}
           disabled={loading || submitSuccess || (step === 1 && !selectedSelf) || (step === 4 && !reflection.trim())}
-          className="px-4 py-2 bg-red-600 text-white rounded-lg disabled:opacity-50"
+          className="px-6 py-3 bg-oura-amber text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-amber-500 transition-all duration-200"
         >
           {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 4 ? 'Submit' : 'Next')}
         </button>
       </div>
 
       {relapseEntries.length > 0 && (
-        <div className="mt-8">
-          <h3 className="text-xl text-white mb-4">Recent Entries</h3>
+        <div className="mt-10">
+          <h3 className="text-2xl font-light text-white mb-6 tracking-tight">
+            Recent Entries <span className="text-gray-500 text-lg">({relapseEntries.length})</span>
+          </h3>
           <div className="space-y-3">
             {relapseEntries.slice(0, 3).map((entry) => (
-              <div key={entry.id} className="bg-gray-700 p-4 rounded-lg">
-                <div className="text-red-400 font-semibold">{entry.selectedSelf}</div>
-                <div className="text-gray-300 text-sm mt-1">
-                  {entry.createdAt?.toDate?.()?.toLocaleDateString()}
+              <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-sm transition-shadow duration-300">
+                <div className="text-oura-amber font-light text-lg">{entry.selectedSelf}</div>
+                <div className="text-gray-500 text-sm mt-2">
+                  {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </div>
-                <div className="text-gray-400 text-sm mt-2">
+                <div className="text-gray-400 text-sm mt-3 leading-relaxed">
                   {entry.reflection?.substring(0, 100)}...
                 </div>
                 {entry.oracleFeedback && (
-                  <div className="mt-3 p-3 bg-gray-800/50 border border-purple-500/30 rounded-lg">
-                    <h4 className="text-purple-300 font-medium text-sm mb-2">🔮 Oracle's Judgment</h4>
-                    <div className="text-purple-200 text-xs leading-relaxed">
+                  <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
+                    <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
+                    <div className="text-gray-300 text-xs leading-relaxed">
                       {entry.oracleFeedback.substring(0, 150)}...
                     </div>
                   </div>

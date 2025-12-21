@@ -397,7 +397,7 @@ const KillList = () => {
     const category = categories.find(c => c.value === target.category) || categories[0];
     
     return (
-      <div key={target.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700 hover:border-red-500/30 transition-all duration-200">
+      <div key={target.id} className="oura-card p-5 hover:border-[#ef4444]/30 transition-all duration-300">
         <div className="flex items-center justify-between mb-3">
           {editingTarget === target.id ? (
             <div className="flex-1 flex gap-2">
@@ -559,13 +559,13 @@ const KillList = () => {
             )}
 
             {/* Reflection Notes Section */}
-            <div className="border-t border-gray-600 pt-3 mt-3">
+            <div className="border-t border-[#1a1a1a] pt-4 mt-4">
               <button
                 onClick={() => setShowReflection(prev => ({ 
                   ...prev, 
                   [target.id]: !prev[target.id] 
                 }))}
-                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-2"
+                className="flex items-center gap-2 text-sm text-[#8a8a8a] hover:text-white transition-colors mb-3"
               >
                 📝 Reflection Notes
                 <span className="text-xs">
@@ -582,20 +582,20 @@ const KillList = () => {
                       [target.id]: e.target.value
                     }))}
                     placeholder="How did this target challenge you? What did you learn?"
-                    className="w-full h-16 p-2 bg-gray-600 text-white border border-gray-500 rounded text-sm resize-none focus:outline-none focus:border-blue-500"
+                    className="w-full h-20 p-3 bg-[#0a0a0a] text-white border border-[#1a1a1a] rounded-xl text-sm resize-none focus:outline-none focus:border-[#a855f7] transition-colors"
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={() => saveReflectionNote(target.id)}
                       disabled={updatingReflection[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      className="px-4 py-2 text-sm bg-[#00d4aa] text-black rounded-xl hover:bg-[#00e6b8] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-colors font-medium"
                     >
                       {updatingReflection[target.id] ? '⏳' : '💾'} Save
                     </button>
                     <button
                       onClick={() => clearReflectionNote(target.id)}
                       disabled={updatingReflection[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                      className="px-4 py-2 text-sm bg-[#ef4444]/10 text-[#ef4444] rounded-xl hover:bg-[#ef4444]/20 disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-colors font-medium"
                     >
                       {updatingReflection[target.id] ? '⏳' : '🗑️'} Clear
                     </button>
@@ -611,109 +611,119 @@ const KillList = () => {
       reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote]);
 
   return (
-    <div className="bg-gray-900 min-h-screen p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-red-400 mb-2">Kill List</h1>
-          <p className="text-gray-400">Eliminate negative patterns and destructive habits</p>
-        </div>
+    <div className="min-h-screen bg-black">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Oura-style Header */}
+        <header className="mb-10 animate-fade-in-up">
+          <p className="text-[#5a5a5a] text-sm uppercase tracking-widest mb-2">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+          <h1 className="text-3xl font-bold text-white mb-2">Kill List</h1>
+          <p className="text-[#8a8a8a]">Eliminate negative patterns and destructive habits</p>
+        </header>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-white">{stats.total}</div>
-            <div className="text-sm text-gray-400">Total Contracts</div>
+        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Progress</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="oura-card p-5 text-center">
+              <div className="text-3xl font-bold text-white oura-score">{stats.total}</div>
+              <div className="text-xs text-[#8a8a8a] mt-2 uppercase tracking-wider">Total Contracts</div>
+            </div>
+            <div className="oura-card p-5 text-center">
+              <div className="text-3xl font-bold text-[#4da6ff] oura-score">{stats.active}</div>
+              <div className="text-xs text-[#8a8a8a] mt-2 uppercase tracking-wider">Active</div>
+            </div>
+            <div className="oura-card p-5 text-center">
+              <div className="text-3xl font-bold text-[#22c55e] oura-score">{stats.completed}</div>
+              <div className="text-xs text-[#8a8a8a] mt-2 uppercase tracking-wider">Killed</div>
+            </div>
+            <div className="oura-card p-5 text-center">
+              <div className="text-3xl font-bold text-[#f59e0b] oura-score">{stats.escaped}</div>
+              <div className="text-xs text-[#8a8a8a] mt-2 uppercase tracking-wider">Escaped</div>
+            </div>
+            <div className="oura-card p-5 text-center">
+              <div className="text-3xl font-bold text-[#00d4aa] oura-score">{stats.completionRate}%</div>
+              <div className="text-xs text-[#8a8a8a] mt-2 uppercase tracking-wider">Success Rate</div>
+            </div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-blue-400">{stats.active}</div>
-            <div className="text-sm text-gray-400">Active</div>
-          </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-green-400">{stats.completed}</div>
-            <div className="text-sm text-gray-400">Killed</div>
-          </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-red-400">{stats.escaped}</div>
-            <div className="text-sm text-gray-400">Escaped</div>
-          </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-yellow-400">{stats.completionRate}%</div>
-            <div className="text-sm text-gray-400">Success Rate</div>
-          </div>
-        </div>
+        </section>
 
         {/* Add New Target */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Add New Kill Contract</h2>
-          <div className="space-y-4">
-            {/* Target Name Input */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Target Name
-              </label>
-              <input
-                type="text"
-                value={newTarget}
-                onChange={(e) => setNewTarget(e.target.value)}
-                placeholder="What negative pattern will you eliminate?"
-                className="w-full bg-gray-700 text-white p-3 rounded border border-gray-600 focus:border-red-500 focus:outline-none"
-                onKeyPress={(e) => e.key === 'Enter' && addTarget()}
-              />
-            </div>
+        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <div className="oura-card p-6">
+            <h2 className="text-white font-semibold mb-6 text-lg">Add New Kill Contract</h2>
+            <div className="space-y-6">
+              {/* Target Name Input */}
+              <div>
+                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                  Target Name
+                </label>
+                <input
+                  type="text"
+                  value={newTarget}
+                  onChange={(e) => setNewTarget(e.target.value)}
+                  placeholder="What negative pattern will you eliminate?"
+                  className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors"
+                  onKeyPress={(e) => e.key === 'Enter' && addTarget()}
+                />
+              </div>
 
-            {/* Category Dropdown */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Category
-              </label>
-              <select
-                value={newTargetCategory}
-                onChange={(e) => setNewTargetCategory(e.target.value)}
-                className="w-full bg-gray-700 text-white p-3 rounded border border-gray-600 focus:border-red-500 focus:outline-none"
-              >
-                {categories.map((category) => (
-                  <option key={category.value} value={category.value}>
-                    {category.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {/* Category Dropdown */}
+              <div>
+                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                  Category
+                </label>
+                <select
+                  value={newTargetCategory}
+                  onChange={(e) => setNewTargetCategory(e.target.value)}
+                  className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors"
+                >
+                  {categories.map((category) => (
+                    <option key={category.value} value={category.value}>
+                      {category.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Submit Button */}
-            <div className="flex justify-end">
-              <button
-                onClick={addTarget}
-                disabled={loading || !newTarget.trim()}
-                className="px-6 py-3 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {loading ? 'Adding Contract...' : 'Add Kill Contract'}
-              </button>
+              {/* Submit Button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={addTarget}
+                  disabled={loading || !newTarget.trim()}
+                  className="px-8 py-3 bg-[#ef4444] text-white rounded-2xl hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-all duration-300 font-medium"
+                >
+                  {loading ? 'Adding Contract...' : 'Add Kill Contract'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Filter Tabs */}
-        <div className="flex space-x-1 mb-6">
-          {[
-            { key: 'all', label: 'All Contracts', count: stats.total },
-            { key: 'active', label: 'Active', count: stats.active },
-            { key: 'completed', label: 'Killed', count: stats.completed },
-            { key: 'escaped', label: 'Escaped', count: stats.escaped }
-          ].map(({ key, label, count }) => (
-            <button
-              key={key}
-              onClick={() => setFilterStatus(key)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filterStatus === key
-                  ? 'bg-red-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {label} ({count})
-            </button>
-          ))}
-        </div>
+        <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: 'all', label: 'All Contracts', count: stats.total },
+              { key: 'active', label: 'Active', count: stats.active },
+              { key: 'completed', label: 'Killed', count: stats.completed },
+              { key: 'escaped', label: 'Escaped', count: stats.escaped }
+            ].map(({ key, label, count }) => (
+              <button
+                key={key}
+                onClick={() => setFilterStatus(key)}
+                className={`px-5 py-2.5 rounded-2xl font-medium transition-all duration-300 text-sm ${
+                  filterStatus === key
+                    ? 'bg-[#ef4444] text-white scale-105'
+                    : 'bg-[#0a0a0a] text-[#8a8a8a] hover:bg-[#1a1a1a] border border-[#1a1a1a]'
+                }`}
+              >
+                {label} ({count})
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* Targets List */}
         {filteredTargets.length > 0 ? (
@@ -724,14 +734,14 @@ const KillList = () => {
             maxHeight={600}
           />
         ) : (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🎯</div>
-            <h3 className="text-xl font-semibold text-gray-400 mb-2">
+          <div className="oura-card p-12 text-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+            <div className="text-6xl mb-4 opacity-30">🎯</div>
+            <h3 className="text-xl font-semibold text-[#8a8a8a] mb-2">
               {filterStatus === 'completed' ? 'No completed contracts yet' :
                filterStatus === 'active' ? 'No active contracts' :
                'No kill contracts yet'}
             </h3>
-            <p className="text-gray-500">
+            <p className="text-[#5a5a5a] text-sm">
               {filterStatus === 'all' ? 'Add your first contract to begin eliminating negative patterns' :
                filterStatus === 'active' ? 'All your contracts have been completed!' :
                'Complete some contracts to see them here'}
