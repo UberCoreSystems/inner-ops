@@ -258,30 +258,31 @@ export default function Journal() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">📝 Journal</h1>
-        <p className="text-gray-400">Capture your thoughts and reflect on your journey</p>
-        <div className="mt-2 text-sm text-green-300">
-          ✍️ Each entry: +10 clarity points | 7-day streak: +50 bonus | 30-day streak: +200 bonus
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        <div className="text-center mb-12 fade-in">
+          <h1 className="text-2xl font-light text-gray-100 mb-2 tracking-wide">📝 Journal</h1>
+          <p className="text-gray-500 text-sm font-light">Capture your thoughts and reflect on your journey</p>
+          <div className="mt-4 text-sm text-green-300 font-light">
+            ✍️ Each entry: +10 clarity points | 7-day streak: +50 bonus | 30-day streak: +200 bonus
+          </div>
         </div>
-      </div>
 
-      {/* Entry Form */}
-      <div className="bg-gray-800 rounded-lg p-6 mb-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Dynamic AI Insights */}
-          {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
-            <div className="mb-6 p-4 bg-purple-900/30 border border-purple-500/30 rounded-lg">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-purple-300 font-medium">🧠 Live Insights</h3>
-                {aiInsights.isGenerating && (
-                  <div className="flex items-center text-purple-400 text-xs">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-400 mr-2"></div>
-                    Analyzing...
-                  </div>
-                )}
-              </div>
+        {/* Entry Form */}
+        <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-3xl p-8 mb-8 border border-gray-800/50 oura-card">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Dynamic AI Insights */}
+            {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
+              <div className="mb-6 p-6 bg-gradient-to-br from-purple-900/20 to-purple-800/10 border border-purple-500/20 rounded-2xl glass-morphism">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-purple-300 font-light tracking-wide">🧠 Live Insights</h3>
+                  {aiInsights.isGenerating && (
+                    <div className="flex items-center text-purple-400 text-xs font-light">
+                      <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-400 mr-2"></div>
+                      Analyzing...
+                    </div>
+                  )}
+                </div>
               <div className="space-y-2">
                 {aiInsights.isGenerating && aiInsights.reflections.length === 0 ? (
                   <div className="text-purple-200 text-sm bg-purple-800/20 p-2 rounded animate-pulse">
@@ -304,17 +305,17 @@ export default function Journal() {
           )}
 
           <div>
-            <label className="block text-gray-400 mb-3">How are you feeling?</label>
+            <label className="block text-gray-400 mb-4 font-light tracking-wide">How are you feeling?</label>
             <div className="grid grid-cols-5 gap-3">
               {moodOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => setMood(option.value)}
-                  className={`p-3 rounded-lg border-2 transition-colors ${
+                  className={`p-4 rounded-2xl border transition-all duration-300 oura-card ${
                     mood === option.value
-                      ? 'border-blue-500 bg-blue-500/20'
-                      : 'border-gray-600 hover:border-gray-500'
+                      ? 'border-blue-500/50 bg-gradient-to-br from-blue-500/20 to-blue-600/10 shadow-lg shadow-blue-500/20'
+                      : 'border-gray-700/50 hover:border-gray-600/50 hover:bg-gray-800/50'
                   }`}
                 >
                   <div className="text-xl mb-1">{option.emoji}</div>
@@ -326,21 +327,21 @@ export default function Journal() {
 
           <div>
             <label className="block text-gray-400 mb-3">Intensity Level</label>
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Fire icons row */}
-              <div className="flex justify-between items-center px-2">
+              <div className="flex justify-between items-center px-4">
                 {intensityLevels.map((level) => (
                   <button
                     key={level.value}
                     type="button"
                     onClick={() => setIntensity(level.value)}
-                    className="flex flex-col items-center transition-all duration-200 hover:scale-110"
+                    className="flex flex-col items-center transition-all duration-300 hover:scale-110 oura-card p-3 rounded-2xl"
                   >
-                    <div className="text-2xl mb-2">{level.icon}</div>
-                    <div className={`w-4 h-4 rounded-full border-2 transition-colors ${
+                    <div className="text-2xl mb-2 opacity-80">{level.icon}</div>
+                    <div className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${
                       intensity === level.value
-                        ? 'bg-orange-500 border-orange-500'
-                        : 'border-gray-500 hover:border-orange-400'
+                        ? 'bg-gradient-to-br from-orange-500 to-red-500 border-orange-400 shadow-lg shadow-orange-500/30'
+                        : 'border-gray-600 hover:border-orange-400/50'
                     }`}></div>
                   </button>
                 ))}
@@ -404,11 +405,11 @@ export default function Journal() {
                 value={entry}
                 onChange={(e) => setEntry(e.target.value)}
                 rows={6}
-                className="w-full p-4 pr-14 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none resize-none"
+                className="w-full p-6 pr-16 bg-gradient-to-br from-gray-800/50 to-gray-900/50 text-white rounded-2xl border border-gray-700/50 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none transition-all duration-300 backdrop-blur-sm"
                 placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
                 required
               />
-              <div className="absolute right-2 top-2">
+              <div className="absolute right-3 top-3">
                 <VoiceInputButton
                   onTranscript={(transcript) => {
                     setEntry(prev => prev + (prev ? ' ' : '') + transcript);
@@ -422,31 +423,31 @@ export default function Journal() {
           <button
             type="submit"
             disabled={loading || !entry.trim()}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white py-3 rounded-lg transition-colors"
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:from-gray-700 disabled:to-gray-800 text-white py-4 rounded-2xl transition-all duration-300 font-light tracking-wide shadow-lg hover:shadow-xl disabled:shadow-none transform hover:scale-[1.02] disabled:hover:scale-100"
           >
             {loading ? 'Saving...' : 'Save Entry'}
           </button>
         </form>
-      </div>
+        </div>
 
-      {/* Previous Entries */}
-      <div>
-        <h2 className="text-xl font-bold text-white mb-4">Previous Entries</h2>
-        {entries.length > 0 ? (
-          <div className="space-y-4">
-            {entries.map((entry) => {
-              const moodOption = moodOptions.find(m => m.value === entry.mood);
-              const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
+        {/* Previous Entries */}
+        <div>
+          <h2 className="text-xl font-light text-white mb-6 tracking-wide">Previous Entries</h2>
+          {entries.length > 0 ? (
+            <div className="space-y-6">
+              {entries.map((entry) => {
+                const moodOption = moodOptions.find(m => m.value === entry.mood);
+                const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
 
-              return (
-                <div key={entry.id} className="bg-gray-800 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-xl">{moodOption?.emoji}</span>
-                      <span className="text-gray-400">
-                        {moodOption?.label} - {intensityLabel}
-                      </span>
-                    </div>
+                return (
+                  <div key={entry.id} className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-3xl p-6 border border-gray-800/50 oura-card">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-xl opacity-80">{moodOption?.emoji}</span>
+                        <span className="text-gray-400 font-light">
+                          {moodOption?.label} - {intensityLabel}
+                        </span>
+                      </div>
                     <div className="flex items-center space-x-3">
                       <span className="text-sm text-gray-500">
                         {new Date(entry.createdAt).toLocaleDateString()} at {new Date(entry.createdAt).toLocaleTimeString()}
@@ -488,6 +489,7 @@ export default function Journal() {
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
       />
+      </div>
     </div>
   );
 }

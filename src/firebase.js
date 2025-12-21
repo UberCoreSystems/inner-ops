@@ -115,19 +115,5 @@ export const getCurrentUserOrMock = () => {
   return createMockUser();
 };
 
-// Helper function to check if Firebase is properly configured
-export const checkFirebaseConnection = () => {
-  const status = {
-    app: !!app,
-    auth: !!auth,
-    db: !!db,
-    projectId: app?.options?.projectId,
-    isConfigured: !!app && !!auth && !!db
-  };
-  
-  console.log("🔍 Firebase Connection Status:", status);
-  return status;
-};
-
 export { auth, db };
 export default app;

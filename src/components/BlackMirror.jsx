@@ -153,91 +153,92 @@ const BlackMirror = () => {
   }, [screenTime, mentalFog, interactionLevel, unconsciousCheck, reflection, calculateBlackMirrorIndex, philosophicalInsight, entries]);
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">📱 Black Mirror: Mindless Usage Tracker</h1>
-        <p className="text-gray-400">Track mindless scrolling and its devastating impact on consciousness</p>
-        <div className="mt-2 text-sm text-purple-300">
-          📱 Weekly check: +25 clarity points | Low index (&lt;10): +10 bonus points
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        <div className="text-center mb-12 fade-in">
+          <h1 className="text-2xl font-light text-white mb-2 tracking-wide">📱 Black Mirror</h1>
+          <p className="text-gray-500 text-sm font-light">Track mindless scrolling and its impact on consciousness</p>
+          <div className="mt-4 text-sm text-purple-300 font-light">
+            📱 Weekly check: +25 clarity points | Low index (&lt;10): +10 bonus points
+          </div>
         </div>
-      </div>
 
-      <div className="bg-gray-800 rounded-lg p-6 mb-8">
-        <h2 className="text-xl font-bold text-white mb-4">Digital Consciousness Check</h2>
+        <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-3xl p-8 mb-8 border border-gray-800/50 oura-card">
+          <h2 className="text-xl font-light text-white mb-6 tracking-wide">Digital Consciousness Check</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-gray-400 mb-2">Mindless Screen Time Today (hours)</label>
-            <input
-              type="number"
-              step="0.5"
-              min="0"
-              max="24"
-              value={screenTime}
-              onChange={(e) => setScreenTime(e.target.value)}
-              className="w-full p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-purple-500 focus:outline-none"
-              placeholder="e.g., 3.5"
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">Only count mindless scrolling, not productive screen time</p>
-          </div>
-
-          <div>
-            <label className="block text-gray-400 mb-2">Mental Fog Level (1-10)</label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={mentalFog}
-              onChange={(e) => setMentalFog(Number(e.target.value))}
-              className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>1 - Crystal Clear</span>
-              <span className="text-white font-bold">{mentalFog}</span>
-              <span>10 - Total Fog</span>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div>
+              <label className="block text-gray-400 mb-3 font-light tracking-wide">Mindless Screen Time Today (hours)</label>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max="24"
+                value={screenTime}
+                onChange={(e) => setScreenTime(e.target.value)}
+                className="w-full p-4 bg-gradient-to-br from-gray-800/50 to-gray-900/50 text-white rounded-2xl border border-gray-700/50 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all duration-300 backdrop-blur-sm"
+                placeholder="e.g., 3.5"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-2 font-light">Only count mindless scrolling, not productive screen time</p>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-gray-400 mb-2">Real-World Human Interaction (1-10)</label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={interactionLevel}
-              onChange={(e) => setInteractionLevel(Number(e.target.value))}
-              className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>1 - Isolated</span>
-              <span className="text-white font-bold">{interactionLevel}</span>
-              <span>10 - Very Social</span>
+            
+            <div>
+              <label className="block text-gray-400 mb-3 font-light tracking-wide">Mental Fog Level (1-10)</label>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                value={mentalFog}
+                onChange={(e) => setMentalFog(Number(e.target.value))}
+                className="w-full h-3 bg-gradient-to-r from-gray-700 to-gray-600 rounded-2xl appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-3 font-light">
+                <span>1 - Crystal Clear</span>
+                <span className="text-white font-light text-lg">{mentalFog}</span>
+                <span>10 - Total Fog</span>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="unconsciousCheck"
-              checked={unconsciousCheck}
-              onChange={(e) => setUnconsciousCheck(e.target.checked)}
-              className="mr-3 w-4 h-4"
-            />
-            <label htmlFor="unconsciousCheck" className="text-gray-300">
-              Did you unconsciously reach for your phone in the last 5 minutes?
-            </label>
-          </div>
-
-          {/* Black Mirror Index Display */}
-          <div className="bg-black border-l-4 border-red-500 p-4 rounded">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-bold text-white">🧠 Black Mirror Index</h3>
-              <span className={`text-2xl font-bold ${currentIndex > 0 ? getIndexColor(currentIndex) : 'text-gray-400'}`}>
-                {currentIndex > 0 ? currentIndex : '—'}
-              </span>
+            <div>
+              <label className="block text-gray-400 mb-3 font-light tracking-wide">Real-World Human Interaction (1-10)</label>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                value={interactionLevel}
+                onChange={(e) => setInteractionLevel(Number(e.target.value))}
+                className="w-full h-3 bg-gradient-to-r from-gray-700 to-gray-600 rounded-2xl appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-3 font-light">
+                <span>1 - Isolated</span>
+                <span className="text-white font-light text-lg">{interactionLevel}</span>
+                <span>10 - Very Social</span>
+              </div>
             </div>
-            <p className="text-gray-300 text-sm italic mb-3">"{philosophicalInsight}"</p>
+
+            <div className="flex items-center space-x-4 p-4 bg-gradient-to-r from-gray-800/30 to-gray-900/30 rounded-2xl border border-gray-700/30">
+              <input
+                type="checkbox"
+                id="unconsciousCheck"
+                checked={unconsciousCheck}
+                onChange={(e) => setUnconsciousCheck(e.target.checked)}
+                className="w-5 h-5 rounded text-purple-600 bg-gray-700 border-gray-600 focus:ring-purple-500 focus:ring-2"
+              />
+              <label htmlFor="unconsciousCheck" className="text-gray-300 font-light tracking-wide">
+                Did you unconsciously reach for your phone in the last 5 minutes?
+              </label>
+            </div>
+
+            {/* Black Mirror Index Display */}
+            <div className="bg-gradient-to-br from-black/60 to-gray-900/60 border-l-4 border-red-500/70 p-6 rounded-2xl backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-light text-white tracking-wide">🧠 Black Mirror Index</h3>
+                <span className={`text-3xl font-thin ${currentIndex > 0 ? getIndexColor(currentIndex) : 'text-gray-400'}`}>
+                  {currentIndex > 0 ? currentIndex : '—'}
+                </span>
+              </div>
+              <p className="text-gray-300 text-sm italic mb-4 font-light">"{philosophicalInsight}"</p>
 
             {currentIndex > 0 && (
               <div className="mt-3">
@@ -259,10 +260,10 @@ const BlackMirror = () => {
                 value={reflection}
                 onChange={(e) => setReflection(e.target.value)}
                 rows={4}
-                className="w-full p-4 pr-14 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none resize-none"
+                className="w-full p-4 pr-16 bg-gradient-to-br from-gray-800/50 to-gray-900/50 text-white rounded-2xl border border-gray-700/50 focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 resize-none transition-all duration-300 backdrop-blur-sm"
                 placeholder="How did technology impact your consciousness today? What patterns do you notice?"
               />
-              <div className="absolute right-2 top-2">
+              <div className="absolute right-3 top-3">
                 <VoiceInputButton
                   onTranscript={handleVoiceInput}
                   disabled={loading}
@@ -274,16 +275,16 @@ const BlackMirror = () => {
           <button
             type="submit"
             disabled={loading || !screenTime.trim()}
-            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white font-bold py-3 px-6 rounded transition-colors"
+            className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 disabled:from-gray-700 disabled:to-gray-800 text-white font-light py-4 px-8 rounded-2xl transition-all duration-300 tracking-wide shadow-lg hover:shadow-xl transform hover:scale-[1.02] disabled:hover:scale-100"
           >
             {loading ? 'Saving...' : 'Save Black Mirror Entry'}
           </button>
         </form>
-      </div>
+        </div>
 
-      {/* Recent Entries */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <h2 className="text-xl font-bold text-white mb-4">Recent Digital Consciousness Checks ({entries.length})</h2>
+        {/* Recent Entries */}
+        <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-3xl p-8 border border-gray-800/50 oura-card">
+          <h2 className="text-xl font-light text-white mb-6 tracking-wide">Recent Digital Consciousness Checks ({entries.length})</h2>
 
         {entries.length > 0 ? (
           <VirtualizedList
@@ -364,6 +365,7 @@ const BlackMirror = () => {
         feedback={aiFeedback}
         loading={loadingFeedback}
       />
+      </div>
     </div>
   );
 };

@@ -211,39 +211,40 @@ Please help extract the core lesson and rule from this experience.
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">⚡ Hard Lessons</h1>
-        <p className="text-gray-400 mb-2">
-          Forensic extraction of irreversible signal from irreversible pain
-        </p>
-        <div className="text-sm text-red-300 bg-red-900/20 p-3 rounded border border-red-500/30">
-          <strong>Purpose:</strong> Ensure the same lesson is never paid for twice. Memory with teeth.
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-6xl mx-auto px-6 py-12">
+        <div className="text-center mb-12 fade-in">
+          <h1 className="text-2xl font-light text-white mb-2 tracking-wide">⚡ Hard Lessons</h1>
+          <p className="text-gray-500 text-sm font-light mb-4">
+            Forensic extraction of irreversible signal from irreversible pain
+          </p>
+          <div className="text-sm text-red-300 bg-gradient-to-br from-red-900/20 to-red-800/10 p-4 rounded-2xl border border-red-500/20 glass-morphism max-w-2xl mx-auto">
+            <strong className="font-light">Purpose:</strong> Ensure the same lesson is never paid for twice. Memory with teeth.
+          </div>
         </div>
-      </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-4 mb-8">
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-        >
-          {showForm ? 'Cancel' : '⚡ Extract New Lesson'}
-        </button>
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-8 items-center justify-center">
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-2xl transition-all duration-300 font-light tracking-wide shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+          >
+            {showForm ? 'Cancel' : '⚡ Extract New Lesson'}
+          </button>
+          
+          <div className="text-sm text-gray-400 flex items-center gap-6 font-light">
+            <span>Total Lessons: {lessons.length}</span>
+            <span>Finalized: {lessons.filter(l => l.isFinalized).length}</span>
+            <span>Draft: {lessons.filter(l => !l.isFinalized).length}</span>
+          </div>
+        </div>
         
-        <div className="text-sm text-gray-400 flex items-center">
-          <span className="mr-4">Total Lessons: {lessons.length}</span>
-          <span className="mr-4">Finalized: {lessons.filter(l => l.isFinalized).length}</span>
-          <span>Draft: {lessons.filter(l => !l.isFinalized).length}</span>
-        </div>
-      </div>
-
-      {/* Lesson Extraction Form */}
-      {showForm && (
-        <div className="bg-gray-800 rounded-lg p-6 mb-8 border border-red-500/30">
-          <h2 className="text-xl font-bold text-white mb-4">
-            {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
-          </h2>
+        {/* Lesson Extraction Form */}
+        {showForm && (
+          <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-3xl p-8 mb-8 border border-red-500/20 oura-card">
+            <h2 className="text-xl font-light text-white mb-6 tracking-wide">
+              {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
+            </h2>
           
           <div className="space-y-6">
             {/* Event Category */}
@@ -537,6 +538,7 @@ Please help extract the core lesson and rule from this experience.
         isLoading={oracleModal.isLoading}
         title="Oracle's Extraction Wisdom"
       />
+      </div>
     </div>
   );
 }

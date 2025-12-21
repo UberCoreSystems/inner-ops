@@ -210,16 +210,28 @@ export const aiUtils = {
   generateActionSteps: (userData) => {
     const steps = [];
 
+    // Mood-based insights
     if (userData.recentMood === 'sad' || userData.recentMood === 'anxious') {
       steps.push("Consider a mindfulness or grounding exercise to center yourself.");
       steps.push("Reflect on what specific thoughts are driving these feelings.");
     }
 
+    // Kill List progress insights
     if (userData.killListProgress < 30) {
       steps.push("Focus on one small action toward your primary target today.");
       steps.push("Break down your largest obstacle into smaller, manageable steps.");
     }
 
+    // Hard Lessons insights
+    if (userData.hardLessonsCount === 0) {
+      steps.push("When facing challenges, consider extracting a Hard Lesson to prevent repeating mistakes.");
+    } else if (userData.hardLessonsFinalized / userData.hardLessonsCount < 0.5) {
+      steps.push("Review your draft Hard Lessons and finalize the most important ones for permanent wisdom.");
+    } else if (userData.hardLessonsCount >= 3) {
+      steps.push("Review your Hard Lessons rules regularly to ensure you're applying them in daily situations.");
+    }
+
+    // Compass/values insights
     if (userData.compassOverall < 4) {
       steps.push("Identify one core value you want to embody more fully this week.");
       steps.push("Consider where you might be compromising your authentic self.");
@@ -229,7 +241,12 @@ export const aiUtils = {
     steps.push("What would your highest self do in today's challenges?");
     steps.push("Challenge yourself to act from courage rather than fear today.");
 
-    return steps.slice(0, 3); // Return max 3 action steps
+    // Add Hard Lessons specific insights based on patterns
+    if (userData.hardLessonsCount > 0) {
+      steps.push("Apply the wisdom from your Hard Lessons to current challenges - let pain become strategic advantage.");
+    }
+
+    return steps.slice(0, 4); // Return max 4 action steps
   },
 
   // Generate AI feedback using OpenAI API

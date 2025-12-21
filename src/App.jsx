@@ -10,11 +10,9 @@ import Onboarding from './pages/Onboarding';
 import HardLessons from './pages/HardLessons';
 import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
-import FirestoreTest from './components/FirestoreTest';
-import OpenAITest from './components/OpenAITest';
 import AuthForm from './components/AuthForm';
-import { checkFirebaseConnection } from './firebase';
 import './App.css';
+import './oura-styles.css';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -23,10 +21,6 @@ function App() {
   useEffect(() => {
     // Log API key to confirm Vite environment variables are loading
     console.log("🔥 VITE_FIREBASE_API_KEY:", import.meta.env.VITE_FIREBASE_API_KEY ? "✅ Present" : "❌ Missing");
-    
-    // Check Firebase connection status
-    const firebaseStatus = checkFirebaseConnection();
-    console.log("🔍 Firebase Status on App Load:", firebaseStatus);
 
     // Listen for authentication state changes
     const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
@@ -88,10 +82,6 @@ function App() {
           <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
           <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/auth" />} />
           <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/auth" />} />
-          
-          {/* Dev/Test Routes */}
-          <Route path="/firebase-test" element={<FirestoreTest />} />
-          <Route path="/openai-test" element={<OpenAITest />} />
           
           {/* Default Routes */}
           <Route path="/login" element={<Navigate to="/auth" />} />

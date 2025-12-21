@@ -14,6 +14,8 @@ export const clarityScoreUtils = {
     RELAPSE_REFLECTION: 5, // additional bonus for detailed reflection
     BLACK_MIRROR_CHECK: 5, // weekly bonus
     BLACK_MIRROR_LOW_INDEX: 3, // bonus for low index (<10)
+    HARD_LESSON_EXTRACTED: 12, // bonus for extracting a hard lesson
+    HARD_LESSON_FINALIZED: 20, // bonus for finalizing a lesson with rules
   },
 
   // Calculate total clarity score from user data
@@ -24,8 +26,9 @@ export const clarityScoreUtils = {
       killCount: userData.killTargets?.length || 0,
       relapseCount: userData.relapseEntries?.length || 0,
       blackMirrorCount: userData.blackMirrorEntries?.length || 0,
+      hardLessonsCount: userData.hardLessons?.length || 0,
       lastUpdate: Math.max(
-        ...[userData.journalEntries, userData.killTargets, userData.relapseEntries, userData.blackMirrorEntries]
+        ...[userData.journalEntries, userData.killTargets, userData.relapseEntries, userData.blackMirrorEntries, userData.hardLessons]
           .filter(arr => arr && arr.length > 0)
           .map(arr => new Date(arr[0].createdAt).getTime())
       )
@@ -37,7 +40,7 @@ export const clarityScoreUtils = {
       return cached.result;
     }
 
-    const { journalEntries = [], killTargets = [], relapseEntries = [], blackMirrorEntries = [] } = userData;
+    const { journalEntries = [], killTargets = [], relapseEntries = [], blackMirrorEntries = [], hardLessons = [] } = userData;
     
     let totalScore = 0;
 
@@ -96,17 +99,33 @@ export const clarityScoreUtils = {
     });
     totalScore += relapseAwarenessBonus;
 
+    // Hard Lessons scoring - reward turning pain into wisdom
+    let hardLessonsScore = 0;
+    hardLessons.forEach(lesson => {
+      // Base bonus for extracting a lesson from failure
+      hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_EXTRACTED;
+      
+      // Additional bonus if the lesson is finalized with actionable rules
+      if (lesson.status === 'finalized' && lesson.actions && lesson.actions.length > 0) {
+        hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_FINALIZED;
+      }
+    });
+    totalScore += hardLessonsScore;
+
     const result = {
       totalScore: Math.floor(totalScore),
       journalStreak,
       killTargetsCompleted: killTargets.filter(t => t.progress === 100).length,
       weeklyBlackMirrorChecks: Math.floor(blackMirrorEntries.length / 7),
       relapseAwarenessEntries: relapseEntries.length,
+      hardLessonsExtracted: hardLessons.length,
+      hardLessonsFinalized: hardLessons.filter(l => l.status === 'finalized').length,
       breakdown: {
         journal: journalEntries.length * clarityScoreUtils.SCORING.JOURNAL_ENTRY,
         killList: killListScore,
         blackMirror: weeklyBlackMirrorBonuses,
         relapseAwareness: relapseAwarenessBonus,
+        hardLessons: hardLessonsScore,
         bonuses: journalStreak >= 7 ? (journalStreak >= 90 ? 130 : (journalStreak >= 30 ? 55 : 15)) : 0,
         completionRate: completionRate,
         completionMultiplier: completionMultiplier

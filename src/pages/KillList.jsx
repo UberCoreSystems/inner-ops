@@ -611,42 +611,42 @@ const KillList = () => {
       reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote]);
 
   return (
-    <div className="bg-gray-900 min-h-screen p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-black text-white">
+      <div className="max-w-4xl mx-auto px-6 py-12">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-red-400 mb-2">Kill List</h1>
-          <p className="text-gray-400">Eliminate negative patterns and destructive habits</p>
+        <div className="text-center mb-12 fade-in">
+          <h1 className="text-2xl font-light text-red-400 mb-2 tracking-wide">Kill List</h1>
+          <p className="text-gray-500 text-sm font-light">Eliminate negative patterns and destructive habits</p>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-white">{stats.total}</div>
-            <div className="text-sm text-gray-400">Total Contracts</div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-8">
+          <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-800/50 oura-card">
+            <div className="text-2xl font-thin text-white mb-1">{stats.total}</div>
+            <div className="text-xs text-gray-400 font-light tracking-wide uppercase">Total Contracts</div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-blue-400">{stats.active}</div>
-            <div className="text-sm text-gray-400">Active</div>
+          <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-800/50 oura-card">
+            <div className="text-2xl font-thin text-blue-400 mb-1">{stats.active}</div>
+            <div className="text-xs text-gray-400 font-light tracking-wide uppercase">Active</div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-green-400">{stats.completed}</div>
-            <div className="text-sm text-gray-400">Killed</div>
+          <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-800/50 oura-card">
+            <div className="text-2xl font-thin text-green-400 mb-1">{stats.completed}</div>
+            <div className="text-xs text-gray-400 font-light tracking-wide uppercase">Killed</div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-red-400">{stats.escaped}</div>
-            <div className="text-sm text-gray-400">Escaped</div>
+          <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-800/50 oura-card">
+            <div className="text-2xl font-thin text-red-400 mb-1">{stats.escaped}</div>
+            <div className="text-xs text-gray-400 font-light tracking-wide uppercase">Escaped</div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-lg text-center">
-            <div className="text-2xl font-bold text-yellow-400">{stats.completionRate}%</div>
-            <div className="text-sm text-gray-400">Success Rate</div>
+          <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-2xl p-6 text-center border border-gray-800/50 oura-card">
+            <div className="text-2xl font-thin text-yellow-400 mb-1">{stats.completionRate}%</div>
+            <div className="text-xs text-gray-400 font-light tracking-wide uppercase">Success Rate</div>
           </div>
         </div>
 
         {/* Add New Target */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Add New Kill Contract</h2>
-          <div className="space-y-4">
+        <div className="bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur-sm rounded-3xl p-8 mb-8 border border-gray-800/50 oura-card">
+          <h2 className="text-xl font-light text-white mb-6 tracking-wide">Add New Kill Contract</h2>
+          <div className="space-y-6">
             {/* Target Name Input */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
