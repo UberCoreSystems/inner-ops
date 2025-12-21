@@ -10,8 +10,6 @@ import Onboarding from './pages/Onboarding';
 import HardLessons from './pages/HardLessons';
 import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
-import FirestoreTest from './components/FirestoreTest';
-import OpenAITest from './components/OpenAITest';
 import AuthForm from './components/AuthForm';
 import { checkFirebaseConnection } from './firebase';
 import './App.css';
@@ -88,10 +86,6 @@ function App() {
           <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
           <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/auth" />} />
           <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/auth" />} />
-          
-          {/* Dev/Test Routes */}
-          <Route path="/firebase-test" element={<FirestoreTest />} />
-          <Route path="/openai-test" element={<OpenAITest />} />
           
           {/* Default Routes */}
           <Route path="/login" element={<Navigate to="/auth" />} />

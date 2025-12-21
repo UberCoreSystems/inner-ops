@@ -12,8 +12,6 @@ export default function Navbar({ onLogout, user }) {
     { path: '/hardlessons', label: 'Hard Lessons', icon: '⚡' },
     { path: '/blackmirror', label: 'Black Mirror', icon: '📱' },
     { path: '/relapse', label: 'Relapse', icon: '⚠️' },
-    { path: '/firebase-test', label: 'Firebase Test', icon: '🔥' },
-    { path: '/openai-test', label: 'OpenAI Test', icon: '🤖' },
   ];
 
   const getUserDisplayName = () => {
