@@ -211,10 +211,13 @@ const KillListDashboard = () => {
 
   if (initialLoad && loading) {
     return (
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="oura-card p-8">
         <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
-          <span className="ml-3 text-gray-400">Loading today's targets...</span>
+          <div className="relative w-12 h-12">
+            <div className="absolute inset-0 rounded-full border-2 border-[#1a1a1a]"></div>
+            <div className="absolute inset-0 rounded-full border-2 border-[#ef4444] border-t-transparent animate-spin"></div>
+          </div>
+          <span className="ml-4 text-[#5a5a5a] text-sm font-light">Loading targets...</span>
         </div>
       </div>
     );
@@ -222,14 +225,20 @@ const KillListDashboard = () => {
 
   if (error) {
     return (
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="oura-card p-8">
         <div className="text-center">
-          <div className="text-6xl mb-4">⚠️</div>
-          <h3 className="text-lg font-semibold text-red-400 mb-2">Error Loading Targets</h3>
-          <p className="text-gray-400 mb-4">{error}</p>
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[#ef4444]/10 flex items-center justify-center">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L2 22h20L12 2z" />
+              <line x1="12" y1="9" x2="12" y2="14" />
+              <circle cx="12" cy="18" r="1" fill="#ef4444" stroke="none" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-light text-white mb-2">Error Loading Targets</h3>
+          <p className="text-[#5a5a5a] text-sm mb-6">{error}</p>
           <button 
             onClick={refetch}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            className="px-6 py-3 bg-[#1a1a1a] text-white text-sm font-light rounded-xl border border-[#2a2a2a] hover:border-[#3a3a3a] hover:bg-[#2a2a2a] transition-all"
           >
             Try Again
           </button>
@@ -240,14 +249,28 @@ const KillListDashboard = () => {
 
   if (todaysTargets.length === 0) {
     return (
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="oura-card p-8">
         <div className="text-center">
-          <div className="text-6xl mb-4">🎯</div>
-          <h3 className="text-lg font-semibold text-white mb-2">No Targets for Today</h3>
-          <p className="text-gray-400 mb-4">You haven't set any kill targets for today.</p>
+          <div className="w-20 h-20 mx-auto mb-6 relative">
+            <svg viewBox="0 0 80 80" className="w-full h-full">
+              {/* Outer ring */}
+              <circle cx="40" cy="40" r="36" fill="none" stroke="#1a1a1a" strokeWidth="2" />
+              <circle cx="40" cy="40" r="36" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="226" strokeDashoffset="170" strokeLinecap="round" opacity="0.3" />
+              {/* Middle ring */}
+              <circle cx="40" cy="40" r="26" fill="none" stroke="#1a1a1a" strokeWidth="2" />
+              <circle cx="40" cy="40" r="26" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="163" strokeDashoffset="120" strokeLinecap="round" opacity="0.5" />
+              {/* Inner ring */}
+              <circle cx="40" cy="40" r="16" fill="none" stroke="#1a1a1a" strokeWidth="2" />
+              <circle cx="40" cy="40" r="16" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="100" strokeDashoffset="75" strokeLinecap="round" opacity="0.7" />
+              {/* Center dot */}
+              <circle cx="40" cy="40" r="4" fill="#ef4444" opacity="0.9" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-light text-white mb-2">No Targets Set</h3>
+          <p className="text-[#5a5a5a] text-sm mb-6 max-w-xs mx-auto">Define what you're eliminating today to track your progress.</p>
           <button 
             onClick={() => window.location.href = '/killlist'}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+            className="px-6 py-3 bg-[#ef4444] text-white text-sm font-medium rounded-xl hover:bg-[#dc2626] transition-all hover:shadow-lg hover:shadow-[#ef4444]/20"
           >
             Set Today's Targets
           </button>
@@ -257,22 +280,35 @@ const KillListDashboard = () => {
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="oura-card p-6">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-white mb-1">🎯 Today's Kill Targets</h2>
-          <p className="text-gray-400 text-sm">
-            {stats.killed} killed • {stats.escaped} escaped • {stats.active} active
-            {stats.total > 0 && (
-              <span className="ml-2 text-xs">
-                ({stats.completionRate.toFixed(0)}% completion rate)
-              </span>
-            )}
-          </p>
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="6" opacity="0.6" />
+              <circle cx="12" cy="12" r="2" fill="#ef4444" stroke="none" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-light text-white">Today's Targets</h2>
+            <p className="text-[#5a5a5a] text-sm font-light">
+              <span className="text-[#22c55e]">{stats.killed} killed</span>
+              <span className="mx-2">•</span>
+              <span className="text-[#f59e0b]">{stats.escaped} escaped</span>
+              <span className="mx-2">•</span>
+              <span className="text-[#4da6ff]">{stats.active} active</span>
+              {stats.total > 0 && (
+                <span className="ml-3 text-[#5a5a5a]">
+                  {stats.completionRate.toFixed(0)}%
+                </span>
+              )}
+            </p>
+          </div>
         </div>
         <button 
           onClick={() => window.location.href = '/killlist'}
-          className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+          className="px-4 py-2 text-sm font-light text-[#5a5a5a] border border-[#2a2a2a] rounded-xl hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all"
         >
           Manage All
         </button>

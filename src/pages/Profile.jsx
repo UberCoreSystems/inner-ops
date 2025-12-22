@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { updateProfile } from 'firebase/auth';
 
 export default function Profile() {
+  const navigate = useNavigate();
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -27,6 +29,10 @@ export default function Profile() {
           displayName: displayName
         });
         setMessage('Profile updated successfully!');
+        // Navigate back to dashboard after short delay
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 1000);
       } else {
         setMessage('Error: No user is currently signed in');
       }
