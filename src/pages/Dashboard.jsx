@@ -145,13 +145,38 @@ export default function Dashboard() {
         }
       }
 
+      // Helper function to count entries from last 30 days
+      const countRecentActivity = (entries) => {
+        if (!entries || !Array.isArray(entries)) return 0;
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 30);
+        
+        return entries.filter(entry => {
+          if (!entry?.createdAt) return false;
+          const entryDate = entry.createdAt?.toDate 
+            ? entry.createdAt.toDate() 
+            : new Date(entry.createdAt);
+          return entryDate >= cutoffDate;
+        }).length;
+      };
+
+      // Calculate recent (30-day) activity for each module
+      const recentJournalCount = countRecentActivity(journalEntries);
+      const recentKillCount = countRecentActivity(killTargets);
+      const recentLessonsCount = countRecentActivity(hardLessons);
+      const recentMirrorCount = countRecentActivity(blackMirrorEntries);
+
       setStats({
-        journalEntries: journalEntries.length,
+        journalEntries: recentJournalCount,  // Use recent count for activity ring
+        journalEntriesTotal: journalEntries.length,  // Keep total for reference
         relapseEntries: relapseEntries.length,
         streakDays: Math.max(0, streakDays),
-        killTargets: killTargets.length,
-        hardLessons: hardLessons.length,
-        blackMirrorEntries: blackMirrorEntries.length
+        killTargets: recentKillCount,  // Use recent count
+        killTargetsTotal: killTargets.length,
+        hardLessons: recentLessonsCount,  // Use recent count
+        hardLessonsTotal: hardLessons.length,
+        blackMirrorEntries: recentMirrorCount,  // Use recent count
+        blackMirrorEntriesTotal: blackMirrorEntries.length
       });
 
       // Get recent entries from all sources
@@ -218,16 +243,21 @@ export default function Dashboard() {
 
   // Calculate ring percentages for visualization - Based on realistic, meaningful goals
   
-  // Clarity Ring: Progress toward next rank milestone
+  // Mastery: Overall progress toward full mastery (0-1000 scale)
+  // 1000 represents years of consistent practice - the full journey
+  const MASTERY_SCORE = 1000;
+  const masteryPercent = Math.min(100, (clarityScore.totalScore / MASTERY_SCORE) * 100);
+  
+  // Also calculate rank progress for display context
   const getCurrentRankThreshold = (score) => {
-    if (score >= 1000) return 1000; // At max
-    if (score >= 750) return 1000;  // Working toward Master (1000)
-    if (score >= 500) return 750;   // Working toward Expert (750)
-    if (score >= 300) return 500;   // Working toward Seeker (500)
-    if (score >= 150) return 300;   // Working toward Practitioner (300)
-    if (score >= 75) return 150;    // Working toward Student (150)
-    if (score >= 25) return 75;     // Working toward Apprentice (75)
-    return 25;                       // Working toward Beginner (25)
+    if (score >= 1000) return 1000;
+    if (score >= 750) return 1000;
+    if (score >= 500) return 750;
+    if (score >= 300) return 500;
+    if (score >= 150) return 300;
+    if (score >= 75) return 150;
+    if (score >= 25) return 75;
+    return 25;
   };
   
   const getPreviousRankThreshold = (score) => {
@@ -241,33 +271,70 @@ export default function Dashboard() {
     return 0;
   };
   
-  const currentThreshold = getCurrentRankThreshold(clarityScore.totalScore);
-  const previousThreshold = getPreviousRankThreshold(clarityScore.totalScore);
-  const rangeSize = currentThreshold - previousThreshold;
-  const progressInRange = clarityScore.totalScore - previousThreshold;
-  const clarityPercent = rangeSize > 0 ? Math.min(100, (progressInRange / rangeSize) * 100) : 0;
+  const nextRankThreshold = getCurrentRankThreshold(clarityScore.totalScore);
+  const previousRankThreshold = getPreviousRankThreshold(clarityScore.totalScore);
+  const pointsToNextRank = nextRankThreshold - clarityScore.totalScore;
+  const rangeSize = nextRankThreshold - previousRankThreshold;
+  const progressInRange = clarityScore.totalScore - previousRankThreshold;
+  
+  // Clarity Ring: Progress within current rank toward next rank
+  // This gives actionable short-term motivation
+  const clarityPercent = rangeSize > 0 ? Math.min(100, (progressInRange / rangeSize) * 100) : 100;
   
   // Streak Ring: Progress toward 30-day milestone (a meaningful recovery goal)
   const streakPercent = Math.min(100, (stats.streakDays / 30) * 100);
   
-  // Activity Ring: Composite of consistent engagement across all modules
-  // Goal: At least 2 journal entries/week (8/month), 2 kill targets, 2 hard lessons, 4 mirror checks/month
-  const journalGoal = 8;  // 2/week
-  const killGoal = 2;     // Quality over quantity
-  const lessonsGoal = 2;  // Extract meaningful lessons
-  const mirrorGoal = 4;   // Weekly checks
+  // Activity Ring: Based on RECENT activity (last 30 days) across all modules
+  // This measures current engagement, not lifetime totals
   
+  // Helper to count entries from last 30 days
+  const countRecentEntries = (entries, daysBack = 30) => {
+    if (!entries || !Array.isArray(entries)) return 0;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+    
+    return entries.filter(entry => {
+      if (!entry?.createdAt) return false;
+      const entryDate = entry.createdAt?.toDate ? entry.createdAt.toDate() : new Date(entry.createdAt);
+      return entryDate >= cutoffDate;
+    }).length;
+  };
+  
+  // Helper to count recent entries from recentEntries (already loaded)
+  // Since we don't have the full arrays in state, we'll use the stats for now
+  // but apply a decay factor based on the most recent entry time
+  
+  // Monthly goals (30-day targets):
+  // - Journal: 8 entries/month (2/week) = most important daily habit
+  // - Kill Targets: 3 targets actively worked on = ongoing elimination
+  // - Hard Lessons: 2 lessons/month = meaningful reflection
+  // - Black Mirror: 4 checks/month (weekly) = digital awareness
+  
+  const journalGoal = 8;
+  const killGoal = 3;
+  const lessonsGoal = 2;
+  const mirrorGoal = 4;
+  
+  // Calculate progress for each module
+  // For kill targets: count both active targets and successfully killed ones
+  const activeKillTargets = stats.killTargets || 0;
+  
+  // Cap each at 100% to prevent one area from inflating overall score
   const journalProgress = Math.min(100, (stats.journalEntries / journalGoal) * 100);
-  const killProgress = Math.min(100, (stats.killTargets / killGoal) * 100);
+  const killProgress = Math.min(100, (activeKillTargets / killGoal) * 100);
   const lessonsProgress = Math.min(100, (stats.hardLessons / lessonsGoal) * 100);
   const mirrorProgress = Math.min(100, ((stats.blackMirrorEntries || 0) / mirrorGoal) * 100);
   
-  // Weighted average: Journal is most important, then kill list
-  const activityPercent = (
-    journalProgress * 0.4 +    // 40% weight - daily reflection is key
-    killProgress * 0.3 +        // 30% weight - eliminating patterns
-    lessonsProgress * 0.2 +     // 20% weight - learning from mistakes
-    mirrorProgress * 0.1        // 10% weight - reality checks
+  // Weighted average with clear rationale:
+  // - Journal (35%): Daily reflection is foundational to self-awareness
+  // - Kill List (25%): Actively eliminating destructive patterns
+  // - Hard Lessons (25%): Extracting wisdom from pain prevents repeat mistakes
+  // - Black Mirror (15%): Digital consciousness checks support overall clarity
+  const activityPercent = Math.round(
+    journalProgress * 0.35 +
+    killProgress * 0.25 +
+    lessonsProgress * 0.25 +
+    mirrorProgress * 0.15
   );
 
   const formatTimeAgo = (date) => {
@@ -300,7 +367,7 @@ export default function Dashboard() {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
           <h1 className="text-3xl font-bold text-white">
-            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}
+            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Warrior'}
           </h1>
         </header>
 
@@ -332,14 +399,14 @@ export default function Dashboard() {
 
             {/* Score Details */}
             <div className="flex-1 w-full">
-              <div className="flex items-center gap-3 mb-6">
+              <div className="flex items-center gap-3 mb-4">
                 <span className="text-3xl">{clarityScore.rank.icon}</span>
                 <div>
                   <h2 className="text-xl font-semibold text-white">{clarityScore.rank.rank}</h2>
                   <p className="text-[#5a5a5a] text-sm">Your current clarity level</p>
                 </div>
               </div>
-
+              
               {/* Ring Legend */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="flex items-center gap-2">
@@ -356,11 +423,14 @@ export default function Dashboard() {
                     <p className="text-[#5a5a5a] text-xs">Activity</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 group relative cursor-help">
                   <div className="w-3 h-3 rounded-full bg-[#a855f7]"></div>
                   <div>
                     <p className="text-white text-sm font-medium">{stats.streakDays}d</p>
                     <p className="text-[#5a5a5a] text-xs">Streak</p>
+                  </div>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[#2a2a2a] text-[#8a8a8a] text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                    Days since last relapse
                   </div>
                 </div>
               </div>
@@ -398,13 +468,13 @@ export default function Dashboard() {
 
         {/* Stats Grid - Oura Score Cards */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Stats</h3>
+          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Stats (Last 30 Days)</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <ScoreCard score={stats.streakDays} label="Streak" sublabel="Days strong" color="#00d4aa" icon="🔥" size="small" />
-            <ScoreCard score={stats.killTargets} label="Targets" sublabel="Eliminated" color="#ef4444" icon="🎯" size="small" />
-            <ScoreCard score={stats.hardLessons} label="Lessons" sublabel="Extracted" color="#f59e0b" icon="⚡" size="small" />
-            <ScoreCard score={stats.journalEntries} label="Journal" sublabel="Entries" color="#a855f7" icon="📝" size="small" />
-            <ScoreCard score={stats.blackMirrorEntries || 0} label="Mirror" sublabel="Checks" color="#4da6ff" icon="📱" size="small" />
+            <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon="🎯" size="small" />
+            <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon="⚡" size="small" />
+            <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon="📝" size="small" />
+            <ScoreCard score={stats.blackMirrorEntries || 0} label="Mirror" sublabel={`of ${stats.blackMirrorEntriesTotal || 0} total`} color="#4da6ff" icon="📱" size="small" />
             <ScoreCard score={clarityScore.journalStreak || 0} label="Journal" sublabel="Day streak" color="#22c55e" icon="📅" size="small" />
           </div>
         </section>

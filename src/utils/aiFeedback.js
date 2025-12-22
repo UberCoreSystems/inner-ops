@@ -49,6 +49,85 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
   let targetContext = 'philosophical';
   let targetContent = '';
   
+  // Extract mood and intensity from journal entries
+  let moodContext = null;
+  let intensityContext = null;
+  
+  if (typeof userInput === 'string') {
+    // Parse mood from format "Mood: Label (X/5)\nContent"
+    const moodMatch = userInput.match(/^Mood:\s*(\w+)\s*\((\d)\/5\)/i);
+    if (moodMatch) {
+      moodContext = moodMatch[1].toLowerCase();
+      intensityContext = parseInt(moodMatch[2]);
+    }
+  }
+  
+  // Build mood-aware guidance for the Oracle
+  const getMoodGuidance = () => {
+    if (!moodContext) return '';
+    
+    const moodInsights = {
+      electric: { energy: 'high-voltage', approach: 'Channel this crackling energy. Ask what ignited it and where it wants to be directed.' },
+      foggy: { energy: 'obscured', approach: 'The fog is not emptiness—it\'s a veil. Gently inquire what is being hidden or processed beneath.' },
+      sharp: { energy: 'focused', approach: 'Honor this clarity. Help them cut through to what matters most while the blade is keen.' },
+      hollow: { energy: 'depleted', approach: 'Emptiness signals something was lost or given away. Explore what needs to be reclaimed or mourned.' },
+      chaotic: { energy: 'turbulent', approach: 'Chaos is unintegrated energy seeking form. Help them find the pattern within the storm.' },
+      triumphant: { energy: 'victorious', approach: 'Celebrate without inflation. Help them understand what made victory possible so it can be repeated.' },
+      heavy: { energy: 'burdened', approach: 'Weight has sources. Help them identify what they\'re carrying that isn\'t theirs, or what needs to be set down.' },
+      light: { energy: 'buoyant', approach: 'Lightness is a reward for work done. Help them notice what released and savor it without grasping.' },
+      focused: { energy: 'concentrated', approach: 'This is sacred attention. Reinforce the power of directed will and help them protect this state.' },
+      radiant: { energy: 'luminous', approach: 'Inner light is shining outward. Explore what opened this channel and how to share it wisely.' }
+    };
+    
+    const mood = moodInsights[moodContext] || { energy: moodContext, approach: 'Reflect this emotional state back with wisdom.' };
+    
+    const intensityFraming = intensityContext >= 4 
+      ? 'The intensity is HIGH—this is not a casual check-in. Something significant is moving. Address it with proportional depth and urgency.'
+      : intensityContext <= 2 
+        ? 'The intensity is LOW—this may be early-stage processing or quiet reflection. Match the gentler energy without forcing depth.'
+        : 'The intensity is MODERATE—a balanced exploration is appropriate.';
+    
+    return `
+EMOTIONAL CONTEXT (USE THIS TO SHAPE YOUR RESPONSE):
+- Mood: "${moodContext}" (${mood.energy} energy)
+- Intensity: ${intensityContext}/5
+- ${intensityFraming}
+- Oracle Approach: ${mood.approach}
+
+Your response should acknowledge and work WITH their current emotional state, not ignore it. If someone feels "hollow" at intensity 4/5, they need different wisdom than someone feeling "electric" at 2/5.
+`;
+  };
+  
+  // Calculate input length for proportional response
+  let inputWordCount = 0;
+  if (typeof userInput === 'string') {
+    inputWordCount = userInput.trim().split(/\s+/).length;
+  } else if (typeof userInput === 'object') {
+    const contentStr = JSON.stringify(userInput);
+    inputWordCount = contentStr.trim().split(/\s+/).length;
+  }
+  
+  // Determine response length tier based on input
+  let lengthGuidance = '';
+  let maxTokens = 300; // default
+  
+  if (inputWordCount < 30) {
+    lengthGuidance = 'RESPONSE LENGTH: Very brief (1-2 sentences). Match the user\'s concise energy.';
+    maxTokens = 100;
+  } else if (inputWordCount < 75) {
+    lengthGuidance = 'RESPONSE LENGTH: Short (2-3 sentences, about 1 paragraph). The user shared briefly, so be succinct but meaningful.';
+    maxTokens = 200;
+  } else if (inputWordCount < 150) {
+    lengthGuidance = 'RESPONSE LENGTH: Medium (2 paragraphs). The user invested thought, so provide proportional depth.';
+    maxTokens = 350;
+  } else if (inputWordCount < 300) {
+    lengthGuidance = 'RESPONSE LENGTH: Substantial (2-3 paragraphs). The user wrote extensively, so honor that with deeper reflection.';
+    maxTokens = 500;
+  } else {
+    lengthGuidance = 'RESPONSE LENGTH: Full response (3 paragraphs max). The user poured out significant content, so provide comprehensive wisdom that matches their investment.';
+    maxTokens = 700;
+  }
+  
   if (moduleName === 'hardLessons') {
     targetContext = 'hardLessons';
     targetContent = userInput;
@@ -94,6 +173,23 @@ You are the Oracle of Inner Ops—a digital brother and wisdom keeper for men se
 Your role is to generate direct, insightful, and psychologically grounded reflections that honor the depth of a man's journey without rescuing or coddling.
 
 CONTEXT ANALYSIS: ${getContextualPrompt(targetContext)}
+${getMoodGuidance()}
+CRITICAL INSTRUCTION - CONTENT-SPECIFIC RESPONSE:
+You MUST directly engage with the SPECIFIC content the user has written. Do not give generic wisdom.
+
+1. **IDENTIFY KEY THEMES**: Read their entry carefully. What specific situations, people, emotions, or events did they mention? Reference these directly.
+
+2. **MIRROR THEIR LANGUAGE**: Use their own words and phrases when reflecting back insights. If they wrote about "feeling stuck at work," speak to that exact situation—not abstract concepts about "life challenges."
+
+3. **SPEAK TO THE PARTICULARS**: 
+   - If they mention a specific person (boss, partner, friend), address that relationship dynamic
+   - If they describe a specific event, reflect on what that event reveals
+   - If they express a specific emotion, name it and explore its source
+   - If they describe a pattern, help them see the deeper mechanism
+
+4. **CONNECT SPECIFICS TO WISDOM**: Take the exact thing they wrote about and illuminate it with philosophical depth. Example: If they wrote "I yelled at my kid again," don't say "Patience is a virtue." Instead: "The rage that escaped toward your child—where did it truly originate? Often the ones closest to us receive the overflow meant for older wounds or impossible pressures."
+
+5. **ASK POINTED QUESTIONS**: Based on what they ACTUALLY wrote, pose 1-2 questions that cut to the heart of their specific situation.
 
 CORE PRINCIPLES:
 
@@ -115,6 +211,8 @@ CORE PRINCIPLES:
 
 5. **AVOID PLATITUDES**: Replace "you've got this" with specific insights about their particular challenge.
 
+6. **MATCH RESPONSE LENGTH TO INPUT**: ${lengthGuidance} Do not exceed this guidance. Short entries deserve short, impactful responses. Long entries earn fuller reflections.
+
 For ${moduleName} specifically:
 - Kill List: Address the specific nature of what they're eliminating - practical habits need different wisdom than deep psychological patterns
 - Hard Lessons: Provide forensic extraction - identify false assumptions, ignored signals, and create enforceable rules. No emotion, just strategic clarity.
@@ -125,14 +223,28 @@ TARGET CONTENT: "${targetContent}"
 DETECTED CONTEXT: ${targetContext}
 `;
 
+  // Extract the actual content for journal entries
+  let actualContent = '';
+  if (typeof userInput === 'string') {
+    actualContent = userInput;
+  } else if (typeof userInput === 'object') {
+    // For journal entries, extract the main content
+    actualContent = userInput.content || userInput.entry || userInput.text || JSON.stringify(userInput);
+  }
+
   const userPrompt = `
-Current Entry: ${JSON.stringify(userInput)}
+=== USER'S ENTRY (READ THIS CAREFULLY AND RESPOND TO THE SPECIFICS) ===
 
-Recent Patterns: ${pastEntries.slice(-3).map(entry => 
-  typeof entry === 'object' ? JSON.stringify(entry) : entry
-).join('\n')}
+${actualContent}
 
-Module Context: ${moduleName}
+=== END OF ENTRY ===
+
+Module: ${moduleName}
+${pastEntries.length > 0 ? `\nRecent context from past entries:\n${pastEntries.slice(-3).map(entry => 
+  typeof entry === 'object' ? (entry.content || entry.entry || JSON.stringify(entry)) : entry
+).join('\n---\n')}` : ''}
+
+IMPORTANT: Your response must directly reference specific words, situations, emotions, or events from the entry above. Do not give generic wisdom—speak to THIS person about THEIR specific experience.
 `;
 
   try {
@@ -160,7 +272,7 @@ Module Context: ${moduleName}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: 500,
+        max_tokens: maxTokens,
         temperature: 0.8
       })
     });

@@ -312,54 +312,82 @@ export default function Journal() {
           )}
 
               <div>
-                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-4">How are you feeling?</label>
-                <div className="grid grid-cols-5 gap-3">
+                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-6 font-medium">How are you feeling?</label>
+                <div className="grid grid-cols-5 gap-4">
                   {moodOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => setMood(option.value)}
-                      className={`p-4 rounded-2xl border transition-all duration-300 ${
+                      className={`group relative p-5 rounded-3xl border-2 transition-all duration-300 ${
                         mood === option.value
-                          ? 'border-[#00d4aa] bg-[#00d4aa]/10 scale-105'
-                          : 'border-[#1a1a1a] hover:border-[#2a2a2a] bg-[#0a0a0a]'
+                          ? 'border-oura-cyan bg-gradient-to-b from-oura-cyan/15 to-transparent scale-[1.02] shadow-oura-glow'
+                          : 'border-transparent bg-oura-card hover:bg-oura-darker hover:border-oura-border'
                       }`}
                     >
-                      <div className="text-2xl mb-2">{option.emoji}</div>
-                      <div className="text-xs text-[#8a8a8a]">{option.label}</div>
+                      <div className={`text-3xl mb-3 transition-transform duration-300 ${mood === option.value ? 'scale-110' : 'group-hover:scale-105'}`}>
+                        {option.emoji}
+                      </div>
+                      <div className={`text-xs font-light tracking-wide transition-colors duration-300 ${
+                        mood === option.value ? 'text-oura-cyan' : 'text-gray-500 group-hover:text-gray-300'
+                      }`}>
+                        {option.label}
+                      </div>
+                      {mood === option.value && (
+                        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-oura-cyan rounded-full"></div>
+                      )}
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-4">Intensity Level</label>
-                <div className="space-y-4">
-                  {/* Fire icons row */}
-                  <div className="flex justify-between items-center px-2">
-                    {intensityLevels.map((level) => (
-                      <button
-                        key={level.value}
-                        type="button"
-                        onClick={() => setIntensity(level.value)}
-                        className="flex flex-col items-center transition-all duration-200 hover:scale-110"
-                      >
-                        <div className="text-2xl mb-2">{level.icon}</div>
-                        <div className={`w-4 h-4 rounded-full border-2 transition-colors ${
-                          intensity === level.value
-                            ? 'bg-[#f59e0b] border-[#f59e0b]'
-                            : 'border-[#2a2a2a] hover:border-[#f59e0b]/50'
-                        }`}></div>
-                      </button>
-                    ))}
+                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-6 font-medium">Intensity Level</label>
+                <div className="space-y-6">
+                  {/* Intensity slider track */}
+                  <div className="relative px-4">
+                    <div className="flex justify-between items-center">
+                      {intensityLevels.map((level, index) => (
+                        <button
+                          key={level.value}
+                          type="button"
+                          onClick={() => setIntensity(level.value)}
+                          className="group flex flex-col items-center transition-all duration-300 z-10"
+                        >
+                          <div className={`text-2xl mb-3 transition-all duration-300 ${
+                            intensity === level.value ? 'scale-125' : intensity > level.value ? 'opacity-80' : 'opacity-40 group-hover:opacity-70'
+                          }`}>
+                            {level.icon}
+                          </div>
+                          <div className={`w-5 h-5 rounded-full border-2 transition-all duration-300 flex items-center justify-center ${
+                            intensity === level.value
+                              ? 'bg-oura-amber border-oura-amber shadow-oura-glow-amber'
+                              : intensity > level.value
+                                ? 'bg-oura-amber/60 border-oura-amber/60'
+                                : 'bg-transparent border-oura-border group-hover:border-oura-amber/40'
+                          }`}>
+                            {intensity === level.value && (
+                              <div className="w-2 h-2 bg-black rounded-full"></div>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {/* Progress line */}
+                    <div className="absolute top-[3.25rem] left-4 right-4 h-0.5 bg-oura-border -z-0">
+                      <div 
+                        className="h-full bg-gradient-to-r from-oura-amber/60 to-oura-amber transition-all duration-500 rounded-full"
+                        style={{ width: `${((intensity - 1) / 4) * 100}%` }}
+                      ></div>
+                    </div>
                   </div>
                   
-                  {/* Selected intensity description */}
-                  <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
-                    <div className="text-white font-medium">
+                  {/* Selected intensity card */}
+                  <div className="text-center p-5 bg-gradient-to-b from-oura-card to-black rounded-2xl border border-oura-border">
+                    <div className="text-white text-lg font-light tracking-wide mb-1">
                       {intensityLevels.find(level => level.value === intensity)?.label}
                     </div>
-                    <div className="text-[#5a5a5a] text-sm">
+                    <div className="text-gray-500 text-sm font-light">
                       {intensityLevels.find(level => level.value === intensity)?.description}
                     </div>
                   </div>
@@ -460,7 +488,12 @@ export default function Journal() {
                       </div>
                       <div className="flex items-center space-x-3">
                         <span className="text-xs text-[#5a5a5a]">
-                          {new Date(entry.createdAt).toLocaleDateString()}
+                          {entry.createdAt?.toDate ? 
+                            entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                            entry.createdAt ? 
+                              new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                              'Unknown date'
+                          }
                         </span>
                         <button
                           onClick={() => deleteEntry(entry.id)}

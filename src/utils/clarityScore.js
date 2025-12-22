@@ -178,14 +178,15 @@ export const clarityScoreUtils = {
   },
 
   // Get clarity rank based on score - Much more realistic progression
+  // Icons updated for Oura-style minimalist aesthetic
   getClarityRank: (score) => {
-    if (score >= 1000) return { rank: 'Clarity Master', icon: '👑', color: 'text-yellow-400' }; // Years of consistent practice
-    if (score >= 750) return { rank: 'Clarity Expert', icon: '🏆', color: 'text-purple-400' }; // 6+ months of solid progress
-    if (score >= 500) return { rank: 'Clarity Seeker', icon: '🔮', color: 'text-red-400' }; // 3-6 months of practice
-    if (score >= 300) return { rank: 'Clarity Practitioner', icon: '🧭', color: 'text-blue-400' }; // 2-3 months of practice
-    if (score >= 150) return { rank: 'Clarity Student', icon: '⚡', color: 'text-green-400' }; // 1-2 months of practice
-    if (score >= 75) return { rank: 'Clarity Apprentice', icon: '💪', color: 'text-orange-400' }; // 2-4 weeks of practice
-    if (score >= 25) return { rank: 'Clarity Beginner', icon: '🎯', color: 'text-gray-400' }; // 1-2 weeks of practice
-    return { rank: 'Clarity Novice', icon: '🌱', color: 'text-gray-500' }; // Just starting
+    if (score >= 1000) return { rank: 'Clarity Master', icon: '◆', color: 'text-yellow-400' }; // Diamond - mastery
+    if (score >= 750) return { rank: 'Clarity Expert', icon: '◈', color: 'text-purple-400' }; // Diamond outline - expertise
+    if (score >= 500) return { rank: 'Clarity Seeker', icon: '◉', color: 'text-red-400' }; // Circle target - seeking
+    if (score >= 300) return { rank: 'Clarity Practitioner', icon: '◎', color: 'text-blue-400' }; // Double circle - practice
+    if (score >= 150) return { rank: 'Clarity Student', icon: '▲', color: 'text-green-400' }; // Triangle up - growth
+    if (score >= 75) return { rank: 'Clarity Apprentice', icon: '●', color: 'text-orange-400' }; // Solid circle - foundation
+    if (score >= 25) return { rank: 'Clarity Beginner', icon: '○', color: 'text-gray-400' }; // Empty circle - starting
+    return { rank: 'Clarity Novice', icon: '·', color: 'text-gray-500' }; // Dot - origin point
   }
 };
