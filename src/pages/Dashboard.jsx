@@ -7,8 +7,10 @@ import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
 import QuickJournalModal from '../components/QuickJournalModal';
+import DailyPrompt from '../components/DailyPrompt';
 import { auth } from '../firebase';
 import { CircularProgressRing, TripleRing, ScoreCard, InsightCard, ActivityItem } from '../components/OuraRing';
+import { AppIcon } from '../components/AppIcons';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -373,6 +375,11 @@ export default function Dashboard() {
           </h1>
         </header>
 
+        {/* Daily Prompt Section */}
+        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+          <DailyPrompt onJournalClick={() => setQuickJournalOpen(true)} />
+        </section>
+
         {/* Main Score Section - Oura Triple Ring Style */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <div className="oura-card p-8 flex flex-col lg:flex-row items-center gap-8">
@@ -472,12 +479,12 @@ export default function Dashboard() {
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Stats (Last 30 Days)</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <ScoreCard score={stats.streakDays} label="Streak" sublabel="Days strong" color="#00d4aa" icon="🔥" size="small" />
-            <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon="🎯" size="small" />
-            <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon="⚡" size="small" />
-            <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon="📝" size="small" />
-            <ScoreCard score={stats.blackMirrorEntries || 0} label="Mirror" sublabel={`of ${stats.blackMirrorEntriesTotal || 0} total`} color="#4da6ff" icon="📱" size="small" />
-            <ScoreCard score={clarityScore.journalStreak || 0} label="Journal" sublabel="Day streak" color="#22c55e" icon="📅" size="small" />
+            <ScoreCard score={stats.streakDays} label="Streak" sublabel="Days strong" color="#00d4aa" icon={<AppIcon name="streak" size={20} color="#00d4aa" />} size="small" />
+            <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" />
+            <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" />
+            <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" />
+            <ScoreCard score={stats.blackMirrorEntries || 0} label="Mirror" sublabel={`of ${stats.blackMirrorEntriesTotal || 0} total`} color="#4da6ff" icon={<AppIcon name="mirror" size={20} color="#4da6ff" />} size="small" />
+            <ScoreCard score={clarityScore.journalStreak || 0} label="Writing" sublabel="Day streak" color="#22c55e" icon={<AppIcon name="writing" size={20} color="#22c55e" />} size="small" />
           </div>
         </section>
 
@@ -487,7 +494,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#a855f7]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">📝</span>
+                <AppIcon name="journal" size={28} color="#a855f7" />
               </div>
               <h4 className="text-white font-medium mb-1">Journal</h4>
               <p className="text-[#5a5a5a] text-sm">Reflect & process</p>
@@ -495,7 +502,7 @@ export default function Dashboard() {
             
             <Link to="/killlist" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">🎯</span>
+                <AppIcon name="target" size={28} color="#ef4444" />
               </div>
               <h4 className="text-white font-medium mb-1">Kill List</h4>
               <p className="text-[#5a5a5a] text-sm">Eliminate patterns</p>
@@ -503,7 +510,7 @@ export default function Dashboard() {
             
             <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#f59e0b]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">⚡</span>
+                <AppIcon name="hardLessons" size={28} color="#f59e0b" />
               </div>
               <h4 className="text-white font-medium mb-1">Hard Lessons</h4>
               <p className="text-[#5a5a5a] text-sm">Turn pain to wisdom</p>
@@ -511,7 +518,7 @@ export default function Dashboard() {
             
             <Link to="/blackmirror" className="oura-card p-5 group hover:border-[#4da6ff]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#4da6ff]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">📱</span>
+                <AppIcon name="mirror" size={28} color="#4da6ff" />
               </div>
               <h4 className="text-white font-medium mb-1">Black Mirror</h4>
               <p className="text-[#5a5a5a] text-sm">Reality check</p>

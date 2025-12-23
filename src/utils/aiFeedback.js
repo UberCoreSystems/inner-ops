@@ -162,6 +162,20 @@ Your response should acknowledge and work WITH their current emotional state, no
         
         Use direct, non-moral language. No "should" or "deserve" framing. Only cause, effect, and correction. The goal is to ensure this lesson is never paid for twice. Be brutally precise and strategically focused.`;
       
+      case 'emergency':
+        return `This is an EMERGENCY intervention request. The user has pressed the "I'm Struggling" button - they are in a moment of crisis, temptation, or intense urge to relapse.
+        
+        Your response must:
+        1. ACKNOWLEDGE their courage for reaching out instead of acting on the urge
+        2. GROUND them in the present moment - remind them this feeling is temporary
+        3. VALIDATE the struggle without judgment - urges are not failures
+        4. PROVIDE one immediate, actionable step they can take RIGHT NOW
+        5. REMIND them of their deeper purpose and who they are becoming
+        
+        Tone: Calm, steady, like a trusted brother who has been through the fire. Not panicked, not preachy. Present and grounded.
+        Length: Brief but powerful - 2-3 sentences max. They need clarity, not a lecture.
+        End with a question or reframe that shifts their perspective.`;
+      
       default:
         return `This target requires philosophical depth. Explore the deeper meaning and patterns beneath the surface behavior. Use timeless wisdom appropriately without being overly abstract.`;
     }

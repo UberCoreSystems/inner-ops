@@ -8,6 +8,7 @@ import { db } from '../firebase';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { useTodaysKillTargets } from '../hooks/useKillTargets';
 import OracleModal from './OracleModal';
+import { AppIcon } from './AppIcons';
 
 const KillListDashboard = () => {
   // Use the custom hook for today's kill targets with all functions
@@ -184,28 +185,28 @@ const KillListDashboard = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'killed': return 'text-green-400 bg-green-900/30 border-green-500/50';
-      case 'escaped': return 'text-red-400 bg-red-900/30 border-red-500/50';
-      case 'active': return 'text-yellow-400 bg-yellow-900/30 border-yellow-500/50';
-      default: return 'text-gray-400 bg-gray-900/30 border-gray-500/50';
+      case 'killed': return 'text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/30';
+      case 'escaped': return 'text-[#ef4444] bg-[#ef4444]/10 border-[#ef4444]/30';
+      case 'active': return 'text-[#f59e0b] bg-[#f59e0b]/10 border-[#f59e0b]/30';
+      default: return 'text-[#5a5a5a] bg-[#1a1a1a] border-[#2a2a2a]';
     }
   };
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'high': return 'text-red-400';
-      case 'medium': return 'text-yellow-400';
-      case 'low': return 'text-green-400';
-      default: return 'text-gray-400';
+      case 'high': return 'text-[#ef4444]';
+      case 'medium': return 'text-[#f59e0b]';
+      case 'low': return 'text-[#22c55e]';
+      default: return 'text-[#5a5a5a]';
     }
   };
 
   const getPriorityIcon = (priority) => {
     switch (priority) {
-      case 'high': return '🔴';
-      case 'medium': return '🟡';
-      case 'low': return '🟢';
-      default: return '⚪';
+      case 'high': return <span className="w-2 h-2 rounded-full bg-[#ef4444] inline-block" style={{ boxShadow: '0 0 8px #ef4444' }}></span>;
+      case 'medium': return <span className="w-2 h-2 rounded-full bg-[#f59e0b] inline-block" style={{ boxShadow: '0 0 8px #f59e0b' }}></span>;
+      case 'low': return <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block" style={{ boxShadow: '0 0 8px #22c55e' }}></span>;
+      default: return <span className="w-2 h-2 rounded-full bg-[#5a5a5a] inline-block"></span>;
     }
   };
 
@@ -316,18 +317,18 @@ const KillListDashboard = () => {
 
       <div className="space-y-4">
         {todaysTargets.map((target) => (
-          <div key={target.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-            <div className="flex items-start justify-between mb-3">
+          <div key={target.id} className="bg-[#0a0a0a] rounded-2xl p-5 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-all">
+            <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg">{getPriorityIcon(target.priority)}</span>
-                  <h3 className="font-semibold text-white">{target.title}</h3>
-                  <span className={`px-2 py-1 text-xs rounded border ${getStatusColor(target.status)}`}>
+                <div className="flex items-center gap-3 mb-2">
+                  {getPriorityIcon(target.priority)}
+                  <h3 className="font-medium text-white">{target.title}</h3>
+                  <span className={`px-2 py-0.5 text-xs font-light rounded-full border ${getStatusColor(target.status)}`}>
                     {target.status.toUpperCase()}
                   </span>
                 </div>
-                <p className="text-gray-300 text-sm mb-2">{target.description}</p>
-                <div className="flex items-center gap-4 text-xs text-gray-400">
+                <p className="text-[#8a8a8a] text-sm mb-3 font-light">{target.description}</p>
+                <div className="flex items-center gap-4 text-xs text-[#5a5a5a]">
                   <span className={getPriorityColor(target.priority)}>
                     {target.priority.toUpperCase()} PRIORITY
                   </span>
@@ -341,66 +342,84 @@ const KillListDashboard = () => {
             </div>
 
             {/* Status Toggle Buttons */}
-            <div className="flex gap-2 mb-3">
+            <div className="flex gap-2 mb-4">
               <button
                 onClick={() => handleQuickKill(target.id)}
                 disabled={updating[target.id] || target.status === 'killed'}
-                className={`px-3 py-1 text-sm rounded transition-colors ${
+                className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
                   target.status === 'killed'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-600 text-gray-300 hover:bg-green-600 hover:text-white'
+                    ? 'bg-[#22c55e] text-black'
+                    : 'bg-[#1a1a1a] text-[#8a8a8a] border border-[#2a2a2a] hover:border-[#22c55e]/50 hover:text-[#22c55e]'
                 } disabled:opacity-50`}
               >
-                {updating[target.id] ? '⏳' : '✅'} Killed
+                <span className="flex items-center gap-2">
+                  <AppIcon name="check" size={14} color={target.status === 'killed' ? '#000' : '#22c55e'} glow={false} />
+                  Killed
+                </span>
               </button>
               <button
                 onClick={() => handleQuickEscape(target.id)}
                 disabled={updating[target.id] || target.status === 'escaped'}
-                className={`px-3 py-1 text-sm rounded transition-colors ${
+                className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
                   target.status === 'escaped'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-600 text-gray-300 hover:bg-red-600 hover:text-white'
+                    ? 'bg-[#ef4444] text-white'
+                    : 'bg-[#1a1a1a] text-[#8a8a8a] border border-[#2a2a2a] hover:border-[#ef4444]/50 hover:text-[#ef4444]'
                 } disabled:opacity-50`}
               >
-                {updating[target.id] ? '⏳' : '❌'} Escaped
+                <span className="flex items-center gap-2">
+                  <AppIcon name="relapse" size={14} color={target.status === 'escaped' ? '#fff' : '#ef4444'} glow={false} />
+                  Escaped
+                </span>
               </button>
               <button
                 onClick={() => handleQuickReset(target.id)}
                 disabled={updating[target.id] || target.status === 'active'}
-                className={`px-3 py-1 text-sm rounded transition-colors ${
+                className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
                   target.status === 'active'
-                    ? 'bg-yellow-600 text-white'
-                    : 'bg-gray-600 text-gray-300 hover:bg-yellow-600 hover:text-white'
+                    ? 'bg-[#f59e0b] text-black'
+                    : 'bg-[#1a1a1a] text-[#8a8a8a] border border-[#2a2a2a] hover:border-[#f59e0b]/50 hover:text-[#f59e0b]'
                 } disabled:opacity-50`}
               >
-                {updating[target.id] ? '⏳' : '🔄'} Reset
+                <span className="flex items-center gap-2">
+                  <AppIcon name="activity" size={14} color={target.status === 'active' ? '#000' : '#f59e0b'} glow={false} />
+                  Reset
+                </span>
               </button>
               <button
                 onClick={() => handleStatusCycle(target)}
                 disabled={updating[target.id]}
-                className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                className="px-3 py-2 text-xs bg-[#1a1a1a] text-[#a855f7] rounded-xl border border-[#2a2a2a] hover:border-[#a855f7]/50 disabled:opacity-50 transition-all"
                 title={`Quick toggle: ${target.status} → ${
                   target.status === 'active' ? 'killed' : 
                   target.status === 'killed' ? 'escaped' : 'active'
                 }`}
               >
-                {updating[target.id] ? '⏳' : '�'}
+                <AppIcon name="dashboard" size={14} color="#a855f7" glow={false} />
               </button>
             </div>
 
             {/* Reflection Notes */}
-            <div className="border-t border-gray-600 pt-3">
+            <div className="border-t border-[#1a1a1a] pt-4">
               <button
                 onClick={() => setShowReflection(prev => ({ 
                   ...prev, 
                   [target.id]: !prev[target.id] 
                 }))}
-                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-2"
+                className="flex items-center gap-2 text-sm text-[#5a5a5a] hover:text-white transition-colors mb-3"
               >
-                📝 Reflection Notes
-                <span className="text-xs">
-                  {showReflection[target.id] ? '▼' : '▶'}
-                </span>
+                <AppIcon name="journal" size={14} color="#a855f7" glow={false} />
+                <span className="font-light">Reflection Notes</span>
+                <svg 
+                  width="12" 
+                  height="12" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2"
+                  className={`transition-transform ${showReflection[target.id] ? 'rotate-180' : ''}`}
+                >
+                  <polyline points="6,9 12,15 18,9" />
+                </svg>
               </button>
 
               {showReflection[target.id] && (
@@ -412,36 +431,42 @@ const KillListDashboard = () => {
                       [target.id]: e.target.value
                     }))}
                     placeholder="How did this target challenge you? What did you learn?"
-                    className="w-full h-20 p-2 bg-gray-600 text-white border border-gray-500 rounded text-sm resize-none focus:outline-none focus:border-blue-500"
+                    className="w-full h-24 p-4 bg-[#0a0a0a] text-white border border-[#2a2a2a] rounded-xl text-sm font-light resize-none focus:outline-none focus:border-[#a855f7]/50 placeholder-[#3a3a3a] transition-all"
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={() => saveReflectionNotes(target.id)}
                       disabled={updating[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      className="px-4 py-2 text-sm font-light bg-[#4da6ff] text-black rounded-xl hover:bg-[#3d96ef] disabled:opacity-50 transition-all flex items-center gap-2"
                     >
-                      {updating[target.id] ? '⏳' : '💾'} Save Notes
+                      <AppIcon name="check" size={14} color="#000" glow={false} />
+                      Save Notes
                     </button>
                     <button
                       onClick={() => handleClearReflection(target.id)}
                       disabled={updating[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                      className="px-4 py-2 text-sm font-light bg-[#1a1a1a] text-[#ef4444] border border-[#2a2a2a] rounded-xl hover:border-[#ef4444]/50 disabled:opacity-50 transition-all flex items-center gap-2"
                     >
-                      {updating[target.id] ? '⏳' : '🗑️'} Clear
+                      <AppIcon name="relapse" size={14} color="#ef4444" glow={false} />
+                      Clear
                     </button>
                     <button
                       onClick={() => openOracleModal(target)}
-                      className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                      className="px-4 py-2 text-sm font-light bg-[#1a1a1a] text-[#a855f7] border border-[#2a2a2a] rounded-xl hover:border-[#a855f7]/50 transition-all flex items-center gap-2"
                     >
-                      🔮 Seek Oracle
+                      <AppIcon name="insight" size={14} color="#a855f7" glow={false} />
+                      Seek Oracle
                     </button>
                   </div>
 
                   {/* Oracle Wisdom Display */}
                   {oracleFeedbacks[target.id] && (
-                    <div className="mt-3 p-3 bg-gray-800/50 border border-purple-500/30 rounded-lg">
-                      <h4 className="text-purple-300 font-medium text-sm mb-2">🔮 Oracle's Stored Wisdom</h4>
-                      <div className="text-purple-200 text-xs leading-relaxed italic bg-gray-700/50 rounded p-2">
+                    <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#a855f7]/30 rounded-xl">
+                      <h4 className="text-[#a855f7] font-light text-sm mb-2 flex items-center gap-2">
+                        <AppIcon name="insight" size={14} color="#a855f7" />
+                        Oracle's Stored Wisdom
+                      </h4>
+                      <div className="text-[#8a8a8a] text-sm leading-relaxed font-light italic">
                         {oracleFeedbacks[target.id]}
                       </div>
                     </div>
@@ -453,28 +478,35 @@ const KillListDashboard = () => {
         ))}
       </div>
 
-      <div className="mt-6 pt-4 border-t border-gray-600">
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-bold text-green-400">{stats.killed}</div>
-            <div className="text-xs text-gray-400">Killed</div>
+      {/* Stats Footer */}
+      <div className="mt-6 pt-6 border-t border-[#1a1a1a]">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
+            <div className="text-2xl font-bold text-[#22c55e]" style={{ textShadow: '0 0 20px rgba(34, 197, 94, 0.3)' }}>{stats.killed}</div>
+            <div className="text-xs text-[#5a5a5a] font-light mt-1">Killed</div>
           </div>
-          <div>
-            <div className="text-2xl font-bold text-red-400">{stats.escaped}</div>
-            <div className="text-xs text-gray-400">Escaped</div>
+          <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
+            <div className="text-2xl font-bold text-[#ef4444]" style={{ textShadow: '0 0 20px rgba(239, 68, 68, 0.3)' }}>{stats.escaped}</div>
+            <div className="text-xs text-[#5a5a5a] font-light mt-1">Escaped</div>
           </div>
-          <div>
-            <div className="text-2xl font-bold text-yellow-400">{stats.active}</div>
-            <div className="text-xs text-gray-400">Active</div>
+          <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
+            <div className="text-2xl font-bold text-[#f59e0b]" style={{ textShadow: '0 0 20px rgba(245, 158, 11, 0.3)' }}>{stats.active}</div>
+            <div className="text-xs text-[#5a5a5a] font-light mt-1">Active</div>
           </div>
         </div>
         {stats.total > 0 && (
-          <div className="mt-3 text-center">
-            <div className="text-sm text-gray-400">
-              Completion Rate: <span className={`font-semibold ${
-                stats.completionRate >= 80 ? 'text-green-400' : 
-                stats.completionRate >= 60 ? 'text-yellow-400' : 'text-red-400'
-              }`}>
+          <div className="mt-4 text-center">
+            <div className="text-sm text-[#5a5a5a] font-light">
+              Completion Rate: <span className={`font-medium ${
+                stats.completionRate >= 80 ? 'text-[#22c55e]' : 
+                stats.completionRate >= 60 ? 'text-[#f59e0b]' : 'text-[#ef4444]'
+              }`} style={{ 
+                textShadow: stats.completionRate >= 80 
+                  ? '0 0 10px rgba(34, 197, 94, 0.3)' 
+                  : stats.completionRate >= 60 
+                  ? '0 0 10px rgba(245, 158, 11, 0.3)' 
+                  : '0 0 10px rgba(239, 68, 68, 0.3)'
+              }}>
                 {stats.completionRate.toFixed(1)}%
               </span>
             </div>

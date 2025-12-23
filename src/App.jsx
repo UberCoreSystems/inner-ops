@@ -11,6 +11,7 @@ import HardLessons from './pages/HardLessons';
 import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
 import AuthForm from './components/AuthForm';
+import EmergencyButton from './components/EmergencyButton';
 import { checkFirebaseConnection } from './firebase';
 import './App.css';
 
@@ -69,6 +70,7 @@ function App() {
     <Router>
       <div className="min-h-screen bg-gray-900 text-white">
         {user && <Navbar onLogout={handleLogout} user={user} />}
+        {user && <EmergencyButton />}
         <Routes>
           <Route 
             path="/auth" 
