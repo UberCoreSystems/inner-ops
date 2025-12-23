@@ -6,11 +6,13 @@ import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
+import QuickJournalModal from '../components/QuickJournalModal';
 import { auth } from '../firebase';
 import { CircularProgressRing, TripleRing, ScoreCard, InsightCard, ActivityItem } from '../components/OuraRing';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
+  const [quickJournalOpen, setQuickJournalOpen] = useState(false);
   const [stats, setStats] = useState({
     journalEntries: 0,
     relapseEntries: 0,
@@ -582,6 +584,28 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* Floating Action Button */}
+      <button
+        onClick={() => setQuickJournalOpen(true)}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#a855f7] to-[#6366f1] rounded-full shadow-lg shadow-[#a855f7]/30 flex items-center justify-center hover:scale-110 hover:shadow-xl hover:shadow-[#a855f7]/40 transition-all duration-200 group z-40"
+        title="Quick Journal Entry"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-200">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+
+      {/* Quick Journal Modal */}
+      <QuickJournalModal
+        isOpen={quickJournalOpen}
+        onClose={() => setQuickJournalOpen(false)}
+        onSuccess={() => {
+          // Refresh data after successful entry
+          loadDashboardData();
+        }}
+      />
     </div>
   );
 }

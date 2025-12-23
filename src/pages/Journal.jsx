@@ -4,30 +4,185 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 
-const moodOptions = [
-  { emoji: '⚡', label: 'Electric', value: 'electric' },
-  { emoji: '�️', label: 'Foggy', value: 'foggy' },
-  { emoji: '🗡️', label: 'Sharp', value: 'sharp' },
-  { emoji: '🕳️', label: 'Hollow', value: 'hollow' },
-  { emoji: '🌪️', label: 'Chaotic', value: 'chaotic' },
-  { emoji: '�', label: 'Triumphant', value: 'triumphant' },
-  { emoji: '🪨', label: 'Heavy', value: 'heavy' },
-  { emoji: '🦋', label: 'Light', value: 'light' },
-  { emoji: '🎯', label: 'Focused', value: 'focused' },
-  { emoji: '💎', label: 'Radiant', value: 'radiant' }
+// Custom SVG mood icons - Oura-style geometric designs
+const MoodIcons = {
+  electric: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+  ),
+  foggy: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14h16M4 10h16M4 18h12" opacity="0.6" />
+      <circle cx="12" cy="8" r="4" opacity="0.3" />
+    </svg>
+  ),
+  sharp: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7l2-7z" />
+    </svg>
+  ),
+  hollow: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="4" opacity="0.3" />
+    </svg>
+  ),
+  chaotic: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10" />
+      <path d="M12 2c5.5 0 10 4.5 10 10s-4.5 10-10 10" opacity="0.5" />
+      <path d="M2 12h20M12 2v20" opacity="0.3" />
+    </svg>
+  ),
+  triumphant: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l3 6 6 1-4.5 4 1.5 6-6-3.5L6 19l1.5-6L3 9l6-1 3-6z" />
+    </svg>
+  ),
+  heavy: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22V12M12 12L6 6M12 12l6-6" />
+      <circle cx="12" cy="22" r="2" fill="currentColor" />
+    </svg>
+  ),
+  light: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5" />
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+      <path d="M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" opacity="0.5" />
+    </svg>
+  ),
+  focused: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" opacity="0.5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  ),
+  radiant: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" />
+    </svg>
+  ),
+  steady: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 12h16" />
+      <path d="M8 8h8M8 16h8" opacity="0.5" />
+    </svg>
+  ),
+  calm: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12c2-2 4-3 6-3s4 2 6 2 4-1 6-3" />
+      <path d="M2 16c2-2 4-3 6-3s4 2 6 2 4-1 6-3" opacity="0.5" />
+    </svg>
+  ),
+};
+
+// Mood categories grouped by emotional valence
+const moodCategories = [
+  {
+    name: 'Energized',
+    color: '#22c55e',
+    bgColor: 'bg-[#22c55e]/10',
+    borderColor: 'border-[#22c55e]',
+    moods: [
+      { label: 'Electric', value: 'electric', description: 'Charged and alive' },
+      { label: 'Light', value: 'light', description: 'Unburdened and free' },
+      { label: 'Radiant', value: 'radiant', description: 'Glowing from within' },
+      { label: 'Triumphant', value: 'triumphant', description: 'Victorious and proud' },
+    ]
+  },
+  {
+    name: 'Grounded',
+    color: '#4da6ff',
+    bgColor: 'bg-[#4da6ff]/10',
+    borderColor: 'border-[#4da6ff]',
+    moods: [
+      { label: 'Focused', value: 'focused', description: 'Clear and intentional' },
+      { label: 'Sharp', value: 'sharp', description: 'Precise and alert' },
+      { label: 'Steady', value: 'steady', description: 'Balanced and stable' },
+      { label: 'Calm', value: 'calm', description: 'Peaceful and still' },
+    ]
+  },
+  {
+    name: 'Challenged',
+    color: '#f59e0b',
+    bgColor: 'bg-[#f59e0b]/10',
+    borderColor: 'border-[#f59e0b]',
+    moods: [
+      { label: 'Heavy', value: 'heavy', description: 'Weighed down' },
+      { label: 'Hollow', value: 'hollow', description: 'Empty inside' },
+      { label: 'Foggy', value: 'foggy', description: 'Unclear and hazy' },
+      { label: 'Chaotic', value: 'chaotic', description: 'Scattered energy' },
+    ]
+  }
 ];
 
+// Flatten for backward compatibility
+const moodOptions = moodCategories.flatMap(cat => 
+  cat.moods.map(m => ({ ...m, category: cat.name, color: cat.color }))
+);
+
+// Ring-based intensity levels
 const intensityLevels = [
-  { value: 1, label: 'Flickering', icon: '🕯️', description: 'Barely there' },
-  { value: 2, label: 'Glowing', icon: '🔥', description: 'Gentle warmth' },
-  { value: 3, label: 'Burning', icon: '🔥🔥', description: 'Steady flame' },
-  { value: 4, label: 'Blazing', icon: '🔥🔥🔥', description: 'Intense heat' },
-  { value: 5, label: 'Inferno', icon: '🔥🔥🔥🔥', description: 'White hot' }
+  { value: 1, label: 'Subtle', description: 'A whisper in the background', rings: 1 },
+  { value: 2, label: 'Present', description: 'Noticeable but manageable', rings: 2 },
+  { value: 3, label: 'Strong', description: 'Commanding your attention', rings: 3 },
+  { value: 4, label: 'Overwhelming', description: 'Hard to ignore', rings: 4 },
+  { value: 5, label: 'Consuming', description: 'All-encompassing', rings: 5 },
 ];
+
+// Intensity ring visualization component
+const IntensityRing = ({ level, selected, onClick }) => {
+  const rings = intensityLevels.find(l => l.value === level)?.rings || 1;
+  const isActive = selected >= level;
+  
+  // Color gradient from cool to warm
+  const getColor = (lvl) => {
+    const colors = ['#4da6ff', '#00d4aa', '#22c55e', '#f59e0b', '#ef4444'];
+    return colors[lvl - 1];
+  };
+  
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative flex flex-col items-center transition-all duration-300"
+    >
+      <div className="relative w-14 h-14 flex items-center justify-center">
+        {[...Array(rings)].map((_, i) => (
+          <div
+            key={i}
+            className={`absolute rounded-full border-2 transition-all duration-500 ${
+              isActive 
+                ? 'opacity-100' 
+                : 'opacity-20 group-hover:opacity-40'
+            }`}
+            style={{
+              width: `${28 + i * 10}px`,
+              height: `${28 + i * 10}px`,
+              borderColor: isActive ? getColor(level) : '#3a3a3a',
+              animationDelay: `${i * 0.1}s`,
+              boxShadow: isActive && selected === level ? `0 0 ${10 + i * 5}px ${getColor(level)}40` : 'none',
+            }}
+          />
+        ))}
+        <div 
+          className={`w-3 h-3 rounded-full transition-all duration-300 ${
+            isActive ? 'scale-100' : 'scale-50 opacity-30'
+          }`}
+          style={{ backgroundColor: isActive ? getColor(level) : '#3a3a3a' }}
+        />
+      </div>
+    </button>
+  );
+};
 
 export default function Journal() {
   const [entry, setEntry] = useState('');
-  const [mood, setMood] = useState(moodOptions[0].value);
+  const [mood, setMood] = useState('focused');
+  const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [intensity, setIntensity] = useState(3);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -312,82 +467,132 @@ export default function Journal() {
           )}
 
               <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-6 font-medium">How are you feeling?</label>
-                <div className="grid grid-cols-5 gap-4">
-                  {moodOptions.map((option) => (
+                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-4 font-medium">How are you feeling?</label>
+                
+                {/* Mood History Mini-visualization */}
+                {entries.length > 0 && (
+                  <div className="mb-4 flex items-center gap-2">
+                    <span className="text-[#5a5a5a] text-xs">Recent:</span>
+                    <div className="flex gap-1">
+                      {entries.slice(0, 5).map((e, i) => {
+                        const moodData = moodOptions.find(m => m.value === e.mood);
+                        return (
+                          <div 
+                            key={i}
+                            className="w-6 h-6 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110"
+                            style={{ 
+                              backgroundColor: `${moodData?.color || '#5a5a5a'}20`,
+                              color: moodData?.color || '#5a5a5a'
+                            }}
+                            title={`${moodData?.label || e.mood} - ${new Date(e.createdAt).toLocaleDateString()}`}
+                          >
+                            <div className="w-3 h-3">
+                              {MoodIcons[e.mood] || <div className="w-2 h-2 rounded-full bg-current" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Category Tabs */}
+                <div className="flex gap-2 mb-5">
+                  {moodCategories.map((cat) => (
                     <button
-                      key={option.value}
+                      key={cat.name}
                       type="button"
-                      onClick={() => setMood(option.value)}
-                      className={`group relative p-5 rounded-3xl border-2 transition-all duration-300 ${
-                        mood === option.value
-                          ? 'border-oura-cyan bg-gradient-to-b from-oura-cyan/15 to-transparent scale-[1.02] shadow-oura-glow'
-                          : 'border-transparent bg-oura-card hover:bg-oura-darker hover:border-oura-border'
+                      onClick={() => setSelectedCategory(cat.name)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
+                        selectedCategory === cat.name
+                          ? `${cat.bgColor} border-2 ${cat.borderColor}`
+                          : 'bg-[#0a0a0a] text-[#5a5a5a] border border-[#1a1a1a] hover:border-[#2a2a2a] hover:text-[#8a8a8a]'
                       }`}
+                      style={{ color: selectedCategory === cat.name ? cat.color : undefined }}
                     >
-                      <div className={`text-3xl mb-3 transition-transform duration-300 ${mood === option.value ? 'scale-110' : 'group-hover:scale-105'}`}>
-                        {option.emoji}
-                      </div>
-                      <div className={`text-xs font-light tracking-wide transition-colors duration-300 ${
-                        mood === option.value ? 'text-oura-cyan' : 'text-gray-500 group-hover:text-gray-300'
-                      }`}>
-                        {option.label}
-                      </div>
-                      {mood === option.value && (
-                        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-oura-cyan rounded-full"></div>
-                      )}
+                      {cat.name}
                     </button>
                   ))}
+                </div>
+
+                {/* Mood Options Grid */}
+                <div className="grid grid-cols-4 gap-3">
+                  {moodCategories.find(c => c.name === selectedCategory)?.moods.map((option) => {
+                    const category = moodCategories.find(c => c.name === selectedCategory);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setMood(option.value)}
+                        className={`group relative p-4 rounded-2xl border-2 transition-all duration-300 ${
+                          mood === option.value
+                            ? `${category.borderColor} ${category.bgColor} scale-[1.02]`
+                            : 'border-transparent bg-[#0a0a0a] hover:bg-[#111] hover:border-[#2a2a2a]'
+                        }`}
+                        style={{ 
+                          boxShadow: mood === option.value ? `0 0 20px ${category.color}30` : 'none'
+                        }}
+                      >
+                        <div 
+                          className={`w-8 h-8 mx-auto mb-2 transition-transform duration-300 ${mood === option.value ? 'scale-110' : 'group-hover:scale-105'}`}
+                          style={{ color: mood === option.value ? category.color : '#5a5a5a' }}
+                        >
+                          {MoodIcons[option.value]}
+                        </div>
+                        <div className={`text-xs font-medium tracking-wide transition-colors duration-300 text-center ${
+                          mood === option.value ? '' : 'text-[#8a8a8a] group-hover:text-white'
+                        }`} style={{ color: mood === option.value ? category.color : undefined }}>
+                          {option.label}
+                        </div>
+                        <div className="text-[10px] text-[#5a5a5a] mt-1 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          {option.description}
+                        </div>
+                        {mood === option.value && (
+                          <div 
+                            className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-1 rounded-full"
+                            style={{ backgroundColor: category.color }}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div>
                 <label className="block text-gray-500 text-xs uppercase tracking-widest mb-6 font-medium">Intensity Level</label>
-                <div className="space-y-6">
-                  {/* Intensity slider track */}
-                  <div className="relative px-4">
-                    <div className="flex justify-between items-center">
-                      {intensityLevels.map((level, index) => (
-                        <button
-                          key={level.value}
-                          type="button"
-                          onClick={() => setIntensity(level.value)}
-                          className="group flex flex-col items-center transition-all duration-300 z-10"
-                        >
-                          <div className={`text-2xl mb-3 transition-all duration-300 ${
-                            intensity === level.value ? 'scale-125' : intensity > level.value ? 'opacity-80' : 'opacity-40 group-hover:opacity-70'
-                          }`}>
-                            {level.icon}
-                          </div>
-                          <div className={`w-5 h-5 rounded-full border-2 transition-all duration-300 flex items-center justify-center ${
-                            intensity === level.value
-                              ? 'bg-oura-amber border-oura-amber shadow-oura-glow-amber'
-                              : intensity > level.value
-                                ? 'bg-oura-amber/60 border-oura-amber/60'
-                                : 'bg-transparent border-oura-border group-hover:border-oura-amber/40'
-                          }`}>
-                            {intensity === level.value && (
-                              <div className="w-2 h-2 bg-black rounded-full"></div>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                    {/* Progress line */}
-                    <div className="absolute top-[3.25rem] left-4 right-4 h-0.5 bg-oura-border -z-0">
-                      <div 
-                        className="h-full bg-gradient-to-r from-oura-amber/60 to-oura-amber transition-all duration-500 rounded-full"
-                        style={{ width: `${((intensity - 1) / 4) * 100}%` }}
-                      ></div>
-                    </div>
+                <div className="space-y-5">
+                  {/* Ring-based intensity visualization */}
+                  <div className="flex justify-between items-center px-4">
+                    {intensityLevels.map((level) => (
+                      <IntensityRing
+                        key={level.value}
+                        level={level.value}
+                        selected={intensity}
+                        onClick={() => setIntensity(level.value)}
+                      />
+                    ))}
+                  </div>
+                  
+                  {/* Progress line with gradient */}
+                  <div className="relative h-1 mx-4 bg-[#1a1a1a] rounded-full overflow-hidden">
+                    <div 
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${((intensity - 1) / 4) * 100}%`,
+                        background: `linear-gradient(90deg, #4da6ff, #00d4aa, #22c55e, #f59e0b, #ef4444)`,
+                        backgroundSize: '400% 100%',
+                        backgroundPosition: `${((intensity - 1) / 4) * 100}% 0`
+                      }}
+                    />
                   </div>
                   
                   {/* Selected intensity card */}
-                  <div className="text-center p-5 bg-gradient-to-b from-oura-card to-black rounded-2xl border border-oura-border">
+                  <div className="text-center p-5 bg-gradient-to-b from-[#0a0a0a] to-black rounded-2xl border border-[#1a1a1a]">
                     <div className="text-white text-lg font-light tracking-wide mb-1">
                       {intensityLevels.find(level => level.value === intensity)?.label}
                     </div>
-                    <div className="text-gray-500 text-sm font-light">
+                    <div className="text-[#5a5a5a] text-sm font-light">
                       {intensityLevels.find(level => level.value === intensity)?.description}
                     </div>
                   </div>

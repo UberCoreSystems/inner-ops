@@ -5,11 +5,13 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
 import VirtualizedList from '../components/VirtualizedList';
+import { KillCelebration } from '../components/Confetti';
 
 const KillList = () => {
   const [targets, setTargets] = useState([]);
   const [newTarget, setNewTarget] = useState('');
   const [newTargetCategory, setNewTargetCategory] = useState('bad-habit');
+  const [newTargetPriority, setNewTargetPriority] = useState('medium');
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,21 +20,79 @@ const KillList = () => {
   const [selectedTargets, setSelectedTargets] = useState(new Set());
   const [bulkActionMode, setBulkActionMode] = useState(false);
   
+  // Celebration state
+  const [celebration, setCelebration] = useState({ show: false, targetName: '' });
+  
   // Reflection notes state
   const [reflectionNotes, setReflectionNotes] = useState({});
   const [showReflection, setShowReflection] = useState({});
   const [updatingReflection, setUpdatingReflection] = useState({});
   const [user, setUser] = useState(null);
 
+  // Priority levels configuration
+  const priorityLevels = [
+    { value: 'high', label: 'High', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '🔥' },
+    { value: 'medium', label: 'Medium', color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '⚡' },
+    { value: 'low', label: 'Low', color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '🌱' },
+  ];
+
+  // Oura-style category icons
+  const CategoryIcons = {
+    'bad-habit': (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v6l4 2" />
+      </svg>
+    ),
+    'negative-thought': (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M8 12h8M8 8h8M8 16h4" opacity="0.6" />
+      </svg>
+    ),
+    'addiction': (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+      </svg>
+    ),
+    'toxic-behavior': (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L2 22h20L12 2z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <circle cx="12" cy="17" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+    'fear': (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" opacity="0.5" />
+        <circle cx="12" cy="12" r="2" opacity="0.3" />
+      </svg>
+    ),
+    'procrastination': (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+    'other': (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" opacity="0.5" />
+        <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  };
+
   // Kill target categories
   const categories = [
-    { value: 'bad-habit', label: '🚬 Bad Habit', color: 'text-red-400' },
-    { value: 'negative-thought', label: '🧠 Negative Thought Pattern', color: 'text-purple-400' },
-    { value: 'addiction', label: '⚡ Addiction', color: 'text-orange-400' },
-    { value: 'toxic-behavior', label: '☠️ Toxic Behavior', color: 'text-yellow-400' },
-    { value: 'fear', label: '😨 Fear/Anxiety', color: 'text-blue-400' },
-    { value: 'procrastination', label: '⏰ Procrastination', color: 'text-green-400' },
-    { value: 'other', label: '🎯 Other', color: 'text-gray-400' }
+    { value: 'bad-habit', label: 'Bad Habit', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10' },
+    { value: 'negative-thought', label: 'Negative Thought', color: 'text-[#a855f7]', bgColor: 'bg-[#a855f7]/10' },
+    { value: 'addiction', label: 'Addiction', color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10' },
+    { value: 'toxic-behavior', label: 'Toxic Behavior', color: 'text-[#eab308]', bgColor: 'bg-[#eab308]/10' },
+    { value: 'fear', label: 'Fear/Anxiety', color: 'text-[#4da6ff]', bgColor: 'bg-[#4da6ff]/10' },
+    { value: 'procrastination', label: 'Procrastination', color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10' },
+    { value: 'other', label: 'Other', color: 'text-[#8a8a8a]', bgColor: 'bg-[#8a8a8a]/10' }
   ];
 
   // Get current user from auth service
@@ -87,8 +147,8 @@ const KillList = () => {
         title: newTarget.trim(),
         description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label.split(' ').slice(1).join(' ') || 'target'}`,
         category: newTargetCategory,
+        priority: newTargetPriority,
         status: 'active',
-        priority: 'medium',
         progress: 0,
         targetDate: getTodaysDate(),
         createdAt: new Date().toISOString(),
@@ -107,6 +167,7 @@ const KillList = () => {
       
       setNewTarget('');
       setNewTargetCategory('bad-habit');
+      setNewTargetPriority('medium');
 
       // Generate Oracle feedback
       setOracleModal({ isOpen: true, content: '', isLoading: true });
@@ -161,9 +222,18 @@ const KillList = () => {
           : target
       ));
 
-      // Show Oracle feedback for completion
+      // Show celebration and Oracle feedback for completion
       if (newProgress >= 100) {
         const completedTarget = targets.find(t => t.id === targetId);
+        
+        // Trigger celebration animation
+        setCelebration({ show: true, targetName: completedTarget?.title || 'Target' });
+        
+        // Auto-hide celebration after 3 seconds
+        setTimeout(() => {
+          setCelebration({ show: false, targetName: '' });
+        }, 3000);
+        
         setOracleModal({ isOpen: true, content: '', isLoading: true });
 
         try {
@@ -395,9 +465,19 @@ const KillList = () => {
 
   const renderTargetItem = useCallback(({ item: target, index }) => {
     const category = categories.find(c => c.value === target.category) || categories[0];
+    const priority = priorityLevels.find(p => p.value === target.priority) || priorityLevels[1];
+    
+    // Priority-based card styling
+    const priorityCardClass = target.status !== 'killed' && target.status !== 'escaped'
+      ? target.priority === 'high' 
+        ? 'priority-high' 
+        : target.priority === 'low' 
+          ? 'priority-low' 
+          : 'priority-medium'
+      : '';
     
     return (
-      <div key={target.id} className="oura-card p-5 hover:border-[#ef4444]/30 transition-all duration-300">
+      <div key={target.id} className={`oura-card p-5 hover:border-[#ef4444]/30 transition-all duration-300 ${priorityCardClass}`}>
         <div className="flex items-center justify-between mb-3">
           {editingTarget === target.id ? (
             <div className="flex-1 flex gap-2">
@@ -424,22 +504,29 @@ const KillList = () => {
           ) : (
             <>
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className={`font-medium ${target.status === 'killed' ? 'line-through text-gray-400' : 'text-white'}`}>
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <h3 className={`font-medium ${target.status === 'killed' ? 'line-through text-[#5a5a5a]' : 'text-white'}`}>
                     {target.title}
                   </h3>
-                  <span className={`text-sm px-2 py-1 rounded ${category.color} bg-gray-700`}>
+                  {/* Priority Badge */}
+                  {target.status !== 'killed' && target.status !== 'escaped' && (
+                    <span className={`text-xs px-2 py-0.5 rounded-lg flex items-center gap-1 ${priority.color} ${priority.bgColor} ${target.priority === 'high' ? 'animate-priority-pulse' : ''}`}>
+                      {priority.icon} {priority.label}
+                    </span>
+                  )}
+                  <span className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${category.color} ${category.bgColor}`}>
+                    {CategoryIcons[target.category]}
                     {category.label}
                   </span>
-                  <span className={`text-xs px-2 py-1 rounded uppercase font-medium ${
-                    target.status === 'killed' ? 'bg-green-900/30 text-green-400' :
-                    target.status === 'escaped' ? 'bg-red-900/30 text-red-400' :
-                    'bg-yellow-900/30 text-yellow-400'
+                  <span className={`text-xs px-2 py-1 rounded-lg uppercase font-medium ${
+                    target.status === 'killed' ? 'bg-[#22c55e]/10 text-[#22c55e]' :
+                    target.status === 'escaped' ? 'bg-[#ef4444]/10 text-[#ef4444]' :
+                    'bg-[#f59e0b]/10 text-[#f59e0b]'
                   }`}>
                     {target.status}
                   </span>
                 </div>
-                <p className="text-sm text-gray-300 mb-1">{target.description}</p>
+                <p className="text-sm text-[#8a8a8a] mb-1">{target.description}</p>
                 <p className="text-xs text-gray-400">
                   Created: {target.createdAt instanceof Date ? target.createdAt.toLocaleDateString() : new Date(target.createdAt).toLocaleDateString()}
                   {target.targetDate && (
@@ -607,7 +694,7 @@ const KillList = () => {
         )}
       </div>
     );
-  }, [editingTarget, editValue, updateProgress, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, categories, 
+  }, [editingTarget, editValue, updateProgress, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, categories, priorityLevels,
       reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote]);
 
   return (
@@ -674,17 +761,54 @@ const KillList = () => {
                 <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
                   Category
                 </label>
-                <select
-                  value={newTargetCategory}
-                  onChange={(e) => setNewTargetCategory(e.target.value)}
-                  className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors"
-                >
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {categories.map((category) => (
-                    <option key={category.value} value={category.value}>
-                      {category.label}
-                    </option>
+                    <button
+                      key={category.value}
+                      type="button"
+                      onClick={() => setNewTargetCategory(category.value)}
+                      className={`p-3 rounded-xl border transition-all duration-200 flex items-center gap-2 text-sm ${
+                        newTargetCategory === category.value
+                          ? `${category.bgColor} ${category.color} border-current`
+                          : 'bg-[#0a0a0a] text-[#5a5a5a] border-[#1a1a1a] hover:border-[#2a2a2a] hover:text-[#8a8a8a]'
+                      }`}
+                    >
+                      <span className={newTargetCategory === category.value ? category.color : 'text-[#5a5a5a]'}>
+                        {CategoryIcons[category.value]}
+                      </span>
+                      <span className="truncate">{category.label}</span>
+                    </button>
                   ))}
-                </select>
+                </div>
+              </div>
+
+              {/* Priority Level */}
+              <div>
+                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+                  Priority Level
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {priorityLevels.map((priority) => (
+                    <button
+                      key={priority.value}
+                      type="button"
+                      onClick={() => setNewTargetPriority(priority.value)}
+                      className={`p-4 rounded-xl border transition-all duration-200 flex flex-col items-center gap-2 ${
+                        newTargetPriority === priority.value
+                          ? `${priority.bgColor} ${priority.color} ${priority.borderColor} border-2 scale-105`
+                          : 'bg-[#0a0a0a] text-[#5a5a5a] border-[#1a1a1a] hover:border-[#2a2a2a] hover:text-[#8a8a8a]'
+                      }`}
+                    >
+                      <span className="text-2xl">{priority.icon}</span>
+                      <span className="text-sm font-medium">{priority.label}</span>
+                      <span className="text-xs opacity-70">
+                        {priority.value === 'high' && 'Urgent - tackle first'}
+                        {priority.value === 'medium' && 'Important - steady focus'}
+                        {priority.value === 'low' && 'Minor - when ready'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Submit Button */}
@@ -755,6 +879,13 @@ const KillList = () => {
           onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
           content={oracleModal.content}
           isLoading={oracleModal.isLoading}
+        />
+        
+        {/* Kill Celebration Animation */}
+        <KillCelebration 
+          show={celebration.show} 
+          targetName={celebration.targetName}
+          onComplete={() => setCelebration({ show: false, targetName: '' })}
         />
       </div>
     </div>
