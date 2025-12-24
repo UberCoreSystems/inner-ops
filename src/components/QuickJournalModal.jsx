@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import ouraToast from '../utils/toast';
 
 const quickMoods = [
   { emoji: '⚡', label: 'Electric', value: 'electric', color: '#00d4aa' },
@@ -65,6 +66,8 @@ export default function QuickJournalModal({ isOpen, onClose, onSuccess }) {
       };
 
       await writeData('journalEntries', journalEntry);
+      
+      ouraToast.success('Quick journal entry saved');
       
       // Generate Oracle feedback if entry is substantial
       if (entry.trim().split(/\s+/).length >= 10) {

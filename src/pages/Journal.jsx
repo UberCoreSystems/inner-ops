@@ -3,6 +3,7 @@ import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
+import ouraToast from '../utils/toast';
 
 // Custom SVG mood icons - Oura-style geometric designs
 const MoodIcons = {
@@ -371,6 +372,8 @@ export default function Journal() {
         oracleJudgment: feedback
       });
       setEntries(prev => [newEntry, ...prev]);
+      
+      ouraToast.success('Journal entry saved');
 
       // Clear form
       setEntry('');
@@ -404,11 +407,10 @@ export default function Journal() {
       // Update local state immediately
       setEntries(prev => prev.filter(entry => entry.id !== entryId));
       
-      // Show success message
-      alert('Journal entry deleted successfully.');
+      ouraToast.success('Journal entry deleted');
     } catch (error) {
       console.error('❌ Journal: Error deleting entry:', error);
-      alert('Failed to delete journal entry. Please try again.');
+      ouraToast.error('Failed to delete journal entry');
     }
   };
 

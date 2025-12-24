@@ -4,6 +4,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import VirtualizedList from './VirtualizedList';
+import ouraToast from '../utils/toast';
 
 const philosophicalQuotes = [
   "He who is not satisfied with a little, is satisfied with nothing. - Epicurus",
@@ -136,6 +137,8 @@ const BlackMirror = () => {
       // Save to Firebase
       const savedEntry = await writeData('blackMirrorEntries', entryData);
       setEntries(prev => [savedEntry, ...prev.slice(0, 49)]);
+      
+      ouraToast.success('Black Mirror entry logged');
 
       // Reset form
       setScreenTime('');

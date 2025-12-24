@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from './OracleModal';
+import ouraToast from '../utils/toast';
 
 // Quick grounding techniques
 const groundingTechniques = [
@@ -100,6 +101,8 @@ const EmergencyButton = () => {
       };
 
       await writeData('emergencyLogs', emergencyEntry);
+      
+      ouraToast.success('Emergency moment logged');
 
       // Get Oracle guidance
       setOracleModal({ isOpen: true, content: '', isLoading: true });

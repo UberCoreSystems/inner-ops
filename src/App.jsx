@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { authService } from './utils/authService';
+import { toasterConfig } from './utils/toast';
 import KillList from './pages/KillList';
 import Journal from './pages/Journal';
 import Dashboard from './pages/Dashboard';
@@ -69,6 +71,7 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-900 text-white">
+        <Toaster {...toasterConfig} />
         {user && <Navbar onLogout={handleLogout} user={user} />}
         {user && <EmergencyButton />}
         <Routes>

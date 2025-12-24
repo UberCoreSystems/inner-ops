@@ -7,6 +7,7 @@ import { aiUtils } from '../utils/aiUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
+import ouraToast from '../utils/toast';
 
 const relapseSelves = [
   'The Addict',
@@ -116,6 +117,8 @@ const RelapseRadar = () => {
 
       await writeData('relapseEntries', entry);
       setRelapseEntries(prev => [entry, ...prev]);
+      
+      ouraToast.success('Relapse check-in logged');
 
       // Clear form
       setSelectedSelf('');

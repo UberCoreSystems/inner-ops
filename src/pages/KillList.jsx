@@ -6,6 +6,7 @@ import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
 import VirtualizedList from '../components/VirtualizedList';
 import { KillCelebration } from '../components/Confetti';
+import ouraToast from '../utils/toast';
 
 const KillList = () => {
   const [targets, setTargets] = useState([]);
@@ -165,6 +166,8 @@ const KillList = () => {
       // Update local state immediately for better UX
       setTargets(prev => [savedTarget, ...prev]);
       
+      ouraToast.success('Target added to Kill List');
+      
       setNewTarget('');
       setNewTargetCategory('bad-habit');
       setNewTargetPriority('medium');
@@ -191,7 +194,7 @@ const KillList = () => {
       }
     } catch (error) {
       console.error('❌ Error adding target:', error);
-      alert(`Failed to save kill target: ${error.message}`);
+      ouraToast.error('Failed to save kill target');
     } finally {
       setLoading(false);
     }
@@ -225,6 +228,8 @@ const KillList = () => {
       // Show celebration and Oracle feedback for completion
       if (newProgress >= 100) {
         const completedTarget = targets.find(t => t.id === targetId);
+        
+        ouraToast.achievement(`Target eliminated: ${completedTarget?.title || 'Target'}`);
         
         // Trigger celebration animation
         setCelebration({ show: true, targetName: completedTarget?.title || 'Target' });
@@ -267,9 +272,10 @@ const KillList = () => {
       
       // Update local state immediately
       setTargets(prev => prev.filter(target => target.id !== targetId));
+      ouraToast.success('Target removed');
     } catch (error) {
       console.error('❌ KillList: Error deleting target:', error);
-      alert('Failed to delete target. Please try again.');
+      ouraToast.error('Failed to delete target');
     }
   };
 
@@ -285,6 +291,8 @@ const KillList = () => {
 
       await updateData('killTargets', targetId, targetUpdate);
       console.log("✅ KillList: Target marked as escaped");
+      
+      ouraToast.warning('Target marked as escaped');
 
       // Update local state immediately
       setTargets(prev => prev.map(target => 
@@ -315,7 +323,7 @@ const KillList = () => {
       }
     } catch (error) {
       console.error('❌ KillList: Error marking target as escaped:', error);
-      alert('Failed to mark target as escaped. Please try again.');
+      ouraToast.error('Failed to mark target as escaped');
     }
   };
 
@@ -331,6 +339,8 @@ const KillList = () => {
 
       await updateData('killTargets', targetId, targetUpdate);
       console.log("✅ KillList: Target reactivated successfully");
+      
+      ouraToast.success('Target reactivated');
 
       // Update local state immediately
       setTargets(prev => prev.map(target => 
@@ -340,7 +350,7 @@ const KillList = () => {
       ));
     } catch (error) {
       console.error('❌ KillList: Error reactivating target:', error);
-      alert('Failed to reactivate target. Please try again.');
+      ouraToast.error('Failed to reactivate target');
     }
   };
 
@@ -368,10 +378,11 @@ const KillList = () => {
 
       setEditingTarget(null);
       setEditValue('');
+      ouraToast.success('Target updated');
       console.log("✅ KillList: Target title updated successfully");
     } catch (error) {
       console.error('❌ KillList: Error updating target:', error);
-      alert('Failed to update target. Please try again.');
+      ouraToast.error('Failed to update target');
     }
   };
 
@@ -393,10 +404,11 @@ const KillList = () => {
         lastUpdated: new Date()
       });
 
+      ouraToast.success('Reflection notes saved');
       console.log(`✅ Reflection notes saved for target: ${targetId}`);
     } catch (error) {
       console.error("Error saving reflection notes:", error);
-      alert('Failed to save reflection notes. Please try again.');
+      ouraToast.error('Failed to save reflection notes');
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
     }
@@ -412,10 +424,11 @@ const KillList = () => {
       });
 
       setReflectionNotes(prev => ({ ...prev, [targetId]: '' }));
+      ouraToast.success('Reflection notes cleared');
       console.log(`✅ Reflection notes cleared for target: ${targetId}`);
     } catch (error) {
       console.error("Error clearing reflection notes:", error);
-      alert('Failed to clear reflection notes. Please try again.');
+      ouraToast.error('Failed to clear reflection notes');
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
     }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
+import ouraToast from '../utils/toast';
 
 // Event categories for Hard Lessons
 const eventCategories = [
@@ -78,13 +79,13 @@ export default function HardLessons() {
 
     for (const field of required) {
       if (!newLesson[field]?.trim()) {
-        alert(`Please complete: ${field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`);
+        ouraToast.warning(`Please complete: ${field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`);
         return false;
       }
     }
 
     if (newLesson.costs.length === 0) {
-      alert('Please select at least one cost category');
+      ouraToast.warning('Please select at least one cost category');
       return false;
     }
 
@@ -135,7 +136,7 @@ Please help extract the core lesson and rule from this experience.
       if (editingLesson) {
         // Handle edits with immutability constraints
         if (editingLesson.isFinalized) {
-          alert('Finalized lessons cannot be edited. Create a new entry if the rule was violated again.');
+          ouraToast.info('Finalized lessons cannot be edited. Create a new entry if the rule was violated again.');
           setLoading(false);
           return;
         }
@@ -151,12 +152,14 @@ Please help extract the core lesson and rule from this experience.
       resetForm();
       
       if (finalize) {
-        alert('Hard Lesson finalized and locked. The extraction is complete.');
+        ouraToast.achievement('Hard Lesson finalized and locked');
+      } else {
+        ouraToast.success('Hard Lesson saved');
       }
 
     } catch (error) {
       console.error('Error saving Hard Lesson:', error);
-      alert('Failed to save Hard Lesson. Please try again.');
+      ouraToast.error('Failed to save Hard Lesson');
     } finally {
       setLoading(false);
     }
@@ -180,7 +183,7 @@ Please help extract the core lesson and rule from this experience.
 
   const editLesson = (lesson) => {
     if (lesson.isFinalized) {
-      alert('This lesson is finalized and immutable. Create a new entry if the rule was violated again.');
+      ouraToast.info('This lesson is finalized. Create a new entry if the rule was violated again.');
       return;
     }
     
@@ -193,7 +196,7 @@ Please help extract the core lesson and rule from this experience.
     const lesson = lessons.find(l => l.id === lessonId);
     
     if (lesson?.isFinalized) {
-      alert('Finalized lessons cannot be deleted. They are part of your permanent strategic assets.');
+      ouraToast.info('Finalized lessons cannot be deleted. They are permanent strategic assets.');
       return;
     }
 
@@ -204,9 +207,10 @@ Please help extract the core lesson and rule from this experience.
     try {
       await deleteData('hardLessons', lessonId);
       setLessons(prev => prev.filter(l => l.id !== lessonId));
+      ouraToast.success('Hard Lesson deleted');
     } catch (error) {
       console.error('Error deleting Hard Lesson:', error);
-      alert('Failed to delete lesson. Please try again.');
+      ouraToast.error('Failed to delete lesson');
     }
   };
 
