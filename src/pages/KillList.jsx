@@ -7,6 +7,8 @@ import { debounce } from '../utils/debounce';
 import VirtualizedList from '../components/VirtualizedList';
 import { KillCelebration } from '../components/Confetti';
 import ouraToast from '../utils/toast';
+import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
+import logger from '../utils/logger';
 
 const KillList = () => {
   const [targets, setTargets] = useState([]);
@@ -16,6 +18,8 @@ const KillList = () => {
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedTargets, setSelectedTargets] = useState(new Set());
@@ -96,11 +100,22 @@ const KillList = () => {
     { value: 'other', label: 'Other', color: 'text-[#8a8a8a]', bgColor: 'bg-[#8a8a8a]/10' }
   ];
 
+  // Delay showing skeleton to prevent flicker
+  useEffect(() => {
+    const skeletonTimer = setTimeout(() => {
+      if (initialLoading) {
+        setShowSkeleton(true);
+      }
+    }, 200);
+
+    return () => clearTimeout(skeletonTimer);
+  }, [initialLoading]);
+
   // Get current user from auth service
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     setUser(currentUser);
-    console.log("👤 KillList: Current user:", currentUser?.uid);
+    logger.log("👤 KillList: Current user:", currentUser?.uid);
     
     if (currentUser) {
       loadTargets();
@@ -115,18 +130,21 @@ const KillList = () => {
   // Load targets from Firebase
   const loadTargets = async () => {
     if (!user) {
-      console.log("⏳ KillList: Waiting for user authentication...");
+      logger.log("⏳ KillList: Waiting for user authentication...");
       return;
     }
 
     try {
-      console.log("📡 KillList: Loading targets for user:", user.uid);
+      logger.log("📡 KillList: Loading targets for user:", user.uid);
+      setInitialLoading(true);
       const targetsData = await readUserData('killTargets');
-      console.log(`📋 KillList: Loaded ${targetsData.length} kill targets`);
+      logger.log(`📋 KillList: Loaded ${targetsData.length} kill targets`);
       setTargets(targetsData);
     } catch (error) {
-      console.error('❌ KillList: Error loading targets:', error);
+      logger.error('❌ KillList: Error loading targets:', error);
       setTargets([]);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -141,7 +159,7 @@ const KillList = () => {
     if (!newTarget.trim() || loading) return;
 
     setLoading(true);
-    console.log("🎯 Adding new kill target:", newTarget.trim());
+    logger.log("🎯 Adding new kill target:", newTarget.trim());
     
     try {
       const targetData = {
@@ -157,11 +175,11 @@ const KillList = () => {
         reflectionNotes: ''
       };
 
-      console.log("📝 Target data to save:", targetData);
+      logger.log("📝 Target data to save:", targetData);
 
       // Use writeData from firebaseUtils for consistent saving
       const savedTarget = await writeData('killTargets', targetData);
-      console.log('✅ Kill target saved successfully:', savedTarget.id);
+      logger.log('✅ Kill target saved successfully:', savedTarget.id);
       
       // Update local state immediately for better UX
       setTargets(prev => [savedTarget, ...prev]);
@@ -185,7 +203,7 @@ const KillList = () => {
 
         setOracleModal({ isOpen: true, content: feedback, isLoading: false });
       } catch (error) {
-        console.error('Oracle feedback error:', error);
+        logger.error('Oracle feedback error:', error);
         setOracleModal({ 
           isOpen: true, 
           content: "The Oracle's wisdom flows through ancient channels. Your contract has been sealed in the ethereal realm. Pursue your target with unwavering focus.", 
@@ -193,7 +211,7 @@ const KillList = () => {
         });
       }
     } catch (error) {
-      console.error('❌ Error adding target:', error);
+      logger.error('❌ Error adding target:', error);
       ouraToast.error('Failed to save kill target');
     } finally {
       setLoading(false);
@@ -202,7 +220,7 @@ const KillList = () => {
 
   const updateProgress = async (targetId, newProgress) => {
     try {
-      console.log("📊 KillList: Updating progress for target:", targetId, "to", newProgress);
+      logger.log("📊 KillList: Updating progress for target:", targetId, "to", newProgress);
       
       const targetUpdate = {
         progress: newProgress,
@@ -216,7 +234,7 @@ const KillList = () => {
       }
 
       await updateData('killTargets', targetId, targetUpdate);
-      console.log("✅ KillList: Progress updated successfully");
+      logger.log("✅ KillList: Progress updated successfully");
 
       // Update local state immediately
       setTargets(prev => prev.map(target => 
@@ -251,37 +269,37 @@ const KillList = () => {
 
           setOracleModal({ isOpen: true, content: feedback, isLoading: false });
         } catch (error) {
-          console.error('Oracle feedback error:', error);
+          logger.error('Oracle feedback error:', error);
           setOracleModal({ 
             isOpen: true, 
-            content: "The Oracle witnesses your triumph. Another chain of limitation has been shattered. The path of self-mastery grows clearer with each victory.", 
+            content: "The Oracle witnesses your triumph through veiled sight... Victory is still yours, warrior.", 
             isLoading: false 
           });
         }
       }
     } catch (error) {
-      console.error('Error updating progress:', error);
+      logger.error('Error updating progress:', error);
     }
   };
 
   const deleteTarget = async (targetId) => {
     try {
-      console.log("🗑️ KillList: Deleting target:", targetId);
+      logger.log("🗑️ KillList: Deleting target:", targetId);
       await deleteData('killTargets', targetId);
-      console.log('✅ KillList: Target deleted successfully');
+      logger.log('✅ KillList: Target deleted successfully');
       
       // Update local state immediately
       setTargets(prev => prev.filter(target => target.id !== targetId));
       ouraToast.success('Target removed');
     } catch (error) {
-      console.error('❌ KillList: Error deleting target:', error);
+      logger.error('❌ KillList: Error deleting target:', error);
       ouraToast.error('Failed to delete target');
     }
   };
 
   const markAsEscaped = async (targetId) => {
     try {
-      console.log("🏃 KillList: Marking target as escaped:", targetId);
+      logger.log("🏃 KillList: Marking target as escaped:", targetId);
       
       const targetUpdate = {
         status: 'escaped',
@@ -290,7 +308,7 @@ const KillList = () => {
       };
 
       await updateData('killTargets', targetId, targetUpdate);
-      console.log("✅ KillList: Target marked as escaped");
+      logger.log("✅ KillList: Target marked as escaped");
       
       ouraToast.warning('Target marked as escaped');
 
@@ -314,7 +332,7 @@ const KillList = () => {
         }, targets);
         setOracleModal({ isOpen: true, content: feedback, isLoading: false });
       } catch (error) {
-        console.error('Oracle feedback error:', error);
+        logger.error('Oracle feedback error:', error);
         setOracleModal({ 
           isOpen: true, 
           content: "The Oracle recognizes the strategic value of retreat. Sometimes the warrior must withdraw to fight another day. Study your patterns and return stronger.", 
@@ -322,14 +340,14 @@ const KillList = () => {
         });
       }
     } catch (error) {
-      console.error('❌ KillList: Error marking target as escaped:', error);
+      logger.error('❌ KillList: Error marking target as escaped:', error);
       ouraToast.error('Failed to mark target as escaped');
     }
   };
 
   const reactivateTarget = async (targetId) => {
     try {
-      console.log("🎯 KillList: Reactivating escaped target:", targetId);
+      logger.log("🎯 KillList: Reactivating escaped target:", targetId);
       
       const targetUpdate = {
         status: 'active',
@@ -338,7 +356,7 @@ const KillList = () => {
       };
 
       await updateData('killTargets', targetId, targetUpdate);
-      console.log("✅ KillList: Target reactivated successfully");
+      logger.log("✅ KillList: Target reactivated successfully");
       
       ouraToast.success('Target reactivated');
 
@@ -349,7 +367,7 @@ const KillList = () => {
           : target
       ));
     } catch (error) {
-      console.error('❌ KillList: Error reactivating target:', error);
+      logger.error('❌ KillList: Error reactivating target:', error);
       ouraToast.error('Failed to reactivate target');
     }
   };
@@ -363,7 +381,7 @@ const KillList = () => {
     if (!editValue.trim()) return;
 
     try {
-      console.log("✏️ KillList: Saving edit for target:", editingTarget);
+      logger.log("✏️ KillList: Saving edit for target:", editingTarget);
       await updateData('killTargets', editingTarget, {
         title: editValue.trim(),
         lastUpdated: new Date()
@@ -379,9 +397,9 @@ const KillList = () => {
       setEditingTarget(null);
       setEditValue('');
       ouraToast.success('Target updated');
-      console.log("✅ KillList: Target title updated successfully");
+      logger.log("✅ KillList: Target title updated successfully");
     } catch (error) {
-      console.error('❌ KillList: Error updating target:', error);
+      logger.error('❌ KillList: Error updating target:', error);
       ouraToast.error('Failed to update target');
     }
   };
@@ -405,9 +423,9 @@ const KillList = () => {
       });
 
       ouraToast.success('Reflection notes saved');
-      console.log(`✅ Reflection notes saved for target: ${targetId}`);
+      logger.log(`✅ Reflection notes saved for target: ${targetId}`);
     } catch (error) {
-      console.error("Error saving reflection notes:", error);
+      logger.error("Error saving reflection notes:", error);
       ouraToast.error('Failed to save reflection notes');
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
@@ -425,9 +443,9 @@ const KillList = () => {
 
       setReflectionNotes(prev => ({ ...prev, [targetId]: '' }));
       ouraToast.success('Reflection notes cleared');
-      console.log(`✅ Reflection notes cleared for target: ${targetId}`);
+      logger.log(`✅ Reflection notes cleared for target: ${targetId}`);
     } catch (error) {
-      console.error("Error clearing reflection notes:", error);
+      logger.error("Error clearing reflection notes:", error);
       ouraToast.error('Failed to clear reflection notes');
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
@@ -863,7 +881,11 @@ const KillList = () => {
         </section>
 
         {/* Targets List */}
-        {filteredTargets.length > 0 ? (
+        {initialLoading && showSkeleton ? (
+          <div className="animate-fade-in">
+            <SkeletonList count={4} ItemComponent={SkeletonKillTarget} />
+          </div>
+        ) : filteredTargets.length > 0 ? (
           <VirtualizedList
             items={filteredTargets}
             renderItem={renderTargetItem}

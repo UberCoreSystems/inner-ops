@@ -4,6 +4,7 @@ import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from './OracleModal';
 import ouraToast from '../utils/toast';
+import logger from '../utils/logger';
 
 // Quick grounding techniques
 const groundingTechniques = [
@@ -113,7 +114,7 @@ const EmergencyButton = () => {
       setOracleModal({ isOpen: true, content: oracleFeedback, isLoading: false });
       setStep('complete');
     } catch (error) {
-      console.error('Error logging emergency:', error);
+      logger.error('Error logging emergency:', error);
       setOracleModal({ 
         isOpen: true, 
         content: "Your struggle is witnessed. Even in chaos, you reached for help - that's strength. Take a deep breath. This moment will pass.", 

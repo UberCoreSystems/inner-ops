@@ -9,6 +9,8 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import { useTodaysKillTargets } from '../hooks/useKillTargets';
 import OracleModal from './OracleModal';
 import { AppIcon } from './AppIcons';
+import { SkeletonList, SkeletonKillTarget } from './SkeletonLoader';
+import logger from '../utils/logger';
 
 const KillListDashboard = () => {
   // Use the custom hook for today's kill targets with all functions
@@ -64,9 +66,9 @@ const KillListDashboard = () => {
     try {
       // Use the hook's toggle functions instead of manual updateDoc
       await toggleTargetStatus(targetId, newStatus);
-      console.log(`✅ Target ${newStatus}: ${targetId}`);
+      logger.log(`✅ Target ${newStatus}: ${targetId}`);
     } catch (error) {
-      console.error("Error updating target status:", error);
+      logger.error("Error updating target status:", error);
     } finally {
       setUpdating(prev => ({ ...prev, [targetId]: false }));
     }
@@ -78,7 +80,7 @@ const KillListDashboard = () => {
     try {
       await markAsKilled(targetId);
     } catch (error) {
-      console.error("Error marking as killed:", error);
+      logger.error("Error marking as killed:", error);
     } finally {
       setUpdating(prev => ({ ...prev, [targetId]: false }));
     }
@@ -89,7 +91,7 @@ const KillListDashboard = () => {
     try {
       await markAsEscaped(targetId);
     } catch (error) {
-      console.error("Error marking as escaped:", error);
+      logger.error("Error marking as escaped:", error);
     } finally {
       setUpdating(prev => ({ ...prev, [targetId]: false }));
     }
@@ -100,7 +102,7 @@ const KillListDashboard = () => {
     try {
       await markAsActive(targetId);
     } catch (error) {
-      console.error("Error resetting to active:", error);
+      logger.error("Error resetting to active:", error);
     } finally {
       setUpdating(prev => ({ ...prev, [targetId]: false }));
     }
@@ -119,7 +121,7 @@ const KillListDashboard = () => {
       const newStatus = statusCycle[target.status] || 'active';
       await toggleTargetStatus(target.id, newStatus);
     } catch (error) {
-      console.error("Error cycling status:", error);
+      logger.error("Error cycling status:", error);
     } finally {
       setUpdating(prev => ({ ...prev, [target.id]: false }));
     }
@@ -133,9 +135,9 @@ const KillListDashboard = () => {
 
     try {
       await updateReflectionNote(targetId, notes);
-      console.log(`✅ Reflection notes saved for target: ${targetId}`);
+      logger.log(`✅ Reflection notes saved for target: ${targetId}`);
     } catch (error) {
-      console.error("Error saving reflection notes:", error);
+      logger.error("Error saving reflection notes:", error);
     } finally {
       setUpdating(prev => ({ ...prev, [targetId]: false }));
     }
@@ -147,9 +149,9 @@ const KillListDashboard = () => {
     try {
       await clearReflectionNote(targetId);
       setReflectionNotes(prev => ({ ...prev, [targetId]: '' }));
-      console.log(`✅ Reflection notes cleared for target: ${targetId}`);
+      logger.log(`✅ Reflection notes cleared for target: ${targetId}`);
     } catch (error) {
-      console.error("Error clearing reflection notes:", error);
+      logger.error("Error clearing reflection notes:", error);
     } finally {
       setUpdating(prev => ({ ...prev, [targetId]: false }));
     }
@@ -179,7 +181,7 @@ const KillListDashboard = () => {
       // Update local state to reflect the change
       setReflectionNotes(prev => ({ ...prev, [targetId]: updatedReflection }));
     } catch (error) {
-      console.error("Error saving Oracle feedback:", error);
+      logger.error("Error saving Oracle feedback:", error);
     }
   };
 
@@ -315,8 +317,11 @@ const KillListDashboard = () => {
         </button>
       </div>
 
-      <div className="space-y-4">
-        {todaysTargets.map((target) => (
+      {loading ? (
+        <SkeletonList count={2} ItemComponent={SkeletonKillTarget} />
+      ) : (
+        <div className="space-y-4">
+          {todaysTargets.map((target) => (
           <div key={target.id} className="bg-[#0a0a0a] rounded-2xl p-5 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-all">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
@@ -476,7 +481,8 @@ const KillListDashboard = () => {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
 
       {/* Stats Footer */}
       <div className="mt-6 pt-6 border-t border-[#1a1a1a]">

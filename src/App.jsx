@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import { authService } from './utils/authService';
 import { toasterConfig } from './utils/toast';
+import logger from './utils/logger';
 import KillList from './pages/KillList';
 import Journal from './pages/Journal';
 import Dashboard from './pages/Dashboard';
@@ -23,15 +24,15 @@ function App() {
 
   useEffect(() => {
     // Log API key to confirm Vite environment variables are loading
-    console.log("🔥 VITE_FIREBASE_API_KEY:", import.meta.env.VITE_FIREBASE_API_KEY ? "✅ Present" : "❌ Missing");
+    logger.log("🔥 VITE_FIREBASE_API_KEY:", import.meta.env.VITE_FIREBASE_API_KEY ? "✅ Present" : "❌ Missing");
     
     // Check Firebase connection status
     const firebaseStatus = checkFirebaseConnection();
-    console.log("🔍 Firebase Status on App Load:", firebaseStatus);
+    logger.log("🔍 Firebase Status on App Load:", firebaseStatus);
 
     // Listen for authentication state changes
     const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
-      console.log("🔐 Auth state changed:", firebaseUser?.uid || 'No user');
+      logger.log("🔐 Auth state changed:", firebaseUser?.uid || 'No user');
       setUser(firebaseUser);
       setLoading(false);
     });
@@ -40,20 +41,20 @@ function App() {
   }, []);
 
   const handleAuthSuccess = (authResult) => {
-    console.log("✅ Authentication successful:", authResult);
+    logger.log("✅ Authentication successful:", authResult);
     // User state will be updated automatically by onAuthStateChanged listener
     
     if (authResult.migrationReport?.success?.length > 0) {
-      console.log("🚀 Data migration completed during authentication");
+      logger.log("🚀 Data migration completed during authentication");
     }
   };
 
   const handleLogout = async () => {
     try {
       await authService.signOut();
-      console.log("✅ Logged out successfully");
+      logger.log("✅ Logged out successfully");
     } catch (error) {
-      console.error("❌ Logout failed:", error);
+      logger.error("❌ Logout failed:", error);
     }
   };
 

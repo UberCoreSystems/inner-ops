@@ -1,3 +1,5 @@
+import logger from './logger';
+
 export const localStorageUtils = {
   // Helper function to safely parse JSON from localStorage
   safeGetItem: (key, defaultValue = null) => {
@@ -5,12 +7,12 @@ export const localStorageUtils = {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : defaultValue;
     } catch (error) {
-      console.warn(`Failed to read ${key} from localStorage:`, error);
+      logger.warn(`Failed to read ${key} from localStorage:`, error);
       // Clear corrupted data
       try {
         localStorage.removeItem(key);
       } catch (clearError) {
-        console.warn(`Failed to clear corrupted key ${key}:`, clearError);
+        logger.warn(`Failed to clear corrupted key ${key}:`, clearError);
       }
       return defaultValue;
     }
@@ -22,7 +24,7 @@ export const localStorageUtils = {
       localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      console.warn(`Failed to write ${key} to localStorage:`, error);
+      logger.warn(`Failed to write ${key} to localStorage:`, error);
       return false;
     }
   },
@@ -40,7 +42,7 @@ export const localStorageUtils = {
     try {
       localStorage.removeItem('inner_ops_user');
     } catch (error) {
-      console.warn('Failed to remove user from localStorage:', error);
+      logger.warn('Failed to remove user from localStorage:', error);
     }
   },
 

@@ -3,6 +3,8 @@ import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import ouraToast from '../utils/toast';
+import logger from '../utils/logger';
+import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
 
 // Event categories for Hard Lessons
 const eventCategories = [
@@ -44,6 +46,8 @@ export default function HardLessons() {
   // Module state
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
@@ -52,9 +56,22 @@ export default function HardLessons() {
     loadHardLessons();
   }, []);
 
+  // Delay showing skeleton to prevent flicker
+  useEffect(() => {
+    const skeletonTimer = setTimeout(() => {
+      if (initialLoading) {
+        setShowSkeleton(true);
+      }
+    }, 200);
+
+    return () => clearTimeout(skeletonTimer);
+  }, [initialLoading]);
+
   const loadHardLessons = async () => {
+    setInitialLoading(true);
     const savedLessons = await readUserData('hardLessons');
     setLessons(savedLessons || []);
+    setInitialLoading(false);
   };
 
   const handleCostToggle = (costValue) => {
@@ -112,7 +129,7 @@ Please help extract the core lesson and rule from this experience.
       setOracleModal({ isOpen: true, content: oracleWisdom, isLoading: false });
 
     } catch (error) {
-      console.error('Error seeking Oracle extraction:', error);
+      logger.error('Error seeking Oracle extraction:', error);
       setOracleModal({
         isOpen: true,
         content: 'The Oracle cannot pierce the veil at this moment. Trust your own extraction of wisdom.',
@@ -158,7 +175,7 @@ Please help extract the core lesson and rule from this experience.
       }
 
     } catch (error) {
-      console.error('Error saving Hard Lesson:', error);
+      logger.error('Error saving Hard Lesson:', error);
       ouraToast.error('Failed to save Hard Lesson');
     } finally {
       setLoading(false);
@@ -209,7 +226,7 @@ Please help extract the core lesson and rule from this experience.
       setLessons(prev => prev.filter(l => l.id !== lessonId));
       ouraToast.success('Hard Lesson deleted');
     } catch (error) {
-      console.error('Error deleting Hard Lesson:', error);
+      logger.error('Error deleting Hard Lesson:', error);
       ouraToast.error('Failed to delete lesson');
     }
   };
@@ -436,7 +453,11 @@ Please help extract the core lesson and rule from this experience.
       <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
         <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Extracted Lessons</h3>
         
-        {lessons.length > 0 ? (
+        {initialLoading && showSkeleton ? (
+          <div className="animate-fade-in">
+            <SkeletonList count={3} ItemComponent={SkeletonCard} />
+          </div>
+        ) : lessons.length > 0 ? (
           <div className="space-y-6">
             {lessons.map((lesson) => {
               const category = eventCategories.find(cat => cat.value === lesson.eventCategory);

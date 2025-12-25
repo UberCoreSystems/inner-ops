@@ -1,4 +1,6 @@
 // AI utilities for generating reflections, insights, and feedback
+import logger from './logger';
+
 export const aiUtils = {
   // Generate journal reflection prompts based on mood and content
   generateJournalReflection: (mood, intensity, content) => {
@@ -273,7 +275,7 @@ Recent Patterns: ${pastEntries.slice(-3).join('\n')}
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
       if (!apiKey) {
-        console.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
+        logger.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
         return "The Oracle requires proper configuration to speak. Set your API key in the Secrets tab.";
       }
 
@@ -295,7 +297,7 @@ Recent Patterns: ${pastEntries.slice(-3).join('\n')}
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error("OpenAI API error:", response.status, errorData);
+        logger.error("OpenAI API error:", response.status, errorData);
 
         if (response.status === 401) {
           return "The Oracle rejects your offering. Verify your API key is correct.";
@@ -309,13 +311,13 @@ Recent Patterns: ${pastEntries.slice(-3).join('\n')}
       const data = await response.json();
 
       if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error("Unexpected OpenAI response format:", data);
+        logger.error("Unexpected OpenAI response format:", data);
         return "The Oracle speaks in riddles. Try rephrasing your input.";
       }
 
       return data.choices[0].message.content;
     } catch (error) {
-      console.error("Error generating AI feedback:", error);
+      logger.error("Error generating AI feedback:", error);
 
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
         return "The Oracle cannot reach the ethereal realm. Check your network connection.";

@@ -8,6 +8,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import ouraToast from '../utils/toast';
+import logger from '../utils/logger';
 
 const relapseSelves = [
   'The Addict',
@@ -72,7 +73,7 @@ const RelapseRadar = () => {
       const insights = aiUtils.analyzeRelapsePatterns(entries);
       setAiInsights(insights);
     } catch (error) {
-      console.error("Error loading relapse entries:", error);
+      logger.error("Error loading relapse entries:", error);
     }
   };
 
@@ -129,7 +130,7 @@ const RelapseRadar = () => {
       setTimeout(() => setSubmitSuccess(false), 3000);
       
     } catch (error) {
-      console.error("Error generating Oracle feedback:", error);
+      logger.error("Error generating Oracle feedback:", error);
       setOracleModal({ 
         isOpen: true, 
         content: "The Oracle senses disturbance in the spiritual realm... Your journey is still witnessed. Please try again in a moment.", 

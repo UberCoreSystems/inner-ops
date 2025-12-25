@@ -1,3 +1,5 @@
+import logger from './logger';
+
 // Add request timeout and debouncing
 let requestTimeout = null;
 const API_TIMEOUT = 10000; // 10 seconds
@@ -266,7 +268,7 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
     if (!apiKey) {
-      console.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
+      logger.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
       return "The Oracle requires proper configuration to commune with deeper wisdom. The key to unlock this channel must be set.";
     }
 
@@ -294,7 +296,7 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
     if (!response.ok) {
       const errorData = await response.json();
       if (import.meta.env.DEV) {
-        console.error("OpenAI API Error:", errorData);
+        logger.error("OpenAI API Error:", errorData);
       }
 
       if (response.status === 401) {
@@ -310,7 +312,7 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
 
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       if (import.meta.env.DEV) {
-        console.error("Unexpected API response structure:", data);
+        logger.error("Unexpected API response structure:", data);
       }
       return "The Oracle's transmission was scattered across the digital winds... The message must be sought again.";
     }
@@ -319,7 +321,7 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
 
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.error("Error generating AI feedback:", error);
+      logger.error("Error generating AI feedback:", error);
     }
 
     // Provide more specific error messages

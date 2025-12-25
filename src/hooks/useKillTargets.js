@@ -11,6 +11,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import logger from '../utils/logger';
 
 /**
  * Custom hook to retrieve kill targets for the current date
@@ -34,7 +35,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       setError(null);
 
       if (!auth.currentUser) {
-        console.warn("No authenticated user for kill targets query");
+        logger.warn("No authenticated user for kill targets query");
         setTargets([]);
         return;
       }
@@ -71,10 +72,10 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       });
 
       setTargets(fetchedTargets);
-      console.log(`✅ Loaded ${fetchedTargets.length} kill targets for ${queryDateString}`);
+      logger.log(`✅ Loaded ${fetchedTargets.length} kill targets for ${queryDateString}`);
 
     } catch (err) {
-      console.error("Error fetching kill targets:", err);
+      logger.error("Error fetching kill targets:", err);
       setError(err.message || 'Failed to fetch kill targets');
       setTargets([]);
     } finally {
@@ -127,10 +128,10 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
           setTargets(fetchedTargets);
           setLoading(false);
           setError(null);
-          console.log(`🔄 Real-time update: ${fetchedTargets.length} kill targets`);
+          logger.log(`🔄 Real-time update: ${fetchedTargets.length} kill targets`);
         },
         (err) => {
-          console.error("Real-time listener error:", err);
+          logger.error("Real-time listener error:", err);
           setError(err.message || 'Real-time update failed');
           setLoading(false);
         }
@@ -172,7 +173,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       }
 
       await updateDoc(targetRef, updateData);
-      console.log(`✅ Target status updated to: ${newStatus}`);
+      logger.log(`✅ Target status updated to: ${newStatus}`);
 
       // If not using real-time updates, manually refetch
       if (!realtime) {
@@ -181,7 +182,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 
       return true;
     } catch (error) {
-      console.error('Error updating target status:', error);
+      logger.error('Error updating target status:', error);
       throw error;
     }
   };
@@ -227,7 +228,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       };
 
       await updateDoc(targetRef, updateData);
-      console.log(`✅ Reflection note updated for target: ${targetId}`);
+      logger.log(`✅ Reflection note updated for target: ${targetId}`);
 
       // If not using real-time updates, manually refetch
       if (!realtime) {
@@ -236,7 +237,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 
       return true;
     } catch (error) {
-      console.error('Error updating reflection note:', error);
+      logger.error('Error updating reflection note:', error);
       throw error;
     }
   };
@@ -255,7 +256,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
       };
 
       await updateDoc(targetRef, updateData);
-      console.log(`✅ Reflection note cleared for target: ${targetId}`);
+      logger.log(`✅ Reflection note cleared for target: ${targetId}`);
 
       // If not using real-time updates, manually refetch
       if (!realtime) {
@@ -264,7 +265,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 
       return true;
     } catch (error) {
-      console.error('Error clearing reflection note:', error);
+      logger.error('Error clearing reflection note:', error);
       throw error;
     }
   };
@@ -357,10 +358,10 @@ export const useThisWeeksKillTargets = (realtime = false) => {
       }));
 
       setWeekTargets(fetchedTargets);
-      console.log(`✅ Loaded ${fetchedTargets.length} kill targets for this week`);
+      logger.log(`✅ Loaded ${fetchedTargets.length} kill targets for this week`);
 
     } catch (err) {
-      console.error("Error fetching week targets:", err);
+      logger.error("Error fetching week targets:", err);
       setError(err.message || 'Failed to fetch week targets');
       setWeekTargets([]);
     } finally {

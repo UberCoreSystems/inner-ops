@@ -1,4 +1,5 @@
 import React from 'react';
+import logger from '../utils/logger';
 
 /**
  * Oura-style minimalist icons with optional glow effect
@@ -255,7 +256,7 @@ export const AppIcon = ({
 }) => {
   const iconFn = Icons[name];
   if (!iconFn) {
-    console.warn(`Icon "${name}" not found`);
+    logger.warn(`Icon "${name}" not found`);
     return null;
   }
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { authService } from '../utils/authService';
 import ouraToast from '../utils/toast';
+import logger from '../utils/logger';
 
 // Animated ring background component
 const AnimatedRings = () => (
@@ -68,14 +69,14 @@ export default function AuthForm({ onAuthSuccess }) {
         ? await authService.signIn(formData.email, formData.password)
         : await authService.register(formData.email, formData.password, formData.displayName);
 
-      console.log("✅ Authentication successful:", result);
+      logger.log("✅ Authentication successful:", result);
       ouraToast.success(isSignIn ? 'Welcome back!' : 'Account created successfully!');
       
       if (onAuthSuccess) {
         onAuthSuccess(result);
       }
     } catch (error) {
-      console.error("❌ Authentication error:", error);
+      logger.error("❌ Authentication error:", error);
       setError(error.message || 'Authentication failed');
       ouraToast.error(error.message || 'Authentication failed');
     } finally {

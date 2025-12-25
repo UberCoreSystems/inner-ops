@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import logger from './utils/logger';
 
 // Firebase configuration with fallbacks and validation
 const firebaseConfig = {
@@ -13,30 +14,30 @@ const firebaseConfig = {
 };
 
 // Log Firebase configuration for debugging
-console.log("🔥 Firebase Configuration Check:");
-console.log("Project ID:", firebaseConfig.projectId);
-console.log("API Key:", firebaseConfig.apiKey ? "✅ Present" : "❌ Missing");
-console.log("Auth Domain:", firebaseConfig.authDomain);
+logger.log("🔥 Firebase Configuration Check:");
+logger.log("Project ID:", firebaseConfig.projectId);
+logger.log("API Key:", firebaseConfig.apiKey ? "✅ Present" : "❌ Missing");
+logger.log("Auth Domain:", firebaseConfig.authDomain);
 
 // Validate required environment variables
 const requiredEnvVars = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_PROJECT_ID'];
 const missingVars = requiredEnvVars.filter(varName => !import.meta.env[varName]);
 
 if (missingVars.length > 0) {
-  console.error("❌ Missing Firebase environment variables:", missingVars);
-  console.warn("🚧 Using fallback values for development - this may cause issues in production");
+  logger.error("❌ Missing Firebase environment variables:", missingVars);
+  logger.warn("🚧 Using fallback values for development - this may cause issues in production");
 } else {
-  console.log("✅ All Firebase environment variables are present");
+  logger.log("✅ All Firebase environment variables are present");
 }
 
 // Initialize Firebase app
 let app;
 try {
   app = initializeApp(firebaseConfig);
-  console.log("✅ Firebase app initialized successfully");
-  console.log("🎯 Connected to project:", app.options.projectId);
+  logger.log("✅ Firebase app initialized successfully");
+  logger.log("🎯 Connected to project:", app.options.projectId);
 } catch (error) {
-  console.error("❌ Firebase initialization failed:", error);
+  logger.error("❌ Firebase initialization failed:", error);
   throw new Error("Failed to initialize Firebase app");
 }
 
@@ -44,9 +45,9 @@ try {
 let auth;
 try {
   auth = getAuth(app);
-  console.log("✅ Firebase Auth initialized");
+  logger.log("✅ Firebase Auth initialized");
 } catch (error) {
-  console.error("❌ Firebase Auth initialization failed:", error);
+  logger.error("❌ Firebase Auth initialization failed:", error);
   throw new Error("Failed to initialize Firebase Auth");
 }
 
@@ -54,9 +55,9 @@ try {
 let db;
 try {
   db = getFirestore(app);
-  console.log("✅ Firebase Firestore initialized");
+  logger.log("✅ Firebase Firestore initialized");
 } catch (error) {
-  console.error("❌ Firebase Firestore initialization failed:", error);
+  logger.error("❌ Firebase Firestore initialization failed:", error);
   throw new Error("Failed to initialize Firebase Firestore");
 }
 
@@ -65,20 +66,20 @@ export const enableAnonymousAuth = async () => {
   try {
     if (!auth.currentUser) {
       const userCredential = await signInAnonymously(auth);
-      console.log("✅ Anonymous user signed in:", userCredential.user.uid);
+      logger.log("✅ Anonymous user signed in:", userCredential.user.uid);
       return userCredential.user;
     }
     return auth.currentUser;
   } catch (error) {
-    console.error("❌ Anonymous auth failed:", error);
+    logger.error("❌ Anonymous auth failed:", error);
     
     if (error.code === 'auth/admin-restricted-operation') {
-      console.error("🚫 Anonymous authentication is disabled in Firebase Console");
-      console.error("💡 To enable it:");
-      console.error("   1. Go to Firebase Console → Authentication → Sign-in method");
-      console.error("   2. Click on 'Anonymous' provider");
-      console.error("   3. Enable the toggle and save");
-      console.error("🔧 Alternative: Use email/password auth or bypass auth for testing");
+      logger.error("🚫 Anonymous authentication is disabled in Firebase Console");
+      logger.error("💡 To enable it:");
+      logger.error("   1. Go to Firebase Console → Authentication → Sign-in method");
+      logger.error("   2. Click on 'Anonymous' provider");
+      logger.error("   3. Enable the toggle and save");
+      logger.error("🔧 Alternative: Use email/password auth or bypass auth for testing");
     }
     
     throw error;
@@ -94,14 +95,14 @@ export const createMockUser = () => {
     displayName: 'Test User',
     isMock: true
   };
-  console.log("🧪 Created mock user for testing:", mockUser.uid);
+  logger.log("🧪 Created mock user for testing:", mockUser.uid);
   return mockUser;
 };
 
 // Enable development mode (bypass auth for testing)
 export const enableDevMode = () => {
-  console.log("🚧 DEVELOPMENT MODE: Bypassing authentication for testing");
-  console.warn("⚠️ This should NEVER be used in production!");
+  logger.log("🚧 DEVELOPMENT MODE: Bypassing authentication for testing");
+  logger.warn("⚠️ This should NEVER be used in production!");
   return createMockUser();
 };
 
@@ -111,7 +112,7 @@ export const getCurrentUserOrMock = () => {
     return auth.currentUser;
   }
   
-  console.warn("🚧 No authenticated user found, using mock user for testing");
+  logger.warn("🚧 No authenticated user found, using mock user for testing");
   return createMockUser();
 };
 
@@ -125,7 +126,7 @@ export const checkFirebaseConnection = () => {
     isConfigured: !!app && !!auth && !!db
   };
   
-  console.log("🔍 Firebase Connection Status:", status);
+  logger.log("🔍 Firebase Connection Status:", status);
   return status;
 };
 

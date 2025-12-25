@@ -11,6 +11,8 @@ import DailyPrompt from '../components/DailyPrompt';
 import { auth } from '../firebase';
 import { CircularProgressRing, TripleRing, ScoreCard, InsightCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
+import { SkeletonDashboard } from '../components/SkeletonLoader';
+import logger from '../utils/logger';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -24,6 +26,7 @@ export default function Dashboard() {
   });
   const [recentEntries, setRecentEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiActionSteps, setAiActionSteps] = useState([]);
   const [firebaseTestResult, setFirebaseTestResult] = useState(null);
   const [clarityScore, setClarityScore] = useState({
@@ -33,11 +36,22 @@ export default function Dashboard() {
     breakdown: {}
   });
 
+  // Delay showing skeleton to prevent flicker on fast loads
+  useEffect(() => {
+    const skeletonTimer = setTimeout(() => {
+      if (loading) {
+        setShowSkeleton(true);
+      }
+    }, 300); // Only show skeleton if loading takes > 300ms
+
+    return () => clearTimeout(skeletonTimer);
+  }, [loading]);
+
   // Get current user from auth service
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     setUser(currentUser);
-    console.log("👤 Dashboard: Current user:", currentUser?.uid);
+    logger.log("👤 Dashboard: Current user:", currentUser?.uid);
     
     if (currentUser) {
       loadDashboardData();
@@ -67,13 +81,13 @@ export default function Dashboard() {
 
   // Test Firebase connection
   const runFirebaseTest = async () => {
-    console.log("🔥 Running Firebase connection test...");
+    logger.log("🔥 Running Firebase connection test...");
     setFirebaseTestResult({ testing: true });
     
     try {
       const result = await testFirebaseConnection();
       setFirebaseTestResult(result);
-      console.log("Firebase test result:", result);
+      logger.log("Firebase test result:", result);
       
       if (result.success) {
         alert("✅ Firebase connection successful! Check console for details.");
@@ -83,7 +97,7 @@ export default function Dashboard() {
         alert(`❌ Firebase connection failed: ${result.error}\n${result.details}`);
       }
     } catch (error) {
-      console.error("Firebase test error:", error);
+      logger.error("Firebase test error:", error);
       setFirebaseTestResult({
         success: false,
         error: "Test failed",
@@ -95,38 +109,38 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     if (!user) {
-      console.log("⏳ Dashboard: Waiting for user authentication...");
+      logger.log("⏳ Dashboard: Waiting for user authentication...");
       return;
     }
 
     try {
-      console.log("📡 Dashboard: Loading data for user:", user.uid);
+      logger.log("📡 Dashboard: Loading data for user:", user.uid);
       
       // Load data in parallel for better performance
       const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons] = await Promise.all([
         readUserData('journalEntries').then(data => {
-          console.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
+          logger.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
         }),
         readUserData('relapseEntries').then(data => {
-          console.log("⚠️ Dashboard: Relapse entries loaded:", data?.length || 0);
+          logger.log("⚠️ Dashboard: Relapse entries loaded:", data?.length || 0);
           return data || [];
         }),
         readUserData('killTargets').then(data => {
-          console.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
+          logger.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
           return data || [];
         }),
         readUserData('blackMirrorEntries').then(data => {
-          console.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
+          logger.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
           return data || [];
         }),
         readUserData('hardLessons').then(data => {
-          console.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
+          logger.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
           return data || [];
         })
       ]);
 
-      console.log("📊 Dashboard: Data loaded:", {
+      logger.log("📊 Dashboard: Data loaded:", {
         journalEntries: journalEntries.length,
         relapseEntries: relapseEntries.length,
         killTargets: killTargets.length,
@@ -210,7 +224,7 @@ export default function Dashboard() {
       const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
       setClarityScore({ ...scoreData, rank });
 
-      console.log("✅ Dashboard: All data processing complete", {
+      logger.log("✅ Dashboard: All data processing complete", {
         stats: { 
           journalEntries: journalEntries.length,
           relapseEntries: relapseEntries.length,
@@ -224,7 +238,7 @@ export default function Dashboard() {
         rank: rank.rank
       });
     } catch (error) {
-      console.error("❌ Dashboard: Error loading data:", error);
+      logger.error("❌ Dashboard: Error loading data:", error);
     } finally {
       setLoading(false);
     }
@@ -232,15 +246,16 @@ export default function Dashboard() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="relative w-20 h-20 mx-auto mb-6">
-            <CircularProgressRing progress={75} size={80} color="#00d4aa" />
+      <div className="min-h-screen bg-black">
+        {showSkeleton ? (
+          <div className="animate-fade-in">
+            <SkeletonDashboard />
           </div>
-          <p className="text-[#5a5a5a] text-sm">
-            {!user ? "Authenticating..." : "Loading your data..."}
-          </p>
-        </div>
+        ) : (
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="w-2 h-2 bg-[#00d4aa] rounded-full animate-pulse" />
+          </div>
+        )}
       </div>
     );
   }
@@ -362,7 +377,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black animate-fade-in">
       <div className="max-w-6xl mx-auto px-4 py-8">
         
         {/* Oura-style Header */}

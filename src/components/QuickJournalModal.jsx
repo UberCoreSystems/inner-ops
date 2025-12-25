@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import ouraToast from '../utils/toast';
+import logger from '../utils/logger';
 
 const quickMoods = [
   { emoji: '⚡', label: 'Electric', value: 'electric', color: '#00d4aa' },
@@ -80,7 +81,7 @@ export default function QuickJournalModal({ isOpen, onClose, onSuccess }) {
           setOracleResponse(feedback);
           setShowOracle(true);
         } catch (error) {
-          console.error('Oracle feedback error:', error);
+          logger.error('Oracle feedback error:', error);
         }
         setOracleLoading(false);
       } else {
@@ -89,7 +90,7 @@ export default function QuickJournalModal({ isOpen, onClose, onSuccess }) {
         onClose();
       }
     } catch (error) {
-      console.error('Error saving quick entry:', error);
+      logger.error('Error saving quick entry:', error);
     } finally {
       setSaving(false);
     }

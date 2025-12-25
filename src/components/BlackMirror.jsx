@@ -5,6 +5,7 @@ import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import VirtualizedList from './VirtualizedList';
 import ouraToast from '../utils/toast';
+import logger from '../utils/logger';
 
 const philosophicalQuotes = [
   "He who is not satisfied with a little, is satisfied with nothing. - Epicurus",
@@ -76,7 +77,7 @@ const BlackMirror = () => {
         setEntries(savedEntries || []);
       } catch (error) {
         if (import.meta.env.DEV) {
-          console.error('Error loading entries:', error);
+          logger.error('Error loading entries:', error);
         }
       }
     };
@@ -128,7 +129,7 @@ const BlackMirror = () => {
         entryData.oracleFeedback = feedback;
         setAiFeedback(feedback);
       } catch (feedbackError) {
-        console.error('Error generating feedback:', feedbackError);
+        logger.error('Error generating feedback:', feedbackError);
         setAiFeedback('The Oracle remains silent for now...');
       }
 
@@ -148,7 +149,7 @@ const BlackMirror = () => {
       setReflection('');
 
     } catch (error) {
-      console.error('Error saving entry:', error);
+      logger.error('Error saving entry:', error);
       setLoadingFeedback(false);
     } finally {
       setLoading(false);

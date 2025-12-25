@@ -8,30 +8,31 @@ import {
   onAuthStateChanged,
   updateProfile 
 } from 'firebase/auth';
+import logger from './logger';
 import { auth } from '../firebase';
 
 export const authService = {
   // Register new user
   async register(email, password, displayName = null) {
     try {
-      console.log("🔐 Creating new user account...");
+      logger.log("🔐 Creating new user account...");
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
       // Update display name if provided
       if (displayName) {
         await updateProfile(user, { displayName });
-        console.log(`✅ Display name set to: ${displayName}`);
+        logger.log(`✅ Display name set to: ${displayName}`);
       }
       
-      console.log("✅ User registered successfully:", user.uid);
+      logger.log("✅ User registered successfully:", user.uid);
       
       return { 
         user, 
         isNewUser: true 
       };
     } catch (error) {
-      console.error("❌ Registration failed:", error);
+      logger.error("❌ Registration failed:", error);
       throw this.handleAuthError(error);
     }
   },
@@ -39,17 +40,17 @@ export const authService = {
   // Sign in existing user
   async signIn(email, password) {
     try {
-      console.log("🔐 Signing in user...");
+      logger.log("🔐 Signing in user...");
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      console.log("✅ User signed in successfully:", user.uid);
+      logger.log("✅ User signed in successfully:", user.uid);
       return { 
         user,
         isNewUser: false 
       };
     } catch (error) {
-      console.error("❌ Sign in failed:", error);
+      logger.error("❌ Sign in failed:", error);
       throw this.handleAuthError(error);
     }
   },
@@ -58,9 +59,9 @@ export const authService = {
   async signOut() {
     try {
       await signOut(auth);
-      console.log("✅ User signed out successfully");
+      logger.log("✅ User signed out successfully");
     } catch (error) {
-      console.error("❌ Sign out failed:", error);
+      logger.error("❌ Sign out failed:", error);
       throw error;
     }
   },

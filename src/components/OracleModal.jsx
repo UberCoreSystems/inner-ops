@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import logger from '../utils/logger';
 
 const OracleModal = ({ 
   isOpen, 
@@ -45,7 +46,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         onFeedbackGenerated(generatedFeedback);
       }
     } catch (error) {
-      console.error("Error generating Oracle feedback:", error);
+      logger.error("Error generating Oracle feedback:", error);
       setOracleFeedback("The Oracle encounters interference... Please try again in a moment.");
     } finally {
       setIsGenerating(false);

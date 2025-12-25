@@ -4,6 +4,8 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ouraToast from '../utils/toast';
+import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
+import logger from '../utils/logger';
 
 // Custom SVG mood icons - Oura-style geometric designs
 const MoodIcons = {
@@ -187,6 +189,8 @@ export default function Journal() {
   const [intensity, setIntensity] = useState(3);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   
@@ -208,6 +212,17 @@ export default function Journal() {
   useEffect(() => {
     loadJournalEntries();
   }, []);
+
+  // Delay showing skeleton to prevent flicker
+  useEffect(() => {
+    const skeletonTimer = setTimeout(() => {
+      if (initialLoading) {
+        setShowSkeleton(true);
+      }
+    }, 200);
+
+    return () => clearTimeout(skeletonTimer);
+  }, [initialLoading]);
 
   // Effect for rotating prompts
   useEffect(() => {
@@ -258,7 +273,7 @@ export default function Journal() {
           lastUpdated: Date.now()
         });
       } catch (error) {
-        console.error('Error generating dynamic insights:', error);
+        logger.error('Error generating dynamic insights:', error);
         setAiInsights(prev => ({ 
           ...prev, 
           isGenerating: false,
@@ -340,8 +355,10 @@ export default function Journal() {
   };
 
   const loadJournalEntries = async () => {
+    setInitialLoading(true);
     const savedEntries = await readUserData('journalEntries');
     setEntries(savedEntries);
+    setInitialLoading(false);
   };
 
   const handleSubmit = async (e) => {
@@ -382,7 +399,7 @@ export default function Journal() {
       setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
 
     } catch (error) {
-      console.error("Error saving journal entry:", error);
+      logger.error("Error saving journal entry:", error);
       setOracleModal({ 
         isOpen: true, 
         content: "The Oracle encounters interference in the cosmic currents... Your thoughts are still sacred. Please try again in a moment.", 
@@ -400,16 +417,16 @@ export default function Journal() {
     }
 
     try {
-      console.log("🗑️ Journal: Deleting entry:", entryId);
+      logger.log("🗑️ Journal: Deleting entry:", entryId);
       await deleteData('journalEntries', entryId);
-      console.log('✅ Journal: Entry deleted successfully');
+      logger.log('✅ Journal: Entry deleted successfully');
       
       // Update local state immediately
       setEntries(prev => prev.filter(entry => entry.id !== entryId));
       
       ouraToast.success('Journal entry deleted');
     } catch (error) {
-      console.error('❌ Journal: Error deleting entry:', error);
+      logger.error('❌ Journal: Error deleting entry:', error);
       ouraToast.error('Failed to delete journal entry');
     }
   };
@@ -675,7 +692,11 @@ export default function Journal() {
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Previous Entries</h3>
-          {entries.length > 0 ? (
+          {initialLoading && showSkeleton ? (
+            <div className="animate-fade-in">
+              <SkeletonList count={3} ItemComponent={SkeletonJournalEntry} />
+            </div>
+          ) : entries.length > 0 ? (
             <div className="space-y-4">
               {entries.map((entry) => {
                 const moodOption = moodOptions.find(m => m.value === entry.mood);
