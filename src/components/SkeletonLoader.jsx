@@ -7,7 +7,7 @@ import React from 'react';
 export function SkeletonBox({ width = '100%', height = '1rem', className = '' }) {
   return (
     <div 
-      className={`skeleton-pulse bg-[#1a1a1a] rounded ${className}`}
+      className={`skel-surface skel-animate rounded ${className}`}
       style={{ width, height }}
     />
   );
@@ -19,7 +19,7 @@ export function SkeletonBox({ width = '100%', height = '1rem', className = '' })
 export function SkeletonCircle({ size = '3rem', className = '' }) {
   return (
     <div 
-      className={`skeleton-pulse bg-[#1a1a1a] rounded-full ${className}`}
+      className={`skel-surface skel-animate rounded-full ${className}`}
       style={{ width: size, height: size }}
     />
   );
@@ -29,48 +29,22 @@ export function SkeletonCircle({ size = '3rem', className = '' }) {
  * Skeleton Ring - Mimics Oura-style circular progress rings
  */
 export function SkeletonRing({ size = 120, strokeWidth = 8, className = '' }) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  
   return (
-    <div className={`relative ${className}`} style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="animate-pulse">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={strokeWidth}
-          stroke="#1a1a1a"
-          fill="none"
-          strokeDasharray={`${circumference * 0.7} ${circumference * 0.3}`}
-          style={{ 
-            transition: 'stroke-dasharray 1.5s ease-in-out',
-            animation: 'skeletonRingRotate 2s linear infinite'
-          }}
-        />
-      </svg>
-    </div>
+    <div 
+      className={`skel-surface skel-animate rounded-full border border-[#1f1f2a] ${className}`}
+      style={{ width: size, height: size, padding: strokeWidth }}
+    />
   );
 }
 
-/**
- * Skeleton Triple Ring - For Dashboard's main ring display
- */
-export function SkeletonTripleRing({ size = 200 }) {
+// Dashboard hero placeholder: simple score block
+export function SkeletonScoreBlock({ size = 200 }) {
   return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      {[0, 1, 2].map((i) => (
-        <SkeletonRing 
-          key={i}
-          size={size - (i * 40)} 
-          strokeWidth={8}
-          className="absolute"
-        />
-      ))}
-      <div className="text-center z-10">
-        <SkeletonBox width="3rem" height="2rem" className="mx-auto mb-2" />
-        <SkeletonBox width="4rem" height="0.75rem" className="mx-auto" />
-      </div>
+    <div className="flex flex-col items-center gap-4" style={{ minHeight: size }}>
+      <SkeletonCircle size={size * 0.45} />
+      <SkeletonBox width="50%" height="1.5rem" />
+      <SkeletonBox width="70%" height="0.9rem" />
+      <SkeletonBox width="60%" height="0.9rem" />
     </div>
   );
 }
@@ -80,7 +54,7 @@ export function SkeletonTripleRing({ size = 200 }) {
  */
 export function SkeletonCard({ className = '' }) {
   return (
-    <div className={`bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6 ${className}`}>
+    <div className={`skel-surface rounded-xl p-6 ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <SkeletonBox width="60%" height="1.25rem" />
         <SkeletonCircle size="2rem" />
@@ -96,7 +70,7 @@ export function SkeletonCard({ className = '' }) {
  */
 export function SkeletonScoreCard({ className = '' }) {
   return (
-    <div className={`bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6 ${className}`}>
+    <div className={`skel-surface rounded-xl p-6 ${className}`}>
       <div className="flex items-center justify-between mb-6">
         <SkeletonBox width="50%" height="1rem" />
         <SkeletonCircle size="1.5rem" />
@@ -119,7 +93,7 @@ export function SkeletonScoreCard({ className = '' }) {
  */
 export function SkeletonInsightCard({ className = '' }) {
   return (
-    <div className={`bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6 ${className}`}>
+    <div className={`skel-surface rounded-xl p-6 ${className}`}>
       <div className="flex items-start gap-3 mb-3">
         <SkeletonCircle size="2rem" />
         <div className="flex-1">
@@ -137,7 +111,7 @@ export function SkeletonInsightCard({ className = '' }) {
  */
 export function SkeletonActivityItem({ className = '' }) {
   return (
-    <div className={`flex items-center gap-4 p-4 border-b border-[#2a2a2a] ${className}`}>
+    <div className={`flex items-center gap-4 p-4 skel-surface ${className}`}>
       <SkeletonCircle size="2.5rem" />
       <div className="flex-1">
         <SkeletonBox width="70%" height="1rem" className="mb-2" />
@@ -153,7 +127,7 @@ export function SkeletonActivityItem({ className = '' }) {
  */
 export function SkeletonJournalEntry({ className = '' }) {
   return (
-    <div className={`bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6 ${className}`}>
+    <div className={`skel-surface rounded-xl p-6 ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <SkeletonCircle size="2.5rem" />
@@ -180,7 +154,7 @@ export function SkeletonJournalEntry({ className = '' }) {
  */
 export function SkeletonKillTarget({ className = '' }) {
   return (
-    <div className={`bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6 ${className}`}>
+    <div className={`skel-surface rounded-xl p-6 ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3 flex-1">
           <SkeletonCircle size="2rem" />
@@ -226,12 +200,12 @@ export function SkeletonDashboard() {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Triple Ring */}
+        {/* Left Column - Hero Score Block */}
         <div className="lg:col-span-1">
-          <div className="bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6">
+          <div className="skel-surface rounded-xl p-6">
             <SkeletonBox width="50%" height="1.25rem" className="mb-6" />
             <div className="flex justify-center mb-6">
-              <SkeletonTripleRing size={200} />
+              <SkeletonScoreBlock size={200} />
             </div>
             <SkeletonBox width="100%" height="0.75rem" className="mb-2" />
             <SkeletonBox width="80%" height="0.75rem" />
@@ -240,7 +214,7 @@ export function SkeletonDashboard() {
 
         {/* Middle Column - Insights */}
         <div className="lg:col-span-1">
-          <div className="bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6">
+          <div className="skel-surface rounded-xl p-6">
             <SkeletonBox width="60%" height="1.25rem" className="mb-6" />
             <SkeletonList count={3} ItemComponent={SkeletonInsightCard} />
           </div>
@@ -248,7 +222,7 @@ export function SkeletonDashboard() {
 
         {/* Right Column - Activity */}
         <div className="lg:col-span-1">
-          <div className="bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl p-6">
+          <div className="skel-surface rounded-xl p-6">
             <SkeletonBox width="60%" height="1.25rem" className="mb-6" />
             <SkeletonList count={4} ItemComponent={SkeletonActivityItem} />
           </div>
@@ -302,7 +276,7 @@ export default {
   Box: SkeletonBox,
   Circle: SkeletonCircle,
   Ring: SkeletonRing,
-  TripleRing: SkeletonTripleRing,
+  ScoreBlock: SkeletonScoreBlock,
   Card: SkeletonCard,
   ScoreCard: SkeletonScoreCard,
   InsightCard: SkeletonInsightCard,

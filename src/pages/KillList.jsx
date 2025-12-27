@@ -111,6 +111,15 @@ const KillList = () => {
     return () => clearTimeout(skeletonTimer);
   }, [initialLoading]);
 
+  // Keep skeleton visible briefly once shown to avoid blink on completion
+  useEffect(() => {
+    let dwellTimer;
+    if (!initialLoading && showSkeleton) {
+      dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
+    }
+    return () => clearTimeout(dwellTimer);
+  }, [initialLoading, showSkeleton]);
+
   // Get current user from auth service
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
@@ -881,32 +890,36 @@ const KillList = () => {
         </section>
 
         {/* Targets List */}
-        {initialLoading && showSkeleton ? (
-          <div className="animate-fade-in">
+        <div className="relative">
+          <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
             <SkeletonList count={4} ItemComponent={SkeletonKillTarget} />
           </div>
-        ) : filteredTargets.length > 0 ? (
-          <VirtualizedList
-            items={filteredTargets}
-            renderItem={renderTargetItem}
-            itemHeight={220}
-            maxHeight={600}
-          />
-        ) : (
-          <div className="oura-card p-12 text-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-            <div className="text-6xl mb-4 opacity-30">🎯</div>
-            <h3 className="text-xl font-semibold text-[#8a8a8a] mb-2">
-              {filterStatus === 'completed' ? 'No completed contracts yet' :
-               filterStatus === 'active' ? 'No active contracts' :
-               'No kill contracts yet'}
-            </h3>
-            <p className="text-[#5a5a5a] text-sm">
-              {filterStatus === 'all' ? 'Add your first contract to begin eliminating negative patterns' :
-               filterStatus === 'active' ? 'All your contracts have been completed!' :
-               'Complete some contracts to see them here'}
-            </p>
+
+          <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
+            {filteredTargets.length > 0 ? (
+              <VirtualizedList
+                items={filteredTargets}
+                renderItem={renderTargetItem}
+                itemHeight={220}
+                maxHeight={600}
+              />
+            ) : (
+              <div className="oura-card p-12 text-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+                <div className="text-6xl mb-4 opacity-30">🎯</div>
+                <h3 className="text-xl font-semibold text-[#8a8a8a] mb-2">
+                  {filterStatus === 'completed' ? 'No completed contracts yet' :
+                   filterStatus === 'active' ? 'No active contracts' :
+                   'No kill contracts yet'}
+                </h3>
+                <p className="text-[#5a5a5a] text-sm">
+                  {filterStatus === 'all' ? 'Add your first contract to begin eliminating negative patterns' :
+                   filterStatus === 'active' ? 'All your contracts have been completed!' :
+                   'Complete some contracts to see them here'}
+                </p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Oracle Modal */}
         <OracleModal

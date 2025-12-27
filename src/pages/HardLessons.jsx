@@ -67,6 +67,15 @@ export default function HardLessons() {
     return () => clearTimeout(skeletonTimer);
   }, [initialLoading]);
 
+  // Keep skeleton visible briefly once data arrives to avoid blink
+  useEffect(() => {
+    let dwellTimer;
+    if (!initialLoading && showSkeleton) {
+      dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
+    }
+    return () => clearTimeout(dwellTimer);
+  }, [initialLoading, showSkeleton]);
+
   const loadHardLessons = async () => {
     setInitialLoading(true);
     const savedLessons = await readUserData('hardLessons');
@@ -157,7 +166,7 @@ Please help extract the core lesson and rule from this experience.
           setLoading(false);
           return;
         }
-        
+
         lessonData.id = editingLesson.id;
         lessonData.originalCreatedAt = editingLesson.createdAt;
         await writeData('hardLessons', lessonData, editingLesson.id);
@@ -167,7 +176,7 @@ Please help extract the core lesson and rule from this experience.
 
       await loadHardLessons();
       resetForm();
-      
+
       if (finalize) {
         ouraToast.achievement('Hard Lesson finalized and locked');
       } else {
@@ -203,7 +212,7 @@ Please help extract the core lesson and rule from this experience.
       ouraToast.info('This lesson is finalized. Create a new entry if the rule was violated again.');
       return;
     }
-    
+
     setNewLesson(lesson);
     setEditingLesson(lesson);
     setShowForm(true);
@@ -211,7 +220,7 @@ Please help extract the core lesson and rule from this experience.
 
   const deleteLesson = async (lessonId) => {
     const lesson = lessons.find(l => l.id === lessonId);
-    
+
     if (lesson?.isFinalized) {
       ouraToast.info('Finalized lessons cannot be deleted. They are permanent strategic assets.');
       return;
@@ -279,7 +288,7 @@ Please help extract the core lesson and rule from this experience.
           <h2 className="text-2xl font-bold text-white mb-6">
             {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
           </h2>
-          
+
           <div className="space-y-6">
             {/* Event Category */}
             <div>
@@ -354,7 +363,7 @@ Please help extract the core lesson and rule from this experience.
                 The Cost <span className="text-[#f59e0b]">*</span>
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">Real consequences (select all that apply)</p>
-              
+
               <div className="grid grid-cols-3 gap-2 mb-4">
                 {costCategories.map(cost => (
                   <button
@@ -421,7 +430,7 @@ Please help extract the core lesson and rule from this experience.
               >
                 {loading ? 'Saving...' : 'Save Draft'}
               </button>
-              
+
               <button
                 onClick={() => submitLesson(true)}
                 disabled={loading}
@@ -452,122 +461,126 @@ Please help extract the core lesson and rule from this experience.
       {/* Lessons List */}
       <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
         <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Extracted Lessons</h3>
-        
-        {initialLoading && showSkeleton ? (
-          <div className="animate-fade-in">
+
+        <div className="relative">
+          <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
             <SkeletonList count={3} ItemComponent={SkeletonCard} />
           </div>
-        ) : lessons.length > 0 ? (
-          <div className="space-y-6">
-            {lessons.map((lesson) => {
-              const category = eventCategories.find(cat => cat.value === lesson.eventCategory);
-              const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
 
-              return (
-                <div key={lesson.id} className={`oura-card p-6 ${
-                  lesson.isFinalized 
-                    ? 'border-[#f59e0b]/50' 
-                    : 'border-[#f59e0b]/20'
-                }`}>
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
-                        <span className="text-2xl">{category?.icon}</span>
+          <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
+            {lessons.length > 0 ? (
+              <div className="space-y-6">
+                {lessons.map((lesson) => {
+                  const category = eventCategories.find(cat => cat.value === lesson.eventCategory);
+                  const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
+
+                  return (
+                    <div key={lesson.id} className={`oura-card p-6 ${
+                      lesson.isFinalized
+                        ? 'border-[#f59e0b]/50'
+                        : 'border-[#f59e0b]/20'
+                    }`}>
+                      <div className="flex items-start justify-between mb-6">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
+                            <span className="text-2xl">{category?.icon}</span>
+                          </div>
+                          <div>
+                            <h3 className="text-white font-medium">{category?.label}</h3>
+                            <div className="flex items-center space-x-3 text-xs text-[#5a5a5a] mt-1">
+                              <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                              <span className={`px-2 py-1 rounded-lg ${
+                                lesson.isFinalized
+                                  ? 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30'
+                                  : 'bg-[#8a8a8a]/10 text-[#8a8a8a] border border-[#2a2a2a]'
+                              }`}>
+                                {lesson.isFinalized ? '🔒 FINALIZED' : '📝 DRAFT'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex space-x-2">
+                          {!lesson.isFinalized && (
+                            <button
+                              onClick={() => editLesson(lesson)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#4da6ff]/10 text-[#4da6ff] hover:bg-[#4da6ff]/20 transition-colors"
+                            >
+                              ✏️
+                            </button>
+                          )}
+                          {!lesson.isFinalized && (
+                            <button
+                              onClick={() => deleteLesson(lesson.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-white font-medium">{category?.label}</h3>
-                        <div className="flex items-center space-x-3 text-xs text-[#5a5a5a] mt-1">
-                          <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
-                          <span className={`px-2 py-1 rounded-lg ${
-                            lesson.isFinalized 
-                              ? 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30' 
-                              : 'bg-[#8a8a8a]/10 text-[#8a8a8a] border border-[#2a2a2a]'
-                          }`}>
-                            {lesson.isFinalized ? '🔒 FINALIZED' : '📝 DRAFT'}
-                          </span>
+
+                      <div className="space-y-5">
+                        <div>
+                          <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Event</h4>
+                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.eventDescription}</p>
+                        </div>
+
+                        <div>
+                          <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">My Assumption</h4>
+                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.myAssumption}</p>
+                        </div>
+
+                        <div>
+                          <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Signal I Ignored</h4>
+                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.signalIgnored}</p>
+                        </div>
+
+                        <div>
+                          <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Cost</h4>
+                          <div className="flex items-center gap-2 mb-3">
+                            {selectedCosts.map(cost => (
+                              <span key={cost.value} className="px-2 py-1 bg-[#0a0a0a] text-[#8a8a8a] rounded-lg text-xs border border-[#1a1a1a]">
+                                {cost.icon} {cost.label}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.costDescription}</p>
+                        </div>
+
+                        <div className="border-t border-[#1a1a1a] pt-5">
+                          <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Lesson</h4>
+                          <p className="text-[#f59e0b] font-medium leading-relaxed">{lesson.extractedLesson}</p>
+                        </div>
+
+                        <div>
+                          <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Rule Going Forward</h4>
+                          <p className="text-[#fbbf24] font-medium border-l-4 border-[#f59e0b] pl-4 bg-[#f59e0b]/10 py-3 rounded-r-xl leading-relaxed">
+                            {lesson.ruleGoingForward}
+                          </p>
                         </div>
                       </div>
                     </div>
-                    
-                    <div className="flex space-x-2">
-                      {!lesson.isFinalized && (
-                        <button
-                          onClick={() => editLesson(lesson)}
-                          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#4da6ff]/10 text-[#4da6ff] hover:bg-[#4da6ff]/20 transition-colors"
-                        >
-                          ✏️
-                        </button>
-                      )}
-                      {!lesson.isFinalized && (
-                        <button
-                          onClick={() => deleteLesson(lesson.id)}
-                          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-5">
-                    <div>
-                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Event</h4>
-                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.eventDescription}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">My Assumption</h4>
-                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.myAssumption}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Signal I Ignored</h4>
-                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.signalIgnored}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[#8a8a8a] text-xs uppercase tracking-wider mb-2">The Cost</h4>
-                      <div className="flex items-center gap-2 mb-3">
-                        {selectedCosts.map(cost => (
-                          <span key={cost.value} className="px-2 py-1 bg-[#0a0a0a] text-[#8a8a8a] rounded-lg text-xs border border-[#1a1a1a]">
-                            {cost.icon} {cost.label}
-                          </span>
-                        ))}
-                      </div>
-                      <p className="text-[#d1d1d1] leading-relaxed">{lesson.costDescription}</p>
-                    </div>
-
-                    <div className="border-t border-[#1a1a1a] pt-5">
-                      <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Lesson</h4>
-                      <p className="text-[#f59e0b] font-medium leading-relaxed">{lesson.extractedLesson}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Rule Going Forward</h4>
-                      <p className="text-[#fbbf24] font-medium border-l-4 border-[#f59e0b] pl-4 bg-[#f59e0b]/10 py-3 rounded-r-xl leading-relaxed">
-                        {lesson.ruleGoingForward}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="oura-card p-12 text-center">
+                <div className="text-6xl mb-4 opacity-30">⚡</div>
+                <h3 className="text-lg font-semibold text-[#8a8a8a] mb-2">No Hard Lessons Extracted Yet</h3>
+                <p className="text-[#5a5a5a] mb-6 text-sm">
+                  When pain demands wisdom, extract the lesson here.
+                </p>
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
+                >
+                  Extract Your First Lesson
+                </button>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="oura-card p-12 text-center">
-            <div className="text-6xl mb-4 opacity-30">⚡</div>
-            <h3 className="text-lg font-semibold text-[#8a8a8a] mb-2">No Hard Lessons Extracted Yet</h3>
-            <p className="text-[#5a5a5a] mb-6 text-sm">
-              When pain demands wisdom, extract the lesson here.
-            </p>
-            <button
-              onClick={() => setShowForm(true)}
-              className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
-            >
-              Extract Your First Lesson
-            </button>
-          </div>
-        )}
+        </div>
       </section>
 
       {/* Oracle Modal */}

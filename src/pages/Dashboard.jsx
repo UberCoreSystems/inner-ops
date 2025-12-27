@@ -47,6 +47,15 @@ export default function Dashboard() {
     return () => clearTimeout(skeletonTimer);
   }, [loading]);
 
+  // Keep skeleton mounted briefly to prevent blink when data finishes loading
+  useEffect(() => {
+    let dwellTimer;
+    if (!loading && showSkeleton) {
+      dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
+    }
+    return () => clearTimeout(dwellTimer);
+  }, [loading, showSkeleton]);
+
   // Get current user from auth service
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
@@ -244,21 +253,7 @@ export default function Dashboard() {
     }
   };
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen bg-black">
-        {showSkeleton ? (
-          <div className="animate-fade-in">
-            <SkeletonDashboard />
-          </div>
-        ) : (
-          <div className="flex items-center justify-center min-h-screen">
-            <div className="w-2 h-2 bg-[#00d4aa] rounded-full animate-pulse" />
-          </div>
-        )}
-      </div>
-    );
-  }
+  const showShell = loading || showSkeleton || !user;
 
   // Calculate ring percentages for visualization - Based on realistic, meaningful goals
   
@@ -377,18 +372,24 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-black animate-fade-in">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        
-        {/* Oura-style Header */}
-        <header className="mb-10 animate-fade-in-up">
-          <p className="text-[#5a5a5a] text-sm uppercase tracking-widest mb-2">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          </p>
-          <h1 className="text-3xl font-bold text-white">
-            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Warrior'}
-          </h1>
-        </header>
+    <div className="min-h-screen bg-black">
+      <div className={`fade-pane ${showShell ? 'visible' : 'hidden'}`}>
+        <SkeletonDashboard />
+      </div>
+
+      <div className={`fade-pane ${showShell ? 'hidden' : 'visible'}`}>
+        <div className="min-h-screen bg-black animate-fade-in">
+          <div className="max-w-6xl mx-auto px-4 py-8">
+            
+            {/* Oura-style Header */}
+            <header className="mb-10 animate-fade-in-up">
+              <p className="text-[#5a5a5a] text-sm uppercase tracking-widest mb-2">
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </p>
+              <h1 className="text-3xl font-bold text-white">
+                Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Warrior'}
+              </h1>
+            </header>
 
         {/* Daily Prompt Section */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
@@ -603,31 +604,32 @@ export default function Dashboard() {
               )}
             </div>
           </section>
+          </div>
         </div>
 
+        {/* Floating Action Button */}
+        <button
+          onClick={() => setQuickJournalOpen(true)}
+          className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#a855f7] to-[#6366f1] rounded-full shadow-lg shadow-[#a855f7]/30 flex items-center justify-center hover:scale-110 hover:shadow-xl hover:shadow-[#a855f7]/40 transition-all duration-200 group z-40"
+          title="Quick Journal Entry"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-200">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+
+        {/* Quick Journal Modal */}
+        <QuickJournalModal
+          isOpen={quickJournalOpen}
+          onClose={() => setQuickJournalOpen(false)}
+          onSuccess={() => {
+            // Refresh data after successful entry
+            loadDashboardData();
+          }}
+        />
       </div>
-
-      {/* Floating Action Button */}
-      <button
-        onClick={() => setQuickJournalOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-[#a855f7] to-[#6366f1] rounded-full shadow-lg shadow-[#a855f7]/30 flex items-center justify-center hover:scale-110 hover:shadow-xl hover:shadow-[#a855f7]/40 transition-all duration-200 group z-40"
-        title="Quick Journal Entry"
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-90 transition-transform duration-200">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
-
-      {/* Quick Journal Modal */}
-      <QuickJournalModal
-        isOpen={quickJournalOpen}
-        onClose={() => setQuickJournalOpen(false)}
-        onSuccess={() => {
-          // Refresh data after successful entry
-          loadDashboardData();
-        }}
-      />
+      </div>
     </div>
   );
 }

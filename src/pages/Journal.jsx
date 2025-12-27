@@ -224,6 +224,15 @@ export default function Journal() {
     return () => clearTimeout(skeletonTimer);
   }, [initialLoading]);
 
+  // Keep skeleton visible briefly once shown to avoid blink on fast completion
+  useEffect(() => {
+    let dwellTimer;
+    if (!initialLoading && showSkeleton) {
+      dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
+    }
+    return () => clearTimeout(dwellTimer);
+  }, [initialLoading, showSkeleton]);
+
   // Effect for rotating prompts
   useEffect(() => {
     const interval = setInterval(() => {
@@ -692,67 +701,71 @@ export default function Journal() {
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Previous Entries</h3>
-          {initialLoading && showSkeleton ? (
-            <div className="animate-fade-in">
+          <div className="relative">
+            <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
               <SkeletonList count={3} ItemComponent={SkeletonJournalEntry} />
             </div>
-          ) : entries.length > 0 ? (
-            <div className="space-y-4">
-              {entries.map((entry) => {
-                const moodOption = moodOptions.find(m => m.value === entry.mood);
-                const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
 
-                return (
-                  <div key={entry.id} className="oura-card p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
-                          <span className="text-xl">{moodOption?.emoji}</span>
-                        </div>
-                        <div>
-                          <p className="text-white text-sm font-medium">{moodOption?.label}</p>
-                          <p className="text-[#5a5a5a] text-xs">{intensityLabel}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <span className="text-xs text-[#5a5a5a]">
-                          {entry.createdAt?.toDate ? 
-                            entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
-                            entry.createdAt ? 
-                              new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
-                              'Unknown date'
-                          }
-                        </span>
-                        <button
-                          onClick={() => deleteEntry(entry.id)}
-                          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
-                          title="Delete this entry"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-[#d1d1d1] leading-relaxed mb-4">{entry.content}</p>
+            <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
+              {entries.length > 0 ? (
+                <div className="space-y-4">
+                  {entries.map((entry) => {
+                    const moodOption = moodOptions.find(m => m.value === entry.mood);
+                    const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
 
-                    {entry.oracleJudgment && (
-                      <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#a855f7]/20 rounded-2xl">
-                        <h4 className="text-[#a855f7] font-medium text-sm mb-3 uppercase tracking-wider">📜 Oracle's Judgment</h4>
-                        <div className="text-[#d8b4fe] text-sm leading-relaxed whitespace-pre-line">
-                          {entry.oracleJudgment}
+                    return (
+                      <div key={entry.id} className="oura-card p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
+                              <span className="text-xl">{moodOption?.emoji}</span>
+                            </div>
+                            <div>
+                              <p className="text-white text-sm font-medium">{moodOption?.label}</p>
+                              <p className="text-[#5a5a5a] text-xs">{intensityLabel}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-xs text-[#5a5a5a]">
+                              {entry.createdAt?.toDate ? 
+                                entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                                entry.createdAt ? 
+                                  new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                                  'Unknown date'
+                              }
+                            </span>
+                            <button
+                              onClick={() => deleteEntry(entry.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
+                              title="Delete this entry"
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         </div>
+                        <p className="text-[#d1d1d1] leading-relaxed mb-4">{entry.content}</p>
+
+                        {entry.oracleJudgment && (
+                          <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#a855f7]/20 rounded-2xl">
+                            <h4 className="text-[#a855f7] font-medium text-sm mb-3 uppercase tracking-wider">📜 Oracle's Judgment</h4>
+                            <div className="text-[#d8b4fe] text-sm leading-relaxed whitespace-pre-line">
+                              {entry.oracleJudgment}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="oura-card p-12 text-center">
+                  <div className="text-4xl mb-4 opacity-30">📝</div>
+                  <p className="text-[#5a5a5a]">No journal entries yet</p>
+                  <p className="text-[#3a3a3a] text-sm mt-1">Start writing to track your journey</p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="oura-card p-12 text-center">
-              <div className="text-4xl mb-4 opacity-30">📝</div>
-              <p className="text-[#5a5a5a]">No journal entries yet</p>
-              <p className="text-[#3a3a3a] text-sm mt-1">Start writing to track your journey</p>
-            </div>
-          )}
+          </div>
         </section>
       </div>
 
