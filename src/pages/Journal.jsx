@@ -193,6 +193,8 @@ export default function Journal() {
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const [currentEntryInput, setCurrentEntryInput] = useState(''); // Track original input for oracle follow-up
+  const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry is being answered
   
   // State for rotating prompts
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
@@ -382,6 +384,9 @@ export default function Journal() {
       const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}`;
       const pastEntries = entries.slice(-3).map(e => e.content);
       
+      // Store the original input for oracle follow-up
+      setCurrentEntryInput(inputText);
+      
       // Show Oracle modal with loading state
       setOracleModal({ isOpen: true, content: '', isLoading: true });
 
@@ -395,9 +400,11 @@ export default function Journal() {
         content: entry,
         mood,
         intensity,
-        oracleJudgment: feedback
+        oracleJudgment: feedback,
+        oracleFollowUp: null // Initialize for potential follow-up
       });
       setEntries(prev => [newEntry, ...prev]);
+      setCurrentEntryId(newEntry.id); // Track the entry ID for follow-up
       
       ouraToast.success('Journal entry saved');
 
@@ -437,6 +444,32 @@ export default function Journal() {
     } catch (error) {
       logger.error('❌ Journal: Error deleting entry:', error);
       ouraToast.error('Failed to delete journal entry');
+    }
+  };
+
+  // Save oracle follow-up response
+  const handleOracleFollowUpSaved = async (followUpResponse) => {
+    if (!currentEntryId) return;
+
+    try {
+      // Update the entry with the oracle follow-up
+      const updatedEntry = {
+        ...entries.find(e => e.id === currentEntryId),
+        oracleFollowUp: followUpResponse
+      };
+
+      // Write to database - use the updateData pattern if available, otherwise re-write
+      await writeData('journalEntries', updatedEntry);
+
+      // Update local state
+      setEntries(prev => 
+        prev.map(e => e.id === currentEntryId ? updatedEntry : e)
+      );
+
+      logger.log('✅ Oracle follow-up saved successfully');
+    } catch (error) {
+      logger.error('❌ Error saving oracle follow-up:', error);
+      ouraToast.error('Could not save oracle follow-up response');
     }
   };
 
@@ -751,6 +784,15 @@ export default function Journal() {
                             <div className="text-[#d8b4fe] text-sm leading-relaxed whitespace-pre-line">
                               {entry.oracleJudgment}
                             </div>
+                            
+                            {entry.oracleFollowUp && (
+                              <div className="mt-4 pt-4 border-t border-[#a855f7]/20">
+                                <h5 className="text-[#d8b4fe] font-medium text-sm mb-2 uppercase tracking-wider">✨ Oracle's Deeper Reflection</h5>
+                                <div className="text-[#d8b4fe] text-sm leading-relaxed whitespace-pre-line italic">
+                                  {entry.oracleFollowUp}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -772,9 +814,14 @@ export default function Journal() {
       {/* Oracle Modal */}
       <OracleModal
         isOpen={oracleModal.isOpen}
-        onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
+        onClose={() => {
+          setOracleModal({ isOpen: false, content: '', isLoading: false });
+          setCurrentEntryInput('');
+          setCurrentEntryId(null);
+        }}
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
+        onFollowUpSaved={handleOracleFollowUpSaved}
       />
     </div>
   );

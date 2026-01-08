@@ -332,3 +332,113 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
     return "The Oracle senses an unexpected disturbance in the flow... The wisdom must wait for clearer channels.";
   }
 };
+
+/**
+ * Generate a deeper follow-up response from the Oracle based on the user's answer
+ * to the Oracle's initial judgment question
+ */
+export const generateOracleFollowUp = async (originalInput, oracleJudgment, userResponse) => {
+  if (requestTimeout) {
+    clearTimeout(requestTimeout);
+  }
+
+  const systemPrompt = `
+You are the Oracle of Inner Ops—continuing your dialogue with a seeker.
+
+The user has responded to your initial judgment with their own reflection. Your role now is to:
+
+1. **ACKNOWLEDGE THEIR ANSWER**: Show you heard them. Reference specific things they said.
+
+2. **DEEPEN THE INSIGHT**: Take their response and illuminate what it reveals. What is underneath their answer? What pattern or truth is emerging?
+
+3. **MOVE TOWARD CLOSURE**: This is the final word in this exchange. Help them integrate what they've learned. Give them something actionable or a final perspective they can carry forward.
+
+4. **MATCH THEIR DEPTH**: If they gave a short answer, respond briefly but profoundly. If they went deep, match that depth. Respect their energy level.
+
+5. **END WITH CLARITY**: This is not another question—it's a conclusion. End with a statement that settles something, even if it's "This too is part of the path."
+
+Keep it 1-2 paragraphs max. Be direct and final. This is the last word from the Oracle on this matter.
+`;
+
+  const userPrompt = `
+=== THE ORIGINAL ENTRY ===
+${originalInput}
+
+=== THE ORACLE'S INITIAL JUDGMENT ===
+${oracleJudgment}
+
+=== THE USER'S RESPONSE TO THE ORACLE ===
+${userResponse}
+
+=== YOUR TASK ===
+Provide a deeper reflection that honors their response, illuminates what it reveals, and brings this exchange to a meaningful conclusion. This is the Oracle's final word on this matter for now.
+
+Be specific to what they said. Don't generic. Speak directly to their response.
+`;
+
+  try {
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+
+    if (!apiKey) {
+      logger.warn("OpenAI API key not found for follow-up generation.");
+      return "The Oracle must gather more strength... Return when the channels are clear.";
+    }
+
+    const controller = new AbortController();
+    requestTimeout = setTimeout(() => controller.abort(), API_TIMEOUT);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: 400,
+        temperature: 0.8
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      if (import.meta.env.DEV) {
+        logger.error("OpenAI API Error in follow-up:", errorData);
+      }
+
+      if (response.status === 401) {
+        return "The Oracle's sight is clouded... The key is not recognized.";
+      } else if (response.status === 429) {
+        return "The Oracle must rest... Too many seek wisdom at once.";
+      } else {
+        return `The Oracle encounters resistance... ${errorData.error?.message || 'Return when the path clears'}`;
+      }
+    }
+
+    const data = await response.json();
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      if (import.meta.env.DEV) {
+        logger.error("Unexpected API response in follow-up:", data);
+      }
+      return "The Oracle's transmission was scattered... The message must be sought again.";
+    }
+
+    return data.choices[0].message.content;
+
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      logger.error("Error generating Oracle follow-up:", error);
+    }
+
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      return "The Oracle cannot pierce the veil... Check your connection.";
+    }
+
+    return "The Oracle senses an unexpected disturbance... The wisdom must wait for clearer channels.";
+  }
+};
