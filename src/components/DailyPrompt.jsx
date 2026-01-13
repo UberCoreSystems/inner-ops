@@ -96,7 +96,7 @@ const categoryMeta = {
   recovery: { icon: 'shield', label: 'Recovery', color: '#ef4444' },
 };
 
-export default function DailyPrompt({ onJournalClick }) {
+const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
   const [todaysPrompt, setTodaysPrompt] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -194,4 +194,6 @@ export default function DailyPrompt({ onJournalClick }) {
       />
     </div>
   );
-}
+});
+
+export default DailyPrompt;

@@ -15,6 +15,7 @@ import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
 import AuthForm from './components/AuthForm';
 import EmergencyButton from './components/EmergencyButton';
+import { InlineErrorBoundary } from './components/ErrorBoundary';
 import { checkFirebaseConnection } from './firebase';
 import './App.css';
 
@@ -73,25 +74,88 @@ function App() {
     <Router>
       <div className="min-h-screen bg-gray-900 text-white">
         <Toaster {...toasterConfig} />
-        {user && <Navbar onLogout={handleLogout} user={user} />}
-        {user && <EmergencyButton />}
+        <InlineErrorBoundary name="Navbar">
+          {user && <Navbar onLogout={handleLogout} user={user} />}
+        </InlineErrorBoundary>
+        <InlineErrorBoundary name="EmergencyButton">
+          {user && <EmergencyButton />}
+        </InlineErrorBoundary>
         <Routes>
           <Route 
             path="/auth" 
             element={
-              user ? 
-                <Navigate to="/dashboard" /> : 
-                <AuthForm onAuthSuccess={handleAuthSuccess} />
+              <InlineErrorBoundary name="Auth">
+                {user ? 
+                  <Navigate to="/dashboard" /> : 
+                  <AuthForm onAuthSuccess={handleAuthSuccess} />
+                }
+              </InlineErrorBoundary>
             } 
           />
-          <Route path="/onboarding" element={user ? <Onboarding /> : <Navigate to="/auth" />} />
-          <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/auth" />} />
-          <Route path="/journal" element={user ? <Journal /> : <Navigate to="/auth" />} />
-          <Route path="/relapse" element={user ? <Relapse /> : <Navigate to="/auth" />} />
-          <Route path="/hardlessons" element={user ? <HardLessons /> : <Navigate to="/auth" />} />
-          <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
-          <Route path="/killlist" element={user ? <KillList /> : <Navigate to="/auth" />} />
-          <Route path="/blackmirror" element={user ? <BlackMirror /> : <Navigate to="/auth" />} />
+          <Route 
+            path="/onboarding" 
+            element={
+              <InlineErrorBoundary name="Onboarding">
+                {user ? <Onboarding /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/dashboard" 
+            element={
+              <InlineErrorBoundary name="Dashboard">
+                {user ? <Dashboard /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/journal" 
+            element={
+              <InlineErrorBoundary name="Journal">
+                {user ? <Journal /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/relapse" 
+            element={
+              <InlineErrorBoundary name="Relapse">
+                {user ? <Relapse /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/hardlessons" 
+            element={
+              <InlineErrorBoundary name="HardLessons">
+                {user ? <HardLessons /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/profile" 
+            element={
+              <InlineErrorBoundary name="Profile">
+                {user ? <Profile /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/killlist" 
+            element={
+              <InlineErrorBoundary name="KillList">
+                {user ? <KillList /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/blackmirror" 
+            element={
+              <InlineErrorBoundary name="BlackMirror">
+                {user ? <BlackMirror /> : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            } 
+          />
           
           {/* Default Routes */}
           <Route path="/login" element={<Navigate to="/auth" />} />

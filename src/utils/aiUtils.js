@@ -234,96 +234,94 @@ export const aiUtils = {
     return steps.slice(0, 3); // Return max 3 action steps
   },
 
-  // Generate AI feedback using OpenAI API
+  // Generate AI feedback using local intelligent responses
   generateAIFeedback: async (moduleName, userInput, pastEntries = []) => {
-    const systemPrompt = `
-You are a wise AI counselor trained in the depths of philosophical wisdom from humanity's greatest thinkers. Your role is to analyze user input and provide reflections that match the most relevant philosophical perspective to their specific situation and emotional state.
-
-PHILOSOPHICAL PERSPECTIVES TO DRAW FROM:
-- Stoicism (Marcus Aurelius, Epictetus, Seneca): For dealing with external pressures, acceptance, discipline, and emotional regulation
-- Existentialism (Kierkegaard, Sartre, Camus): For questions of meaning, authenticity, freedom, and life choices
-- Nietzschean philosophy: For self-overcoming, will to power, questioning values, and transcending limitations
-- Buddhist wisdom: For attachment, suffering, mindfulness, and letting go
-- Jungian psychology: For shadow work, integration, dreams, and unconscious patterns
-- Virtue ethics (Aristotle): For character development, habits, and moral excellence
-- Modern resilience (Frankl, Goggins, Peterson): For finding meaning in suffering and building mental toughness
-- Ancient wisdom (Lao Tzu, Rumi): For flow, surrender, and spiritual insight
-
-ANALYSIS APPROACH:
-1. First, identify the core themes in the user's entry (fear, anger, procrastination, relationships, purpose, suffering, etc.)
-2. Match the most relevant philosophical perspective(s) to those themes
-3. Deliver insights from that philosophical lens without over-quoting names
-4. Challenge and guide toward growth with appropriate philosophical depth
-
-For ${moduleName} specifically:
-- Journal: Match philosophy to emotional state and life themes present
-- Compass: Focus on authenticity, values alignment, and character development
-- Kill List: Address self-sabotage, discipline, and breaking destructive patterns
-- Relapse Radar: Deal with shame, recovery, and rebuilding from setbacks
-
-Respond with brutal honesty but profound wisdom. Never flatter. Challenge when necessary. Let the ideas speak more than the names. Keep responses under 3 paragraphs.
-`;
-
-    const userPrompt = `
-Current Entry: ${userInput}
-
-Recent Patterns: ${pastEntries.slice(-3).join('\n')}
-`;
-
+    // SECURITY: Removed direct OpenAI API calls from client-side
+    // This prevents API key exposure in browser
+    logger.info("Generating local AI feedback (API calls removed for security)");
+    
     try {
-      // Check if API key is available
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-
-      if (!apiKey) {
-        logger.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
-        return "The Oracle requires proper configuration to speak. Set your API key in the Secrets tab.";
-      }
-
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "gpt-4",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          temperature: 0.7
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        logger.error("OpenAI API error:", response.status, errorData);
-
-        if (response.status === 401) {
-          return "The Oracle rejects your offering. Verify your API key is correct.";
-        } else if (response.status === 429) {
-          return "The Oracle is overwhelmed with requests. Try again in a moment.";
-        } else {
-          return "The Oracle encounters interference. Check your connection and try again.";
-        }
-      }
-
-      const data = await response.json();
-
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        logger.error("Unexpected OpenAI response format:", data);
-        return "The Oracle speaks in riddles. Try rephrasing your input.";
-      }
-
-      return data.choices[0].message.content;
+      return generateLocalAIResponse(moduleName, userInput, pastEntries);
     } catch (error) {
       logger.error("Error generating AI feedback:", error);
-
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        return "The Oracle cannot reach the ethereal realm. Check your network connection.";
-      }
-
-      return "The Oracle remains silent. Continue your practice with inner discipline.";
+      return "Continue your practice with inner discipline and honest reflection.";
     }
   }
+};
+
+/**
+ * Generate intelligent local AI responses without external API calls
+ */
+const generateLocalAIResponse = (moduleName, userInput, pastEntries = []) => {
+  const inputLower = userInput.toLowerCase();
+  
+  // Detect themes
+  const themes = {
+    fear: /fear|afraid|anxious|worry|scared|nervous/i.test(inputLower),
+    anger: /angry|furious|mad|frustrated|irritated|rage/i.test(inputLower),
+    procrastination: /procrastinat|delay|avoid|putting off|later/i.test(inputLower),
+    suffering: /pain|hurt|suffer|difficult|hard|struggle/i.test(inputLower),
+    purpose: /purpose|meaning|why|point|worth/i.test(inputLower),
+    discipline: /disciplin|habit|routine|consistency|practice/i.test(inputLower),
+    relapse: /relapse|fail|gave in|slip|broke/i.test(inputLower),
+    progress: /progress|better|improv|success|achiev/i.test(inputLower)
+  };
+  
+  const detectedThemes = Object.keys(themes).filter(key => themes[key]);
+  const primaryTheme = detectedThemes[0] || 'general';
+  
+  // Philosophical responses by theme
+  const responses = {
+    fear: [
+      "Fear shows you what you value. The things you're afraid to lose reveal what matters most. But ask yourself: is this fear protecting you, or imprisoning you? Courage isn't the absence of fear—it's acting despite it.",
+      "Your fear is a threshold guardian. Every meaningful transformation requires passing through anxiety. What lies on the other side of this fear? That's where your growth lives.",
+      "The Stoics taught that we suffer more in imagination than in reality. Most of what you fear will never happen. And what does happen, you'll handle—because you always have."
+    ],
+    anger: [
+      "Anger is energy seeking direction. It's neither good nor evil—it's power. The question isn't whether to feel it, but where to aim it. What injustice or boundary violation sparked this? Address that, not the symptom.",
+      "Your anger reveals violated expectations. Something didn't go as it 'should.' But who wrote that rule? Examine whether your expectations serve you, or whether they're the real enemy.",
+      "Rage is a teacher if you listen. It tells you where your boundaries are, what you won't tolerate, what you're unwilling to compromise on. Honor the message, then release the heat."
+    ],
+    procrastination: [
+      "You're not lazy—you're conflicted. Part of you wants the outcome, another part resists the process. Which part is wiser? Sometimes procrastination protects you from misaligned goals. Sometimes it's just fear wearing a mask.",
+      "Delaying action creates more suffering than taking it. The gap between knowing and doing is where self-respect erodes. Start smaller if you must, but start. Momentum creates clarity that thinking never will.",
+      "What you resist persists. The task you're avoiding doesn't shrink with time—it grows teeth. Do the hard thing first, and watch how lightness returns to your day."
+    ],
+    suffering: [
+      "Suffering without meaning is unbearable. But suffering with purpose transforms you. What is this pain teaching you that nothing else could? Extract the wisdom, or repeat the lesson.",
+      "You can't control whether you suffer, but you can control what you become through it. Will this harden you or deepen you? Brittleness or resilience—that choice is always yours.",
+      "Pain is inevitable; suffering is optional. One is what happens to you, the other is your relationship with it. You're adding a story to the sensation. What story are you telling, and does it serve you?"
+    ],
+    purpose: [
+      "Meaning isn't found—it's created through commitment. You don't discover your purpose like a hidden treasure. You forge it through consistent action toward what calls to you, even faintly.",
+      "The question 'what is my purpose?' is paralyzing. Ask instead: 'what am I willing to suffer for?' Your answer reveals your values. Purpose emerges from living those values daily.",
+      "You don't need a grand purpose to live well. Start with who you are today: be honest, be disciplined, be useful. Meaning compounds from small actions consistently taken."
+    ],
+    discipline: [
+      "Discipline is freedom. Every boundary you set, every temptation you resist, every promise you keep to yourself—these are deposits in the bank of self-trust. You're building a self you can rely on.",
+      "You don't rise to your goals; you fall to your systems. Motivation is a spark. Discipline is the structure that keeps the fire burning when the spark fades. Build the structure.",
+      "The gap between who you are and who you want to become is crossed through daily practice. Not heroic acts, not perfect days—just showing up when you don't feel like it. That's where transformation lives."
+    ],
+    relapse: [
+      "A slip is not a fall. It's data. What triggered it? What was underneath the urge? Every relapse is a teacher if you ask the right questions. Shame is useless. Analysis is everything.",
+      "You didn't lose progress—you revealed where the system needs strengthening. The weak point is now visible. Fortify it. Adjust the approach. Resume the path. This is how mastery is built.",
+      "The path is not linear. Expect setbacks, but don't normalize them. Each relapse shows you what you haven't yet integrated. The question isn't 'why did I fail?' but 'what did I miss?'"
+    ],
+    progress: [
+      "Progress is fractal—the same patterns that got you here will get you further. What worked? Why did it work? Codify it. Repeat it. Growth compounds when you understand its mechanics.",
+      "Success is evidence of change, but don't let it breed complacency. The next level requires a new version of you. What got you here won't get you there. Keep evolving.",
+      "Celebrate without inflating. Progress is real, but fragile. Momentum can reverse quickly. The mark of wisdom isn't hitting the peak—it's staying consistent when it's easy to coast."
+    ],
+    general: [
+      "The unexamined life stays unchanged. You're here because something in you wants more—more clarity, more strength, more truth. That wanting is sacred. Honor it with action.",
+      "Every entry you write is a conversation with your future self. What wisdom are you leaving behind? What pattern are you breaking? This work compounds invisibly until one day, you turn around and barely recognize who you used to be.",
+      "Transformation doesn't announce itself with trumpets. It happens in the small moments—the choice made, the boundary held, the truth spoken. You're building something here. Trust the process."
+    ]
+  };
+  
+  // Get response for primary theme
+  const themeResponses = responses[primaryTheme] || responses.general;
+  const selectedResponse = themeResponses[Math.floor(Math.random() * themeResponses.length)];
+  
+  return selectedResponse;
 };

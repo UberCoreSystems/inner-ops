@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   updateDoc, 
   doc,
@@ -12,7 +12,7 @@ import { AppIcon } from './AppIcons';
 import { SkeletonList, SkeletonKillTarget } from './SkeletonLoader';
 import logger from '../utils/logger';
 
-const KillListDashboard = () => {
+const KillListDashboard = React.memo(function KillListDashboard() {
   // Use the custom hook for today's kill targets with all functions
   const { 
     targets: todaysTargets, 
@@ -534,6 +534,6 @@ const KillListDashboard = () => {
       />
     </div>
   );
-};
+});
 
 export default KillListDashboard;

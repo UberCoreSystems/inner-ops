@@ -264,73 +264,163 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
 `;
 
   try {
-    // Check if API key is available
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-
-    if (!apiKey) {
-      logger.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
-      return "The Oracle requires proper configuration to commune with deeper wisdom. The key to unlock this channel must be set.";
-    }
-
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    requestTimeout = setTimeout(() => controller.abort(), API_TIMEOUT);
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: maxTokens,
-        temperature: 0.8
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      if (import.meta.env.DEV) {
-        logger.error("OpenAI API Error:", errorData);
-      }
-
-      if (response.status === 401) {
-        return "The Oracle's sight is clouded... The key to wisdom is not recognized. Check your configuration.";
-      } else if (response.status === 429) {
-        return "The Oracle must rest... Too many seek wisdom at once. Return when the digital currents are calmer.";
-      } else {
-        return `The Oracle encounters resistance in the void... ${errorData.error?.message || 'The path is temporarily blocked'}`;
-      }
-    }
-
-    const data = await response.json();
-
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      if (import.meta.env.DEV) {
-        logger.error("Unexpected API response structure:", data);
-      }
-      return "The Oracle's transmission was scattered across the digital winds... The message must be sought again.";
-    }
-
-    return data.choices[0].message.content;
+    // SECURITY: Removed direct OpenAI API calls from client-side
+    // This prevents API key exposure in browser
+    logger.info("Generating local AI feedback (API calls removed for security)");
+    
+    // Generate intelligent local feedback based on context analysis
+    return generateLocalFeedback(moduleName, userInput, targetContext, moodContext, intensityContext, pastEntries);
 
   } catch (error) {
-    if (import.meta.env.DEV) {
-      logger.error("Error generating AI feedback:", error);
-    }
-
-    // Provide more specific error messages
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      return "The Oracle cannot pierce the veil... The digital realm is unreachable. Check your connection to the network.";
-    }
-
-    return "The Oracle senses an unexpected disturbance in the flow... The wisdom must wait for clearer channels.";
+    logger.error("Error generating feedback:", error);
+    return getFallbackResponse(moduleName);
   }
+};
+
+/**
+ * Generate intelligent feedback locally without API calls
+ * Uses pattern matching and context analysis
+ */
+const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext, intensityContext, pastEntries) => {
+  const inputText = typeof userInput === 'string' ? userInput.toLowerCase() : JSON.stringify(userInput).toLowerCase();
+  
+  // Extract key themes and patterns
+  const patterns = {
+    struggle: /struggle|difficult|hard|tough|can't|unable|failing/i,
+    progress: /better|improvement|progress|success|achieved|accomplished/i,
+    relapse: /relapse|fell|slip|gave in|failed/i,
+    determination: /will|determined|committed|going to|must|need to/i,
+    reflection: /realize|understand|learned|noticed|aware/i,
+    emotional: /feel|feeling|emotion|angry|sad|anxious|stressed|happy|grateful/i
+  };
+
+  const detectedPatterns = Object.keys(patterns).filter(key => patterns[key].test(inputText));
+  
+  // Mood-aware responses
+  const moodResponses = {
+    electric: [
+      "This vibrant energy is powerful. What ignited this spark, and where do you want to direct it?",
+      "Channel this intensity. What breakthrough is trying to emerge through this electric state?"
+    ],
+    foggy: [
+      "The fog isn't emptiness—it's a processing state. What needs time to clarify beneath this veil?",
+      "Confusion often precedes clarity. What question is this fog protecting you from rushing to answer?"
+    ],
+    sharp: [
+      "This clarity is a gift. What insight is cutting through right now? Capture it while the blade is keen.",
+      "Sharp focus reveals truth. What are you seeing clearly that you couldn't see before?"
+    ],
+    hollow: [
+      "Emptiness signals something was lost or given away. What needs to be mourned or reclaimed?",
+      "This hollow space might be making room for something new. What's ready to release, and what wants to enter?"
+    ],
+    heavy: [
+      "This weight has sources. What are you carrying that isn't yours, or what needs to be set down?",
+      "Burdens reveal what matters. What responsibility is real, and what is self-imposed?"
+    ],
+    chaotic: [
+      "Chaos is unintegrated energy seeking form. What pattern is trying to emerge from this storm?",
+      "Turbulence signals transformation. What old structure is breaking down to make space for the new?"
+    ],
+    triumphant: [
+      "Victory earned through struggle deserves recognition. What made this possible, and how can you repeat it?",
+      "This success is data. What did you do differently that worked? Capture the formula."
+    ],
+    light: [
+      "Lightness is a reward for releasing what doesn't serve. What let go, and how can you protect this freedom?",
+      "This buoyancy is precious. What opened, and how do you maintain this state without grasping?"
+    ],
+    focused: [
+      "Sacred attention is your superpower. What's capturing your focus, and is it worthy of this energy?",
+      "This concentration is rare. Protect it fiercely and direct it toward what truly matters."
+    ],
+    radiant: [
+      "Inner light shining outward is a sign of alignment. What opened this channel?",
+      "This luminosity wants to be shared. How can you express it without depleting yourself?"
+    ]
+  };
+
+  // Pattern-based responses
+  const patternResponses = {
+    struggle: [
+      "Struggle reveals what you're unwilling to abandon. What are you fighting for that's worth this resistance?",
+      "Difficulty is information. What's this challenge teaching you about your edges and capacity?",
+      "The hard path often leads somewhere worth reaching. What would make this struggle meaningful?"
+    ],
+    progress: [
+      "Progress compounds. What small win today builds toward your larger transformation?",
+      "Improvement is evidence you're learning. What shifted, and how can you amplify it?",
+      "Success leaves clues. What worked here that you can apply elsewhere?"
+    ],
+    relapse: [
+      "A slip is not a fall—it's data. What triggered it, and what does that teach you about your system?",
+      "Every relapse reveals an unaddressed need. What was underneath the urge?",
+      "Return to the path without shame. What boundary needs strengthening, or what pain needs processing?"
+    ],
+    determination: [
+      "Commitment is powerful, but systems outlast motivation. What structure will support this intention?",
+      "Will is the spark; discipline is the fuel. What daily practice will carry this forward when willpower fades?",
+      "Your determination is noted. Now what's the smallest next action that proves it?"
+    ],
+    reflection: [
+      "Awareness is the first transformation. What understanding is emerging?",
+      "The observer sees what the doer missed. What pattern are you recognizing?",
+      "Meta-awareness creates choice. What do you now see that you can change?"
+    ],
+    emotional: [
+      "Emotions are messengers, not meanings. What is this feeling trying to tell you?",
+      "Name the emotion, honor it, then ask: what does it need from me?",
+      "Feeling deeply means you're alive and engaged. What action does this emotion want to inspire?"
+    ]
+  };
+
+  // Module-specific guidance
+  const moduleGuidance = {
+    journal: [
+      "Your words today are breadcrumbs for your future self. What truth are you leaving behind?",
+      "The unexamined life stays unchanged. What are you seeing now that demands action?",
+      "Writing creates distance from pain, turning it into wisdom. What shifts when you witness your own story?"
+    ],
+    killList: [
+      "Naming the target is half the battle. Every addiction protects something—what pain is it masking?",
+      "You don't need to be perfect; you need to be persistent. What's one more day of resistance teaching you?",
+      "The thing you're trying to kill is trying to keep you. What does freedom from this pattern look like?"
+    ],
+    relapse: [
+      "Honesty about the fall is the first step back up. No shame, just data—what happened?",
+      "Each reset sharpens your awareness. What warning sign did you miss this time?",
+      "The gap between trigger and action is where freedom lives. How can you widen that space?"
+    ],
+    hardLessons: [
+      "Pain that isn't transformed gets transmitted. What wisdom is this suffering trying to birth?",
+      "Hard lessons earn their name. What won't you forget after this?",
+      "Extracting meaning from pain is how you avoid repeating it. What's the takeaway you can't afford to lose?"
+    ]
+  };
+
+  // Build response
+  let response = "";
+  
+  // Add mood-specific insight if present
+  if (moodContext && moodResponses[moodContext]) {
+    const moodOptions = moodResponses[moodContext];
+    response += moodOptions[Math.floor(Math.random() * moodOptions.length)] + "\n\n";
+  }
+  
+  // Add pattern-based insight
+  if (detectedPatterns.length > 0) {
+    const primaryPattern = detectedPatterns[0];
+    const patternOptions = patternResponses[primaryPattern] || [];
+    if (patternOptions.length > 0) {
+      response += patternOptions[Math.floor(Math.random() * patternOptions.length)] + "\n\n";
+    }
+  }
+  
+  // Add module guidance
+  const moduleOptions = moduleGuidance[moduleName] || moduleGuidance.journal;
+  response += moduleOptions[Math.floor(Math.random() * moduleOptions.length)];
+  
+  return response;
 };
 
 /**
@@ -342,103 +432,66 @@ export const generateOracleFollowUp = async (originalInput, oracleJudgment, user
     clearTimeout(requestTimeout);
   }
 
-  const systemPrompt = `
-You are the Oracle of Inner Ops—continuing your dialogue with a seeker.
-
-The user has responded to your initial judgment with their own reflection. Your role now is to:
-
-1. **ACKNOWLEDGE THEIR ANSWER**: Show you heard them. Reference specific things they said.
-
-2. **DEEPEN THE INSIGHT**: Take their response and illuminate what it reveals. What is underneath their answer? What pattern or truth is emerging?
-
-3. **MOVE TOWARD CLOSURE**: This is the final word in this exchange. Help them integrate what they've learned. Give them something actionable or a final perspective they can carry forward.
-
-4. **MATCH THEIR DEPTH**: If they gave a short answer, respond briefly but profoundly. If they went deep, match that depth. Respect their energy level.
-
-5. **END WITH CLARITY**: This is not another question—it's a conclusion. End with a statement that settles something, even if it's "This too is part of the path."
-
-Keep it 1-2 paragraphs max. Be direct and final. This is the last word from the Oracle on this matter.
-`;
-
-  const userPrompt = `
-=== THE ORIGINAL ENTRY ===
-${originalInput}
-
-=== THE ORACLE'S INITIAL JUDGMENT ===
-${oracleJudgment}
-
-=== THE USER'S RESPONSE TO THE ORACLE ===
-${userResponse}
-
-=== YOUR TASK ===
-Provide a deeper reflection that honors their response, illuminates what it reveals, and brings this exchange to a meaningful conclusion. This is the Oracle's final word on this matter for now.
-
-Be specific to what they said. Don't generic. Speak directly to their response.
-`;
-
+  // SECURITY: Removed direct OpenAI API calls from client-side
+  // Generate intelligent local follow-up based on context
+  logger.info("Generating local Oracle follow-up (API calls removed for security)");
+  
   try {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-
-    if (!apiKey) {
-      logger.warn("OpenAI API key not found for follow-up generation.");
-      return "The Oracle must gather more strength... Return when the channels are clear.";
-    }
-
-    const controller = new AbortController();
-    requestTimeout = setTimeout(() => controller.abort(), API_TIMEOUT);
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 400,
-        temperature: 0.8
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      if (import.meta.env.DEV) {
-        logger.error("OpenAI API Error in follow-up:", errorData);
-      }
-
-      if (response.status === 401) {
-        return "The Oracle's sight is clouded... The key is not recognized.";
-      } else if (response.status === 429) {
-        return "The Oracle must rest... Too many seek wisdom at once.";
-      } else {
-        return `The Oracle encounters resistance... ${errorData.error?.message || 'Return when the path clears'}`;
-      }
-    }
-
-    const data = await response.json();
-
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      if (import.meta.env.DEV) {
-        logger.error("Unexpected API response in follow-up:", data);
-      }
-      return "The Oracle's transmission was scattered... The message must be sought again.";
-    }
-
-    return data.choices[0].message.content;
-
+    return generateLocalFollowUp(originalInput, oracleJudgment, userResponse);
   } catch (error) {
-    if (import.meta.env.DEV) {
-      logger.error("Error generating Oracle follow-up:", error);
-    }
-
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      return "The Oracle cannot pierce the veil... Check your connection.";
-    }
-
-    return "The Oracle senses an unexpected disturbance... The wisdom must wait for clearer channels.";
+    logger.error("Error generating Oracle follow-up:", error);
+    return "The Oracle acknowledges your reflection. Integration happens in silence as much as in words. Carry this forward.";
   }
+};
+
+/**
+ * Generate local follow-up responses
+ */
+const generateLocalFollowUp = (originalInput, oracleJudgment, userResponse) => {
+  const responseLower = userResponse.toLowerCase();
+  
+  // Detect response patterns
+  const hasInsight = /understand|realize|see|learned|aware|know|recognize/i.test(responseLower);
+  const hasConfusion = /confused|unsure|don't know|not sure|unclear/i.test(responseLower);
+  const hasCommitment = /will|going to|commit|promise|determined/i.test(responseLower);
+  const hasResistance = /but|however|can't|difficult|hard|struggle/i.test(responseLower);
+  const isShort = userResponse.split(' ').length < 10;
+  
+  let response = "";
+  
+  // Opening acknowledgment
+  if (hasInsight) {
+    response += "You see it now. That awareness is the first transformation—what you can name, you can change. ";
+  } else if (hasConfusion) {
+    response += "Not knowing is honest. Confusion often precedes breakthrough. Trust the process of unclear becoming clear. ";
+  } else if (hasCommitment) {
+    response += "Intention noted. But remember: the path between saying and doing is where most lose their way. ";
+  } else if (hasResistance) {
+    response += "Resistance is information—it shows you where the real work lives. Don't fight it; understand it. ";
+  } else {
+    response += "Your reflection is heard. ";
+  }
+  
+  // Deepening based on response length and content
+  if (isShort) {
+    response += "Sometimes the simplest truths need no elaboration. ";
+  } else {
+    response += "The depth of your response reveals the work you're already doing beneath the surface. ";
+  }
+  
+  // Closing wisdom
+  const closings = [
+    "What you've uncovered here becomes your compass. Return to it when the path gets unclear.",
+    "This insight isn't the end—it's the beginning of a new pattern. Watch how it unfolds.",
+    "You know what needs to happen next. The question isn't what, but when you'll begin.",
+    "Understanding and transformation aren't the same. Knowledge alone changes nothing. Action is where wisdom lives.",
+    "The Oracle doesn't give you answers—it helps you hear the ones you already have. Now listen.",
+    "What you've written here will echo forward. Let it guide you when motivation fades and discipline must carry you.",
+    "This too is part of the path. Not every moment needs to be profound—consistency matters more than intensity.",
+    "You're building something here, one reflection at a time. Trust the accumulation of small insights."
+  ];
+  
+  response += closings[Math.floor(Math.random() * closings.length)];
+  
+  return response;
 };

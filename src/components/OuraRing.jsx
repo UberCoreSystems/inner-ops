@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
  * Oura-style Circular Progress Ring Component
  * Creates the signature stacked ring visualization
  */
-export function CircularProgressRing({ 
+export const CircularProgressRing = React.memo(function CircularProgressRing({ 
   progress = 0, 
   size = 120, 
   strokeWidth = 8, 
@@ -89,12 +89,12 @@ export function CircularProgressRing({
       )}
     </div>
   );
-}
+});
 
 /**
  * Stacked Triple Ring - Like Oura's main readiness display
  */
-export function TripleRing({
+export const TripleRing = React.memo(function TripleRing({
   rings = [
     { progress: 75, color: '#00d4aa', label: 'Clarity' },
     { progress: 60, color: '#4da6ff', label: 'Activity' },
@@ -142,12 +142,12 @@ export function TripleRing({
       )}
     </div>
   );
-}
+});
 
 /**
  * Score Card - Oura-style metric display
  */
-export function ScoreCard({ 
+export const ScoreCard = React.memo(function ScoreCard({ 
   score, 
   label, 
   sublabel,
@@ -204,12 +204,12 @@ export function ScoreCard({
       )}
     </div>
   );
-}
+});
 
 /**
  * Insight Card - For AI insights and recommendations
  */
-export function InsightCard({ 
+export const InsightCard = React.memo(function InsightCard({ 
   title, 
   description, 
   icon = '💡',
@@ -247,12 +247,12 @@ export function InsightCard({
       </div>
     </div>
   );
-}
+});
 
 /**
  * Activity Item - For recent activity feed
  */
-export function ActivityItem({ 
+export const ActivityItem = React.memo(function ActivityItem({ 
   type, 
   title, 
   description, 
@@ -285,6 +285,6 @@ export function ActivityItem({
       </div>
     </div>
   );
-}
+});
 
 export default CircularProgressRing;

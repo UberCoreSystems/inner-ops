@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { readUserData, testFirebaseConnection } from '../utils/firebaseUtils';
 import { authService } from '../utils/authService';
@@ -56,21 +56,21 @@ export default function Dashboard() {
     return () => clearTimeout(dwellTimer);
   }, [loading, showSkeleton]);
 
-  // Get current user from auth service
+  // Get current user from auth service and load data ONCE
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     setUser(currentUser);
     logger.log("👤 Dashboard: Current user:", currentUser?.uid);
     
     if (currentUser) {
-      loadDashboardData();
+      loadDashboardData(currentUser);
     } else {
       setLoading(false); // Stop loading if no user
     }
 
     // Add debugging function to window
     window.debugDashboard = {
-      reloadData: () => loadDashboardData(),
+      reloadData: () => loadDashboardData(currentUser),
       checkAuth: () => ({
         currentUser: authService.getCurrentUser(),
         hasUser: !!authService.getCurrentUser()
@@ -79,14 +79,7 @@ export default function Dashboard() {
       getRecentEntries: () => recentEntries,
       getClarityScore: () => clarityScore
     };
-  }, []);
-
-  // Load data when user is authenticated
-  useEffect(() => {
-    if (user) {
-      loadDashboardData();
-    }
-  }, [user]);
+  }, []); // Only run once on mount
 
   // Test Firebase connection
   const runFirebaseTest = async () => {
@@ -116,14 +109,14 @@ export default function Dashboard() {
     }
   };
 
-  const loadDashboardData = async () => {
-    if (!user) {
+  const loadDashboardData = useCallback(async (currentUser = user) => {
+    if (!currentUser) {
       logger.log("⏳ Dashboard: Waiting for user authentication...");
       return;
     }
 
     try {
-      logger.log("📡 Dashboard: Loading data for user:", user.uid);
+      logger.log("📡 Dashboard: Loading data for user:", currentUser.uid);
       
       // Load data in parallel for better performance
       const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons] = await Promise.all([
@@ -251,11 +244,11 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   const showShell = loading || showSkeleton || !user;
 
-  // Calculate ring percentages for visualization - Based on realistic, meaningful goals
+  // Calculate ring percentages for visualization - Based on realistic, meaningful goals (memoized to prevent recalculation)
   
   // Mastery: Overall progress toward full mastery (0-1000 scale)
   // 1000 represents years of consistent practice - the full journey
@@ -351,7 +344,7 @@ export default function Dashboard() {
     mirrorProgress * 0.15
   );
 
-  const formatTimeAgo = (date) => {
+  const formatTimeAgo = useCallback((date) => {
     const now = new Date();
     const diff = now - new Date(date);
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -359,9 +352,9 @@ export default function Dashboard() {
     if (days === 1) return 'Yesterday';
     if (days < 7) return `${days}d ago`;
     return new Date(date).toLocaleDateString();
-  };
+  }, []);
 
-  const getActivityMeta = (type) => {
+  const getActivityMeta = useCallback((type) => {
     const meta = {
       journal: { icon: '📝', color: '#a855f7', label: 'Journal' },
       relapse: { icon: '⚠️', color: '#f59e0b', label: 'Awareness' },
@@ -369,7 +362,7 @@ export default function Dashboard() {
       blackmirror: { icon: '📱', color: '#4da6ff', label: 'Mirror Check' }
     };
     return meta[type] || { icon: '📊', color: '#8a8a8a', label: 'Activity' };
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-black">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import ouraToast from '../utils/toast';
@@ -22,7 +22,7 @@ const quickPrompts = [
   "What do you need to let go of?",
 ];
 
-export default function QuickJournalModal({ isOpen, onClose, onSuccess }) {
+const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClose, onSuccess }) {
   const [entry, setEntry] = useState('');
   const [mood, setMood] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -53,7 +53,7 @@ export default function QuickJournalModal({ isOpen, onClose, onSuccess }) {
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!entry.trim()) return;
 
     setSaving(true);
@@ -94,12 +94,12 @@ export default function QuickJournalModal({ isOpen, onClose, onSuccess }) {
     } finally {
       setSaving(false);
     }
-  };
+  }, [entry, mood, onSuccess, onClose]);
 
-  const handleDone = () => {
+  const handleDone = useCallback(() => {
     onSuccess?.();
     onClose();
-  };
+  }, [onSuccess, onClose]);
 
   if (!isOpen) return null;
 
@@ -251,4 +251,6 @@ export default function QuickJournalModal({ isOpen, onClose, onSuccess }) {
       </div>
     </div>
   );
-}
+});
+
+export default QuickJournalModal;

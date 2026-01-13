@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
@@ -545,7 +545,7 @@ export default function Journal() {
                               backgroundColor: `${moodData?.color || '#5a5a5a'}20`,
                               color: moodData?.color || '#5a5a5a'
                             }}
-                            title={`${moodData?.label || e.mood} - ${new Date(e.createdAt).toLocaleDateString()}`}
+                            title={`${moodData?.label || e.mood} - ${e.timestamp?.toDate ? e.timestamp.toDate().toLocaleDateString() : e.createdAt ? new Date(e.createdAt).toLocaleDateString() : new Date(e.timestamp).toLocaleDateString()}`}
                           >
                             <div className="w-3 h-3">
                               {MoodIcons[e.mood] || <div className="w-2 h-2 rounded-full bg-current" />}
@@ -760,11 +760,15 @@ export default function Journal() {
                           </div>
                           <div className="flex items-center space-x-3">
                             <span className="text-xs text-[#5a5a5a]">
-                              {entry.createdAt?.toDate ? 
-                                entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
-                                entry.createdAt ? 
-                                  new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
-                                  'Unknown date'
+                              {entry.timestamp?.toDate ? 
+                                entry.timestamp.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                                entry.createdAt?.toDate ? 
+                                  entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                                  entry.timestamp ? 
+                                    new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                                    entry.createdAt ? 
+                                      new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                                      'Unknown date'
                               }
                             </span>
                             <button
