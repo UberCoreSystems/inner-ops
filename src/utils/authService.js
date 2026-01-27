@@ -9,7 +9,7 @@ import {
   updateProfile 
 } from 'firebase/auth';
 import logger from './logger';
-import { getCachedAuth } from '../firebase';
+import { getCachedAuth, getAuth } from '../firebase';
 
 export const authService = {
   // Register new user
@@ -75,13 +75,18 @@ export const authService = {
     return auth?.currentUser || null;
   },
 
-  // Listen to auth state changes
+  // Listen to auth state changes - with async initialization
   onAuthStateChanged(callback) {
     const auth = getCachedAuth();
     if (!auth) {
-      logger.warn("⚠️ Auth not initialized, callback will be called with null");
-      callback(null);
-      return () => {};
+      // If not initialized yet, initialize first then listen
+      getAuth().then(authInstance => {
+        onAuthStateChanged(authInstance, callback);
+      }).catch(err => {
+        logger.error("Failed to initialize auth for listener:", err);
+        callback(null);
+      });
+      return () => {}; // Return empty unsubscribe
     }
     return onAuthStateChanged(auth, callback);
   },

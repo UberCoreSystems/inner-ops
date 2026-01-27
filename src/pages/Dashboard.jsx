@@ -42,7 +42,7 @@ export default function Dashboard() {
       if (loading) {
         setShowSkeleton(true);
       }
-    }, 300); // Only show skeleton if loading takes > 300ms
+    }, 250); // Only show skeleton if loading takes > 250ms
 
     return () => clearTimeout(skeletonTimer);
   }, [loading]);

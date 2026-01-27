@@ -109,7 +109,7 @@ const KillList = () => {
       if (initialLoading) {
         setShowSkeleton(true);
       }
-    }, 200);
+    }, 250);
 
     return () => clearTimeout(skeletonTimer);
   }, [initialLoading]);

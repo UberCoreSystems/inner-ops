@@ -56,19 +56,33 @@ function App() {
     const firebaseStatus = checkFirebaseConnection();
     logger.log("🔍 Firebase Status on App Load:", firebaseStatus);
 
-    // Initialize Firebase lazily when needed
-    lazyInitializeFirebase().catch(err => logger.warn("Lazy Firebase init failed:", err.message));
+    // Initialize Firebase FIRST before setting up auth listener
+    const setupAuth = async () => {
+      try {
+        await lazyInitializeFirebase();
+        logger.log("✅ Firebase initialized, setting up auth listener");
+        
+        // NOW set up the auth listener after Firebase is initialized
+        const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
+          logger.log("🔐 Auth state changed:", firebaseUser?.uid || 'No user');
+          setUser(firebaseUser);
+          setLoading(false);
+        });
 
-    // Listen for authentication state changes
-    const unsubscribePromise = authService.onAuthStateChanged((firebaseUser) => {
-      logger.log("🔐 Auth state changed:", firebaseUser?.uid || 'No user');
-      setUser(firebaseUser);
-      setLoading(false);
-    });
+        return unsubscribe;
+      } catch (error) {
+        logger.error("❌ Firebase initialization failed:", error);
+        setLoading(false);
+        return () => {};
+      }
+    };
+
+    let unsubscribe;
+    setupAuth().then(unsub => { unsubscribe = unsub; });
 
     return () => {
-      if (unsubscribePromise instanceof Promise) {
-        unsubscribePromise.then(unsub => unsub?.()).catch(err => logger.warn("Unsubscribe error:", err));
+      if (unsubscribe) {
+        unsubscribe();
       }
     };
   }, []);
