@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
+import VirtualizedList from '../components/VirtualizedList';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
@@ -469,8 +470,11 @@ Please help extract the core lesson and rule from this experience.
 
           <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
             {lessons.length > 0 ? (
-              <div className="space-y-6">
-                {lessons.map((lesson) => {
+              <VirtualizedList
+                items={lessons}
+                itemHeight={420}
+                maxHeight={800}
+                renderItem={({ item: lesson }) => {
                   const category = eventCategories.find(cat => cat.value === lesson.eventCategory);
                   const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
 
@@ -562,8 +566,8 @@ Please help extract the core lesson and rule from this experience.
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                }}
+              />
             ) : (
               <div className="oura-card p-12 text-center">
                 <div className="text-6xl mb-4 opacity-30">⚡</div>

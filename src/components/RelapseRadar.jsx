@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
+import { getAuth } from '../firebase';
 import { writeData, readUserData } from '../utils/firebaseUtils';
 import { aiUtils } from '../utils/aiUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -54,14 +54,22 @@ const RelapseRadar = () => {
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        loadRelapseEntries();
-      } else {
-        setRelapseEntries([]);
-      }
-    });
-    return () => unsubscribe();
+    const setupAuthListener = async () => {
+      const auth = await getAuth();
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+          loadRelapseEntries();
+        } else {
+          setRelapseEntries([]);
+        }
+      });
+      return unsubscribe;
+    };
+
+    let unsubscribePromise = setupAuthListener();
+    return () => {
+      unsubscribePromise.then(unsub => unsub?.());
+    };
   }, []);
 
   const loadRelapseEntries = async () => {

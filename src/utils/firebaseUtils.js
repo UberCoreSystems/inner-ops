@@ -1,5 +1,5 @@
 import { doc, setDoc, collection, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, enableAnonymousAuth, enableDevMode, getCurrentUserOrMock } from '../firebase.js';
+import { enableAnonymousAuth, enableDevMode, getCurrentUserOrMock, getAuth, getDb } from '../firebase.js';
 import logger from './logger';
 
 // Development mode flag - set to false to use real authentication and preserve user data
@@ -14,6 +14,7 @@ logger.log("App ID:", import.meta.env.VITE_FIREBASE_APP_ID ? "✅ Present" : "�
 
 // Helper function to ensure user is authenticated (with fallbacks)
 const ensureAuthenticated = async () => {
+  const auth = await getAuth();
   if (auth.currentUser) {
     return auth.currentUser;
   }
@@ -41,6 +42,7 @@ const ensureAuthenticated = async () => {
 export const writeData = async (collectionName, data) => {
   try {
     const user = await ensureAuthenticated();
+    const db = await getDb();
     
     const payload = {
       ...data,
@@ -64,6 +66,7 @@ export const writeData = async (collectionName, data) => {
 export const updateData = async (collectionName, docId, data) => {
   try {
     const user = await ensureAuthenticated();
+    const db = await getDb();
 
     const updatePayload = {
       ...data,
@@ -87,6 +90,7 @@ export const updateData = async (collectionName, docId, data) => {
 export const deleteData = async (collectionName, docId) => {
   try {
     const user = await ensureAuthenticated();
+    const db = await getDb();
     
     await deleteDoc(doc(db, collectionName, docId));
     logger.log("✅ Data deleted successfully from", collectionName, "for doc:", docId);
@@ -102,6 +106,8 @@ export const deleteData = async (collectionName, docId) => {
 
 export const readUserData = async (collectionName, requireAuth = false) => {
   try {
+    const auth = await getAuth();
+    const db = await getDb();
     let user = auth.currentUser;
     
     if (!user && !requireAuth) {

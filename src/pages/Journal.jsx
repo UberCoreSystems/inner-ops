@@ -3,6 +3,7 @@ import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
+import VirtualizedList from '../components/VirtualizedList';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
@@ -741,8 +742,11 @@ export default function Journal() {
 
             <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
               {entries.length > 0 ? (
-                <div className="space-y-4">
-                  {entries.map((entry) => {
+                <VirtualizedList
+                  items={entries}
+                  itemHeight={280}
+                  maxHeight={600}
+                  renderItem={({ item: entry }) => {
                     const moodOption = moodOptions.find(m => m.value === entry.mood);
                     const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
 
@@ -801,8 +805,8 @@ export default function Journal() {
                         )}
                       </div>
                     );
-                  })}
-                </div>
+                  }}
+                />
               ) : (
                 <div className="oura-card p-12 text-center">
                   <div className="text-4xl mb-4 opacity-30">📝</div>

@@ -4,7 +4,7 @@ import {
   doc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { getDb } from '../firebase';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { useTodaysKillTargets } from '../hooks/useKillTargets';
 import OracleModal from './OracleModal';

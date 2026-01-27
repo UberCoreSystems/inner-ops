@@ -1,23 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { authService } from './utils/authService';
 import { toasterConfig } from './utils/toast';
 import logger from './utils/logger';
-import KillList from './pages/KillList';
-import Journal from './pages/Journal';
-import Dashboard from './pages/Dashboard';
-import Relapse from './pages/Relapse';
-import Profile from './pages/Profile';
-import Onboarding from './pages/Onboarding';
-import HardLessons from './pages/HardLessons';
+import { checkFirebaseConnection } from './firebase';
+import './App.css';
+
+// Core components (loaded immediately)
 import Navbar from './components/Navbar';
 import BlackMirror from './components/BlackMirror';
 import AuthForm from './components/AuthForm';
 import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
-import { checkFirebaseConnection } from './firebase';
-import './App.css';
+
+// Lazy-loaded pages (code splitting)
+const KillList = React.lazy(() => import('./pages/KillList'));
+const Journal = React.lazy(() => import('./pages/Journal'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const Relapse = React.lazy(() => import('./pages/Relapse'));
+const Profile = React.lazy(() => import('./pages/Profile'));
+const Onboarding = React.lazy(() => import('./pages/Onboarding'));
+const HardLessons = React.lazy(() => import('./pages/HardLessons'));
+
+// Fallback loader
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-screen bg-black text-white">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-500 mx-auto"></div>
+      <p className="mt-4 text-lg">Loading...</p>
+    </div>
+  </div>
+);
+
+// Lazy-initialize Firebase when needed
+const lazyInitializeFirebase = async () => {
+  try {
+    const { enableAnonymousAuth } = await import('./firebase');
+    await enableAnonymousAuth();
+    logger.log("✅ Firebase initialized on first use");
+  } catch (error) {
+    logger.warn("Firebase initialization deferred:", error.message);
+  }
+};
 
 function App() {
   const [user, setUser] = useState(null);
@@ -31,14 +56,21 @@ function App() {
     const firebaseStatus = checkFirebaseConnection();
     logger.log("🔍 Firebase Status on App Load:", firebaseStatus);
 
+    // Initialize Firebase lazily when needed
+    lazyInitializeFirebase().catch(err => logger.warn("Lazy Firebase init failed:", err.message));
+
     // Listen for authentication state changes
-    const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
+    const unsubscribePromise = authService.onAuthStateChanged((firebaseUser) => {
       logger.log("🔐 Auth state changed:", firebaseUser?.uid || 'No user');
       setUser(firebaseUser);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribePromise instanceof Promise) {
+        unsubscribePromise.then(unsub => unsub?.()).catch(err => logger.warn("Unsubscribe error:", err));
+      }
+    };
   }, []);
 
   const handleAuthSuccess = (authResult) => {
@@ -96,7 +128,11 @@ function App() {
             path="/onboarding" 
             element={
               <InlineErrorBoundary name="Onboarding">
-                {user ? <Onboarding /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <Onboarding />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />
@@ -104,7 +140,11 @@ function App() {
             path="/dashboard" 
             element={
               <InlineErrorBoundary name="Dashboard">
-                {user ? <Dashboard /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <Dashboard />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />
@@ -112,7 +152,11 @@ function App() {
             path="/journal" 
             element={
               <InlineErrorBoundary name="Journal">
-                {user ? <Journal /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <Journal />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />
@@ -120,7 +164,11 @@ function App() {
             path="/relapse" 
             element={
               <InlineErrorBoundary name="Relapse">
-                {user ? <Relapse /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <Relapse />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />
@@ -128,7 +176,11 @@ function App() {
             path="/hardlessons" 
             element={
               <InlineErrorBoundary name="HardLessons">
-                {user ? <HardLessons /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <HardLessons />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />
@@ -136,7 +188,11 @@ function App() {
             path="/profile" 
             element={
               <InlineErrorBoundary name="Profile">
-                {user ? <Profile /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <Profile />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />
@@ -144,7 +200,11 @@ function App() {
             path="/killlist" 
             element={
               <InlineErrorBoundary name="KillList">
-                {user ? <KillList /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <KillList />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />
@@ -152,7 +212,11 @@ function App() {
             path="/blackmirror" 
             element={
               <InlineErrorBoundary name="BlackMirror">
-                {user ? <BlackMirror /> : <Navigate to="/auth" />}
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <BlackMirror />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
             } 
           />

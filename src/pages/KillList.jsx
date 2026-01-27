@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { authService } from '../utils/authService';
 import { writeData, readUserData, updateData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -9,6 +9,70 @@ import { KillCelebration } from '../components/Confetti';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
+
+// Stable icon definitions to avoid recreating objects on every render
+const CATEGORY_ICONS = {
+  'bad-habit': (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  ),
+  'negative-thought': (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 12h8M8 8h8M8 16h4" opacity="0.6" />
+    </svg>
+  ),
+  'addiction': (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+  ),
+  'toxic-behavior': (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2L2 22h20L12 2z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <circle cx="12" cy="17" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  'fear': (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" opacity="0.5" />
+      <circle cx="12" cy="12" r="2" opacity="0.3" />
+    </svg>
+  ),
+  'procrastination': (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
+  'other': (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" opacity="0.5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+};
+
+const PRIORITY_LEVELS = [
+  { value: 'high', label: 'High', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '🔥' },
+  { value: 'medium', label: 'Medium', color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '⚡' },
+  { value: 'low', label: 'Low', color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '🌱' },
+];
+
+const CATEGORIES = [
+  { value: 'bad-habit', label: 'Bad Habit', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10' },
+  { value: 'negative-thought', label: 'Negative Thought', color: 'text-[#a855f7]', bgColor: 'bg-[#a855f7]/10' },
+  { value: 'addiction', label: 'Addiction', color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10' },
+  { value: 'toxic-behavior', label: 'Toxic Behavior', color: 'text-[#eab308]', bgColor: 'bg-[#eab308]/10' },
+  { value: 'fear', label: 'Fear/Anxiety', color: 'text-[#4da6ff]', bgColor: 'bg-[#4da6ff]/10' },
+  { value: 'procrastination', label: 'Procrastination', color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10' },
+  { value: 'other', label: 'Other', color: 'text-[#8a8a8a]', bgColor: 'bg-[#8a8a8a]/10' }
+];
 
 const KillList = () => {
   const [targets, setTargets] = useState([]);
@@ -24,6 +88,7 @@ const KillList = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedTargets, setSelectedTargets] = useState(new Set());
   const [bulkActionMode, setBulkActionMode] = useState(false);
+  const targetsRef = useRef([]);
   
   // Celebration state
   const [celebration, setCelebration] = useState({ show: false, targetName: '' });
@@ -34,71 +99,9 @@ const KillList = () => {
   const [updatingReflection, setUpdatingReflection] = useState({});
   const [user, setUser] = useState(null);
 
-  // Priority levels configuration
-  const priorityLevels = [
-    { value: 'high', label: 'High', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '🔥' },
-    { value: 'medium', label: 'Medium', color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '⚡' },
-    { value: 'low', label: 'Low', color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '🌱' },
-  ];
-
-  // Oura-style category icons
-  const CategoryIcons = {
-    'bad-habit': (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 6v6l4 2" />
-      </svg>
-    ),
-    'negative-thought': (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M8 12h8M8 8h8M8 16h4" opacity="0.6" />
-      </svg>
-    ),
-    'addiction': (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-      </svg>
-    ),
-    'toxic-behavior': (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L2 22h20L12 2z" />
-        <line x1="12" y1="9" x2="12" y2="13" />
-        <circle cx="12" cy="17" r="1" fill="currentColor" stroke="none" />
-      </svg>
-    ),
-    'fear': (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="6" opacity="0.5" />
-        <circle cx="12" cy="12" r="2" opacity="0.3" />
-      </svg>
-    ),
-    'procrastination': (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    ),
-    'other': (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="6" opacity="0.5" />
-        <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
-      </svg>
-    ),
-  };
-
-  // Kill target categories
-  const categories = [
-    { value: 'bad-habit', label: 'Bad Habit', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10' },
-    { value: 'negative-thought', label: 'Negative Thought', color: 'text-[#a855f7]', bgColor: 'bg-[#a855f7]/10' },
-    { value: 'addiction', label: 'Addiction', color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10' },
-    { value: 'toxic-behavior', label: 'Toxic Behavior', color: 'text-[#eab308]', bgColor: 'bg-[#eab308]/10' },
-    { value: 'fear', label: 'Fear/Anxiety', color: 'text-[#4da6ff]', bgColor: 'bg-[#4da6ff]/10' },
-    { value: 'procrastination', label: 'Procrastination', color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10' },
-    { value: 'other', label: 'Other', color: 'text-[#8a8a8a]', bgColor: 'bg-[#8a8a8a]/10' }
-  ];
+  const priorityLevels = useMemo(() => PRIORITY_LEVELS, []);
+  const categories = useMemo(() => CATEGORIES, []);
+  const categoryIcons = useMemo(() => CATEGORY_ICONS, []);
 
   // Delay showing skeleton to prevent flicker
   useEffect(() => {
@@ -120,6 +123,11 @@ const KillList = () => {
     return () => clearTimeout(dwellTimer);
   }, [initialLoading, showSkeleton]);
 
+  // Keep an up-to-date reference for functions that should stay memoized
+  useEffect(() => {
+    targetsRef.current = targets;
+  }, [targets]);
+
   // Get current user from auth service
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
@@ -137,7 +145,7 @@ const KillList = () => {
   };
 
   // Load targets from Firebase
-  const loadTargets = async () => {
+  const loadTargets = useCallback(async () => {
     if (!user) {
       logger.log("⏳ KillList: Waiting for user authentication...");
       return;
@@ -155,14 +163,14 @@ const KillList = () => {
     } finally {
       setInitialLoading(false);
     }
-  };
+  }, [user]);
 
   // Set up real-time listener when user changes
   useEffect(() => {
     if (user) {
       loadTargets();
     }
-  }, [user]);
+  }, [user, loadTargets]);
 
   const addTarget = async () => {
     if (!newTarget.trim() || loading) return;
@@ -227,7 +235,7 @@ const KillList = () => {
     }
   };
 
-  const updateProgress = async (targetId, newProgress) => {
+  const updateProgress = useCallback(async (targetId, newProgress) => {
     try {
       logger.log("📊 KillList: Updating progress for target:", targetId, "to", newProgress);
       
@@ -254,7 +262,7 @@ const KillList = () => {
 
       // Show celebration and Oracle feedback for completion
       if (newProgress >= 100) {
-        const completedTarget = targets.find(t => t.id === targetId);
+        const completedTarget = targetsRef.current.find(t => t.id === targetId);
         
         ouraToast.achievement(`Target eliminated: ${completedTarget?.title || 'Target'}`);
         
@@ -273,8 +281,8 @@ const KillList = () => {
             action: 'targetCompleted',
             target: completedTarget?.title || 'target',
             category: completedTarget?.category,
-            completedTargets: targets.filter(t => t.status === 'killed').length + 1
-          }, targets);
+            completedTargets: targetsRef.current.filter(t => t.status === 'killed').length + 1
+          }, targetsRef.current);
 
           setOracleModal({ isOpen: true, content: feedback, isLoading: false });
         } catch (error) {
@@ -289,9 +297,9 @@ const KillList = () => {
     } catch (error) {
       logger.error('Error updating progress:', error);
     }
-  };
+  }, []);
 
-  const deleteTarget = async (targetId) => {
+  const deleteTarget = useCallback(async (targetId) => {
     try {
       logger.log("🗑️ KillList: Deleting target:", targetId);
       await deleteData('killTargets', targetId);
@@ -304,9 +312,9 @@ const KillList = () => {
       logger.error('❌ KillList: Error deleting target:', error);
       ouraToast.error('Failed to delete target');
     }
-  };
+  }, []);
 
-  const markAsEscaped = async (targetId) => {
+  const markAsEscaped = useCallback(async (targetId) => {
     try {
       logger.log("🏃 KillList: Marking target as escaped:", targetId);
       
@@ -329,7 +337,7 @@ const KillList = () => {
       ));
 
       // Show Oracle feedback for escaped target
-      const escapedTarget = targets.find(t => t.id === targetId);
+      const escapedTarget = targetsRef.current.find(t => t.id === targetId);
       setOracleModal({ isOpen: true, content: '', isLoading: true });
       
       try {
@@ -337,8 +345,8 @@ const KillList = () => {
           action: 'targetEscaped',
           target: escapedTarget?.title || 'target',
           category: escapedTarget?.category,
-          escapedTargets: targets.filter(t => t.status === 'escaped').length + 1
-        }, targets);
+          escapedTargets: targetsRef.current.filter(t => t.status === 'escaped').length + 1
+        }, targetsRef.current);
         setOracleModal({ isOpen: true, content: feedback, isLoading: false });
       } catch (error) {
         logger.error('Oracle feedback error:', error);
@@ -352,9 +360,9 @@ const KillList = () => {
       logger.error('❌ KillList: Error marking target as escaped:', error);
       ouraToast.error('Failed to mark target as escaped');
     }
-  };
+  }, []);
 
-  const reactivateTarget = async (targetId) => {
+  const reactivateTarget = useCallback(async (targetId) => {
     try {
       logger.log("🎯 KillList: Reactivating escaped target:", targetId);
       
@@ -379,14 +387,14 @@ const KillList = () => {
       logger.error('❌ KillList: Error reactivating target:', error);
       ouraToast.error('Failed to reactivate target');
     }
-  };
+  }, []);
 
-  const startEditing = (target) => {
+  const startEditing = useCallback((target) => {
     setEditingTarget(target.id);
     setEditValue(target.title);
-  };
+  }, []);
 
-  const saveEdit = async () => {
+  const saveEdit = useCallback(async () => {
     if (!editValue.trim()) return;
 
     try {
@@ -411,15 +419,15 @@ const KillList = () => {
       logger.error('❌ KillList: Error updating target:', error);
       ouraToast.error('Failed to update target');
     }
-  };
+  }, [editValue, editingTarget]);
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     setEditingTarget(null);
     setEditValue('');
-  };
+  }, []);
 
   // Reflection notes functions
-  const saveReflectionNote = async (targetId) => {
+  const saveReflectionNote = useCallback(async (targetId) => {
     const notes = reflectionNotes[targetId];
     if (!notes || notes.trim() === '') return;
 
@@ -439,9 +447,9 @@ const KillList = () => {
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
     }
-  };
+  }, [reflectionNotes]);
 
-  const clearReflectionNote = async (targetId) => {
+  const clearReflectionNote = useCallback(async (targetId) => {
     setUpdatingReflection(prev => ({ ...prev, [targetId]: true }));
 
     try {
@@ -459,7 +467,7 @@ const KillList = () => {
     } finally {
       setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
     }
-  };
+  }, []);
 
   // Initialize reflection notes when targets load
   useEffect(() => {
@@ -555,7 +563,7 @@ const KillList = () => {
                     </span>
                   )}
                   <span className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${category.color} ${category.bgColor}`}>
-                    {CategoryIcons[target.category]}
+                    {categoryIcons[target.category]}
                     {category.label}
                   </span>
                   <span className={`text-xs px-2 py-1 rounded-lg uppercase font-medium ${
@@ -734,8 +742,8 @@ const KillList = () => {
         )}
       </div>
     );
-  }, [editingTarget, editValue, updateProgress, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, categories, priorityLevels,
-      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote]);
+    }, [editingTarget, editValue, updateProgress, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, categories, priorityLevels,
+      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote, categoryIcons]);
 
   return (
     <div className="min-h-screen bg-black">
@@ -814,7 +822,7 @@ const KillList = () => {
                       }`}
                     >
                       <span className={newTargetCategory === category.value ? category.color : 'text-[#5a5a5a]'}>
-                        {CategoryIcons[category.value]}
+                        {categoryIcons[category.value]}
                       </span>
                       <span className="truncate">{category.label}</span>
                     </button>

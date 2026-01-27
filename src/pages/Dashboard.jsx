@@ -8,7 +8,7 @@ import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
 import QuickJournalModal from '../components/QuickJournalModal';
 import DailyPrompt from '../components/DailyPrompt';
-import { auth } from '../firebase';
+import { getAuth } from '../firebase';
 import { CircularProgressRing, TripleRing, ScoreCard, InsightCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';

@@ -9,13 +9,14 @@ import {
   updateProfile 
 } from 'firebase/auth';
 import logger from './logger';
-import { auth } from '../firebase';
+import { getAuth } from '../firebase';
 
 export const authService = {
   // Register new user
   async register(email, password, displayName = null) {
     try {
       logger.log("🔐 Creating new user account...");
+      const auth = await getAuth();
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -41,6 +42,7 @@ export const authService = {
   async signIn(email, password) {
     try {
       logger.log("🔐 Signing in user...");
+      const auth = await getAuth();
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -58,6 +60,7 @@ export const authService = {
   // Sign out
   async signOut() {
     try {
+      const auth = await getAuth();
       await signOut(auth);
       logger.log("✅ User signed out successfully");
     } catch (error) {
@@ -67,22 +70,26 @@ export const authService = {
   },
 
   // Get current user
-  getCurrentUser() {
+  async getCurrentUser() {
+    const auth = await getAuth();
     return auth.currentUser;
   },
 
   // Listen to auth state changes
-  onAuthStateChanged(callback) {
+  async onAuthStateChanged(callback) {
+    const auth = await getAuth();
     return onAuthStateChanged(auth, callback);
   },
 
   // Check if user is authenticated
-  isAuthenticated() {
+  async isAuthenticated() {
+    const auth = await getAuth();
     return !!auth.currentUser;
   },
 
   // Get user display name or email
-  getUserDisplayName() {
+  async getUserDisplayName() {
+    const auth = await getAuth();
     const user = auth.currentUser;
     if (!user) return null;
     

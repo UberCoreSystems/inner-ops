@@ -1,15 +1,11 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import logger from './utils/logger';
 
-// Firebase configuration with fallbacks and validation
+// Firebase configuration - only include required services
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "demo-api-key",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "demo-project.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "demo-project",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "demo-project.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789",
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789:web:abcdef"
 };
 
@@ -41,45 +37,45 @@ try {
   throw new Error("Failed to initialize Firebase app");
 }
 
-// Initialize Auth with the app instance
+// Lazy-load Auth and Firestore only when needed
 let auth;
-try {
-  auth = getAuth(app);
-  logger.log("✅ Firebase Auth initialized");
-} catch (error) {
-  logger.error("❌ Firebase Auth initialization failed:", error);
-  throw new Error("Failed to initialize Firebase Auth");
-}
-
-// Initialize Firestore with the app instance
 let db;
-try {
-  db = getFirestore(app);
-  logger.log("✅ Firebase Firestore initialized");
-} catch (error) {
-  logger.error("❌ Firebase Firestore initialization failed:", error);
-  throw new Error("Failed to initialize Firebase Firestore");
-}
+
+const initializeAuth = async () => {
+  if (!auth) {
+    const { getAuth, signInAnonymously: signInAnon } = await import('firebase/auth');
+    auth = getAuth(app);
+    logger.log("✅ Firebase Auth initialized");
+    return { auth, signInAnonymously: signInAnon };
+  }
+  const { signInAnonymously: signInAnon } = await import('firebase/auth');
+  return { auth, signInAnonymously: signInAnon };
+};
+
+const initializeFirestore = async () => {
+  if (!db) {
+    const { getFirestore } = await import('firebase/firestore');
+    db = getFirestore(app);
+    logger.log("✅ Firebase Firestore initialized");
+  }
+  return db;
+};
 
 // Enable anonymous authentication for testing
 export const enableAnonymousAuth = async () => {
   try {
-    if (!auth.currentUser) {
-      const userCredential = await signInAnonymously(auth);
+    const { auth: authInstance, signInAnonymously } = await initializeAuth();
+    if (!authInstance.currentUser) {
+      const userCredential = await signInAnonymously(authInstance);
       logger.log("✅ Anonymous user signed in:", userCredential.user.uid);
       return userCredential.user;
     }
-    return auth.currentUser;
+    return authInstance.currentUser;
   } catch (error) {
     logger.error("❌ Anonymous auth failed:", error);
     
     if (error.code === 'auth/admin-restricted-operation') {
       logger.error("🚫 Anonymous authentication is disabled in Firebase Console");
-      logger.error("💡 To enable it:");
-      logger.error("   1. Go to Firebase Console → Authentication → Sign-in method");
-      logger.error("   2. Click on 'Anonymous' provider");
-      logger.error("   3. Enable the toggle and save");
-      logger.error("🔧 Alternative: Use email/password auth or bypass auth for testing");
     }
     
     throw error;
@@ -107,9 +103,10 @@ export const enableDevMode = () => {
 };
 
 // Helper to get current user or create mock user for testing
-export const getCurrentUserOrMock = () => {
-  if (auth.currentUser) {
-    return auth.currentUser;
+export const getCurrentUserOrMock = async () => {
+  const { auth: authInstance } = await initializeAuth();
+  if (authInstance.currentUser) {
+    return authInstance.currentUser;
   }
   
   logger.warn("🚧 No authenticated user found, using mock user for testing");
@@ -130,5 +127,18 @@ export const checkFirebaseConnection = () => {
   return status;
 };
 
-export { auth, db };
+// Export lazy-loading functions
+export { initializeAuth, initializeFirestore };
+
+// Get auth (lazy init)
+export const getAuth = async () => {
+  const { auth: authInstance } = await initializeAuth();
+  return authInstance;
+};
+
+// Get database (lazy init)
+export const getDb = async () => {
+  return await initializeFirestore();
+};
+
 export default app;

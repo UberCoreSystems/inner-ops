@@ -10,7 +10,7 @@ import {
   updateDoc,
   serverTimestamp
 } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { getAuth, getDb } from '../firebase';
 import logger from '../utils/logger';
 
 /**
@@ -33,6 +33,9 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
     try {
       setLoading(true);
       setError(null);
+
+      const auth = await getAuth();
+      const db = await getDb();
 
       if (!auth.currentUser) {
         logger.warn("No authenticated user for kill targets query");
@@ -85,64 +88,76 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 
   // Setup real-time listener or one-time fetch
   useEffect(() => {
-    const userId = auth.currentUser?.uid;
-    
-    if (!userId) {
+    let cleanup;
+    const setupListener = async () => {
+      const auth = await getAuth();
+      const db = await getDb();
+      const userId = auth.currentUser?.uid;
+      
+      if (!userId) {
+        setLoading(false);
+        setTargets([]);
+        return;
+      }
+
+      if (realtime) {
+        // Real-time listener with simple query (no orderBy to avoid composite index requirement)
+        const q = query(
+          collection(db, 'killTargets'),
+          where('userId', '==', userId),
+          where('targetDate', '==', queryDateString)
+        );
+
+        const unsubscribe = onSnapshot(
+          q,
+          (querySnapshot) => {
+            const fetchedTargets = querySnapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                id: doc.id,
+                ...data,
+                // Handle both Firebase Timestamp objects and regular dates
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
+                lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
+                completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null)
+              };
+            });
+
+            // Sort by priority and creation time
+            fetchedTargets.sort((a, b) => {
+              if (a.priority !== b.priority) {
+                const priorityOrder = { high: 3, medium: 2, low: 1 };
+                return (priorityOrder[b.priority] || 1) - (priorityOrder[a.priority] || 1);
+              }
+              return new Date(b.createdAt) - new Date(a.createdAt);
+            });
+
+            setTargets(fetchedTargets);
+            setLoading(false);
+            setError(null);
+            logger.log(`🔄 Real-time update: ${fetchedTargets.length} kill targets`);
+          },
+          (err) => {
+            logger.error("Real-time listener error:", err);
+            setError(err.message || 'Real-time update failed');
+            setLoading(false);
+          }
+        );
+
+        cleanup = () => unsubscribe();
+      } else {
+        // One-time fetch
+        await fetchTargets();
+      }
+    };
+
+    setupListener().catch(err => {
+      logger.error("Setup listener error:", err);
       setLoading(false);
-      setTargets([]);
-      return;
-    }
+    });
 
-    if (realtime) {
-      // Real-time listener with simple query (no orderBy to avoid composite index requirement)
-      const q = query(
-        collection(db, 'killTargets'),
-        where('userId', '==', userId),
-        where('targetDate', '==', queryDateString)
-      );
-
-      const unsubscribe = onSnapshot(
-        q,
-        (querySnapshot) => {
-          const fetchedTargets = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              // Handle both Firebase Timestamp objects and regular dates
-              createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
-              lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
-              completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null)
-            };
-          });
-
-          // Sort by priority and creation time
-          fetchedTargets.sort((a, b) => {
-            if (a.priority !== b.priority) {
-              const priorityOrder = { high: 3, medium: 2, low: 1 };
-              return (priorityOrder[b.priority] || 1) - (priorityOrder[a.priority] || 1);
-            }
-            return new Date(b.createdAt) - new Date(a.createdAt);
-          });
-
-          setTargets(fetchedTargets);
-          setLoading(false);
-          setError(null);
-          logger.log(`🔄 Real-time update: ${fetchedTargets.length} kill targets`);
-        },
-        (err) => {
-          logger.error("Real-time listener error:", err);
-          setError(err.message || 'Real-time update failed');
-          setLoading(false);
-        }
-      );
-
-      return () => unsubscribe();
-    } else {
-      // One-time fetch
-      fetchTargets();
-    }
-  }, [auth.currentUser?.uid, queryDateString, realtime]);
+    return () => cleanup?.();
+  }, [queryDateString, realtime]);
 
   // Manual refetch function
   const refetch = () => {
@@ -154,6 +169,9 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
   // Toggle target status between different states
   const toggleTargetStatus = async (targetId, newStatus) => {
     try {
+      const auth = await getAuth();
+      const db = await getDb();
+      
       if (!auth.currentUser) {
         throw new Error('No authenticated user');
       }
@@ -217,6 +235,9 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
   // Update reflection notes for a target
   const updateReflectionNote = async (targetId, reflectionNote) => {
     try {
+      const auth = await getAuth();
+      const db = await getDb();
+      
       if (!auth.currentUser) {
         throw new Error('No authenticated user');
       }
@@ -245,6 +266,9 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
   // Clear reflection notes for a target
   const clearReflectionNote = async (targetId) => {
     try {
+      const auth = await getAuth();
+      const db = await getDb();
+      
       if (!auth.currentUser) {
         throw new Error('No authenticated user');
       }
@@ -325,6 +349,9 @@ export const useThisWeeksKillTargets = (realtime = false) => {
       setLoading(true);
       setError(null);
 
+      const auth = await getAuth();
+      const db = await getDb();
+
       if (!auth.currentUser) {
         setWeekTargets([]);
         return;
@@ -370,13 +397,17 @@ export const useThisWeeksKillTargets = (realtime = false) => {
   };
 
   useEffect(() => {
-    if (auth.currentUser) {
-      fetchWeekTargets();
-    } else {
-      setLoading(false);
-      setWeekTargets([]);
-    }
-  }, [auth.currentUser]);
+    const checkAndFetch = async () => {
+      const auth = await getAuth();
+      if (auth.currentUser) {
+        fetchWeekTargets();
+      } else {
+        setLoading(false);
+        setWeekTargets([]);
+      }
+    };
+    checkAndFetch();
+  }, []);
 
   const refetch = () => fetchWeekTargets();
 
