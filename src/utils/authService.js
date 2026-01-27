@@ -9,14 +9,14 @@ import {
   updateProfile 
 } from 'firebase/auth';
 import logger from './logger';
-import { getAuth } from '../firebase';
+import { getCachedAuth } from '../firebase';
 
 export const authService = {
   // Register new user
   async register(email, password, displayName = null) {
     try {
       logger.log("🔐 Creating new user account...");
-      const auth = await getAuth();
+      const auth = getCachedAuth();
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -42,7 +42,7 @@ export const authService = {
   async signIn(email, password) {
     try {
       logger.log("🔐 Signing in user...");
-      const auth = await getAuth();
+      const auth = getCachedAuth();
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -60,7 +60,7 @@ export const authService = {
   // Sign out
   async signOut() {
     try {
-      const auth = await getAuth();
+      const auth = getCachedAuth();
       await signOut(auth);
       logger.log("✅ User signed out successfully");
     } catch (error) {
@@ -69,28 +69,33 @@ export const authService = {
     }
   },
 
-  // Get current user
-  async getCurrentUser() {
-    const auth = await getAuth();
-    return auth.currentUser;
+  // Get current user (synchronous - uses cached instance)
+  getCurrentUser() {
+    const auth = getCachedAuth();
+    return auth?.currentUser || null;
   },
 
   // Listen to auth state changes
-  async onAuthStateChanged(callback) {
-    const auth = await getAuth();
+  onAuthStateChanged(callback) {
+    const auth = getCachedAuth();
+    if (!auth) {
+      logger.warn("⚠️ Auth not initialized, callback will be called with null");
+      callback(null);
+      return () => {};
+    }
     return onAuthStateChanged(auth, callback);
   },
 
   // Check if user is authenticated
-  async isAuthenticated() {
-    const auth = await getAuth();
-    return !!auth.currentUser;
+  isAuthenticated() {
+    const auth = getCachedAuth();
+    return !!auth?.currentUser;
   },
 
   // Get user display name or email
-  async getUserDisplayName() {
-    const auth = await getAuth();
-    const user = auth.currentUser;
+  getUserDisplayName() {
+    const auth = getCachedAuth();
+    const user = auth?.currentUser;
     if (!user) return null;
     
     return user.displayName || user.email?.split('@')[0] || 'Warrior';

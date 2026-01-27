@@ -40,11 +40,14 @@ try {
 // Lazy-load Auth and Firestore only when needed
 let auth;
 let db;
+let authInitialized = false;
+let dbInitialized = false;
 
 const initializeAuth = async () => {
-  if (!auth) {
+  if (!authInitialized) {
     const { getAuth, signInAnonymously: signInAnon } = await import('firebase/auth');
     auth = getAuth(app);
+    authInitialized = true;
     logger.log("✅ Firebase Auth initialized");
     return { auth, signInAnonymously: signInAnon };
   }
@@ -53,10 +56,28 @@ const initializeAuth = async () => {
 };
 
 const initializeFirestore = async () => {
-  if (!db) {
+  if (!dbInitialized) {
     const { getFirestore } = await import('firebase/firestore');
     db = getFirestore(app);
+    dbInitialized = true;
     logger.log("✅ Firebase Firestore initialized");
+  }
+  return db;
+};
+
+// Synchronous getters for cached instances (initialize on first async call)
+const getCachedAuth = () => {
+  if (!auth) {
+    logger.warn("⚠️ Auth not yet initialized - call getAuth() async first");
+    return null;
+  }
+  return auth;
+};
+
+const getCachedDb = () => {
+  if (!db) {
+    logger.warn("⚠️ Firestore not yet initialized - call getDb() async first");
+    return null;
   }
   return db;
 };
@@ -130,15 +151,18 @@ export const checkFirebaseConnection = () => {
 // Export lazy-loading functions
 export { initializeAuth, initializeFirestore };
 
-// Get auth (lazy init)
+// Get auth (lazy init with async, returns cached instance)
 export const getAuth = async () => {
   const { auth: authInstance } = await initializeAuth();
   return authInstance;
 };
 
-// Get database (lazy init)
+// Get database (lazy init with async, returns cached instance)
 export const getDb = async () => {
   return await initializeFirestore();
 };
+
+// Export cached getters for synchronous access (after lazy init)
+export { getCachedAuth, getCachedDb };
 
 export default app;
