@@ -35,6 +35,10 @@ export default function Dashboard() {
     isFrozen: false,
     breakdown: {}
   });
+  
+  // Store raw data for deferred clarity score calculation
+  const [rawUserData, setRawUserData] = useState(null);
+  const [calculatingClarity, setCalculatingClarity] = useState(false);
 
   // Delay showing skeleton to prevent flicker on fast loads
   useEffect(() => {
@@ -118,8 +122,8 @@ export default function Dashboard() {
     try {
       logger.log("📡 Dashboard: Loading data for user:", currentUser.uid);
       
-      // Load data in parallel for better performance
-      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons] = await Promise.all([
+      // Load critical data first (journal, relapse, kill targets) for immediate UI
+      const [journalEntries, relapseEntries, killTargets] = await Promise.all([
         readUserData('journalEntries').then(data => {
           logger.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
@@ -131,16 +135,26 @@ export default function Dashboard() {
         readUserData('killTargets').then(data => {
           logger.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
           return data || [];
-        }),
+        })
+      ]);
+
+      // Load non-critical data in the background (black mirror, hard lessons)
+      let blackMirrorEntries = [];
+      let hardLessons = [];
+      
+      // Start loading these in background without waiting
+      Promise.all([
         readUserData('blackMirrorEntries').then(data => {
           logger.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
+          blackMirrorEntries = data || [];
           return data || [];
         }),
         readUserData('hardLessons').then(data => {
           logger.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
+          hardLessons = data || [];
           return data || [];
         })
-      ]);
+      ]).catch(err => logger.warn("Background data loading warning:", err));
 
       logger.log("📊 Dashboard: Data loaded:", {
         journalEntries: journalEntries.length,
@@ -209,7 +223,7 @@ export default function Dashboard() {
 
       setRecentEntries(allEntries);
       
-      // Generate AI action steps based on user data
+      // Generate AI action steps based on user data (quick operation)
       const userData = {
         recentMood: journalEntries[0]?.mood || 'neutral',
         killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'killed').length / killTargets.length * 100) : 0,
@@ -220,31 +234,54 @@ export default function Dashboard() {
       const actionSteps = aiUtils.generateActionSteps(userData);
       setAiActionSteps(actionSteps);
 
-      // Calculate clarity score  
-      const allUserData = { journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons };
-      const scoreData = await clarityScoreUtils.calculateClarityScore(allUserData);
-      const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
-      setClarityScore({ ...scoreData, rank });
+      // Store raw data for deferred clarity score calculation
+      setRawUserData({ journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons });
 
-      logger.log("✅ Dashboard: All data processing complete", {
+      logger.log("✅ Dashboard: Critical data loaded and UI updated", {
         stats: { 
           journalEntries: journalEntries.length,
           relapseEntries: relapseEntries.length,
           killTargets: killTargets.length,
-          hardLessons: hardLessons.length,
-          blackMirrorEntries: blackMirrorEntries.length,
           streakDays: Math.max(0, streakDays)
         },
-        recentEntries: allEntries.length,
-        clarityScore: scoreData.totalScore,
-        rank: rank.rank
+        recentEntries: allEntries.length
       });
+      
+      // Defer clarity score calculation to avoid blocking initial render
+      // This will be calculated in a separate effect after UI is shown
     } catch (error) {
-      logger.error("❌ Dashboard: Error loading data:", error);
+      logger.error("❌ Dashboard: Error loading critical data:", error);
     } finally {
       setLoading(false);
     }
   }, [user]);
+
+  // Deferred clarity score calculation - runs after UI renders
+  useEffect(() => {
+    if (!loading && rawUserData && !calculatingClarity) {
+      setCalculatingClarity(true);
+      
+      // Use setTimeout to allow UI to render first
+      const timer = setTimeout(async () => {
+        try {
+          const scoreData = await clarityScoreUtils.calculateClarityScore(rawUserData);
+          const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
+          setClarityScore({ ...scoreData, rank });
+          
+          logger.log("✅ Dashboard: Clarity score calculated", {
+            score: scoreData.totalScore,
+            rank: rank.rank
+          });
+        } catch (error) {
+          logger.error("❌ Dashboard: Error calculating clarity score:", error);
+        } finally {
+          setCalculatingClarity(false);
+        }
+      }, 100); // Small delay to let UI render first
+      
+      return () => clearTimeout(timer);
+    }
+  }, [loading, rawUserData, calculatingClarity]);
 
   const showShell = loading || showSkeleton || !user;
 
