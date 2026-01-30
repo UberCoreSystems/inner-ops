@@ -36,11 +36,14 @@ const PageLoader = () => (
 // Lazy-initialize Firebase when needed
 const lazyInitializeFirebase = async () => {
   try {
-    const { enableAnonymousAuth } = await import('./firebase');
-    await enableAnonymousAuth();
-    logger.log("✅ Firebase initialized on first use");
+    // Just initialize without forcing anonymous auth
+    // Let authService handle authentication properly
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    logger.log("✅ Firebase initialized");
+    return auth;
   } catch (error) {
-    logger.warn("Firebase initialization deferred:", error.message);
+    logger.warn("Firebase initialization error:", error.message);
   }
 };
 
@@ -60,11 +63,16 @@ function App() {
     const setupAuth = async () => {
       try {
         await lazyInitializeFirebase();
-        logger.log("✅ Firebase initialized, setting up auth listener");
+        logger.log("✅ Firebase initialized, checking for existing login...");
         
         // NOW set up the auth listener after Firebase is initialized
+        // This will check if user is already logged in
         const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
-          logger.log("🔐 Auth state changed:", firebaseUser?.uid || 'No user');
+          if (firebaseUser) {
+            logger.log("🔐 Existing user found:", firebaseUser.uid, firebaseUser.email);
+          } else {
+            logger.log("🔐 No authenticated user - waiting for login");
+          }
           setUser(firebaseUser);
           setLoading(false);
         });

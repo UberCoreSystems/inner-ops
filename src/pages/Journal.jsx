@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
+import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
-import VirtualizedList from '../components/VirtualizedList';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
@@ -189,8 +188,7 @@ export default function Journal() {
   const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [intensity, setIntensity] = useState(3);
   const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
@@ -219,22 +217,22 @@ export default function Journal() {
   // Delay showing skeleton to prevent flicker
   useEffect(() => {
     const skeletonTimer = setTimeout(() => {
-      if (initialLoading) {
+      if (loading) {
         setShowSkeleton(true);
       }
     }, 250);
 
     return () => clearTimeout(skeletonTimer);
-  }, [initialLoading]);
+  }, [loading]);
 
   // Keep skeleton visible briefly once shown to avoid blink on fast completion
   useEffect(() => {
     let dwellTimer;
-    if (!initialLoading && showSkeleton) {
+    if (!loading && showSkeleton) {
       dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
     }
     return () => clearTimeout(dwellTimer);
-  }, [initialLoading, showSkeleton]);
+  }, [loading, showSkeleton]);
 
   // Effect for rotating prompts
   useEffect(() => {
@@ -367,10 +365,20 @@ export default function Journal() {
   };
 
   const loadJournalEntries = async () => {
-    setInitialLoading(true);
-    const savedEntries = await readUserData('journalEntries');
-    setEntries(savedEntries);
-    setInitialLoading(false);
+    setLoading(true);
+    try {
+      const savedEntries = await readUserData('journalEntries');
+      logger.log("📔 Journal page: Loaded entries:", savedEntries.length);
+      savedEntries.forEach((entry, idx) => {
+        logger.log(`  Entry ${idx + 1}: ID=${entry.id}, hasOracle=${!!entry.oracleJudgment}, hasFollowUp=${!!entry.oracleFollowUp}, content="${entry.content?.substring(0, 50)}..."`);
+      });
+      setEntries(savedEntries);
+    } catch (error) {
+      logger.error("❌ Error loading journal entries:", error);
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -449,25 +457,35 @@ export default function Journal() {
   };
 
   // Save oracle follow-up response
-  const handleOracleFollowUpSaved = async (followUpResponse) => {
+  const handleOracleFollowUpSaved = async (followUpData) => {
     if (!currentEntryId) return;
 
     try {
-      // Update the entry with the oracle follow-up
-      const updatedEntry = {
-        ...entries.find(e => e.id === currentEntryId),
-        oracleFollowUp: followUpResponse
-      };
+      // followUpData can be either:
+      // 1. Legacy: just the oracleFollowUp string
+      // 2. New: object with { userResponse, oracleFollowUp }
+      const updatePayload = typeof followUpData === 'string' 
+        ? { oracleFollowUp: followUpData }
+        : { 
+            userResponse: followUpData.userResponse,
+            oracleFollowUp: followUpData.oracleFollowUp
+          };
 
-      // Write to database - use the updateData pattern if available, otherwise re-write
-      await writeData('journalEntries', updatedEntry);
+      logger.log('Saving oracle follow-up with payload:', updatePayload);
+
+      // Update the entry with the oracle follow-up using updateData
+      await updateData('journalEntries', currentEntryId, updatePayload);
 
       // Update local state
       setEntries(prev => 
-        prev.map(e => e.id === currentEntryId ? updatedEntry : e)
+        prev.map(e => e.id === currentEntryId ? {
+          ...e,
+          ...updatePayload
+        } : e)
       );
 
-      logger.log('✅ Oracle follow-up saved successfully');
+      logger.log('✅ Oracle follow-up saved successfully for entry:', currentEntryId, 'with data:', updatePayload);
+      ouraToast.success('Oracle\'s reflection saved');
     } catch (error) {
       logger.error('❌ Error saving oracle follow-up:', error);
       ouraToast.error('Could not save oracle follow-up response');
@@ -736,19 +754,21 @@ export default function Journal() {
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Previous Entries</h3>
           <div className="relative">
-            <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
-              <SkeletonList count={3} ItemComponent={SkeletonJournalEntry} />
+            <div className={`fade-pane ${showSkeleton ? 'visible' : 'hidden'}`}>
+              <SkeletonList count={4} ItemComponent={SkeletonJournalEntry} />
             </div>
 
-            <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
+            <div className={`fade-pane ${showSkeleton ? 'hidden' : 'visible'}`}>
               {entries.length > 0 ? (
-                <VirtualizedList
-                  items={entries}
-                  itemHeight={280}
-                  maxHeight={600}
-                  renderItem={({ item: entry }) => {
+                <div className="space-y-4 max-h-[800px] overflow-y-auto pr-4">
+                  {entries.map((entry, mapIndex) => {
                     const moodOption = moodOptions.find(m => m.value === entry.mood);
                     const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
+                    
+                    // Log each entry being rendered
+                    if (mapIndex < 3) {
+                      logger.log(`📝 Rendering entry ${mapIndex + 1}: ID=${entry.id}`);
+                    }
 
                     return (
                       <div key={entry.id} className="oura-card p-6">
@@ -793,6 +813,15 @@ export default function Journal() {
                               {entry.oracleJudgment}
                             </div>
                             
+                            {entry.userResponse && (
+                              <div className="mt-4 pt-4 border-t border-[#a855f7]/20">
+                                <h5 className="text-[#d1d1d1] font-medium text-sm mb-2 uppercase tracking-wider">💭 Your Response</h5>
+                                <div className="text-[#d1d1d1] text-sm leading-relaxed whitespace-pre-line">
+                                  {entry.userResponse}
+                                </div>
+                              </div>
+                            )}
+                            
                             {entry.oracleFollowUp && (
                               <div className="mt-4 pt-4 border-t border-[#a855f7]/20">
                                 <h5 className="text-[#d8b4fe] font-medium text-sm mb-2 uppercase tracking-wider">✨ Oracle's Deeper Reflection</h5>
@@ -805,13 +834,19 @@ export default function Journal() {
                         )}
                       </div>
                     );
-                  }}
-                />
+                  })}
+                </div>
               ) : (
                 <div className="oura-card p-12 text-center">
                   <div className="text-4xl mb-4 opacity-30">📝</div>
-                  <p className="text-[#5a5a5a]">No journal entries yet</p>
-                  <p className="text-[#3a3a3a] text-sm mt-1">Start writing to track your journey</p>
+                  <p className="text-[#5a5a5a] font-medium mb-1">No journal entries yet</p>
+                  <p className="text-[#3a3a3a] text-sm mb-6">Start writing to track your journey</p>
+                  <button
+                    onClick={() => document.querySelector('textarea[placeholder="What\'s on your mind?"]')?.focus()}
+                    className="px-6 py-2 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-lg transition-all duration-300 font-medium text-sm"
+                  >
+                    Write Your First Entry
+                  </button>
                 </div>
               )}
             </div>

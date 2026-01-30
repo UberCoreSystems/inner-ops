@@ -14,6 +14,8 @@ export const clarityScoreUtils = {
     RELAPSE_REFLECTION: 5, // additional bonus for detailed reflection
     BLACK_MIRROR_CHECK: 5, // weekly bonus
     BLACK_MIRROR_LOW_INDEX: 3, // bonus for low index (<10)
+    HARD_LESSON_EXTRACTED: 10, // Base score for extracting a lesson from pain
+    HARD_LESSON_FINALIZED: 15, // Additional bonus for finalizing with a rule going forward
   },
 
   // Calculate total clarity score from user data
@@ -37,7 +39,7 @@ export const clarityScoreUtils = {
       return cached.result;
     }
 
-    const { journalEntries = [], killTargets = [], relapseEntries = [], blackMirrorEntries = [] } = userData;
+    const { journalEntries = [], killTargets = [], relapseEntries = [], blackMirrorEntries = [], hardLessons = [] } = userData;
     
     let totalScore = 0;
 
@@ -79,6 +81,19 @@ export const clarityScoreUtils = {
     killListScore = Math.floor(killListScore * completionMultiplier);
     totalScore += killListScore;
 
+    // Hard Lessons scoring - turning pain into wisdom
+    let hardLessonsScore = 0;
+    hardLessons.forEach(lesson => {
+      // Base score for extracting a lesson
+      hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_EXTRACTED;
+      
+      // Bonus for finalizing with a rule going forward (shows commitment to change)
+      if (lesson.isFinalized && lesson.ruleGoingForward) {
+        hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_FINALIZED;
+      }
+    });
+    totalScore += hardLessonsScore;
+
     // Black Mirror scoring (weekly bonus system)
     const weeklyBlackMirrorBonuses = clarityScoreUtils.calculateWeeklyBlackMirrorBonuses(blackMirrorEntries);
     totalScore += weeklyBlackMirrorBonuses;
@@ -105,6 +120,7 @@ export const clarityScoreUtils = {
       breakdown: {
         journal: journalEntries.length * clarityScoreUtils.SCORING.JOURNAL_ENTRY,
         killList: killListScore,
+        hardLessons: hardLessonsScore,
         blackMirror: weeklyBlackMirrorBonuses,
         relapseAwareness: relapseAwarenessBonus,
         bonuses: journalStreak >= 7 ? (journalStreak >= 90 ? 130 : (journalStreak >= 30 ? 55 : 15)) : 0,

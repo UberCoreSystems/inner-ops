@@ -81,8 +81,7 @@ const KillList = () => {
   const [newTargetPriority, setNewTargetPriority] = useState('medium');
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [filterStatus, setFilterStatus] = useState('all');
@@ -106,22 +105,22 @@ const KillList = () => {
   // Delay showing skeleton to prevent flicker
   useEffect(() => {
     const skeletonTimer = setTimeout(() => {
-      if (initialLoading) {
+      if (loading) {
         setShowSkeleton(true);
       }
     }, 250);
 
     return () => clearTimeout(skeletonTimer);
-  }, [initialLoading]);
+  }, [loading]);
 
   // Keep skeleton visible briefly once shown to avoid blink on completion
   useEffect(() => {
     let dwellTimer;
-    if (!initialLoading && showSkeleton) {
+    if (!loading && showSkeleton) {
       dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
     }
     return () => clearTimeout(dwellTimer);
-  }, [initialLoading, showSkeleton]);
+  }, [loading, showSkeleton]);
 
   // Keep an up-to-date reference for functions that should stay memoized
   useEffect(() => {
@@ -153,7 +152,7 @@ const KillList = () => {
 
     try {
       logger.log("📡 KillList: Loading targets for user:", user.uid);
-      setInitialLoading(true);
+      setLoading(true);
       const targetsData = await readUserData('killTargets');
       logger.log(`📋 KillList: Loaded ${targetsData.length} kill targets`);
       setTargets(targetsData);
@@ -161,7 +160,7 @@ const KillList = () => {
       logger.error('❌ KillList: Error loading targets:', error);
       setTargets([]);
     } finally {
-      setInitialLoading(false);
+      setLoading(false);
     }
   }, [user]);
 
@@ -899,11 +898,11 @@ const KillList = () => {
 
         {/* Targets List */}
         <div className="relative">
-          <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
+          <div className={`fade-pane ${showSkeleton ? 'visible' : 'hidden'}`}>
             <SkeletonList count={4} ItemComponent={SkeletonKillTarget} />
           </div>
 
-          <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
+          <div className={`fade-pane ${showSkeleton ? 'hidden' : 'visible'}`}>
             {filteredTargets.length > 0 ? (
               <VirtualizedList
                 items={filteredTargets}
@@ -919,11 +918,19 @@ const KillList = () => {
                    filterStatus === 'active' ? 'No active contracts' :
                    'No kill contracts yet'}
                 </h3>
-                <p className="text-[#5a5a5a] text-sm">
+                <p className="text-[#5a5a5a] text-sm mb-6">
                   {filterStatus === 'all' ? 'Add your first contract to begin eliminating negative patterns' :
                    filterStatus === 'active' ? 'All your contracts have been completed!' :
                    'Complete some contracts to see them here'}
                 </p>
+                {filterStatus !== 'completed' && (
+                  <button
+                    onClick={() => document.querySelector('input[placeholder="Enter a new kill target..."]')?.focus()}
+                    className="px-6 py-2 bg-[#ef4444] hover:bg-[#dc2626] text-white rounded-lg transition-all duration-300 font-medium text-sm"
+                  >
+                    {filterStatus === 'active' ? 'Create New Target' : 'Add Your First Target'}
+                  </button>
+                )}
               </div>
             )}
           </div>

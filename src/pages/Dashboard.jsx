@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { readUserData, testFirebaseConnection } from '../utils/firebaseUtils';
+import { readUserData, testFirebaseConnection, debugInspectAllFirebaseData, previewDataMigration, executeDataMigration, findDuplicateDocuments, removeDuplicateDocuments } from '../utils/firebaseUtils';
+import { migrateOldDataToFirestore, findOldData } from '../utils/dataMigration';
 import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
@@ -77,11 +78,167 @@ export default function Dashboard() {
       reloadData: () => loadDashboardData(currentUser),
       checkAuth: () => ({
         currentUser: authService.getCurrentUser(),
-        hasUser: !!authService.getCurrentUser()
+        hasUser: !!authService.getCurrentUser(),
+        userId: currentUser?.uid,
+        email: currentUser?.email,
+        isAnonymous: currentUser?.isAnonymous
       }),
       getStats: () => stats,
       getRecentEntries: () => recentEntries,
-      getClarityScore: () => clarityScore
+      getClarityScore: () => clarityScore,
+      checkLocalStorage: () => {
+        const lsData = {};
+        const allKeys = Object.keys(localStorage);
+        
+        // Check all keys, not just the known ones
+        allKeys.forEach(key => {
+          if (key.includes('inner_ops') || key.includes('journal') || key.includes('kill') || key.includes('lesson') || key.includes('mirror') || key.includes('relapse')) {
+            const data = localStorage.getItem(key);
+            try {
+              const parsed = JSON.parse(data);
+              lsData[key] = {
+                count: Array.isArray(parsed) ? parsed.length : typeof parsed,
+                size: JSON.stringify(parsed).length,
+                keys: Array.isArray(parsed) ? Object.keys(parsed[0] || {}) : Object.keys(parsed || {})
+              };
+            } catch (e) {
+              lsData[key] = { raw: data.substring(0, 100) + '...' };
+            }
+          }
+        });
+        
+        return {
+          totalKeys: allKeys.length,
+          relevantKeys: Object.keys(lsData),
+          data: lsData,
+          allKeys: allKeys
+        };
+      },
+      showUserInfo: () => {
+        const auth = currentUser;
+        console.log('=== USER INFO ===');
+        console.log('User ID:', auth?.uid);
+        console.log('Email:', auth?.email);
+        console.log('Display Name:', auth?.displayName);
+        console.log('Is Anonymous:', auth?.isAnonymous);
+        console.log('=== LOCALSTORAGE DATA ===');
+        console.log(window.debugDashboard.checkLocalStorage());
+        alert(`User ID: ${auth?.uid}\nEmail: ${auth?.email}\nOpen console for full details`);
+      },
+      inspectFirebase: async () => {
+        console.log('🔍 Inspecting Firestore (ALL documents, no filters)...');
+        const result = await debugInspectAllFirebaseData();
+        console.log('=== COMPLETE FIRESTORE STRUCTURE ===');
+        console.log('This shows ALL documents in each collection, grouped by userId');
+        console.log(result);
+        
+        // Summary
+        let totalDocs = 0;
+        Object.values(result).forEach(collection => {
+          if (collection.total) totalDocs += collection.total;
+        });
+        
+        console.log('\n=== SUMMARY ===');
+        console.log('Total documents across all collections:', totalDocs);
+        console.log('Current user ID:', window.debugDashboard.checkAuth()?.userId);
+        
+        return result;
+      },
+      findOldData: async () => {
+        console.log('🔍 Scanning for old localStorage data...');
+        const result = await findOldData();
+        console.log('=== OLD DATA FOUND ===');
+        console.log(result);
+        return result;
+      },
+      migrateData: async () => {
+        console.log('📤 Starting data migration...');
+        const result = await migrateOldDataToFirestore();
+        console.log('=== MIGRATION RESULT ===');
+        console.log(result);
+        alert(`Migration complete!\n${JSON.stringify(result.summary, null, 2)}`);
+        // Reload the page to refresh data
+        setTimeout(() => window.location.reload(), 2000);
+        return result;
+      },
+      previewMigration: async (sourceUserId) => {
+        if (!sourceUserId) {
+          console.error('❌ sourceUserId required. Usage: await window.debugDashboard.previewMigration("old-user-id")');
+          console.log('Available userIds from latest inspection:');
+          console.log('  consistent-test-user-2025 (28 journal, 12 kill targets)');
+          console.log('  T8iUaMTFmcPcIjCaYF26gJg4lXu2 (4 journal, 2 kill targets, 1 relapse)');
+          console.log('  0uJELSIt1uQdcLvR7Sh1tsbPMLE2 (3 journal)');
+          console.log('  708R0rNyePVE5nAMLXZXudgVoMA3 (2 journal, 1 black mirror)');
+          return;
+        }
+        const currentUserId = window.debugDashboard.checkAuth()?.userId;
+        console.log(`\n🔍 PREVIEW: Migrating from "${sourceUserId}" to "${currentUserId}"`);
+        const result = await previewDataMigration(sourceUserId, currentUserId);
+        console.log('=== MIGRATION PREVIEW ===');
+        console.log(result);
+        console.log('\n⚠️ Review above. To execute migration, run:');
+        console.log(`await window.debugDashboard.executeMigration("${sourceUserId}")`);
+        return result;
+      },
+      executeMigration: async (sourceUserId) => {
+        if (!sourceUserId) {
+          console.error('❌ sourceUserId required. Usage: await window.debugDashboard.executeMigration("old-user-id")');
+          return;
+        }
+        const currentUserId = window.debugDashboard.checkAuth()?.userId;
+        console.log(`\n⚡ EXECUTING: Migrating ${sourceUserId} → ${currentUserId}`);
+        const result = await executeDataMigration(sourceUserId, currentUserId);
+        console.log('=== MIGRATION RESULT ===');
+        console.log(result);
+        
+        if (result.totalErrors === 0) {
+          console.log(`✅ Successfully migrated ${result.totalMigrated} documents!`);
+          console.log('Reloading dashboard to show new data...');
+          setTimeout(() => window.location.reload(), 2000);
+        } else {
+          console.log(`⚠️ Migration completed with ${result.totalErrors} errors. Check console above.`);
+        }
+        return result;
+      },
+      findDuplicates: async () => {
+        console.log('🔍 Scanning for duplicate document IDs...');
+        const result = await findDuplicateDocuments();
+        console.log('=== DUPLICATE SCAN RESULT ===');
+        console.log(result);
+        
+        if (result.hasDuplicates) {
+          console.log('\n⚠️ DUPLICATES FOUND! To remove them safely (keeping oldest copies), run:');
+          console.log('await window.debugDashboard.removeDuplicates()');
+        } else {
+          console.log('\n✅ No duplicates found!');
+        }
+        return result;
+      },
+      removeDuplicates: async () => {
+        const hasConfirmed = confirm(
+          '⚠️ This will PERMANENTLY DELETE duplicate documents (keeping oldest copies only).\n\n' +
+          'This action cannot be undone. Are you sure?'
+        );
+        
+        if (!hasConfirmed) {
+          console.log('❌ Removal cancelled');
+          return;
+        }
+        
+        console.log('⚡ REMOVING duplicates (keeping oldest copies)...');
+        const result = await removeDuplicateDocuments();
+        console.log('=== REMOVAL RESULT ===');
+        console.log(result);
+        
+        if (result.totalRemoved > 0) {
+          console.log(`✅ Removed ${result.totalRemoved} duplicate documents!`);
+          console.log('Reloading dashboard...');
+          setTimeout(() => window.location.reload(), 2000);
+        } else {
+          console.log('ℹ️ No duplicates were removed');
+        }
+        return result;
+      }
     };
   }, []); // Only run once on mount
 
@@ -122,8 +279,8 @@ export default function Dashboard() {
     try {
       logger.log("📡 Dashboard: Loading data for user:", currentUser.uid);
       
-      // Load critical data first (journal, relapse, kill targets) for immediate UI
-      const [journalEntries, relapseEntries, killTargets] = await Promise.all([
+      // Load ALL data at once - await everything before setting state
+      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons] = await Promise.all([
         readUserData('journalEntries').then(data => {
           logger.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
@@ -135,28 +292,18 @@ export default function Dashboard() {
         readUserData('killTargets').then(data => {
           logger.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
           return data || [];
-        })
-      ]);
-
-      // Load non-critical data in the background (black mirror, hard lessons)
-      let blackMirrorEntries = [];
-      let hardLessons = [];
-      
-      // Start loading these in background without waiting
-      Promise.all([
+        }),
         readUserData('blackMirrorEntries').then(data => {
           logger.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
-          blackMirrorEntries = data || [];
           return data || [];
         }),
         readUserData('hardLessons').then(data => {
           logger.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
-          hardLessons = data || [];
           return data || [];
         })
-      ]).catch(err => logger.warn("Background data loading warning:", err));
+      ]);
 
-      logger.log("📊 Dashboard: Data loaded:", {
+      logger.log("📊 Dashboard: All data loaded:", {
         journalEntries: journalEntries.length,
         relapseEntries: relapseEntries.length,
         killTargets: killTargets.length,
@@ -179,37 +326,18 @@ export default function Dashboard() {
         }
       }
 
-      // Helper function to count entries from last 30 days
-      const countRecentActivity = (entries) => {
-        if (!entries || !Array.isArray(entries)) return 0;
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - 30);
-        
-        return entries.filter(entry => {
-          if (!entry?.createdAt) return false;
-          const entryDate = entry.createdAt?.toDate 
-            ? entry.createdAt.toDate() 
-            : new Date(entry.createdAt);
-          return entryDate >= cutoffDate;
-        }).length;
-      };
-
-      // Calculate recent (30-day) activity for each module
-      const recentJournalCount = countRecentActivity(journalEntries);
-      const recentKillCount = countRecentActivity(killTargets);
-      const recentLessonsCount = countRecentActivity(hardLessons);
-      const recentMirrorCount = countRecentActivity(blackMirrorEntries);
-
+      // Set stats to show ALL-TIME counts (not just recent activity)
+      // This gives a complete picture of user progress
       setStats({
-        journalEntries: recentJournalCount,  // Use recent count for activity ring
-        journalEntriesTotal: journalEntries.length,  // Keep total for reference
+        journalEntries: journalEntries.length,  // All-time total
+        journalEntriesTotal: journalEntries.length,
         relapseEntries: relapseEntries.length,
         streakDays: Math.max(0, streakDays),
-        killTargets: recentKillCount,  // Use recent count
+        killTargets: killTargets.length,  // All-time total
         killTargetsTotal: killTargets.length,
-        hardLessons: recentLessonsCount,  // Use recent count
+        hardLessons: hardLessons.length,  // All-time total
         hardLessonsTotal: hardLessons.length,
-        blackMirrorEntries: recentMirrorCount,  // Use recent count
+        blackMirrorEntries: blackMirrorEntries.length,  // All-time total
         blackMirrorEntriesTotal: blackMirrorEntries.length
       });
 
@@ -261,6 +389,14 @@ export default function Dashboard() {
     if (!loading && rawUserData && !calculatingClarity) {
       setCalculatingClarity(true);
       
+      logger.log("🧮 Dashboard: Starting clarity score calculation with data:", {
+        journalEntries: rawUserData.journalEntries?.length || 0,
+        killTargets: rawUserData.killTargets?.length || 0,
+        relapseEntries: rawUserData.relapseEntries?.length || 0,
+        blackMirrorEntries: rawUserData.blackMirrorEntries?.length || 0,
+        hardLessons: rawUserData.hardLessons?.length || 0
+      });
+      
       // Use setTimeout to allow UI to render first
       const timer = setTimeout(async () => {
         try {
@@ -268,12 +404,14 @@ export default function Dashboard() {
           const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
           setClarityScore({ ...scoreData, rank });
           
-          logger.log("✅ Dashboard: Clarity score calculated", {
+          logger.log("✅ Dashboard: Clarity score calculated successfully", {
             score: scoreData.totalScore,
-            rank: rank.rank
+            rank: rank.rank,
+            breakdown: scoreData.breakdown
           });
         } catch (error) {
           logger.error("❌ Dashboard: Error calculating clarity score:", error);
+          logger.error("Error details:", error.message, error.stack);
         } finally {
           setCalculatingClarity(false);
         }
@@ -281,7 +419,7 @@ export default function Dashboard() {
       
       return () => clearTimeout(timer);
     }
-  }, [loading, rawUserData, calculatingClarity]);
+  }, [loading, rawUserData]); // Remove calculatingClarity from dependencies to avoid loop
 
   const showShell = loading || showSkeleton || !user;
 
@@ -523,7 +661,7 @@ export default function Dashboard() {
 
         {/* Stats Grid - Oura Score Cards */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Stats (Last 30 Days)</h3>
+          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <ScoreCard score={stats.streakDays} label="Streak" sublabel="Days strong" color="#00d4aa" icon={<AppIcon name="streak" size={20} color="#00d4aa" />} size="small" />
             <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" />
@@ -658,6 +796,58 @@ export default function Dashboard() {
             loadDashboardData();
           }}
         />
+
+        {/* Debug Info Section */}
+        <div className="mt-12 pt-8 border-t border-[#1a1a1a] animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
+          <div className="bg-[#0a0a0a] rounded-xl p-6 border border-[#1a1a1a]">
+            <h4 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Debug Info & Data Recovery</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-4">
+              <div>
+                <p className="text-[#3a3a3a]">User ID</p>
+                <p className="text-white font-mono text-xs truncate">{user?.uid || 'Not authenticated'}</p>
+              </div>
+              <div>
+                <p className="text-[#3a3a3a]">Email</p>
+                <p className="text-white font-mono text-xs truncate">{user?.email || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[#3a3a3a]">Auth Type</p>
+                <p className="text-white text-xs">{user?.isAnonymous ? 'Anonymous' : 'Email'}</p>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => window.debugDashboard?.showUserInfo?.()}
+                className="px-4 py-2 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#8a8a8a] hover:text-white rounded-lg text-sm transition-all"
+              >
+                Show User Info
+              </button>
+              <button
+                onClick={async () => {
+                  const oldData = await window.debugDashboard?.findOldData?.();
+                  if (oldData && Object.keys(oldData).length > 0) {
+                    alert(`Found old data!\n${JSON.stringify(Object.keys(oldData))}\n\nClick "Migrate Data" to import it`);
+                  } else {
+                    alert('No old data found');
+                  }
+                }}
+                className="px-4 py-2 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#8a8a8a] hover:text-white rounded-lg text-sm transition-all"
+              >
+                Scan Old Data
+              </button>
+              <button
+                onClick={async () => {
+                  if (confirm('Migrate old localStorage data to Firestore? This will import all your historical entries.')) {
+                    await window.debugDashboard?.migrateData?.();
+                  }
+                }}
+                className="px-4 py-2 bg-[#00d4aa]/20 hover:bg-[#00d4aa]/30 text-[#00d4aa] rounded-lg text-sm transition-all font-medium"
+              >
+                🚀 Migrate Data
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       </div>
     </div>

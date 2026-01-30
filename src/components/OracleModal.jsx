@@ -190,10 +190,19 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   ← Back to Judgment
                 </button>
                 <button
-                  onClick={onClose}
+                  onClick={() => {
+                    // Save the follow-up response before closing
+                    if (onFollowUpSaved) {
+                      onFollowUpSaved({
+                        userResponse,
+                        oracleFollowUp
+                      });
+                    }
+                    onClose();
+                  }}
                   className="flex-1 bg-[#a855f7] hover:bg-[#9333ea] text-white px-6 py-3 rounded-xl transition-colors font-medium text-sm"
                 >
-                  Complete Entry
+                  Save & Complete Entry
                 </button>
               </div>
             </div>

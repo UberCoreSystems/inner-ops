@@ -1,9 +1,19 @@
 import { doc, setDoc, collection, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { enableAnonymousAuth, enableDevMode, getCurrentUserOrMock, getAuth, getDb } from '../firebase.js';
 import logger from './logger';
+import { localStorageUtils } from './localStorage';
 
 // Development mode flag - set to false to use real authentication and preserve user data
 const DEV_MODE = false; // Set to true only for testing without real user accounts
+
+// Mapping of collection names to localStorage keys
+const LOCALSTORAGE_KEYS = {
+  'journalEntries': 'inner_ops_journal_entries',
+  'killTargets': 'inner_ops_kill_targets',
+  'hardLessons': 'inner_ops_hard_lessons',
+  'blackMirrorEntries': 'inner_ops_black_mirror_entries',
+  'relapseEntries': 'inner_ops_relapse_entries'
+};
 
 // Log environment variables for debugging
 logger.log("🔍 Environment Check:");
@@ -36,6 +46,75 @@ const ensureAuthenticated = async () => {
     // In production mode, require proper authentication
     logger.error("❌ User must be authenticated to access data");
     throw new Error("Please sign in to continue using the app");
+  }
+};
+
+// Get data from localStorage as fallback
+const getLocalStorageFallback = (collectionName) => {
+  try {
+    const lsKey = LOCALSTORAGE_KEYS[collectionName];
+    if (!lsKey) {
+      return [];
+    }
+
+    const data = localStorage.getItem(lsKey);
+    if (!data) {
+      return [];
+    }
+
+    const parsed = JSON.parse(data);
+    const entries = Array.isArray(parsed) ? parsed : [];
+    
+    logger.log(`💾 Retrieved ${entries.length} entries from localStorage for ${collectionName}`);
+    
+    // Sort by date descending
+    return entries.sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.timestamp || 0);
+      const dateB = new Date(b.createdAt || b.timestamp || 0);
+      return dateB - dateA;
+    });
+  } catch (error) {
+    logger.warn(`⚠️ Could not read from localStorage for ${collectionName}:`, error.message);
+    return [];
+  }
+};
+
+// Recover historical data from top-level collections and migrate to user-scoped collections
+export const recoverHistoricalData = async (collectionName) => {
+  try {
+    const user = await ensureAuthenticated();
+    const db = await getDb();
+    
+    logger.log("🔄 Attempting to recover historical data from", collectionName);
+    
+    // Try to read all documents from top-level collection
+    const colRef = collection(db, collectionName);
+    const querySnapshot = await getDocs(colRef);
+    
+    const allDocs = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    logger.log(`📋 Found ${allDocs.length} historical documents in ${collectionName}`);
+    
+    if (allDocs.length === 0) {
+      return [];
+    }
+    
+    // Filter by current user's data (those with matching userId or no userId)
+    const userDocs = allDocs.filter(doc => !doc.userId || doc.userId === user.uid);
+    
+    logger.log(`✅ Recovered ${userDocs.length} documents for current user from historical data`);
+    
+    return userDocs.sort((a, b) => {
+      const dateA = a.timestamp?.toDate?.() || new Date(a.createdAt || 0);
+      const dateB = b.timestamp?.toDate?.() || new Date(b.createdAt || 0);
+      return dateB - dateA;
+    });
+  } catch (error) {
+    logger.warn("⚠️ Could not recover historical data:", error.message);
+    return [];
   }
 };
 
@@ -123,35 +202,136 @@ export const readUserData = async (collectionName, requireAuth = false) => {
     }
 
     const colRef = collection(db, collectionName);
-    let q;
+    let data = [];
     
     if (user) {
-      // Filter by userId if we have an authenticated user
-      q = query(colRef, where("userId", "==", user.uid));
-      logger.log("🔍 Reading data for user:", user.uid);
+      // STEP 1: Try to read user-scoped data first
+      logger.log("🔍 Reading user-scoped data for user:", user.uid);
+      const userScopedQuery = query(colRef, where("userId", "==", user.uid));
+      const userScopedSnapshot = await getDocs(userScopedQuery);
+      
+      data = userScopedSnapshot.docs.map(doc => {
+        const docData = doc.data();
+        // Ensure createdAt is always a proper Date object
+        let createdAt = new Date();
+        if (docData.timestamp?.toDate) {
+          createdAt = docData.timestamp.toDate();
+        } else if (docData.createdAt?.toDate) {
+          createdAt = docData.createdAt.toDate();
+        } else if (typeof docData.createdAt === 'string') {
+          createdAt = new Date(docData.createdAt);
+        } else if (typeof docData.timestamp === 'string') {
+          createdAt = new Date(docData.timestamp);
+        }
+        
+        return {
+          id: doc.id,
+          ...docData,
+          createdAt: createdAt,
+          timestamp: createdAt // Ensure both fields are Date objects
+        };
+      });
+      
+      logger.log(`✅ User-scoped query returned ${data.length} documents`);
+      
+      // STEP 2: If no user-scoped data, try reading ALL documents and filter
+      if (data.length === 0) {
+        logger.log("📋 No user-scoped data found, reading all documents in collection...");
+        const allDocsQuery = query(colRef);
+        const allDocsSnapshot = await getDocs(allDocsQuery);
+        
+        const allDocs = allDocsSnapshot.docs.map(doc => {
+          const docData = doc.data();
+          // Ensure createdAt is always a proper Date object
+          let createdAt = new Date();
+          if (docData.timestamp?.toDate) {
+            createdAt = docData.timestamp.toDate();
+          } else if (docData.createdAt?.toDate) {
+            createdAt = docData.createdAt.toDate();
+          } else if (typeof docData.createdAt === 'string') {
+            createdAt = new Date(docData.createdAt);
+          } else if (typeof docData.timestamp === 'string') {
+            createdAt = new Date(docData.timestamp);
+          }
+          
+          return {
+            id: doc.id,
+            ...docData,
+            createdAt: createdAt,
+            timestamp: createdAt
+          };
+        });
+        
+        logger.log(`📊 Found ${allDocs.length} total documents in collection`);
+        
+        // Filter to include:
+        // - Documents with matching userId
+        // - Documents with no userId (legacy data)
+        data = allDocs.filter(doc => !doc.userId || doc.userId === user.uid);
+        
+        logger.log(`🎯 After filtering, ${data.length} documents belong to current user`);
+      }
     } else {
       // Read all documents if no auth (for testing purposes)
-      q = query(colRef);
       logger.log("🔍 Reading all documents (no auth filter)");
+      const allDocsQuery = query(colRef);
+      const allDocsSnapshot = await getDocs(allDocsQuery);
+      
+      data = allDocsSnapshot.docs.map(doc => {
+        const docData = doc.data();
+        // Ensure createdAt is always a proper Date object
+        let createdAt = new Date();
+        if (docData.timestamp?.toDate) {
+          createdAt = docData.timestamp.toDate();
+        } else if (docData.createdAt?.toDate) {
+          createdAt = docData.createdAt.toDate();
+        } else if (typeof docData.createdAt === 'string') {
+          createdAt = new Date(docData.createdAt);
+        } else if (typeof docData.timestamp === 'string') {
+          createdAt = new Date(docData.timestamp);
+        }
+        
+        return {
+          id: doc.id,
+          ...docData,
+          createdAt: createdAt,
+          timestamp: createdAt
+        };
+      });
     }
-    
-    const querySnapshot = await getDocs(q);
-    
-    const data = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().timestamp?.toDate?.() || new Date()
-    }));
 
     data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     logger.log("✅ Data read successfully from", collectionName, "- found", data.length, "documents");
+    
+    // If still no data found, try recovery strategies
+    if (data.length === 0) {
+      logger.log("📋 No data found in Firestore, attempting recovery strategies...");
+      
+      // Fall back to localStorage
+      logger.log("💾 Attempting localStorage fallback...");
+      const lsData = getLocalStorageFallback(collectionName);
+      if (lsData.length > 0) {
+        logger.log(`✅ Retrieved ${lsData.length} entries from localStorage for ${collectionName}`);
+        return lsData;
+      }
+    }
+    
     return data;
   } catch (error) {
     logger.error("❌ Firestore read error:", error);
     if (error.code === 'permission-denied') {
       logger.error("💡 Hint: Check your Firestore security rules. You may need to allow reads for anonymous users or update the rules for testing.");
     }
+    
+    // Final fallback to localStorage on any error
+    logger.log("⚠️ Firestore failed, falling back to localStorage...");
+    const lsData = getLocalStorageFallback(collectionName);
+    if (lsData.length > 0) {
+      logger.log(`✅ Retrieved ${lsData.length} entries from localStorage after Firestore error`);
+      return lsData;
+    }
+    
     return [];
   }
 };
@@ -160,6 +340,7 @@ export const readUserData = async (collectionName, requireAuth = false) => {
 export const readTestData = async (collectionName) => {
   try {
     logger.log("🧪 Reading test data from", collectionName, "(no auth required)");
+    const db = await getDb();
     const colRef = collection(db, collectionName);
     const querySnapshot = await getDocs(colRef);
     
@@ -217,6 +398,7 @@ export const writeUserData = async (collectionName, dataArray) => {
 export const writeTestDataNoAuth = async (collectionName, data) => {
   try {
     logger.log("🧪 Writing test data without authentication to", collectionName);
+    const db = await getDb();
     
     const testPayload = {
       ...data,
@@ -244,6 +426,7 @@ export const testFirebaseConnection = async () => {
     logger.log("🔥 Testing Firebase connection...");
     
     // Test 1: Check if we can get current user
+    const auth = await getAuth();
     const currentUser = auth.currentUser;
     logger.log("Current user:", currentUser ? currentUser.uid : "None");
     
@@ -303,5 +486,318 @@ export const testFirebaseConnection = async () => {
       error: "Connection test failed",
       details: error.message
     };
+  }
+};
+
+// Debug function to inspect all data in Firestore for current user
+export const debugInspectAllFirebaseData = async () => {
+  try {
+    const user = await ensureAuthenticated();
+    const db = await getDb();
+    
+    logger.log("🔍 Inspecting all Firestore data for user:", user.uid);
+    
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const results = {};
+    
+    for (const collectionName of collections) {
+      try {
+        // Query ALL documents in collection (no filters)
+        const colRef = collection(db, collectionName);
+        const allDocsQuery = query(colRef);
+        const allDocsSnapshot = await getDocs(allDocsQuery);
+        
+        const allDocs = allDocsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          userId: doc.data().userId,
+          hasUserId: !!doc.data().userId,
+          createdAt: doc.data().createdAt || doc.data().timestamp,
+          ...doc.data()
+        }));
+        
+        // Count by userId
+        const byUserId = {};
+        allDocs.forEach(doc => {
+          const uid = doc.userId || 'NO_USER_ID';
+          byUserId[uid] = (byUserId[uid] || 0) + 1;
+        });
+        
+        results[collectionName] = {
+          total: allDocsSnapshot.docs.length,
+          byUserId: byUserId,
+          currentUserCount: allDocs.filter(d => !d.userId || d.userId === user.uid).length,
+          samples: allDocs.slice(0, 2).map(d => ({
+            id: d.id,
+            userId: d.userId,
+            hasUserId: d.hasUserId,
+            createdAt: d.createdAt
+          }))
+        };
+        
+        logger.log(`📊 ${collectionName}:`, results[collectionName]);
+      } catch (error) {
+        logger.warn(`⚠️ Could not read ${collectionName}:`, error.message);
+        results[collectionName] = { error: error.message, total: 0 };
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    logger.error("❌ Debug inspection failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * Safe preview of data migration - shows what will be migrated WITHOUT making changes
+ */
+export const previewDataMigration = async (sourceUserId, targetUserId) => {
+  try {
+    const db = await getDb();
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const preview = {};
+    let totalDocuments = 0;
+
+    for (const collectionName of collections) {
+      const collectionRef = collection(db, collectionName);
+      const q = query(collectionRef, where('userId', '==', sourceUserId));
+      const snapshot = await getDocs(q);
+
+      const docCount = snapshot.size;
+      totalDocuments += docCount;
+
+      preview[collectionName] = {
+        count: docCount,
+        documents: snapshot.docs.map(doc => ({
+          id: doc.id,
+          userId: doc.data().userId,
+          preview: Object.keys(doc.data()).slice(0, 3).reduce((acc, key) => {
+            acc[key] = doc.data()[key];
+            return acc;
+          }, {})
+        }))
+      };
+    }
+
+    return {
+      sourceUserId,
+      targetUserId,
+      totalDocuments,
+      summary: preview,
+      confirmation: `⚠️ PREVIEW: Will migrate ${totalDocuments} documents from "${sourceUserId}" to "${targetUserId}". Review above before confirming!`
+    };
+  } catch (error) {
+    logger.error("❌ Migration preview failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * Execute safe data migration - moves documents from source userId to target userId
+ */
+export const executeDataMigration = async (sourceUserId, targetUserId) => {
+  try {
+    if (!sourceUserId || !targetUserId) {
+      throw new Error('Both sourceUserId and targetUserId are required');
+    }
+
+    if (sourceUserId === targetUserId) {
+      throw new Error('Source and target userIds must be different');
+    }
+
+    const db = await getDb();
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const migrationResults = {};
+    let totalMigrated = 0;
+    let totalErrors = 0;
+
+    for (const collectionName of collections) {
+      const collectionRef = collection(db, collectionName);
+      const q = query(collectionRef, where('userId', '==', sourceUserId));
+      const snapshot = await getDocs(q);
+
+      migrationResults[collectionName] = {
+        attempted: snapshot.size,
+        succeeded: 0,
+        failed: 0,
+        errors: []
+      };
+
+      for (const doc of snapshot.docs) {
+        try {
+          await updateDoc(doc.ref, { userId: targetUserId });
+          migrationResults[collectionName].succeeded++;
+          totalMigrated++;
+        } catch (error) {
+          migrationResults[collectionName].failed++;
+          migrationResults[collectionName].errors.push({
+            docId: doc.id,
+            error: error.message
+          });
+          totalErrors++;
+          logger.error(`❌ Failed to migrate ${collectionName}/${doc.id}:`, error);
+        }
+      }
+    }
+
+    logger.log(`✅ Migration complete: ${totalMigrated} documents migrated, ${totalErrors} errors`);
+
+    return {
+      sourceUserId,
+      targetUserId,
+      totalMigrated,
+      totalErrors,
+      details: migrationResults,
+      status: totalErrors === 0 ? '✅ MIGRATION COMPLETE' : '⚠️ MIGRATION COMPLETED WITH ERRORS'
+    };
+  } catch (error) {
+    logger.error("❌ Data migration failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * Scan for duplicate document IDs and show preview
+ */
+export const findDuplicateDocuments = async () => {
+  try {
+    const db = await getDb();
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const duplicateReport = {};
+
+    for (const collectionName of collections) {
+      const collectionRef = collection(db, collectionName);
+      const allDocsQuery = query(collectionRef);
+      const snapshot = await getDocs(allDocsQuery);
+
+      const idMap = {};
+      const duplicates = [];
+
+      snapshot.docs.forEach(doc => {
+        const docId = doc.id;
+        if (!idMap[docId]) {
+          idMap[docId] = [];
+        }
+        idMap[docId].push({
+          docId,
+          userId: doc.data().userId,
+          createdAt: doc.data().createdAt || doc.data().timestamp,
+          title: doc.data().title || doc.data().entry || 'N/A'
+        });
+      });
+
+      // Find duplicates
+      Object.entries(idMap).forEach(([docId, instances]) => {
+        if (instances.length > 1) {
+          duplicates.push({
+            docId,
+            count: instances.length,
+            instances
+          });
+        }
+      });
+
+      if (duplicates.length > 0) {
+        duplicateReport[collectionName] = {
+          duplicateCount: duplicates.length,
+          totalAffectedIds: duplicates.length,
+          duplicates
+        };
+      }
+    }
+
+    const hasDuplicates = Object.keys(duplicateReport).length > 0;
+    
+    if (hasDuplicates) {
+      logger.warn('⚠️ DUPLICATES FOUND:', duplicateReport);
+    } else {
+      logger.log('✅ No duplicate document IDs found!');
+    }
+
+    return {
+      hasDuplicates,
+      collections: duplicateReport,
+      summary: `Found duplicates in ${Object.keys(duplicateReport).length} collection(s)`
+    };
+  } catch (error) {
+    logger.error("❌ Duplicate scan failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * Remove duplicate documents - keeps oldest, removes newer copies
+ */
+export const removeDuplicateDocuments = async () => {
+  try {
+    const db = await getDb();
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const removalResults = {};
+    let totalRemoved = 0;
+    let totalErrors = 0;
+
+    for (const collectionName of collections) {
+      const collectionRef = collection(db, collectionName);
+      const allDocsQuery = query(collectionRef);
+      const snapshot = await getDocs(allDocsQuery);
+
+      const idMap = {};
+
+      snapshot.docs.forEach(doc => {
+        const docId = doc.id;
+        if (!idMap[docId]) {
+          idMap[docId] = [];
+        }
+        idMap[docId].push({
+          ref: doc.ref,
+          data: doc.data(),
+          createdAt: doc.data().createdAt || doc.data().timestamp || '0'
+        });
+      });
+
+      removalResults[collectionName] = {
+        duplicatesRemoved: 0,
+        errors: []
+      };
+
+      // For each duplicate ID, keep oldest and remove rest
+      for (const [docId, instances] of Object.entries(idMap)) {
+        if (instances.length > 1) {
+          // Sort by createdAt - keep first (oldest), remove rest
+          instances.sort((a, b) => {
+            const dateA = new Date(a.createdAt).getTime();
+            const dateB = new Date(b.createdAt).getTime();
+            return dateA - dateB;
+          });
+
+          // Remove all but first
+          for (let i = 1; i < instances.length; i++) {
+            try {
+              await deleteDoc(instances[i].ref);
+              removalResults[collectionName].duplicatesRemoved++;
+              totalRemoved++;
+              logger.log(`✅ Removed duplicate: ${collectionName}/${docId} (kept oldest)`);
+            } catch (error) {
+              removalResults[collectionName].errors.push({
+                docId,
+                error: error.message
+              });
+              totalErrors++;
+              logger.error(`❌ Failed to remove duplicate ${collectionName}/${docId}:`, error);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      totalRemoved,
+      totalErrors,
+      details: removalResults,
+      status: totalErrors === 0 ? '✅ CLEANUP COMPLETE' : '⚠️ CLEANUP COMPLETED WITH ERRORS'
+    };
+  } catch (error) {
+    logger.error("❌ Duplicate removal failed:", error);
+    throw error;
   }
 };
