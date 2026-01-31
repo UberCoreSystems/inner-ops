@@ -278,149 +278,286 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
 };
 
 /**
- * Generate intelligent feedback locally without API calls
- * Uses pattern matching and context analysis
+ * Generate contextual feedback locally without API calls
+ * Philosophy-aligned, length-matched, module-specific
  */
 const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext, intensityContext, pastEntries) => {
-  const inputText = typeof userInput === 'string' ? userInput.toLowerCase() : JSON.stringify(userInput).toLowerCase();
-  
-  // Extract key themes and patterns
-  const patterns = {
-    struggle: /struggle|difficult|hard|tough|can't|unable|failing/i,
-    progress: /better|improvement|progress|success|achieved|accomplished/i,
-    relapse: /relapse|fell|slip|gave in|failed/i,
-    determination: /will|determined|committed|going to|must|need to/i,
-    reflection: /realize|understand|learned|noticed|aware/i,
-    emotional: /feel|feeling|emotion|angry|sad|anxious|stressed|happy|grateful/i
+  const inputText = typeof userInput === 'string' ? userInput : JSON.stringify(userInput);
+  const inputLower = inputText.toLowerCase();
+
+  const wordCount = inputText.trim().split(/\s+/).filter(Boolean).length;
+
+  const getLengthPlan = () => {
+    if (wordCount < 25) return { paragraphs: 1, sentences: 3 };
+    if (wordCount < 75) return { paragraphs: 1, sentences: 4 };
+    if (wordCount < 150) return { paragraphs: 2, sentences: 6 };
+    if (wordCount < 300) return { paragraphs: 2, sentences: 8 };
+    return { paragraphs: 3, sentences: 10 };
   };
 
-  const detectedPatterns = Object.keys(patterns).filter(key => patterns[key].test(inputText));
-  
-  // Mood-aware responses
-  const moodResponses = {
-    electric: [
-      "This vibrant energy is powerful. What ignited this spark, and where do you want to direct it?",
-      "Channel this intensity. What breakthrough is trying to emerge through this electric state?"
-    ],
-    foggy: [
-      "The fog isn't emptiness—it's a processing state. What needs time to clarify beneath this veil?",
-      "Confusion often precedes clarity. What question is this fog protecting you from rushing to answer?"
-    ],
-    sharp: [
-      "This clarity is a gift. What insight is cutting through right now? Capture it while the blade is keen.",
-      "Sharp focus reveals truth. What are you seeing clearly that you couldn't see before?"
-    ],
-    hollow: [
-      "Emptiness signals something was lost or given away. What needs to be mourned or reclaimed?",
-      "This hollow space might be making room for something new. What's ready to release, and what wants to enter?"
-    ],
-    heavy: [
-      "This weight has sources. What are you carrying that isn't yours, or what needs to be set down?",
-      "Burdens reveal what matters. What responsibility is real, and what is self-imposed?"
-    ],
-    chaotic: [
-      "Chaos is unintegrated energy seeking form. What pattern is trying to emerge from this storm?",
-      "Turbulence signals transformation. What old structure is breaking down to make space for the new?"
-    ],
-    triumphant: [
-      "Victory earned through struggle deserves recognition. What made this possible, and how can you repeat it?",
-      "This success is data. What did you do differently that worked? Capture the formula."
-    ],
-    light: [
-      "Lightness is a reward for releasing what doesn't serve. What let go, and how can you protect this freedom?",
-      "This buoyancy is precious. What opened, and how do you maintain this state without grasping?"
-    ],
-    focused: [
-      "Sacred attention is your superpower. What's capturing your focus, and is it worthy of this energy?",
-      "This concentration is rare. Protect it fiercely and direct it toward what truly matters."
-    ],
-    radiant: [
-      "Inner light shining outward is a sign of alignment. What opened this channel?",
-      "This luminosity wants to be shared. How can you express it without depleting yourself?"
-    ]
+  const extractKeyPhrases = () => {
+    const sentences = inputText
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (sentences.length === 0) return [];
+
+    const weighted = sentences.map((s) => {
+      const score =
+        (/(\bfeel\b|\bfeeling\b|\bafraid\b|\banxious\b|\bstress\b|\banger\b|\bgrief\b|\bshame\b)/i.test(s) ? 2 : 0) +
+        (/(\bshould\b|\bmust\b|\bneed\b|\bcan't\b|\bwon't\b|\bfailed\b|\brelapse\b|\bslip\b)/i.test(s) ? 2 : 0) +
+        (/(\bbecause\b|\bwhen\b|\bafter\b|\bbefore\b|\bso that\b|\btherefore\b)/i.test(s) ? 1 : 0) +
+        Math.min(s.length / 80, 2);
+      return { sentence: s, score };
+    });
+
+    return weighted
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2)
+      .map(s => s.sentence);
   };
 
-  // Pattern-based responses
-  const patternResponses = {
-    struggle: [
-      "Struggle reveals what you're unwilling to abandon. What are you fighting for that's worth this resistance?",
-      "Difficulty is information. What's this challenge teaching you about your edges and capacity?",
-      "The hard path often leads somewhere worth reaching. What would make this struggle meaningful?"
-    ],
-    progress: [
-      "Progress compounds. What small win today builds toward your larger transformation?",
-      "Improvement is evidence you're learning. What shifted, and how can you amplify it?",
-      "Success leaves clues. What worked here that you can apply elsewhere?"
-    ],
-    relapse: [
-      "A slip is not a fall—it's data. What triggered it, and what does that teach you about your system?",
-      "Every relapse reveals an unaddressed need. What was underneath the urge?",
-      "Return to the path without shame. What boundary needs strengthening, or what pain needs processing?"
-    ],
-    determination: [
-      "Commitment is powerful, but systems outlast motivation. What structure will support this intention?",
-      "Will is the spark; discipline is the fuel. What daily practice will carry this forward when willpower fades?",
-      "Your determination is noted. Now what's the smallest next action that proves it?"
-    ],
-    reflection: [
-      "Awareness is the first transformation. What understanding is emerging?",
-      "The observer sees what the doer missed. What pattern are you recognizing?",
-      "Meta-awareness creates choice. What do you now see that you can change?"
-    ],
-    emotional: [
-      "Emotions are messengers, not meanings. What is this feeling trying to tell you?",
-      "Name the emotion, honor it, then ask: what does it need from me?",
-      "Feeling deeply means you're alive and engaged. What action does this emotion want to inspire?"
-    ]
-  };
+  const detectLens = () => {
+    const lenses = [];
 
-  // Module-specific guidance
-  const moduleGuidance = {
-    journal: [
-      "Your words today are breadcrumbs for your future self. What truth are you leaving behind?",
-      "The unexamined life stays unchanged. What are you seeing now that demands action?",
-      "Writing creates distance from pain, turning it into wisdom. What shifts when you witness your own story?"
-    ],
-    killList: [
-      "Naming the target is half the battle. Every addiction protects something—what pain is it masking?",
-      "You don't need to be perfect; you need to be persistent. What's one more day of resistance teaching you?",
-      "The thing you're trying to kill is trying to keep you. What does freedom from this pattern look like?"
-    ],
-    relapse: [
-      "Honesty about the fall is the first step back up. No shame, just data—what happened?",
-      "Each reset sharpens your awareness. What warning sign did you miss this time?",
-      "The gap between trigger and action is where freedom lives. How can you widen that space?"
-    ],
-    hardLessons: [
-      "Pain that isn't transformed gets transmitted. What wisdom is this suffering trying to birth?",
-      "Hard lessons earn their name. What won't you forget after this?",
-      "Extracting meaning from pain is how you avoid repeating it. What's the takeaway you can't afford to lose?"
-    ]
-  };
-
-  // Build response
-  let response = "";
-  
-  // Add mood-specific insight if present
-  if (moodContext && moodResponses[moodContext]) {
-    const moodOptions = moodResponses[moodContext];
-    response += moodOptions[Math.floor(Math.random() * moodOptions.length)] + "\n\n";
-  }
-  
-  // Add pattern-based insight
-  if (detectedPatterns.length > 0) {
-    const primaryPattern = detectedPatterns[0];
-    const patternOptions = patternResponses[primaryPattern] || [];
-    if (patternOptions.length > 0) {
-      response += patternOptions[Math.floor(Math.random() * patternOptions.length)] + "\n\n";
+    if (/(anxious|fear|worry|panic|overwhelmed|stress|fragile|breakdown)/i.test(inputLower)) {
+      lenses.push('stoic');
     }
+    if (/(empty|hollow|stillness|present|now|breath|awareness|peace)/i.test(inputLower)) {
+      lenses.push('zen');
+    }
+    if (/(weak|lazy|avoid|procrastinate|coward|comfort|soft)/i.test(inputLower)) {
+      lenses.push('nietzsche');
+    }
+    if (/(meaningless|absurd|purpose|why|exist|freedom|choice)/i.test(inputLower)) {
+      lenses.push('existential');
+    }
+    if (/(shadow|projection|mask|archetype|childhood|wound)/i.test(inputLower)) {
+      lenses.push('jung');
+    }
+    if (/(strategy|enemy|battle|power|control|discipline|plan|war)/i.test(inputLower)) {
+      lenses.push('strategic');
+    }
+    if (/(flow|nature|let go|surrender|yield|water|way)/i.test(inputLower)) {
+      lenses.push('tao');
+    }
+
+    if (moodContext && ['foggy', 'hollow', 'heavy', 'chaotic'].includes(moodContext)) {
+      lenses.push('zen');
+    }
+    if (moodContext && ['focused', 'sharp', 'triumphant'].includes(moodContext)) {
+      lenses.push('stoic');
+    }
+
+    if (lenses.length === 0) lenses.push('stoic');
+    return Array.from(new Set(lenses)).slice(0, 2);
+  };
+
+  const lensLines = {
+    stoic: [
+      'Distinguish what you can control from what you cannot, then invest all force in the former.',
+      'Your judgment is the lever. Move the mind, and the rest follows.',
+      'As Epictetus would insist, the event is neutral; your verdict is the battle.'
+    ],
+    zen: [
+      'Return to direct experience. The mind’s noise settles when you stop feeding it.',
+      'Let the moment be complete before you decide what it means.',
+      'As Thich Nhat Hanh taught, peace is available when you stop chasing it.'
+    ],
+    tao: [
+      'Force creates resistance; alignment creates momentum. Choose the path with least friction.',
+      'Flow is not passivity. It is precision without strain.',
+      'Lao Tzu would call this the water path: soft, exact, unstoppable.'
+    ],
+    nietzsche: [
+      'If weakness is steering you, name it and refuse the steering wheel.',
+      'Your strength is forged by the weight you decide to carry.',
+      'Nietzsche would ask: are you choosing comfort, or choosing becoming?'
+    ],
+    existential: [
+      'Meaning is not found; it is authored. Your choice is the brush.',
+      'Freedom is heavy, but it is yours. Act from it.',
+      'Camus would say: the absurd isn’t a wall; it is a test of your defiance.'
+    ],
+    jung: [
+      'The shadow does not disappear; it integrates when you face it without flinching.',
+      'What you resist in others often mirrors what you have not claimed in yourself.',
+      'Jung would call this the call to integrate, not to deny.'
+    ],
+    strategic: [
+      'Strategy is the discipline of choosing battles that compound power.',
+      'Every move should reduce future friction and increase optionality.',
+      'Sun Tzu would remind you: the best win is the one you script in advance.'
+    ]
+  };
+
+  const summarizePastEntries = () => {
+    if (!pastEntries || pastEntries.length === 0) return '';
+    const recent = pastEntries.slice(-3).map((entry) => {
+      if (typeof entry === 'string') return entry;
+      if (typeof entry === 'object') return entry.content || entry.entry || entry.text || JSON.stringify(entry);
+      return '';
+    }).filter(Boolean).join(' ').toLowerCase();
+
+    if (!recent) return '';
+
+    const themes = [
+      { key: 'avoidance', re: /avoid|escape|numb|scroll|procrastin/i },
+      { key: 'pressure', re: /pressure|stress|overwhelm|too much/i },
+      { key: 'isolation', re: /alone|isolated|lonely|withdraw/i },
+      { key: 'anger', re: /angry|rage|irritat/i },
+      { key: 'grief', re: /grief|loss|mourning|sad/i }
+    ];
+
+    const hit = themes.find(t => t.re.test(recent));
+    if (!hit) return '';
+
+    const lines = {
+      avoidance: 'A pattern of avoidance keeps surfacing. Name the cost of the escape.',
+      pressure: 'The pressure theme keeps returning. What boundary would lower the load without lowering your standards?',
+      isolation: 'Isolation shows up more than once. Is it protection, or is it a slow leak of strength?',
+      anger: 'Anger repeats in the background. What boundary keeps getting crossed, and who needs to hear it?',
+      grief: 'Grief echoes across entries. Let it speak without turning it into a verdict.'
+    };
+
+    return lines[hit.key] || '';
+  };
+
+  const moduleDirectives = {
+    journal: 'Name the specific shift they’re experiencing and translate it into a next action.',
+    killList: 'Frame the target as a system to dismantle; highlight triggers and replacement behavior.',
+    relapse: 'Treat relapse as data; identify trigger → impulse → action chain and a single interrupt.',
+    hardLessons: 'Extract assumption, ignored signal, lesson, and rule. No moral language.',
+    emergency: 'Short, grounding, immediate action, then a single reframe question.',
+    'black mirror': 'Expose attention leaks; name the cost and the smallest boundary.'
+  };
+
+  const getModuleName = () => (moduleName || '').toLowerCase();
+  const moduleKey = getModuleName();
+
+  if (moduleKey === 'hardlessons' || moduleKey === 'hard lessons' || moduleKey === 'hardlessonsmodule' || targetContext === 'hardLessons') {
+    const phrases = extractKeyPhrases();
+    const assumption = phrases[0] ? `Assumption: ${phrases[0]}` : 'Assumption: Identify the belief that proved false.';
+    const signal = phrases[1] ? `Ignored Signal: ${phrases[1]}` : 'Ignored Signal: Name the early warning you discounted.';
+    const lesson = 'Lesson: State the precise cause-effect you must remember.';
+    const rule = 'Rule: Convert the lesson into a constraint you can enforce.';
+    return [assumption, signal, lesson, rule].join('\n');
   }
-  
-  // Add module guidance
-  const moduleOptions = moduleGuidance[moduleName] || moduleGuidance.journal;
-  response += moduleOptions[Math.floor(Math.random() * moduleOptions.length)];
-  
-  return response;
+
+  if (moduleKey === 'emergency') {
+    return [
+      'You did the hard part: you paused. This urge will crest and fall—breathe and let it pass through without acting.',
+      'Do one small interrupt now: stand up, drink water, and change your environment for five minutes.',
+      'What is the deeper need underneath this impulse that you can meet without breaking your standards?'
+    ].join(' ');
+  }
+
+  const keyPhrases = extractKeyPhrases();
+  const lenses = detectLens();
+  const { paragraphs, sentences } = getLengthPlan();
+
+  const openerVariants = keyPhrases[0]
+    ? [
+        `You named: “${keyPhrases[0]}”. That isn’t a small detail—it’s the hinge.`,
+        `The core of it is here: “${keyPhrases[0]}”. That’s the pivot.`,
+        `This line matters most: “${keyPhrases[0]}”. Build from there.`
+      ]
+    : [
+        'Say it plainly: what you wrote is the hinge point of your pattern.',
+        'The core is there even if unnamed—find it and say it out loud.',
+        'Your entry already contains the answer; isolate it and act.'
+      ];
+
+  const contextVariants = keyPhrases[1]
+    ? [
+        `And this matters: “${keyPhrases[1]}”. That’s where the leverage hides.`,
+        `This line has weight: “${keyPhrases[1]}”. That’s your leverage.`,
+        `Notice the consequence here: “${keyPhrases[1]}”. That’s the handle.`
+      ]
+    : [
+        'The leverage is buried in the exact moment you described—return to it.',
+        'Look at the trigger point you described—that’s where the change starts.',
+        'The pattern lives in the moment before the choice. Go back there.'
+      ];
+
+  const opener = openerVariants[Math.floor(Math.random() * openerVariants.length)];
+  const contextLine = contextVariants[Math.floor(Math.random() * contextVariants.length)];
+
+  const lensStack = lenses
+    .map((lens) => lensLines[lens]?.[0])
+    .filter(Boolean)
+    .slice(0, 2);
+
+  const lensFollow = lenses
+    .map((lens) => lensLines[lens]?.[1])
+    .filter(Boolean)
+    .slice(0, 1);
+
+  const signatureLine = lenses
+    .map((lens) => lensLines[lens]?.[2])
+    .filter(Boolean)
+    .slice(0, 1);
+
+  const moduleLine = moduleDirectives[moduleKey] || moduleDirectives.journal;
+
+  const actionLines = [
+    'Next action: choose one concrete step you will take within 24 hours and schedule it.',
+    'Make it measurable: decide the exact time, place, and duration for the next step.',
+    'Reduce friction: remove one obstacle today so tomorrow is easier.'
+  ];
+
+  const questions = [
+    'What is the smallest action you can take in the next 24 hours that proves you mean it?',
+    'If you remove one excuse, which one collapses the whole pattern?',
+    'What boundary, if enforced once, would change everything?'
+  ];
+
+  const question = questions[Math.floor(Math.random() * questions.length)];
+  const actionLine = actionLines[Math.floor(Math.random() * actionLines.length)];
+
+  const responseStyles = [
+    { name: 'direct', order: ['opener', 'context', 'lens', 'module', 'action', 'question'] },
+    { name: 'coach', order: ['opener', 'module', 'context', 'lens', 'action', 'question'] },
+    { name: 'reflective', order: ['opener', 'lens', 'context', 'module', 'question', 'action'] },
+    { name: 'strategic', order: ['opener', 'context', 'module', 'lens', 'action', 'question'] }
+  ];
+  const style = responseStyles[Math.floor(Math.random() * responseStyles.length)];
+
+  const pastLine = summarizePastEntries();
+
+  const blocks = {
+    opener,
+    context: contextLine,
+    lens: [...lensStack, ...lensFollow, ...signatureLine].filter(Boolean).join(' '),
+    past: pastLine,
+    module: moduleLine,
+    action: actionLine,
+    question
+  };
+
+  const bodySentences = style.order
+    .map((key) => blocks[key])
+    .filter(Boolean);
+
+  if (blocks.past && !bodySentences.includes(blocks.past)) {
+    bodySentences.splice(2, 0, blocks.past);
+  }
+
+  const targetCount = Math.max(sentences, 4);
+  const sliced = bodySentences.slice(0, Math.min(bodySentences.length, targetCount));
+
+  if (paragraphs === 1) {
+    return sliced.join(' ');
+  }
+
+  const splitIndex = Math.ceil(sliced.length / 2);
+  const first = sliced.slice(0, splitIndex).join(' ');
+  const second = sliced.slice(splitIndex).join(' ');
+  if (paragraphs === 2) return `${first}\n\n${second}`;
+
+  const third = lensFollow.length ? lensFollow.join(' ') : 'Hold the line and let the results educate you.';
+  return `${first}\n\n${second}\n\n${third}`;
 };
 
 /**

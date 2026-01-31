@@ -233,10 +233,8 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
       if (entry.trim().split(/\s+/).length >= 10) {
         setOracleLoading(true);
         try {
-          const feedback = await generateAIFeedback(entry, 'journal', {
-            mood: mood || 'focused',
-            intensity: intensity,
-          });
+          const inputText = `Mood: ${mood || 'focused'} (${intensity}/5)\n${entry.trim()}`;
+          const feedback = await generateAIFeedback('journal', inputText, []);
           setOracleResponse(feedback);
           setShowOracle(true);
         } catch (error) {

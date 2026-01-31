@@ -744,6 +744,20 @@ export default function Dashboard() {
                   <div className="text-4xl mb-3 opacity-30">📊</div>
                   <p className="text-[#5a5a5a]">No recent activity</p>
                   <p className="text-[#3a3a3a] text-sm mt-1">Start using the modules to track progress</p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
+                    <button
+                      onClick={() => setQuickJournalOpen(true)}
+                      className="px-5 py-2.5 bg-[#00d4aa] hover:bg-[#00e6b8] text-black rounded-xl transition-all duration-300 font-medium text-sm"
+                    >
+                      Quick Journal
+                    </button>
+                    <Link
+                      to="/killlist"
+                      className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
+                    >
+                      Add a Kill Contract
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -768,6 +782,12 @@ export default function Dashboard() {
                   <div className="text-4xl mb-3 opacity-30">🤖</div>
                   <p className="text-[#5a5a5a]">Learning your patterns</p>
                   <p className="text-[#3a3a3a] text-sm mt-1">Keep using the app for personalized insights</p>
+                  <button
+                    onClick={() => setQuickJournalOpen(true)}
+                    className="mt-4 px-5 py-2.5 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-xl transition-all duration-300 font-medium text-sm"
+                  >
+                    Add a Journal Entry
+                  </button>
                 </div>
               )}
             </div>

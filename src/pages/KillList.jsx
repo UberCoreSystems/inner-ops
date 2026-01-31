@@ -85,6 +85,7 @@ const KillList = () => {
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedTargets, setSelectedTargets] = useState(new Set());
   const [bulkActionMode, setBulkActionMode] = useState(false);
   const targetsRef = useRef([]);
@@ -480,17 +481,39 @@ const KillList = () => {
   }, [targets]);
 
   const filteredTargets = useMemo(() => {
-    switch (filterStatus) {
-      case 'active':
-        return targets.filter(target => target.status === 'active');
-      case 'completed':
-        return targets.filter(target => target.status === 'killed');
-      case 'escaped':
-        return targets.filter(target => target.status === 'escaped');
-      default:
-        return targets;
-    }
-  }, [targets, filterStatus]);
+    const statusFiltered = (() => {
+      switch (filterStatus) {
+        case 'active':
+          return targets.filter(target => target.status === 'active');
+        case 'completed':
+          return targets.filter(target => target.status === 'killed');
+        case 'escaped':
+          return targets.filter(target => target.status === 'escaped');
+        default:
+          return targets;
+      }
+    })();
+
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return statusFiltered;
+
+    return statusFiltered.filter((target) => {
+      const categoryLabel = categories.find(c => c.value === target.category)?.label || '';
+      const haystack = [
+        target.title,
+        target.description,
+        target.reflectionNotes,
+        target.status,
+        target.priority,
+        categoryLabel
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [targets, filterStatus, searchQuery, categories]);
 
   const stats = useMemo(() => {
     const total = targets.length;
@@ -874,7 +897,25 @@ const KillList = () => {
 
         {/* Filter Tabs */}
         <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-4">
+            <div className="relative">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search contracts, notes, or categories..."
+                className="w-full px-4 py-3 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a5a5a] hover:text-white text-sm"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
             {[
               { key: 'all', label: 'All Contracts', count: stats.total },
               { key: 'active', label: 'Active', count: stats.active },
@@ -893,6 +934,7 @@ const KillList = () => {
                 {label} ({count})
               </button>
             ))}
+            </div>
           </div>
         </section>
 
@@ -914,16 +956,34 @@ const KillList = () => {
               <div className="oura-card p-12 text-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
                 <div className="text-6xl mb-4 opacity-30">🎯</div>
                 <h3 className="text-xl font-semibold text-[#8a8a8a] mb-2">
-                  {filterStatus === 'completed' ? 'No completed contracts yet' :
-                   filterStatus === 'active' ? 'No active contracts' :
-                   'No kill contracts yet'}
+                  {searchQuery.trim()
+                    ? `No matches for “${searchQuery.trim()}”`
+                    : (filterStatus === 'completed' ? 'No completed contracts yet' :
+                      filterStatus === 'active' ? 'No active contracts' :
+                      'No kill contracts yet')}
                 </h3>
                 <p className="text-[#5a5a5a] text-sm mb-6">
-                  {filterStatus === 'all' ? 'Add your first contract to begin eliminating negative patterns' :
-                   filterStatus === 'active' ? 'All your contracts have been completed!' :
-                   'Complete some contracts to see them here'}
+                  {searchQuery.trim()
+                    ? 'Try a different keyword or clear the search.'
+                    : (filterStatus === 'all' ? 'Add your first contract to begin eliminating negative patterns' :
+                      filterStatus === 'active' ? 'All your contracts have been completed!' :
+                      'Complete some contracts to see them here')}
                 </p>
-                {filterStatus !== 'completed' && (
+                {searchQuery.trim() ? (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="px-6 py-2 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white border border-[#1a1a1a] rounded-lg transition-all duration-300 font-medium text-sm"
+                  >
+                    Clear Search
+                  </button>
+                ) : filterStatus === 'completed' ? (
+                  <button
+                    onClick={() => setFilterStatus('active')}
+                    className="px-6 py-2 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white border border-[#1a1a1a] rounded-lg transition-all duration-300 font-medium text-sm"
+                  >
+                    View Active Contracts
+                  </button>
+                ) : (
                   <button
                     onClick={() => document.querySelector('input[placeholder="Enter a new kill target..."]')?.focus()}
                     className="px-6 py-2 bg-[#ef4444] hover:bg-[#dc2626] text-white rounded-lg transition-all duration-300 font-medium text-sm"

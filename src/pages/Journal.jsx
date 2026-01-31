@@ -188,6 +188,7 @@ export default function Journal() {
   const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [intensity, setIntensity] = useState(3);
   const [entries, setEntries] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
@@ -213,6 +214,28 @@ export default function Journal() {
   useEffect(() => {
     loadJournalEntries();
   }, []);
+
+  const filteredEntries = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return entries;
+
+    return entries.filter((entry) => {
+      const moodLabel = moodOptions.find(m => m.value === entry.mood)?.label || '';
+      const haystack = [
+        entry.content,
+        entry.oracleJudgment,
+        entry.userResponse,
+        entry.oracleFollowUp,
+        moodLabel,
+        entry.category
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [entries, searchQuery, moodOptions]);
 
   // Delay showing skeleton to prevent flicker
   useEffect(() => {
@@ -721,6 +744,7 @@ export default function Journal() {
 
                 <div className="relative">
                   <textarea
+                    id="journal-entry-input"
                     value={entry}
                     onChange={(e) => setEntry(e.target.value)}
                     rows={6}
@@ -752,16 +776,42 @@ export default function Journal() {
 
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Previous Entries</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest">
+              Previous Entries
+              {searchQuery.trim() && (
+                <span className="text-[#3a3a3a] ml-2">
+                  ({filteredEntries.length}/{entries.length})
+                </span>
+              )}
+            </h3>
+            <div className="relative w-full sm:w-80">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search entries..."
+                className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#00d4aa] focus:outline-none transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a5a5a] hover:text-white text-xs"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
           <div className="relative">
             <div className={`fade-pane ${showSkeleton ? 'visible' : 'hidden'}`}>
               <SkeletonList count={4} ItemComponent={SkeletonJournalEntry} />
             </div>
 
             <div className={`fade-pane ${showSkeleton ? 'hidden' : 'visible'}`}>
-              {entries.length > 0 ? (
+              {filteredEntries.length > 0 ? (
                 <div className="space-y-4 max-h-[800px] overflow-y-auto pr-4">
-                  {entries.map((entry, mapIndex) => {
+                  {filteredEntries.map((entry, mapIndex) => {
                     const moodOption = moodOptions.find(m => m.value === entry.mood);
                     const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
                     
@@ -838,15 +888,48 @@ export default function Journal() {
                 </div>
               ) : (
                 <div className="oura-card p-12 text-center">
-                  <div className="text-4xl mb-4 opacity-30">📝</div>
-                  <p className="text-[#5a5a5a] font-medium mb-1">No journal entries yet</p>
-                  <p className="text-[#3a3a3a] text-sm mb-6">Start writing to track your journey</p>
-                  <button
-                    onClick={() => document.querySelector('textarea[placeholder="What\'s on your mind?"]')?.focus()}
-                    className="px-6 py-2 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-lg transition-all duration-300 font-medium text-sm"
-                  >
-                    Write Your First Entry
-                  </button>
+                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center text-2xl">
+                    📝
+                  </div>
+                  <h3 className="text-lg font-light text-white mb-2">
+                    {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No journal entries yet'}
+                  </h3>
+                  <p className="text-[#5a5a5a] text-sm mb-6">
+                    {searchQuery.trim()
+                      ? 'Try a different keyword or clear the search.'
+                      : 'Start with one clear thought. Momentum comes from the first line.'}
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    {searchQuery.trim() ? (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="px-6 py-2.5 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
+                      >
+                        Clear Search
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            document.getElementById('journal-entry-input')?.focus();
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="px-6 py-2.5 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-xl transition-all duration-300 font-medium text-sm"
+                        >
+                          Write Your First Entry
+                        </button>
+                        <button
+                          onClick={() => {
+                            document.getElementById('journal-entry-input')?.focus();
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="px-6 py-2.5 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
+                        >
+                          Use a Prompt
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

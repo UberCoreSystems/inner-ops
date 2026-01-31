@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData } from '../utils/firebaseUtils';
@@ -48,6 +48,7 @@ const RelapseRadar = () => {
   const [substanceUse, setSubstanceUse] = useState([]);
   const [reflection, setReflection] = useState('');
   const [relapseEntries, setRelapseEntries] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [aiInsights, setAiInsights] = useState([]);
@@ -84,6 +85,26 @@ const RelapseRadar = () => {
       logger.error("Error loading relapse entries:", error);
     }
   };
+
+  const filteredRelapseEntries = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return relapseEntries;
+
+    return relapseEntries.filter((entry) => {
+      const haystack = [
+        entry.selectedSelf,
+        entry.selectedHabits?.join(' '),
+        entry.substanceUse?.join(' '),
+        entry.reflection,
+        entry.oracleFeedback
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [relapseEntries, searchQuery]);
 
   const handleHabitToggle = (habit) => {
     setSelectedHabits(prev => 
@@ -306,30 +327,70 @@ const RelapseRadar = () => {
 
       {relapseEntries.length > 0 && (
         <div className="mt-10">
-          <h3 className="text-2xl font-light text-white mb-6 tracking-tight">
-            Recent Entries <span className="text-gray-500 text-lg">({relapseEntries.length})</span>
-          </h3>
-          <div className="space-y-3">
-            {relapseEntries.slice(0, 3).map((entry) => (
-              <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-sm transition-shadow duration-300">
-                <div className="text-oura-amber font-light text-lg">{entry.selectedSelf}</div>
-                <div className="text-gray-500 text-sm mt-2">
-                  {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </div>
-                <div className="text-gray-400 text-sm mt-3 leading-relaxed">
-                  {entry.reflection?.substring(0, 100)}...
-                </div>
-                {entry.oracleFeedback && (
-                  <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
-                    <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
-                    <div className="text-gray-300 text-xs leading-relaxed">
-                      {entry.oracleFeedback.substring(0, 150)}...
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+            <h3 className="text-2xl font-light text-white tracking-tight">
+              Recent Entries{' '}
+              <span className="text-gray-500 text-lg">
+                ({searchQuery.trim() ? `${filteredRelapseEntries.length}/${relapseEntries.length}` : relapseEntries.length})
+              </span>
+            </h3>
+            <div className="relative w-full sm:w-72">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search entries..."
+                className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-amber focus:outline-none transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
+
+          {filteredRelapseEntries.length > 0 ? (
+            <div className="space-y-3">
+              {filteredRelapseEntries.slice(0, 3).map((entry) => (
+                <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-sm transition-shadow duration-300">
+                  <div className="text-oura-amber font-light text-lg">{entry.selectedSelf}</div>
+                  <div className="text-gray-500 text-sm mt-2">
+                    {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                  <div className="text-gray-400 text-sm mt-3 leading-relaxed">
+                    {entry.reflection?.substring(0, 100)}...
+                  </div>
+                  {entry.oracleFeedback && (
+                    <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
+                      <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
+                      <div className="text-gray-300 text-xs leading-relaxed">
+                        {entry.oracleFeedback.substring(0, 150)}...
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="oura-card p-6 text-center">
+              <div className="text-2xl mb-2 opacity-40">🧭</div>
+              <p className="text-gray-300 text-sm">
+                {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No entries to show yet.'}
+              </p>
+              {searchQuery.trim() && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="mt-3 px-4 py-2 bg-oura-card border border-oura-border text-gray-300 rounded-xl hover:text-white hover:border-gray-500 transition-all text-xs"
+                >
+                  Clear Search
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

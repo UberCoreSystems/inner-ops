@@ -37,6 +37,7 @@ const BlackMirror = () => {
   const [unconsciousCheck, setUnconsciousCheck] = useState(false);
   const [reflection, setReflection] = useState('');
   const [entries, setEntries] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiFeedback, setAiFeedback] = useState('');
   const [loadingFeedback, setLoadingFeedback] = useState(false);
@@ -68,6 +69,27 @@ const BlackMirror = () => {
   const philosophicalInsight = useMemo(() => {
     return philosophicalQuotes[Math.floor(Math.random() * philosophicalQuotes.length)];
   }, []);
+
+  const filteredEntries = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return entries;
+
+    return entries.filter((entry) => {
+      const haystack = [
+        entry.reflection,
+        entry.oracleFeedback,
+        entry.philosophicalInsight,
+        String(entry.screenTime),
+        String(entry.blackMirrorIndex),
+        entry.unconsciousCheck ? 'yes' : 'no'
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [entries, searchQuery]);
 
   // Load entries on component mount
   useEffect(() => {
@@ -182,6 +204,7 @@ const BlackMirror = () => {
           <div>
             <label className="block text-gray-400 text-sm font-medium mb-3">Mindless Screen Time Today (hours)</label>
             <input
+              id="black-mirror-screen-time"
               type="number"
               step="0.5"
               min="0"
@@ -269,6 +292,7 @@ const BlackMirror = () => {
             <label className="block text-gray-400 text-sm font-medium mb-3">Reflection (Optional)</label>
             <div className="relative">
               <textarea
+                id="black-mirror-reflection"
                 value={reflection}
                 onChange={(e) => setReflection(e.target.value)}
                 rows={4}
@@ -296,13 +320,35 @@ const BlackMirror = () => {
 
       {/* Recent Entries */}
       <div className="oura-card p-6 animate-fade-in-up animation-delay-200">
-        <h2 className="text-2xl font-light text-white mb-6 tracking-tight">
-          History <span className="text-gray-500 text-lg">({entries.length})</span>
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <h2 className="text-2xl font-light text-white tracking-tight">
+            History{' '}
+            <span className="text-gray-500 text-lg">
+              ({searchQuery.trim() ? `${filteredEntries.length}/${entries.length}` : entries.length})
+            </span>
+          </h2>
+          <div className="relative w-full sm:w-72">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search history..."
+              className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-red focus:outline-none transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
 
-        {entries.length > 0 ? (
+        {filteredEntries.length > 0 ? (
           <VirtualizedList
-            items={entries}
+            items={filteredEntries}
             itemHeight={280}
             maxHeight={400}
             overscan={1}
@@ -368,9 +414,49 @@ const BlackMirror = () => {
             )}
           />
         ) : (
-          <div className="text-center py-16">
-            <p className="text-gray-500 text-base">No entries yet</p>
-            <p className="text-gray-600 text-sm mt-2">Start tracking your digital consciousness</p>
+          <div className="oura-card p-10 text-center border border-oura-border">
+            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center text-2xl">
+              🪞
+            </div>
+            <h3 className="text-lg font-light text-white mb-2">
+              {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No Black Mirror entries yet'}
+            </h3>
+            <p className="text-gray-500 text-sm mb-6">
+              {searchQuery.trim()
+                ? 'Try a different keyword or clear the search.'
+                : 'Log a quick check-in to surface unconscious patterns and reclaim attention.'}
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              {searchQuery.trim() ? (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="px-6 py-2.5 bg-transparent border border-oura-border text-gray-300 hover:text-white hover:border-gray-500 rounded-xl transition-all duration-300 font-medium text-sm"
+                >
+                  Clear Search
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      document.getElementById('black-mirror-screen-time')?.focus();
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-6 py-2.5 bg-oura-red hover:bg-red-600 text-white rounded-xl transition-all duration-300 font-medium text-sm"
+                  >
+                    Log Today’s Check
+                  </button>
+                  <button
+                    onClick={() => {
+                      document.getElementById('black-mirror-reflection')?.focus();
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-6 py-2.5 bg-transparent border border-oura-border text-gray-300 hover:text-white hover:border-gray-500 rounded-xl transition-all duration-300 font-medium text-sm"
+                  >
+                    Add a Reflection
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

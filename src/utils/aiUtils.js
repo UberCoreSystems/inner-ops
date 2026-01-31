@@ -1,5 +1,6 @@
 // AI utilities for generating reflections, insights, and feedback
 import logger from './logger';
+import { generateAIFeedback as generateOracleFeedback } from './aiFeedback';
 
 export const aiUtils = {
   // Generate journal reflection prompts based on mood and content
@@ -236,12 +237,10 @@ export const aiUtils = {
 
   // Generate AI feedback using local intelligent responses
   generateAIFeedback: async (moduleName, userInput, pastEntries = []) => {
-    // SECURITY: Removed direct OpenAI API calls from client-side
-    // This prevents API key exposure in browser
     logger.info("Generating local AI feedback (API calls removed for security)");
-    
+
     try {
-      return generateLocalAIResponse(moduleName, userInput, pastEntries);
+      return generateOracleFeedback(moduleName, userInput, pastEntries);
     } catch (error) {
       logger.error("Error generating AI feedback:", error);
       return "Continue your practice with inner discipline and honest reflection.";

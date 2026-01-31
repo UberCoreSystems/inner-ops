@@ -591,32 +591,7 @@ const deleteEntry = async (entryId) => {
 
 ## 🔐 SECURITY IMPROVEMENTS
 
-### 19. **API Keys in Client Code**
-**Issue:** OpenAI API key called from client-side (visible in browser).
-
-**Critical:** Move to backend/serverless function
-```javascript
-// Create Firebase Cloud Function
-// functions/src/index.ts
-export const generateOracleFeedback = functions.https.onCall(async (data, context) => {
-  // Verify auth
-  if (!context.auth) throw new Error('Unauthenticated');
-  
-  const response = await openai.chat.completions.create({
-    // Use environment variable on server
-  });
-  
-  return response.choices[0].message.content;
-});
-
-// Call from client
-const generateFeedback = firebase.functions().httpsCallable('generateOracleFeedback');
-const result = await generateFeedback({ text: entry });
-```
-
----
-
-### 20. **Firestore Security Rules**
+### 19. **Firestore Security Rules**
 **Issue:** Need to verify security rules are properly set.
 
 **Recommendation:**
@@ -636,7 +611,7 @@ service cloud.firestore {
 
 ## 📊 ANALYTICS & MONITORING
 
-### 21. **No Error Tracking**
+### 20. **No Error Tracking**
 **Recommendation:** Add Sentry or similar
 ```javascript
 import * as Sentry from "@sentry/react";
@@ -649,7 +624,7 @@ Sentry.init({
 
 ---
 
-### 22. **No Usage Analytics**
+### 21. **No Usage Analytics**
 **Recommendation:** Add privacy-friendly analytics
 ```javascript
 // Simple custom analytics
@@ -672,7 +647,7 @@ trackEvent('KillList', 'TargetCompleted', targetCategory);
 
 ## 🎨 VISUAL POLISH
 
-### 23. **Animation Performance**
+### 22. **Animation Performance**
 **Issue:** Some animations cause jank on lower-end devices.
 
 **Recommendations:**
@@ -701,7 +676,7 @@ trackEvent('KillList', 'TargetCompleted', targetCategory);
 
 ---
 
-### 24. **Dark Mode Only**
+### 23. **Dark Mode Only**
 **Issue:** No light mode option (could exclude users who prefer light themes).
 
 **Recommendation:**
@@ -720,9 +695,7 @@ localStorage.setItem('theme', theme);
 
 ---
 
-## 📱 PWA FEATURES
-
-### 25. **Not a Progressive Web App**
+### 24. **Not a Progressive Web App**
 **Missing:**
 - Service worker
 - Web app manifest
@@ -758,8 +731,8 @@ export default {
 1. ✅ Remove/replace console.logs
 2. ✅ Add error boundaries
 3. ✅ Fix mobile navigation
-4. ✅ Move API keys to backend
-5. ✅ Add input validation
+4. ✅ Add input validation
+5. ✅ Implement API security
 
 ### Phase 2 (Week 2) - Performance
 6. ✅ Implement caching strategy

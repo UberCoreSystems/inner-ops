@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
@@ -46,6 +46,7 @@ export default function HardLessons() {
 
   // Module state
   const [lessons, setLessons] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
@@ -83,6 +84,31 @@ export default function HardLessons() {
     setLessons(savedLessons || []);
     setInitialLoading(false);
   };
+
+  const filteredLessons = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return lessons;
+
+    return lessons.filter((lesson) => {
+      const categoryLabel = eventCategories.find(cat => cat.value === lesson.eventCategory)?.label || '';
+      const statusLabel = lesson.isFinalized ? 'finalized' : 'draft';
+      const haystack = [
+        categoryLabel,
+        lesson.eventDescription,
+        lesson.myAssumption,
+        lesson.signalIgnored,
+        lesson.costDescription,
+        lesson.extractedLesson,
+        lesson.ruleGoingForward,
+        statusLabel
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [lessons, searchQuery, eventCategories]);
 
   const handleCostToggle = (costValue) => {
     setNewLesson(prev => ({
@@ -320,6 +346,7 @@ Please help extract the core lesson and rule from this experience.
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">What actually happened (no interpretation, just facts)</p>
               <textarea
+                id="hard-lessons-event"
                 value={newLesson.eventDescription}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, eventDescription: e.target.value }))}
                 rows={3}
@@ -461,7 +488,31 @@ Please help extract the core lesson and rule from this experience.
 
       {/* Lessons List */}
       <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-        <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Extracted Lessons</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest">
+            Extracted Lessons
+            {searchQuery.trim() && (
+              <span className="text-[#3a3a3a] ml-2">({filteredLessons.length}/{lessons.length})</span>
+            )}
+          </h3>
+          <div className="relative w-full sm:w-80">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search lessons..."
+              className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a5a5a] hover:text-white text-xs"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="relative">
           <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
@@ -469,9 +520,9 @@ Please help extract the core lesson and rule from this experience.
           </div>
 
           <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
-            {lessons.length > 0 ? (
+            {filteredLessons.length > 0 ? (
               <VirtualizedList
-                items={lessons}
+                items={filteredLessons}
                 itemHeight={420}
                 maxHeight={800}
                 renderItem={({ item: lesson }) => {
@@ -570,17 +621,54 @@ Please help extract the core lesson and rule from this experience.
               />
             ) : (
               <div className="oura-card p-12 text-center">
-                <div className="text-6xl mb-4 opacity-30">⚡</div>
-                <h3 className="text-lg font-semibold text-[#8a8a8a] mb-2">No Hard Lessons Extracted Yet</h3>
+                <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center text-2xl">
+                  ⚡
+                </div>
+                <h3 className="text-lg font-light text-white mb-2">
+                  {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No Hard Lessons Extracted Yet'}
+                </h3>
                 <p className="text-[#5a5a5a] mb-6 text-sm">
-                  When pain demands wisdom, extract the lesson here.
+                  {searchQuery.trim()
+                    ? 'Try a different keyword or clear the search.'
+                    : 'Turn a painful event into an enforceable rule you never pay for twice.'}
                 </p>
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
-                >
-                  Extract Your First Lesson
-                </button>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  {searchQuery.trim() ? (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="px-6 py-3 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
+                    >
+                      Clear Search
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          setShowForm(true);
+                          setTimeout(() => {
+                            document.getElementById('hard-lessons-event')?.focus();
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }, 0);
+                        }}
+                        className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
+                      >
+                        Extract Your First Lesson
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowForm(true);
+                          setTimeout(() => {
+                            document.getElementById('hard-lessons-event')?.focus();
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }, 0);
+                        }}
+                        className="px-6 py-3 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
+                      >
+                        Start the Framework
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
