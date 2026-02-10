@@ -89,6 +89,7 @@ const KillList = () => {
   const [selectedTargets, setSelectedTargets] = useState(new Set());
   const [bulkActionMode, setBulkActionMode] = useState(false);
   const targetsRef = useRef([]);
+  const pendingTargetDeletes = useRef(new Map());
   
   // Celebration state
   const [celebration, setCelebration] = useState({ show: false, targetName: '' });
@@ -300,18 +301,77 @@ const KillList = () => {
   }, []);
 
   const deleteTarget = useCallback(async (targetId) => {
-    try {
-      logger.log("🗑️ KillList: Deleting target:", targetId);
-      await deleteData('killTargets', targetId);
-      logger.log('✅ KillList: Target deleted successfully');
-      
-      // Update local state immediately
-      setTargets(prev => prev.filter(target => target.id !== targetId));
-      ouraToast.success('Target removed');
-    } catch (error) {
-      logger.error('❌ KillList: Error deleting target:', error);
-      ouraToast.error('Failed to delete target');
+    const targetToDelete = targetsRef.current.find(t => t.id === targetId);
+    const targetIndex = targetsRef.current.findIndex(t => t.id === targetId);
+
+    if (!targetToDelete) return;
+
+    if (!window.confirm('Delete this target? You can undo within 5 seconds.')) {
+      return;
     }
+
+    logger.log("🗑️ KillList: Deleting target:", targetId);
+
+    setTargets(prev => prev.filter(target => target.id !== targetId));
+
+    const existingPending = pendingTargetDeletes.current.get(targetId);
+    if (existingPending) {
+      clearTimeout(existingPending.timeoutId);
+      pendingTargetDeletes.current.delete(targetId);
+    }
+
+    const undoDelete = () => {
+      const pending = pendingTargetDeletes.current.get(targetId);
+      if (!pending) return;
+
+      clearTimeout(pending.timeoutId);
+      pendingTargetDeletes.current.delete(targetId);
+
+      setTargets(prev => {
+        if (prev.some(target => target.id === targetId)) return prev;
+        const next = [...prev];
+        const insertIndex = Math.min(pending.index, next.length);
+        next.splice(insertIndex, 0, pending.target);
+        return next;
+      });
+
+      ouraToast.dismiss(pending.toastId);
+      ouraToast.success('Deletion undone');
+    };
+
+    const toastId = ouraToast.warning(
+      <div className="flex items-center gap-3">
+        <span>Target removed</span>
+        <button
+          onClick={undoDelete}
+          className="px-2 py-1 text-xs rounded-md border border-white/20 text-white hover:bg-white/10 transition-colors"
+        >
+          Undo
+        </button>
+      </div>,
+      { duration: 5000 }
+    );
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await deleteData('killTargets', targetId);
+        logger.log('✅ KillList: Target deleted successfully');
+      } catch (error) {
+        logger.error('❌ KillList: Error deleting target:', error);
+        setTargets(prev => {
+          if (prev.some(target => target.id === targetId)) return prev;
+          const next = [...prev];
+          const insertIndex = Math.min(targetIndex, next.length);
+          next.splice(insertIndex, 0, targetToDelete);
+          return next;
+        });
+        ouraToast.error('Failed to delete target');
+      } finally {
+        pendingTargetDeletes.current.delete(targetId);
+      }
+    }, 5000);
+
+    pendingTargetDeletes.current.set(targetId, { timeoutId, target: targetToDelete, index: targetIndex, toastId });
   }, []);
 
   const markAsEscaped = useCallback(async (targetId) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
@@ -53,6 +53,7 @@ export default function HardLessons() {
   const [showForm, setShowForm] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const pendingLessonDeletes = useRef(new Map());
 
   useEffect(() => {
     loadHardLessons();
@@ -247,24 +248,78 @@ Please help extract the core lesson and rule from this experience.
 
   const deleteLesson = async (lessonId) => {
     const lesson = lessons.find(l => l.id === lessonId);
+    const lessonIndex = lessons.findIndex(l => l.id === lessonId);
 
     if (lesson?.isFinalized) {
       ouraToast.info('Finalized lessons cannot be deleted. They are permanent strategic assets.');
       return;
     }
 
-    if (!window.confirm('Delete this Hard Lesson? This action cannot be undone.')) {
+    if (!lesson) return;
+
+    if (!window.confirm('Delete this Hard Lesson? You can undo within 5 seconds.')) {
       return;
     }
 
-    try {
-      await deleteData('hardLessons', lessonId);
-      setLessons(prev => prev.filter(l => l.id !== lessonId));
-      ouraToast.success('Hard Lesson deleted');
-    } catch (error) {
-      logger.error('Error deleting Hard Lesson:', error);
-      ouraToast.error('Failed to delete lesson');
+    setLessons(prev => prev.filter(l => l.id !== lessonId));
+
+    const existingPending = pendingLessonDeletes.current.get(lessonId);
+    if (existingPending) {
+      clearTimeout(existingPending.timeoutId);
+      pendingLessonDeletes.current.delete(lessonId);
     }
+
+    const undoDelete = () => {
+      const pending = pendingLessonDeletes.current.get(lessonId);
+      if (!pending) return;
+
+      clearTimeout(pending.timeoutId);
+      pendingLessonDeletes.current.delete(lessonId);
+
+      setLessons(prev => {
+        if (prev.some(l => l.id === lessonId)) return prev;
+        const next = [...prev];
+        const insertIndex = Math.min(pending.index, next.length);
+        next.splice(insertIndex, 0, pending.lesson);
+        return next;
+      });
+
+      ouraToast.dismiss(pending.toastId);
+      ouraToast.success('Deletion undone');
+    };
+
+    const toastId = ouraToast.warning(
+      <div className="flex items-center gap-3">
+        <span>Hard Lesson deleted</span>
+        <button
+          onClick={undoDelete}
+          className="px-2 py-1 text-xs rounded-md border border-white/20 text-white hover:bg-white/10 transition-colors"
+        >
+          Undo
+        </button>
+      </div>,
+      { duration: 5000 }
+    );
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await deleteData('hardLessons', lessonId);
+      } catch (error) {
+        logger.error('Error deleting Hard Lesson:', error);
+        setLessons(prev => {
+          if (prev.some(l => l.id === lessonId)) return prev;
+          const next = [...prev];
+          const insertIndex = Math.min(lessonIndex, next.length);
+          next.splice(insertIndex, 0, lesson);
+          return next;
+        });
+        ouraToast.error('Failed to delete lesson');
+      } finally {
+        pendingLessonDeletes.current.delete(lessonId);
+      }
+    }, 5000);
+
+    pendingLessonDeletes.current.set(lessonId, { timeoutId, lesson, index: lessonIndex, toastId });
   };
 
   return (

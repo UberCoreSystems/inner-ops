@@ -264,16 +264,78 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
 `;
 
   try {
-    // SECURITY: Removed direct OpenAI API calls from client-side
-    // This prevents API key exposure in browser
-    logger.info("Generating local AI feedback (API calls removed for security)");
-    
-    // Generate intelligent local feedback based on context analysis
-    return generateLocalFeedback(moduleName, userInput, targetContext, moodContext, intensityContext, pastEntries);
+    // Check if API key is available
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+
+    if (!apiKey) {
+      logger.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
+      return "The Oracle requires proper configuration to commune with deeper wisdom. The key to unlock this channel must be set.";
+    }
+
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    requestTimeout = setTimeout(() => controller.abort(), API_TIMEOUT);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.8
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      if (import.meta.env.DEV) {
+        logger.error("OpenAI API Error:", errorData);
+      }
+
+      if (response.status === 401) {
+        return "The Oracle's sight is clouded... The key to wisdom is not recognized. Check your configuration.";
+      } else if (response.status === 429) {
+        return "The Oracle must rest... Too many seek wisdom at once. Return when the digital currents are calmer.";
+      } else {
+        return `The Oracle encounters resistance in the void... ${errorData.error?.message || 'The path is temporarily blocked'}`;
+      }
+    }
+
+    const data = await response.json();
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      if (import.meta.env.DEV) {
+        logger.error("Unexpected API response structure:", data);
+      }
+      return "The Oracle's transmission was scattered across the digital winds... The message must be sought again.";
+    }
+
+    return data.choices[0].message.content;
 
   } catch (error) {
-    logger.error("Error generating feedback:", error);
-    return getFallbackResponse(moduleName);
+    if (import.meta.env.DEV) {
+      logger.error("Error generating AI feedback:", error);
+    }
+
+    // Provide more specific error messages
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      return "The Oracle cannot pierce the veil... The digital realm is unreachable. Check your connection to the network.";
+    }
+
+    return "The Oracle senses an unexpected disturbance in the flow... The wisdom must wait for clearer channels.";
+  } finally {
+    if (requestTimeout) {
+      clearTimeout(requestTimeout);
+      requestTimeout = null;
+    }
   }
 };
 
@@ -284,6 +346,7 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
 const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext, intensityContext, pastEntries) => {
   const inputText = typeof userInput === 'string' ? userInput : JSON.stringify(userInput);
   const inputLower = inputText.toLowerCase();
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
   const wordCount = inputText.trim().split(/\s+/).filter(Boolean).length;
 
@@ -425,12 +488,36 @@ const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext
   };
 
   const moduleDirectives = {
-    journal: 'Name the specific shift they’re experiencing and translate it into a next action.',
-    killList: 'Frame the target as a system to dismantle; highlight triggers and replacement behavior.',
-    relapse: 'Treat relapse as data; identify trigger → impulse → action chain and a single interrupt.',
-    hardLessons: 'Extract assumption, ignored signal, lesson, and rule. No moral language.',
-    emergency: 'Short, grounding, immediate action, then a single reframe question.',
-    'black mirror': 'Expose attention leaks; name the cost and the smallest boundary.'
+    journal: [
+      'Name the specific shift they’re experiencing and translate it into a next action.',
+      'Make the insight practical: one behavior to keep, one behavior to stop.',
+      'Turn the reflection into a concrete next step and a boundary to protect it.'
+    ],
+    killList: [
+      'Frame the target as a system to dismantle; highlight triggers and replacement behavior.',
+      'Reduce the target to a loop: trigger → urge → action. Break one link today.',
+      'Name the replacement behavior so the old pattern has nowhere to land.'
+    ],
+    relapse: [
+      'Treat relapse as data; identify trigger → impulse → action chain and a single interrupt.',
+      'Locate the first weak link and strengthen it with one clear safeguard.',
+      'Remove the biggest trigger you control and add a replacement ritual.'
+    ],
+    hardLessons: [
+      'Extract assumption, ignored signal, lesson, and rule. No moral language.',
+      'Convert the pain into a rule you can enforce on your next decision.',
+      'State the precise failure point and the constraint that prevents repeat.'
+    ],
+    emergency: [
+      'Short, grounding, immediate action, then a single reframe question.',
+      'Stabilize first, then choose one small action that interrupts the urge.',
+      'Keep it simple: breathe, move, change environment, then decide.'
+    ],
+    'black mirror': [
+      'Expose attention leaks; name the cost and the smallest boundary.',
+      'Call out the leak and seal it with one rule you can keep for 24 hours.',
+      'Name the attention drain and choose the smallest constraint that works.'
+    ]
   };
 
   const getModuleName = () => (moduleName || '').toLowerCase();
@@ -481,8 +568,8 @@ const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext
         'The pattern lives in the moment before the choice. Go back there.'
       ];
 
-  const opener = openerVariants[Math.floor(Math.random() * openerVariants.length)];
-  const contextLine = contextVariants[Math.floor(Math.random() * contextVariants.length)];
+  const opener = pick(openerVariants);
+  const contextLine = pick(contextVariants);
 
   const lensStack = lenses
     .map((lens) => lensLines[lens]?.[0])
@@ -499,12 +586,13 @@ const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext
     .filter(Boolean)
     .slice(0, 1);
 
-  const moduleLine = moduleDirectives[moduleKey] || moduleDirectives.journal;
+  const moduleLine = pick(moduleDirectives[moduleKey] || moduleDirectives.journal);
 
   const actionLines = [
     'Next action: choose one concrete step you will take within 24 hours and schedule it.',
     'Make it measurable: decide the exact time, place, and duration for the next step.',
-    'Reduce friction: remove one obstacle today so tomorrow is easier.'
+    'Reduce friction: remove one obstacle today so tomorrow is easier.',
+    'Do this next: one small action today that proves the pattern is changing.'
   ];
 
   const questions = [
@@ -513,16 +601,20 @@ const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext
     'What boundary, if enforced once, would change everything?'
   ];
 
-  const question = questions[Math.floor(Math.random() * questions.length)];
-  const actionLine = actionLines[Math.floor(Math.random() * actionLines.length)];
+  const question = pick(questions);
+  const actionLine = pick(actionLines);
+
+  const plainLine = keyPhrases[0]
+    ? `Plainly: this is about “${keyPhrases[0]}”. Name it, then act on it once today.`
+    : 'Plainly: pick one behavior to change today, and prove it with a small action.';
 
   const responseStyles = [
-    { name: 'direct', order: ['opener', 'context', 'lens', 'module', 'action', 'question'] },
-    { name: 'coach', order: ['opener', 'module', 'context', 'lens', 'action', 'question'] },
-    { name: 'reflective', order: ['opener', 'lens', 'context', 'module', 'question', 'action'] },
-    { name: 'strategic', order: ['opener', 'context', 'module', 'lens', 'action', 'question'] }
+    { name: 'direct', order: ['opener', 'context', 'module', 'action', 'plain', 'lens', 'question'] },
+    { name: 'coach', order: ['opener', 'module', 'context', 'plain', 'lens', 'action', 'question'] },
+    { name: 'reflective', order: ['opener', 'lens', 'context', 'module', 'plain', 'question', 'action'] },
+    { name: 'strategic', order: ['opener', 'context', 'module', 'lens', 'plain', 'action', 'question'] }
   ];
-  const style = responseStyles[Math.floor(Math.random() * responseStyles.length)];
+  const style = pick(responseStyles);
 
   const pastLine = summarizePastEntries();
 
@@ -533,6 +625,7 @@ const generateLocalFeedback = (moduleName, userInput, targetContext, moodContext
     past: pastLine,
     module: moduleLine,
     action: actionLine,
+    plain: plainLine,
     question
   };
 

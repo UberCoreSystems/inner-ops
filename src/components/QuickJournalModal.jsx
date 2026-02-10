@@ -232,11 +232,12 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
       // Generate Oracle feedback if entry is substantial
       if (entry.trim().split(/\s+/).length >= 10) {
         setOracleLoading(true);
+        setOracleResponse('');
+        setShowOracle(true);
         try {
           const inputText = `Mood: ${mood || 'focused'} (${intensity}/5)\n${entry.trim()}`;
           const feedback = await generateAIFeedback('journal', inputText, []);
           setOracleResponse(feedback);
-          setShowOracle(true);
         } catch (error) {
           logger.error('Oracle feedback error:', error);
         }

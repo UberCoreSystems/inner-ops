@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
@@ -195,6 +195,7 @@ export default function Journal() {
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [currentEntryInput, setCurrentEntryInput] = useState(''); // Track original input for oracle follow-up
   const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry is being answered
+  const pendingEntryDeletes = useRef(new Map());
   
   // State for rotating prompts
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
@@ -460,23 +461,79 @@ export default function Journal() {
 
   // Delete journal entry
   const deleteEntry = async (entryId) => {
-    if (!window.confirm('Are you sure you want to delete this journal entry? This action cannot be undone.')) {
+    const entryToDelete = entries.find(e => e.id === entryId);
+    const entryIndex = entries.findIndex(e => e.id === entryId);
+
+    if (!entryToDelete) return;
+
+    if (!window.confirm('Delete this journal entry? You can undo within 5 seconds.')) {
       return;
     }
 
-    try {
-      logger.log("🗑️ Journal: Deleting entry:", entryId);
-      await deleteData('journalEntries', entryId);
-      logger.log('✅ Journal: Entry deleted successfully');
-      
-      // Update local state immediately
-      setEntries(prev => prev.filter(entry => entry.id !== entryId));
-      
-      ouraToast.success('Journal entry deleted');
-    } catch (error) {
-      logger.error('❌ Journal: Error deleting entry:', error);
-      ouraToast.error('Failed to delete journal entry');
+    logger.log("🗑️ Journal: Deleting entry:", entryId);
+
+    // Optimistic UI update
+    setEntries(prev => prev.filter(entry => entry.id !== entryId));
+
+    // Clear any pending delete for the same entry
+    const existingPending = pendingEntryDeletes.current.get(entryId);
+    if (existingPending) {
+      clearTimeout(existingPending.timeoutId);
+      pendingEntryDeletes.current.delete(entryId);
     }
+
+    const undoDelete = () => {
+      const pending = pendingEntryDeletes.current.get(entryId);
+      if (!pending) return;
+
+      clearTimeout(pending.timeoutId);
+      pendingEntryDeletes.current.delete(entryId);
+
+      setEntries(prev => {
+        if (prev.some(entry => entry.id === entryId)) return prev;
+        const next = [...prev];
+        const insertIndex = Math.min(pending.index, next.length);
+        next.splice(insertIndex, 0, pending.entry);
+        return next;
+      });
+
+      ouraToast.dismiss(pending.toastId);
+      ouraToast.success('Deletion undone');
+    };
+
+    const toastId = ouraToast.warning(
+      <div className="flex items-center gap-3">
+        <span>Journal entry deleted</span>
+        <button
+          onClick={undoDelete}
+          className="px-2 py-1 text-xs rounded-md border border-white/20 text-white hover:bg-white/10 transition-colors"
+        >
+          Undo
+        </button>
+      </div>,
+      { duration: 5000 }
+    );
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await deleteData('journalEntries', entryId);
+        logger.log('✅ Journal: Entry deleted successfully');
+      } catch (error) {
+        logger.error('❌ Journal: Error deleting entry:', error);
+        setEntries(prev => {
+          if (prev.some(entry => entry.id === entryId)) return prev;
+          const next = [...prev];
+          const insertIndex = Math.min(entryIndex, next.length);
+          next.splice(insertIndex, 0, entryToDelete);
+          return next;
+        });
+        ouraToast.error('Failed to delete journal entry');
+      } finally {
+        pendingEntryDeletes.current.delete(entryId);
+      }
+    }, 5000);
+
+    pendingEntryDeletes.current.set(entryId, { timeoutId, entry: entryToDelete, index: entryIndex, toastId });
   };
 
   // Save oracle follow-up response
