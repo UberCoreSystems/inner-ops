@@ -117,8 +117,16 @@ export const authService = {
       'auth/wrong-password': 'Incorrect password. Please try again.',
       'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
       'auth/network-request-failed': 'Network error. Please check your connection.',
-      'auth/invalid-credential': 'Invalid email or password combination.'
+      'auth/invalid-credential': 'Invalid email or password combination.',
+      'auth/api-key-not-valid': 'Firebase is not configured correctly. Add valid VITE_FIREBASE_* values in your .env file and restart the dev server.'
     };
+    
+    if (typeof error?.code === 'string' && error.code.includes('api-key-not-valid')) {
+      return {
+        code: error.code,
+        message: errorMessages['auth/api-key-not-valid']
+      };
+    }
 
     return {
       code: error.code,

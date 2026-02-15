@@ -264,72 +264,19 @@ IMPORTANT: Your response must directly reference specific words, situations, emo
 `;
 
   try {
-    // Check if API key is available
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-
-    if (!apiKey) {
-      logger.warn("OpenAI API key not found. Add VITE_OPENAI_API_KEY to your secrets.");
-      return "The Oracle requires proper configuration to commune with deeper wisdom. The key to unlock this channel must be set.";
-    }
-
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    requestTimeout = setTimeout(() => controller.abort(), API_TIMEOUT);
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: maxTokens,
-        temperature: 0.8
-      }),
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      if (import.meta.env.DEV) {
-        logger.error("OpenAI API Error:", errorData);
-      }
-
-      if (response.status === 401) {
-        return "The Oracle's sight is clouded... The key to wisdom is not recognized. Check your configuration.";
-      } else if (response.status === 429) {
-        return "The Oracle must rest... Too many seek wisdom at once. Return when the digital currents are calmer.";
-      } else {
-        return `The Oracle encounters resistance in the void... ${errorData.error?.message || 'The path is temporarily blocked'}`;
-      }
-    }
-
-    const data = await response.json();
-
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      if (import.meta.env.DEV) {
-        logger.error("Unexpected API response structure:", data);
-      }
-      return "The Oracle's transmission was scattered across the digital winds... The message must be sought again.";
-    }
-
-    return data.choices[0].message.content;
-
+    logger.info("Generating local Oracle feedback (client-side external API calls disabled)");
+    return generateLocalFeedback(
+      moduleName,
+      userInput,
+      targetContext,
+      moodContext,
+      intensityContext,
+      pastEntries
+    );
   } catch (error) {
     if (import.meta.env.DEV) {
-      logger.error("Error generating AI feedback:", error);
+      logger.error("Error generating local AI feedback:", error);
     }
-
-    // Provide more specific error messages
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      return "The Oracle cannot pierce the veil... The digital realm is unreachable. Check your connection to the network.";
-    }
-
     return "The Oracle senses an unexpected disturbance in the flow... The wisdom must wait for clearer channels.";
   } finally {
     if (requestTimeout) {
