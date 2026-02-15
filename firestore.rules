@@ -2,84 +2,113 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // TESTING RULES - Allow all reads and writes for development
-    // WARNING: These rules are for development only!
-    // Remove or restrict these rules before going to production
-    match /testCollection/{document=**} {
-      allow read, write: if true; // Allow all operations for testing (no auth required)
+
+    function isSignedIn() {
+      return request.auth != null;
     }
-    
-    // Allow any read/write to test collections without authentication
-    match /test/{document=**} {
-      allow read, write: if true;
+
+    function isOwner(userId) {
+      return isSignedIn() && userId == request.auth.uid;
     }
-    
-    match /dev/{document=**} {
-      allow read, write: if true;
+
+    function createsOwnDocument() {
+      return isSignedIn() &&
+        request.resource.data.userId is string &&
+        request.resource.data.userId == request.auth.uid;
     }
-    
-    // Allow authenticated users (including anonymous) to read/write their own data
+
+    function updatesOwnDocument() {
+      return isSignedIn() &&
+        resource.data.userId is string &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
+    }
+
+    // User-scoped nested structure
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
       
       // Journal entries
       match /journalEntries/{entryId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
       }
       
       // Kill list targets
       match /killTargets/{targetId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
       }
       
       // Black mirror entries
       match /blackMirrorEntries/{entryId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
       }
       
       // Relapse radar entries
       match /relapseEntries/{entryId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
       }
       
       // Compass checks
       match /compassChecks/{checkId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
+      }
+
+      // Hard lessons
+      match /hardLessons/{lessonId} {
+        allow read, write: if isOwner(userId);
       }
     }
     
-    // Black mirror collection (alternative structure) - allow anonymous users for testing
+    // Alternative black mirror structure (user-scoped)
     match /blackMirror/{userId} {
-      allow read, write: if request.auth != null && 
-        (request.auth.uid == userId || request.auth.token.firebase.sign_in_provider == 'anonymous');
+      allow read, write: if isOwner(userId);
       
       match /entries/{entryId} {
-        allow read, write: if request.auth != null && 
-          (request.auth.uid == userId || request.auth.token.firebase.sign_in_provider == 'anonymous');
+        allow read, write: if isOwner(userId);
       }
     }
-    
-    // Allow any authenticated user (including anonymous) to read/write main collections for testing
-    // Remove these rules in production and implement proper user-based security
-    match /journalEntries/{document=**} {
-      allow read, write: if request.auth != null;
+
+    // Top-level collections used by the app (strict owner-based access)
+    match /journalEntries/{docId} {
+      allow create: if createsOwnDocument();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
     }
     
-    match /killTargets/{document=**} {
-      allow read, write: if request.auth != null;
+    match /killTargets/{docId} {
+      allow create: if createsOwnDocument();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
     }
     
-    match /blackMirrorEntries/{document=**} {
-      allow read, write: if request.auth != null;
+    match /blackMirrorEntries/{docId} {
+      allow create: if createsOwnDocument();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
     }
     
-    match /relapseEntries/{document=**} {
-      allow read, write: if request.auth != null;
+    match /relapseEntries/{docId} {
+      allow create: if createsOwnDocument();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
     }
     
-    match /compassChecks/{document=**} {
-      allow read, write: if request.auth != null;
+    match /hardLessons/{docId} {
+      allow create: if createsOwnDocument();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+    }
+
+    match /compassChecks/{docId} {
+      allow create: if createsOwnDocument();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+    }
+
+    match /test-connection/{docId} {
+      allow create: if createsOwnDocument();
+      allow read, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
     }
   }
 }

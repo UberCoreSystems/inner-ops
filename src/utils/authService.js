@@ -16,7 +16,7 @@ export const authService = {
   async register(email, password, displayName = null) {
     try {
       logger.log("🔐 Creating new user account...");
-      const auth = getCachedAuth();
+      const auth = getCachedAuth() || await getAuth();
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -42,7 +42,7 @@ export const authService = {
   async signIn(email, password) {
     try {
       logger.log("🔐 Signing in user...");
-      const auth = getCachedAuth();
+      const auth = getCachedAuth() || await getAuth();
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -60,7 +60,7 @@ export const authService = {
   // Sign out
   async signOut() {
     try {
-      const auth = getCachedAuth();
+      const auth = getCachedAuth() || await getAuth();
       await signOut(auth);
       logger.log("✅ User signed out successfully");
     } catch (error) {

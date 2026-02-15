@@ -1,12 +1,35 @@
 import { initializeApp } from "firebase/app";
 import logger from './utils/logger';
 
-// Firebase configuration - only include required services
+const isDevEnvironment = import.meta.env.DEV;
+
+// Validate required environment variables
+const requiredEnvVars = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_APP_ID'
+];
+const missingVars = requiredEnvVars.filter((varName) => !import.meta.env[varName]);
+
+if (missingVars.length > 0) {
+  logger.error("❌ Missing Firebase environment variables:", missingVars);
+
+  if (!isDevEnvironment) {
+    throw new Error(
+      `Firebase configuration is missing required environment variables: ${missingVars.join(', ')}`
+    );
+  }
+
+  logger.warn("🚧 Firebase is misconfigured in development. Add required VITE_FIREBASE_* values to .env.");
+}
+
+// Firebase configuration (no placeholder fallbacks)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "demo-api-key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "demo-project.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "demo-project",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789:web:abcdef"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Log Firebase configuration for debugging
@@ -15,14 +38,7 @@ logger.log("Project ID:", firebaseConfig.projectId);
 logger.log("API Key:", firebaseConfig.apiKey ? "✅ Present" : "❌ Missing");
 logger.log("Auth Domain:", firebaseConfig.authDomain);
 
-// Validate required environment variables
-const requiredEnvVars = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_PROJECT_ID'];
-const missingVars = requiredEnvVars.filter(varName => !import.meta.env[varName]);
-
-if (missingVars.length > 0) {
-  logger.error("❌ Missing Firebase environment variables:", missingVars);
-  logger.warn("🚧 Using fallback values for development - this may cause issues in production");
-} else {
+if (missingVars.length === 0) {
   logger.log("✅ All Firebase environment variables are present");
 }
 

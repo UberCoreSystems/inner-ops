@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { readUserData, testFirebaseConnection, debugInspectAllFirebaseData, previewDataMigration, executeDataMigration, findDuplicateDocuments, removeDuplicateDocuments } from '../utils/firebaseUtils';
+import { readUserData, debugInspectAllFirebaseData, previewDataMigration, executeDataMigration, findDuplicateDocuments, removeDuplicateDocuments } from '../utils/firebaseUtils';
 import { migrateOldDataToFirestore, findOldData } from '../utils/dataMigration';
 import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
@@ -9,11 +9,12 @@ import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
 import QuickJournalModal from '../components/QuickJournalModal';
 import DailyPrompt from '../components/DailyPrompt';
-import { getAuth } from '../firebase';
 import { CircularProgressRing, TripleRing, ScoreCard, InsightCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
+
+const isDevEnvironment = import.meta.env.DEV;
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -29,7 +30,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiActionSteps, setAiActionSteps] = useState([]);
-  const [firebaseTestResult, setFirebaseTestResult] = useState(null);
   const [clarityScore, setClarityScore] = useState({
     totalScore: 0,
     rank: { rank: 'Clarity Novice', icon: '🌱', color: 'text-gray-500' },
@@ -73,7 +73,11 @@ export default function Dashboard() {
       setLoading(false); // Stop loading if no user
     }
 
-    // Add debugging function to window
+    if (!isDevEnvironment) {
+      return;
+    }
+
+    // Add debugging function to window in development only
     window.debugDashboard = {
       reloadData: () => loadDashboardData(currentUser),
       checkAuth: () => ({
@@ -240,35 +244,13 @@ export default function Dashboard() {
         return result;
       }
     };
-  }, []); // Only run once on mount
 
-  // Test Firebase connection
-  const runFirebaseTest = async () => {
-    logger.log("🔥 Running Firebase connection test...");
-    setFirebaseTestResult({ testing: true });
-    
-    try {
-      const result = await testFirebaseConnection();
-      setFirebaseTestResult(result);
-      logger.log("Firebase test result:", result);
-      
-      if (result.success) {
-        alert("✅ Firebase connection successful! Check console for details.");
-        // Reload data after successful test
-        loadDashboardData();
-      } else {
-        alert(`❌ Firebase connection failed: ${result.error}\n${result.details}`);
+    return () => {
+      if (window.debugDashboard) {
+        delete window.debugDashboard;
       }
-    } catch (error) {
-      logger.error("Firebase test error:", error);
-      setFirebaseTestResult({
-        success: false,
-        error: "Test failed",
-        details: error.message
-      });
-      alert(`❌ Firebase test failed: ${error.message}`);
-    }
-  };
+    };
+  }, []); // Only run once on mount
 
   const loadDashboardData = useCallback(async (currentUser = user) => {
     if (!currentUser) {
@@ -817,8 +799,8 @@ export default function Dashboard() {
           }}
         />
 
-        {/* Debug Info Section */}
-        <div className="mt-12 pt-8 border-t border-[#1a1a1a] animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
+        {/* Debug Info Section (development only) */}
+        {isDevEnvironment && <div className="mt-12 pt-8 border-t border-[#1a1a1a] animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
           <div className="bg-[#0a0a0a] rounded-xl p-6 border border-[#1a1a1a]">
             <h4 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Debug Info & Data Recovery</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-4">
@@ -867,7 +849,7 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
       </div>
     </div>

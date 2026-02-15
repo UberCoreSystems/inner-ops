@@ -366,23 +366,38 @@ export const useThisWeeksKillTargets = (realtime = false) => {
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 7); // End of week
 
+      const toDateKey = (date) => date.toISOString().split('T')[0];
+      const startOfWeekKey = toDateKey(startOfWeek);
+      const endOfWeekKey = toDateKey(endOfWeek);
+
       const q = query(
         collection(db, 'killTargets'),
         where('userId', '==', auth.currentUser.uid),
-        where('targetDate', '>=', startOfWeek),
-        where('targetDate', '<', endOfWeek),
+        where('targetDate', '>=', startOfWeekKey),
+        where('targetDate', '<', endOfWeekKey),
         orderBy('targetDate', 'desc'),
         orderBy('createdAt', 'desc')
       );
 
       const querySnapshot = await getDocs(q);
-      const fetchedTargets = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        targetDate: doc.data().targetDate?.toDate() || new Date(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        completedAt: doc.data().completedAt?.toDate() || null
-      }));
+      const fetchedTargets = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+
+        const parseDateValue = (value, fallback = new Date()) => {
+          if (!value) return fallback;
+          if (value?.toDate) return value.toDate();
+          if (typeof value === 'string') return new Date(value);
+          return value instanceof Date ? value : fallback;
+        };
+
+        return {
+          id: doc.id,
+          ...data,
+          targetDate: parseDateValue(data.targetDate),
+          createdAt: parseDateValue(data.createdAt),
+          completedAt: parseDateValue(data.completedAt, null)
+        };
+      });
 
       setWeekTargets(fetchedTargets);
       logger.log(`✅ Loaded ${fetchedTargets.length} kill targets for this week`);

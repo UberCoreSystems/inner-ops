@@ -188,29 +188,26 @@ export const readUserData = async (collectionName, requireAuth = false) => {
     const auth = await getAuth();
     const db = await getDb();
     let user = auth.currentUser;
-    
-    if (!user && !requireAuth) {
-      // Try to get anonymous auth for read operations
-      try {
-        user = await ensureAuthenticated();
-      } catch (error) {
-        logger.warn("⚠️ Could not authenticate for read operation, attempting without auth:", error.message);
-      }
-    } else if (!user && requireAuth) {
+
+    if (!user && requireAuth) {
       logger.error("❌ User not authenticated and auth is required");
+      return [];
+    }
+
+    if (!user) {
+      logger.warn("⚠️ User not authenticated - blocking Firestore read to prevent data leakage");
       return [];
     }
 
     const colRef = collection(db, collectionName);
     let data = [];
     
-    if (user) {
-      // STEP 1: Try to read user-scoped data first
-      logger.log("🔍 Reading user-scoped data for user:", user.uid);
-      const userScopedQuery = query(colRef, where("userId", "==", user.uid));
-      const userScopedSnapshot = await getDocs(userScopedQuery);
-      
-      data = userScopedSnapshot.docs.map(doc => {
+    // STEP 1: Read only user-scoped data
+    logger.log("🔍 Reading user-scoped data for user:", user.uid);
+    const userScopedQuery = query(colRef, where("userId", "==", user.uid));
+    const userScopedSnapshot = await getDocs(userScopedQuery);
+
+    data = userScopedSnapshot.docs.map(doc => {
         const docData = doc.data();
         // Ensure createdAt is always a proper Date object
         let createdAt = new Date();
@@ -230,92 +227,13 @@ export const readUserData = async (collectionName, requireAuth = false) => {
           createdAt: createdAt,
           timestamp: createdAt // Ensure both fields are Date objects
         };
-      });
-      
-      logger.log(`✅ User-scoped query returned ${data.length} documents`);
-      
-      // STEP 2: If no user-scoped data, try reading ALL documents and filter
-      if (data.length === 0) {
-        logger.log("📋 No user-scoped data found, reading all documents in collection...");
-        const allDocsQuery = query(colRef);
-        const allDocsSnapshot = await getDocs(allDocsQuery);
-        
-        const allDocs = allDocsSnapshot.docs.map(doc => {
-          const docData = doc.data();
-          // Ensure createdAt is always a proper Date object
-          let createdAt = new Date();
-          if (docData.timestamp?.toDate) {
-            createdAt = docData.timestamp.toDate();
-          } else if (docData.createdAt?.toDate) {
-            createdAt = docData.createdAt.toDate();
-          } else if (typeof docData.createdAt === 'string') {
-            createdAt = new Date(docData.createdAt);
-          } else if (typeof docData.timestamp === 'string') {
-            createdAt = new Date(docData.timestamp);
-          }
-          
-          return {
-            id: doc.id,
-            ...docData,
-            createdAt: createdAt,
-            timestamp: createdAt
-          };
-        });
-        
-        logger.log(`📊 Found ${allDocs.length} total documents in collection`);
-        
-        // Filter to include:
-        // - Documents with matching userId
-        // - Documents with no userId (legacy data)
-        data = allDocs.filter(doc => !doc.userId || doc.userId === user.uid);
-        
-        logger.log(`🎯 After filtering, ${data.length} documents belong to current user`);
-      }
-    } else {
-      // Read all documents if no auth (for testing purposes)
-      logger.log("🔍 Reading all documents (no auth filter)");
-      const allDocsQuery = query(colRef);
-      const allDocsSnapshot = await getDocs(allDocsQuery);
-      
-      data = allDocsSnapshot.docs.map(doc => {
-        const docData = doc.data();
-        // Ensure createdAt is always a proper Date object
-        let createdAt = new Date();
-        if (docData.timestamp?.toDate) {
-          createdAt = docData.timestamp.toDate();
-        } else if (docData.createdAt?.toDate) {
-          createdAt = docData.createdAt.toDate();
-        } else if (typeof docData.createdAt === 'string') {
-          createdAt = new Date(docData.createdAt);
-        } else if (typeof docData.timestamp === 'string') {
-          createdAt = new Date(docData.timestamp);
-        }
-        
-        return {
-          id: doc.id,
-          ...docData,
-          createdAt: createdAt,
-          timestamp: createdAt
-        };
-      });
-    }
+    });
+
+    logger.log(`✅ User-scoped query returned ${data.length} documents`);
 
     data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     logger.log("✅ Data read successfully from", collectionName, "- found", data.length, "documents");
-    
-    // If still no data found, try recovery strategies
-    if (data.length === 0) {
-      logger.log("📋 No data found in Firestore, attempting recovery strategies...");
-      
-      // Fall back to localStorage
-      logger.log("💾 Attempting localStorage fallback...");
-      const lsData = getLocalStorageFallback(collectionName);
-      if (lsData.length > 0) {
-        logger.log(`✅ Retrieved ${lsData.length} entries from localStorage for ${collectionName}`);
-        return lsData;
-      }
-    }
     
     return data;
   } catch (error) {
@@ -323,15 +241,7 @@ export const readUserData = async (collectionName, requireAuth = false) => {
     if (error.code === 'permission-denied') {
       logger.error("💡 Hint: Check your Firestore security rules. You may need to allow reads for anonymous users or update the rules for testing.");
     }
-    
-    // Final fallback to localStorage on any error
-    logger.log("⚠️ Firestore failed, falling back to localStorage...");
-    const lsData = getLocalStorageFallback(collectionName);
-    if (lsData.length > 0) {
-      logger.log(`✅ Retrieved ${lsData.length} entries from localStorage after Firestore error`);
-      return lsData;
-    }
-    
+
     return [];
   }
 };
@@ -364,6 +274,7 @@ export const readData = readUserData;
 export const writeUserData = async (collectionName, dataArray) => {
   try {
     const user = await ensureAuthenticated();
+    const db = await getDb();
     logger.log(`📝 Writing user data collection: ${collectionName} with ${Array.isArray(dataArray) ? dataArray.length : 1} items`);
     
     if (Array.isArray(dataArray)) {
