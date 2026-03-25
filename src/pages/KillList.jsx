@@ -582,7 +582,26 @@ const KillList = () => {
     const escaped = targets.filter(t => t.status === 'escaped').length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    return { total, completed, active, escaped, completionRate };
+    // Avg days from creation to kill
+    const killedWithDates = targets.filter(t => t.status === 'killed' && t.createdAt && (t.killedAt || t.updatedAt));
+    const avgDaysToKill = killedWithDates.length > 0
+      ? Math.round(killedWithDates.reduce((sum, t) => {
+          const start = t.createdAt?.toDate?.()?.getTime() ?? t.createdAt;
+          const end = (t.killedAt ?? t.updatedAt)?.toDate?.()?.getTime() ?? (t.killedAt ?? t.updatedAt);
+          return sum + Math.max(0, (end - start) / (1000 * 60 * 60 * 24));
+        }, 0) / killedWithDates.length)
+      : null;
+
+    // Category distribution (active + killed)
+    const catCounts = {};
+    targets.forEach(t => {
+      if (t.category) catCounts[t.category] = (catCounts[t.category] || 0) + 1;
+    });
+    const categoryDist = Object.entries(catCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, count]) => ({ cat, count }));
+
+    return { total, completed, active, escaped, completionRate, avgDaysToKill, categoryDist };
   }, [targets]);
 
   const getProgressColor = (progress) => {
@@ -864,6 +883,50 @@ const KillList = () => {
               <div className="text-xs text-[#8a8a8a] mt-2 uppercase tracking-wider">Success Rate</div>
             </div>
           </div>
+
+          {/* Completion metrics row */}
+          {targets.length >= 3 && (
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Category distribution */}
+              <div>
+                <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-3">By Category</div>
+                <div className="space-y-2">
+                  {stats.categoryDist.map(({ cat, count }) => {
+                    const catDef = CATEGORIES.find(c => c.value === cat);
+                    const pct = Math.round((count / stats.total) * 100);
+                    return (
+                      <div key={cat} className="flex items-center gap-3">
+                        <div className={`text-xs w-28 shrink-0 truncate ${catDef?.color ?? 'text-[#8a8a8a]'}`}>{catDef?.label ?? cat}</div>
+                        <div className="flex-1 bg-[#1a1a1a] rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="h-1.5 rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%`, backgroundColor: catDef?.color?.match(/#[0-9a-fA-F]{6}/)?.[0] ?? '#8a8a8a' }}
+                          />
+                        </div>
+                        <div className="text-[#5a5a5a] text-xs w-4 text-right shrink-0">{count}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Avg days to kill */}
+              <div className="flex flex-col justify-center">
+                <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Avg Days to Kill</div>
+                {stats.avgDaysToKill !== null ? (
+                  <div>
+                    <span className={`text-4xl font-light tabular-nums ${stats.avgDaysToKill <= 7 ? 'text-[#22c55e]' : stats.avgDaysToKill <= 21 ? 'text-[#f59e0b]' : 'text-[#ef4444]'}`}>
+                      {stats.avgDaysToKill}
+                    </span>
+                    <span className="text-[#5a5a5a] text-sm ml-2">days</span>
+                    <div className="text-[#5a5a5a] text-xs mt-1">across {targets.filter(t => t.status === 'killed').length} confirmed kills</div>
+                  </div>
+                ) : (
+                  <div className="text-[#3a3a3a] text-sm">No kills recorded yet</div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Add New Target */}

@@ -196,6 +196,41 @@ const BlackMirror = () => {
           </div>
         </div>
 
+        {/* Index History Sparkline */}
+        {entries.length >= 2 && (
+          <div className="oura-card p-5 mb-8 animate-fade-in-up">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest">Index History</h3>
+              <span className="text-[10px] text-[#3a3a3a]">last {Math.min(entries.length, 20)} entries</span>
+            </div>
+            {/* Index formula explanation */}
+            <p className="text-[10px] text-[#3a3a3a] mb-4">
+              Score = screen×8 + fog×2.5 − interaction×2 + unconscious×8 — lower is better
+            </p>
+            <div className="flex items-end gap-1 h-14">
+              {[...entries].slice(0, 20).reverse().map((e, i) => {
+                const idx = e.blackMirrorIndex || 0;
+                const maxIdx = Math.max(...entries.slice(0, 20).map(x => x.blackMirrorIndex || 0), 20);
+                const pct = Math.max((idx / maxIdx) * 100, 4);
+                const color = idx >= 40 ? '#ef4444' : idx >= 25 ? '#f97316' : idx >= 15 ? '#eab308' : idx >= 8 ? '#4da6ff' : '#22c55e';
+                const dateStr = e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-0.5 h-full justify-end" title={`${dateStr}: ${idx}`}>
+                    <div
+                      className="w-full rounded-t transition-all duration-300"
+                      style={{ height: `${pct}%`, backgroundColor: color, opacity: 0.75 }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between mt-1 text-[9px] text-[#2a2a2a]">
+              <span>oldest</span>
+              <span>latest</span>
+            </div>
+          </div>
+        )}
+
         {/* Digital Consciousness Check Form */}
         <div className="oura-card p-6 mb-8 animate-fade-in-up animation-delay-100">
           <h2 className="text-2xl font-light text-white mb-6 tracking-tight">Digital Consciousness Check</h2>

@@ -41,6 +41,10 @@ export default function Dashboard() {
   const [rawUserData, setRawUserData] = useState(null);
   const [calculatingClarity, setCalculatingClarity] = useState(false);
 
+  // Collapsible section states
+  const [killListExpanded, setKillListExpanded] = useState(true);
+  const [insightsExpanded, setInsightsExpanded] = useState(true);
+
   // Delay showing skeleton to prevent flicker on fast loads
   useEffect(() => {
     const skeletonTimer = setTimeout(() => {
@@ -611,32 +615,48 @@ export default function Dashboard() {
               </div>
 
               {/* Score Breakdown */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="bg-[#0a0a0a] rounded-xl p-3 border border-[#1a1a1a]">
-                  <p className="text-[#5a5a5a] text-xs mb-1">Journal</p>
-                  <p className="text-[#a855f7] font-semibold">+{clarityScore.breakdown?.journal || 0}</p>
-                </div>
-                <div className="bg-[#0a0a0a] rounded-xl p-3 border border-[#1a1a1a]">
-                  <p className="text-[#5a5a5a] text-xs mb-1">Kill List</p>
-                  <p className="text-[#ef4444] font-semibold">+{clarityScore.breakdown?.killList || 0}</p>
-                </div>
-                <div className="bg-[#0a0a0a] rounded-xl p-3 border border-[#1a1a1a]">
-                  <p className="text-[#5a5a5a] text-xs mb-1">Hard Lessons</p>
-                  <p className="text-[#f59e0b] font-semibold">+{clarityScore.breakdown?.hardLessons || 0}</p>
-                </div>
-                <div className="bg-[#0a0a0a] rounded-xl p-3 border border-[#1a1a1a]">
-                  <p className="text-[#5a5a5a] text-xs mb-1">Mirror</p>
-                  <p className="text-[#4da6ff] font-semibold">+{clarityScore.breakdown?.blackMirror || 0}</p>
-                </div>
-                <div className="bg-[#0a0a0a] rounded-xl p-3 border border-[#1a1a1a]">
-                  <p className="text-[#5a5a5a] text-xs mb-1">Awareness</p>
-                  <p className="text-[#22c55e] font-semibold">+{clarityScore.breakdown?.relapseAwareness || 0}</p>
-                </div>
-                <div className="bg-[#0a0a0a] rounded-xl p-3 border border-[#1a1a1a]">
-                  <p className="text-[#5a5a5a] text-xs mb-1">Bonuses</p>
-                  <p className="text-[#00d4aa] font-semibold">+{clarityScore.breakdown?.bonuses || 0}</p>
-                </div>
-              </div>
+              {(() => {
+                const bd = clarityScore.breakdown || {};
+                const rawTotal = (bd.journal || 0) + (bd.killList || 0) + (bd.hardLessons || 0) + (bd.blackMirror || 0) + (bd.relapseAwareness || 0) + (bd.bonuses || 0);
+                const modules = [
+                  { label: 'Journal',      pts: bd.journal || 0,            color: '#a855f7' },
+                  { label: 'Kill List',    pts: bd.killList || 0,            color: '#ef4444' },
+                  { label: 'Hard Lessons', pts: bd.hardLessons || 0,         color: '#f59e0b' },
+                  { label: 'Mirror',       pts: bd.blackMirror || 0,         color: '#4da6ff' },
+                  { label: 'Awareness',    pts: bd.relapseAwareness || 0,    color: '#22c55e' },
+                  { label: 'Bonuses',      pts: bd.bonuses || 0,             color: '#00d4aa' },
+                ];
+                const multiplier = bd.completionMultiplier ?? 1;
+                const completionPct = bd.completionRate != null ? Math.round(bd.completionRate * 100) : null;
+                return (
+                  <div className="space-y-3">
+                    {modules.map(({ label, pts, color }) => {
+                      const barPct = rawTotal > 0 ? Math.round((pts / rawTotal) * 100) : 0;
+                      return (
+                        <div key={label} className="flex items-center gap-3">
+                          <span className="text-[#5a5a5a] text-xs w-24 shrink-0">{label}</span>
+                          <div className="flex-1 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${barPct}%`, backgroundColor: color }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold tabular-nums w-10 text-right" style={{ color }}>
+                            +{pts}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {/* Multiplier row */}
+                    <div className="pt-2 border-t border-[#1a1a1a] flex items-center justify-between text-xs text-[#5a5a5a]">
+                      <span>Kill-list completion rate</span>
+                      <span className={`font-semibold ${multiplier >= 1 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+                        ×{multiplier.toFixed(2)}{completionPct != null ? ` (${completionPct}%)` : ''}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </section>
@@ -692,9 +712,21 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Kill List Dashboard */}
+        {/* Kill List Dashboard — collapsible */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-          <KillListDashboard />
+          <button
+            onClick={() => setKillListExpanded(prev => !prev)}
+            className="flex items-center justify-between w-full mb-4 group"
+          >
+            <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest group-hover:text-[#8a8a8a] transition-colors">Kill List Overview</h3>
+            <svg
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className={`text-[#3a3a3a] group-hover:text-[#5a5a5a] transition-all duration-200 ${killListExpanded ? 'rotate-180' : ''}`}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {killListExpanded && <KillListDashboard />}
         </section>
 
         {/* Two Column: Activity + Insights */}
@@ -745,34 +777,47 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* AI Insights */}
+          {/* AI Insights — collapsible */}
           <section>
-            <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">AI Insights</h3>
-            <div className="space-y-3">
-              {aiActionSteps.length > 0 ? (
-                aiActionSteps.slice(0, 4).map((step, index) => (
-                  <InsightCard
-                    key={index}
-                    title="Recommendation"
-                    description={step}
-                    icon="💡"
-                    accentColor={['#00d4aa', '#4da6ff', '#a855f7', '#f59e0b'][index % 4]}
-                  />
-                ))
-              ) : (
-                <div className="oura-card p-8 text-center">
-                  <div className="text-4xl mb-3 opacity-30">🤖</div>
-                  <p className="text-[#5a5a5a]">Learning your patterns</p>
-                  <p className="text-[#3a3a3a] text-sm mt-1">Keep using the app for personalized insights</p>
-                  <button
-                    onClick={() => setQuickJournalOpen(true)}
-                    className="mt-4 px-5 py-2.5 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-xl transition-all duration-300 font-medium text-sm"
-                  >
-                    Add a Journal Entry
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setInsightsExpanded(prev => !prev)}
+              className="flex items-center justify-between w-full mb-4 group"
+            >
+              <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest group-hover:text-[#8a8a8a] transition-colors">AI Insights</h3>
+              <svg
+                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                className={`text-[#3a3a3a] group-hover:text-[#5a5a5a] transition-all duration-200 ${insightsExpanded ? 'rotate-180' : ''}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {insightsExpanded && (
+              <div className="space-y-3">
+                {aiActionSteps.length > 0 ? (
+                  aiActionSteps.slice(0, 4).map((step, index) => (
+                    <InsightCard
+                      key={index}
+                      title="Recommendation"
+                      description={step}
+                      icon="💡"
+                      accentColor={['#00d4aa', '#4da6ff', '#a855f7', '#f59e0b'][index % 4]}
+                    />
+                  ))
+                ) : (
+                  <div className="oura-card p-8 text-center">
+                    <div className="text-4xl mb-3 opacity-30">🤖</div>
+                    <p className="text-[#5a5a5a]">Learning your patterns</p>
+                    <p className="text-[#3a3a3a] text-sm mt-1">Keep using the app for personalized insights</p>
+                    <button
+                      onClick={() => setQuickJournalOpen(true)}
+                      className="mt-4 px-5 py-2.5 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-xl transition-all duration-300 font-medium text-sm"
+                    >
+                      Add a Journal Entry
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
           </div>
         </div>

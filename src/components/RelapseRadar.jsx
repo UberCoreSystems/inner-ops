@@ -86,6 +86,29 @@ const RelapseRadar = () => {
     }
   };
 
+  const archetypeFrequency = useMemo(() => {
+    if (relapseEntries.length === 0) return [];
+    const counts = {};
+    relapseEntries.forEach(e => {
+      if (e.selectedSelf) counts[e.selectedSelf] = (counts[e.selectedSelf] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }));
+  }, [relapseEntries]);
+
+  const daysSinceLastRelapse = useMemo(() => {
+    if (relapseEntries.length === 0) return null;
+    const sorted = [...relapseEntries].sort((a, b) => {
+      const aTime = a.createdAt?.toDate?.()?.getTime() ?? a.timestamp ?? 0;
+      const bTime = b.createdAt?.toDate?.()?.getTime() ?? b.timestamp ?? 0;
+      return bTime - aTime;
+    });
+    const latest = sorted[0].createdAt?.toDate?.() ?? (sorted[0].timestamp ? new Date(sorted[0].timestamp) : null);
+    if (!latest) return null;
+    return Math.floor((Date.now() - latest.getTime()) / (1000 * 60 * 60 * 24));
+  }, [relapseEntries]);
+
   const filteredRelapseEntries = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return relapseEntries;
@@ -209,8 +232,45 @@ const RelapseRadar = () => {
           </div>
         )}
 
+        {/* Days since last relapse + archetype frequency — step 1 only */}
+        {step === 1 && daysSinceLastRelapse !== null && (
+          <div className="mb-6 flex items-center gap-3 oura-card p-4">
+            <div className={`text-4xl font-light tabular-nums ${daysSinceLastRelapse === 0 ? 'text-red-400' : daysSinceLastRelapse < 3 ? 'text-oura-amber' : 'text-oura-cyan'}`}>
+              {daysSinceLastRelapse}
+            </div>
+            <div>
+              <div className="text-white text-sm font-light">day{daysSinceLastRelapse !== 1 ? 's' : ''} since last relapse</div>
+              <div className="text-gray-500 text-xs">{relapseEntries.length} total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && archetypeFrequency.length >= 2 && (
+          <div className="mb-6 oura-card p-5">
+            <h3 className="text-xs text-gray-500 tracking-widest uppercase mb-4">Archetype Frequency</h3>
+            <div className="space-y-2.5">
+              {archetypeFrequency.map(({ name, count }) => {
+                const maxCount = archetypeFrequency[0].count;
+                const pct = Math.round((count / maxCount) * 100);
+                return (
+                  <div key={name} className="flex items-center gap-3">
+                    <div className="text-gray-400 text-xs w-36 shrink-0 truncate">{name}</div>
+                    <div className="flex-1 bg-oura-border rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="h-1.5 rounded-full bg-oura-amber transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="text-gray-500 text-xs w-4 text-right shrink-0">{count}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="w-full bg-oura-border rounded-full h-2">
-          <div 
+          <div
             className="bg-oura-amber h-2 rounded-full transition-all duration-300"
             style={{ width: `${(step / 4) * 100}%` }}
           ></div>

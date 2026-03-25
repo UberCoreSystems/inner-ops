@@ -57,12 +57,12 @@ export default function Navbar({ onLogout, user }) {
   const location = useLocation();
 
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: Icons.dashboard },
-    { path: '/journal', label: 'Journal', icon: Icons.journal },
-    { path: '/killlist', label: 'Kill List', icon: Icons.killList },
-    { path: '/hardlessons', label: 'Hard Lessons', icon: Icons.hardLessons },
-    { path: '/blackmirror', label: 'Black Mirror', icon: Icons.blackMirror },
-    { path: '/relapse', label: 'Relapse', icon: Icons.relapse },
+    { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard },
+    { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal },
+    { path: '/killlist', label: 'Kill List', mobileLabel: 'Kill', icon: Icons.killList },
+    { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
+    { path: '/blackmirror', label: 'Black Mirror', mobileLabel: 'Mirror', icon: Icons.blackMirror },
+    { path: '/relapse', label: 'Relapse', mobileLabel: 'Relapse', icon: Icons.relapse },
   ];
 
   const getUserDisplayName = () => {
@@ -72,61 +72,128 @@ export default function Navbar({ onLogout, user }) {
   };
 
   return (
-    <nav className="bg-black border-b border-oura-border sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
-      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-8">
-            <Link to="/dashboard" className="flex items-center space-x-2 group">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-oura-cyan">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
-                <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" opacity="0.3" />
-              </svg>
-              <span className="text-xl font-light tracking-tight">
-                <span className="text-oura-cyan">Inner</span>
-                <span className="text-white ml-1">Ops</span>
-              </span>
-            </Link>
-            <div className="hidden md:flex items-center space-x-1">
-              {navItems.map(item => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`px-4 py-2 rounded-xl text-sm font-light transition-all duration-200 flex items-center space-x-2 border ${
-                    location.pathname === item.path
-                      ? 'bg-oura-card text-white border-oura-border'
-                      : 'text-gray-400 border-transparent hover:text-white hover:border-gray-500 hover:bg-oura-card'
-                  }`}
-                >
-                  <span className="opacity-80">{item.icon}</span>
-                  <span>{item.label}</span>
-                </Link>
-              ))}
+    <>
+      {/* Top bar */}
+      <nav className="bg-black border-b border-oura-border sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-8">
+              <Link to="/dashboard" className="flex items-center space-x-2 group">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-oura-cyan">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
+                  <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+                  <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" opacity="0.3" />
+                </svg>
+                <span className="text-xl font-light tracking-tight">
+                  <span className="text-oura-cyan">Inner</span>
+                  <span className="text-white ml-1">Ops</span>
+                </span>
+              </Link>
+              {/* Desktop nav links */}
+              <div className="hidden md:flex items-center space-x-1">
+                {navItems.map(item => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`px-4 py-2 rounded-xl text-sm font-light transition-all duration-200 flex items-center space-x-2 border ${
+                      location.pathname === item.path
+                        ? 'bg-oura-card text-white border-oura-border'
+                        : 'text-gray-400 border-transparent hover:text-white hover:border-gray-500 hover:bg-oura-card'
+                    }`}
+                  >
+                    <span className="opacity-80">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* User Info and Logout */}
+            <div className="flex items-center space-x-2 md:space-x-4">
+              <Link
+                to="/profile"
+                className={`text-sm font-light flex items-center space-x-2 px-3 md:px-4 py-2 rounded-xl cursor-pointer transition-all duration-200 border ${
+                  location.pathname === '/profile'
+                    ? 'bg-oura-card text-white border-oura-border'
+                    : 'text-gray-400 border-transparent hover:text-white hover:border-gray-500 hover:bg-oura-card'
+                }`}
+              >
+                <span className="opacity-80">{Icons.profile}</span>
+                <span className="hidden sm:inline">{getUserDisplayName()}</span>
+              </Link>
+              <button
+                onClick={onLogout}
+                className="text-gray-400 hover:text-white transition-all duration-200 text-sm font-light px-3 md:px-4 py-2 border border-oura-border rounded-xl hover:border-gray-500 hover:bg-oura-card"
+              >
+                <span className="hidden sm:inline">Sign Out</span>
+                {/* Mobile sign-out icon */}
+                <span className="sm:hidden">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                </span>
+              </button>
             </div>
           </div>
-          
-          {/* User Info and Logout */}
-          <div className="flex items-center space-x-4">
-            <Link 
-              to="/profile"
-              className={`text-sm font-light flex items-center space-x-2 px-4 py-2 rounded-xl cursor-pointer transition-all duration-200 border ${
-                location.pathname === '/profile'
-                  ? 'bg-oura-card text-white border-oura-border'
-                  : 'text-gray-400 border-transparent hover:text-white hover:border-gray-500 hover:bg-oura-card'
-              }`}
-            >
-              <span className="opacity-80">{Icons.profile}</span>
-              <span>{getUserDisplayName()}</span>
-            </Link>
-            <button
-              onClick={onLogout}
-              className="text-gray-400 hover:text-white transition-all duration-200 text-sm font-light px-4 py-2 border border-oura-border rounded-xl hover:border-gray-500 hover:bg-oura-card"
-            >
-              Sign Out
-            </button>
-          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      {/* Mobile bottom nav bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-oura-border">
+        <div className="grid grid-cols-6 h-16">
+          {navItems.map(item => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all duration-200 ${
+                  isActive ? 'text-oura-cyan' : 'text-gray-500 active:text-white'
+                }`}
+              >
+                <span className={`transition-transform duration-200 ${isActive ? 'scale-110' : ''}`}>
+                  {/* Render a slightly larger icon for mobile */}
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    {item.path === '/dashboard' && <>
+                      <circle cx="12" cy="12" r="10" />
+                      <circle cx="12" cy="12" r="6" opacity="0.5" />
+                      <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+                    </>}
+                    {item.path === '/journal' && <>
+                      <path d="M4 4h16v16H4z" />
+                      <path d="M8 8h8M8 12h8M8 16h4" opacity="0.7" />
+                    </>}
+                    {item.path === '/killlist' && <>
+                      <circle cx="12" cy="12" r="10" />
+                      <circle cx="12" cy="12" r="6" opacity="0.5" />
+                      <line x1="12" y1="2" x2="12" y2="6" />
+                      <line x1="12" y1="18" x2="12" y2="22" />
+                      <line x1="2" y1="12" x2="6" y2="12" />
+                      <line x1="18" y1="12" x2="22" y2="12" />
+                    </>}
+                    {item.path === '/hardlessons' && <>
+                      <polygon points="12,2 15,10 23,10 17,15 19,23 12,18 5,23 7,15 1,10 9,10" />
+                    </>}
+                    {item.path === '/blackmirror' && <>
+                      <rect x="3" y="3" width="18" height="18" rx="3" />
+                      <circle cx="12" cy="12" r="4" opacity="0.5" />
+                    </>}
+                    {item.path === '/relapse' && <>
+                      <path d="M12 2L2 22h20L12 2z" />
+                      <line x1="12" y1="9" x2="12" y2="14" opacity="0.7" />
+                      <circle cx="12" cy="18" r="1" fill="currentColor" stroke="none" />
+                    </>}
+                  </svg>
+                </span>
+                <span className="text-[9px] font-light tracking-wide leading-none">{item.mobileLabel}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+    </>
   );
 }

@@ -1,3 +1,5 @@
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
 const logger = {
   info: (...args) => console.info(...args),
   warn: (...args) => console.warn(...args),
@@ -453,32 +455,50 @@ const parseLLMJsonSafely = (value) => {
 };
 
 export const callLLM = async (promptBundle, generationContext) => {
+  const { userPrompt } = promptBundle;
+
   try {
-    const { userPrompt } = promptBundle;
+    // Call real Claude API via secure Firebase Cloud Function proxy
+    const functions = getFunctions();
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+
+    // Map the first selected lens to a tone string the Cloud Function understands
+    const toneMap = {
+      'Stoicism': 'stoic',
+      'Jung': 'jungian',
+      'Sun Tzu': 'sun-tzu',
+      'Taoism': 'taoist',
+      'Musashi': 'musashi',
+      'Alan Watts': 'watts',
+    };
+    const tone = toneMap[userPrompt.selectedLenses?.[0]] || 'stoic';
+
+    const result = await oracleFn({
+      entryText: userPrompt.entryText,
+      moduleName: userPrompt.moduleName,
+      userContext: userPrompt.userContext || {},
+      tone,
+    });
+
+    const { feedback } = result.data;
+
+    // Claude returned real prose — skip the template formatter entirely
+    return { _rawClaudeResponse: true, rawText: feedback || '' };
+  } catch (error) {
+    // Cloud Function unavailable (not yet deployed, network issue, rate limit) —
+    // fall back to the local template system so the app stays functional.
+    logger.warn('Oracle Cloud Function unavailable, using local fallback:', error.message);
+
     const draft = composeFeedback({
       moduleName: userPrompt.moduleName,
       entryText: userPrompt.entryText,
       themes: userPrompt.extractedThemes,
       lenses: userPrompt.selectedLenses,
       antiRepetitionData: userPrompt.antiRepetition,
-      strictMode: false
+      strictMode: generationContext?.strictRetry || false,
     });
 
     return parseLLMJsonSafely(draft);
-  } catch (error) {
-    logger.error('callLLM failed:', error);
-    if (generationContext?.strictRetry) {
-      const fallbackDraft = composeFeedback({
-        moduleName: generationContext.moduleName,
-        entryText: generationContext.entryText,
-        themes: generationContext.themes,
-        lenses: generationContext.lenses,
-        antiRepetitionData: generationContext.antiRepetitionData,
-        strictMode: true
-      });
-      return fallbackDraft;
-    }
-    throw error;
   }
 };
 
@@ -666,6 +686,9 @@ export const generateFeedback = async ({
       strictRetry: true
     });
 
+    // Real Claude prose — skip validation/formatting entirely
+    if (llmResponse._rawClaudeResponse) return llmResponse;
+
     const checked = await validateAndFix(llmResponse, {
       entryText: cleanEntry,
       themes,
@@ -711,6 +734,9 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
       priorFeedbackSummary
     });
 
+    // Real Claude response — return prose directly, no template formatting
+    if (feedback._rawClaudeResponse) return feedback.rawText;
+
     return formatFeedbackAsText(feedback);
   } catch (error) {
     logger.error('Error generating AI feedback:', error);
@@ -721,21 +747,36 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
 
 export const generateOracleFollowUp = async (originalInput, oracleJudgment, userResponse) => {
   try {
-    const combined = normalizeWhitespace(`${originalInput || ''} ${oracleJudgment || ''} ${userResponse || ''}`);
-    const feedback = await generateFeedback({
-      moduleName: 'oracle_follow_up',
-      entryText: combined,
-      priorFeedbackSummary: normalizeWhitespace(oracleJudgment)
+    const functions = getFunctions();
+    const followUpFn = httpsCallable(functions, 'oracleFollowUp', { timeout: 30000 });
+
+    const result = await followUpFn({
+      originalEntry: normalizeWhitespace(originalInput || ''),
+      userResponse: normalizeWhitespace(userResponse || ''),
+      initialFeedback: normalizeWhitespace(oracleJudgment || ''),
     });
 
-    return [
-      feedback.summary_mirror,
-      feedback.analysis,
-      `Next move: ${feedback.prescriptions[0]}`,
-      feedback.closing_charge
-    ].join('\n\n');
+    return result.data.followUp || 'You gave signal, now execute. What one decision rule are you enforcing in the next 24 hours?';
   } catch (error) {
-    logger.error('Error generating Oracle follow-up:', error);
-    return 'You gave signal, now execute. What one decision rule are you enforcing in the next 24 hours?';
+    logger.warn('Oracle follow-up Cloud Function unavailable, using local fallback:', error.message);
+
+    // Local fallback
+    try {
+      const combined = normalizeWhitespace(`${originalInput || ''} ${oracleJudgment || ''} ${userResponse || ''}`);
+      const feedback = await generateFeedback({
+        moduleName: 'oracle_follow_up',
+        entryText: combined,
+        priorFeedbackSummary: normalizeWhitespace(oracleJudgment)
+      });
+
+      return [
+        feedback.summary_mirror,
+        feedback.analysis,
+        `Next move: ${feedback.prescriptions[0]}`,
+        feedback.closing_charge
+      ].join('\n\n');
+    } catch {
+      return 'You gave signal, now execute. What one decision rule are you enforcing in the next 24 hours?';
+    }
   }
 };

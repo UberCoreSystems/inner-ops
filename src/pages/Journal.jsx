@@ -200,6 +200,10 @@ export default function Journal() {
   // State for rotating prompts
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
   const [promptVisible, setPromptVisible] = useState(true);
+  const [isTextareaFocused, setIsTextareaFocused] = useState(false);
+
+  // Entry editing state
+  const [editingEntryId, setEditingEntryId] = useState(null);
 
   const journalPrompts = [
     "What am I most grateful for today?",
@@ -258,22 +262,20 @@ export default function Journal() {
     return () => clearTimeout(dwellTimer);
   }, [loading, showSkeleton]);
 
-  // Effect for rotating prompts
+  // Effect for rotating prompts — pauses while the user is typing
   useEffect(() => {
+    if (isTextareaFocused) return; // don't rotate while writing
+
     const interval = setInterval(() => {
-      // Fade out
       setPromptVisible(false);
-      
-      // After fade out completes, change prompt and fade in
       setTimeout(() => {
         setCurrentPromptIndex((prev) => (prev + 1) % journalPrompts.length);
         setPromptVisible(true);
-      }, 300); // Half of the transition duration
-      
-    }, 3000); // Change every 3 seconds
+      }, 300);
+    }, 4000);
 
     return () => clearInterval(interval);
-  }, [journalPrompts.length]);
+  }, [journalPrompts.length, isTextareaFocused]);
 
   // Dynamic AI insights generation
   useEffect(() => {
@@ -405,6 +407,26 @@ export default function Journal() {
     }
   };
 
+  const cancelEdit = () => {
+    setEditingEntryId(null);
+    setEntry('');
+    setMood(moodOptions[0].value);
+    setIntensity(3);
+    setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
+  };
+
+  const startEditEntry = (entryToEdit) => {
+    setEditingEntryId(entryToEdit.id);
+    setEntry(entryToEdit.content || '');
+    setMood(entryToEdit.mood || moodOptions[0].value);
+    setIntensity(entryToEdit.intensity || 3);
+    // Switch category tab to match the saved mood
+    const cat = moodCategories.find(c => c.moods.some(m => m.value === entryToEdit.mood));
+    if (cat) setSelectedCategory(cat.name);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('journal-entry-input')?.focus();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!entry.trim()) return;
@@ -412,36 +434,43 @@ export default function Journal() {
     setLoading(true);
 
     try {
-      // Generate AI feedback first
+      if (editingEntryId) {
+        // Update existing entry — preserve oracle data, just update content/mood/intensity
+        await updateData('journalEntries', editingEntryId, {
+          content: entry,
+          mood,
+          intensity,
+        });
+        setEntries(prev =>
+          prev.map(e => e.id === editingEntryId ? { ...e, content: entry, mood, intensity } : e)
+        );
+        ouraToast.success('Journal entry updated');
+        cancelEdit();
+        return;
+      }
+
+      // New entry — generate Oracle feedback
       const moodLabel = moodOptions.find(m => m.value === mood)?.label || mood;
       const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}`;
       const pastEntries = entries.slice(-3).map(e => e.content);
-      
-      // Store the original input for oracle follow-up
+
       setCurrentEntryInput(inputText);
-      
-      // Show Oracle modal with loading state
       setOracleModal({ isOpen: true, content: '', isLoading: true });
 
       const feedback = await generateAIFeedback('journal', inputText, pastEntries);
-      
-      // Show Oracle feedback in modal
       setOracleModal({ isOpen: true, content: feedback, isLoading: false });
 
-      // Save entry with Oracle feedback
       const newEntry = await writeData('journalEntries', {
         content: entry,
         mood,
         intensity,
         oracleJudgment: feedback,
-        oracleFollowUp: null // Initialize for potential follow-up
+        oracleFollowUp: null,
       });
       setEntries(prev => [newEntry, ...prev]);
-      setCurrentEntryId(newEntry.id); // Track the entry ID for follow-up
-      
-      ouraToast.success('Journal entry saved');
+      setCurrentEntryId(newEntry.id);
 
-      // Clear form
+      ouraToast.success('Journal entry saved');
       setEntry('');
       setMood(moodOptions[0].value);
       setIntensity(3);
@@ -449,10 +478,10 @@ export default function Journal() {
 
     } catch (error) {
       logger.error("Error saving journal entry:", error);
-      setOracleModal({ 
-        isOpen: true, 
-        content: "The Oracle encounters interference in the cosmic currents... Your thoughts are still sacred. Please try again in a moment.", 
-        isLoading: false 
+      setOracleModal({
+        isOpen: true,
+        content: "The Oracle encounters interference in the cosmic currents... Your thoughts are still sacred. Please try again in a moment.",
+        isLoading: false
       });
     } finally {
       setLoading(false);
@@ -589,9 +618,77 @@ export default function Journal() {
           </div>
         </header>
 
+        {/* 30-Day Mood Calendar */}
+        {entries.length > 0 && (
+          <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+            <div className="oura-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest">30-Day Mood</h3>
+                <div className="flex items-center gap-3 text-[10px] text-[#3a3a3a]">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#22c55e]" />Energized</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#4da6ff]" />Grounded</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#f59e0b]" />Challenged</span>
+                </div>
+              </div>
+              {(() => {
+                const today = new Date();
+                const toLocalKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                const todayKey = toLocalKey(today);
+                // Build date→last-entry map for last 30 days
+                const entryMap = {};
+                entries.forEach(e => {
+                  const raw = e.createdAt || e.timestamp;
+                  if (!raw) return;
+                  const d = raw.toDate ? raw.toDate() : new Date(raw);
+                  if (isNaN(d.getTime())) return; // guard unresolved server timestamps
+                  const k = toLocalKey(d);
+                  entryMap[k] = e; // keep most recent per day
+                });
+                const getMoodColor = (mood) => {
+                  if (['electric','light','radiant','triumphant'].includes(mood)) return '#22c55e';
+                  if (['focused','sharp','steady','calm'].includes(mood)) return '#4da6ff';
+                  if (['heavy','hollow','foggy','chaotic'].includes(mood)) return '#f59e0b';
+                  return '#5a5a5a';
+                };
+                const days = Array.from({ length: 30 }, (_, i) => {
+                  const d = new Date(today);
+                  d.setDate(today.getDate() - (29 - i));
+                  return d;
+                });
+                return (
+                  <div className="grid grid-cols-10 gap-1.5">
+                    {days.map((day) => {
+                      const k = toLocalKey(day);
+                      const e = entryMap[k];
+                      const color = e ? getMoodColor(e.mood) : null;
+                      const intensity = e?.intensity || 3;
+                      const opacity = color ? 0.25 + (intensity / 5) * 0.75 : 1;
+                      const isToday = k === todayKey;
+                      return (
+                        <div
+                          key={k}
+                          title={`${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${e ? `: ${e.mood}` : ': no entry'}`}
+                          className={`h-7 rounded-md transition-all duration-300 cursor-default ${isToday ? 'ring-1 ring-white/40' : ''}`}
+                          style={{ backgroundColor: color || '#1a1a1a', opacity }}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+        )}
+
         {/* Entry Form */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className="oura-card p-6 mb-8">
+          <div className={`oura-card p-6 mb-8 ${editingEntryId ? 'border border-[#4da6ff]/40' : ''}`}>
+            {editingEntryId && (
+              <div className="flex items-center justify-between mb-5 p-3 bg-[#4da6ff]/10 border border-[#4da6ff]/20 rounded-xl">
+                <span className="text-[#4da6ff] text-sm font-medium">Editing entry — Oracle feedback will not regenerate on update</span>
+                <button type="button" onClick={cancelEdit} className="text-[#4da6ff] text-xs hover:text-white transition-colors">Cancel</button>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Dynamic AI Insights */}
               {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
@@ -804,6 +901,8 @@ export default function Journal() {
                     id="journal-entry-input"
                     value={entry}
                     onChange={(e) => setEntry(e.target.value)}
+                    onFocus={() => setIsTextareaFocused(true)}
+                    onBlur={() => setIsTextareaFocused(false)}
                     rows={6}
                     className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#00d4aa] focus:outline-none resize-none transition-colors"
                     placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
@@ -820,13 +919,24 @@ export default function Journal() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading || !entry.trim()}
-                className="w-full bg-[#00d4aa] hover:bg-[#00e6b8] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-black font-medium py-3 rounded-2xl transition-all duration-300"
-              >
-                {loading ? 'Saving...' : 'Save Entry'}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={loading || !entry.trim()}
+                  className="flex-1 bg-[#00d4aa] hover:bg-[#00e6b8] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-black font-medium py-3 rounded-2xl transition-all duration-300"
+                >
+                  {loading ? 'Saving...' : editingEntryId ? 'Update Entry' : 'Save Entry'}
+                </button>
+                {editingEntryId && (
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    className="px-6 py-3 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-[#8a8a8a] hover:text-white border border-[#1a1a1a] rounded-2xl transition-all duration-300 font-medium"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         </section>
@@ -889,19 +999,26 @@ export default function Journal() {
                               <p className="text-[#5a5a5a] text-xs">{intensityLabel}</p>
                             </div>
                           </div>
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-2">
                             <span className="text-xs text-[#5a5a5a]">
-                              {entry.timestamp?.toDate ? 
-                                entry.timestamp.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
-                                entry.createdAt?.toDate ? 
-                                  entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
-                                  entry.timestamp ? 
-                                    new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
-                                    entry.createdAt ? 
-                                      new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 
+                              {entry.timestamp?.toDate ?
+                                entry.timestamp.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
+                                entry.createdAt?.toDate ?
+                                  entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
+                                  entry.timestamp ?
+                                    new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
+                                    entry.createdAt ?
+                                      new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
                                       'Unknown date'
                               }
                             </span>
+                            <button
+                              onClick={() => startEditEntry(entry)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#4da6ff]/10 text-[#4da6ff] hover:bg-[#4da6ff]/20 transition-colors"
+                              title="Edit this entry"
+                            >
+                              ✏️
+                            </button>
                             <button
                               onClick={() => deleteEntry(entry.id)}
                               className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"

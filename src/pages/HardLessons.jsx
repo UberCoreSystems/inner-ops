@@ -86,6 +86,22 @@ export default function HardLessons() {
     setInitialLoading(false);
   };
 
+  const costFrequency = useMemo(() => {
+    if (lessons.length === 0) return [];
+    const counts = {};
+    lessons.forEach(l => {
+      (l.costs || []).forEach(cost => {
+        counts[cost] = (counts[cost] || 0) + 1;
+      });
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([value, count]) => {
+        const def = costCategories.find(c => c.value === value);
+        return { value, label: def?.label ?? value, icon: def?.icon ?? '⚡', count };
+      });
+  }, [lessons]);
+
   const filteredLessons = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return lessons;
@@ -322,6 +338,18 @@ Please help extract the core lesson and rule from this experience.
     pendingLessonDeletes.current.set(lessonId, { timeoutId, lesson, index: lessonIndex, toastId });
   };
 
+  // Derive which of the 7 form fields are complete
+  const formSteps = [
+    { key: 'eventCategory',    label: 'Category',   done: !!newLesson.eventCategory },
+    { key: 'eventDescription', label: 'Event',       done: !!newLesson.eventDescription?.trim() },
+    { key: 'myAssumption',     label: 'Assumption',  done: !!newLesson.myAssumption?.trim() },
+    { key: 'signalIgnored',    label: 'Signal',      done: !!newLesson.signalIgnored?.trim() },
+    { key: 'costs',            label: 'Cost',        done: newLesson.costs.length > 0 && !!newLesson.costDescription?.trim() },
+    { key: 'extractedLesson',  label: 'Lesson',      done: !!newLesson.extractedLesson?.trim() },
+    { key: 'ruleGoingForward', label: 'Rule',        done: !!newLesson.ruleGoingForward?.trim() },
+  ];
+  const completedSteps = formSteps.filter(s => s.done).length;
+
   return (
     <div className="min-h-screen bg-black">
       <div className="max-w-6xl mx-auto p-6">
@@ -354,6 +382,32 @@ Please help extract the core lesson and rule from this experience.
           </div>
         </div>
 
+        {/* Cost type distribution */}
+        {costFrequency.length >= 2 && (
+          <div className="oura-card p-5 mb-8 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+            <h3 className="text-xs text-[#5a5a5a] uppercase tracking-widest mb-4">Cost Distribution</h3>
+            <div className="space-y-2.5">
+              {costFrequency.map(({ value, label, icon, count }) => {
+                const maxCount = costFrequency[0].count;
+                const pct = Math.round((count / maxCount) * 100);
+                return (
+                  <div key={value} className="flex items-center gap-3">
+                    <div className="text-sm w-4 shrink-0">{icon}</div>
+                    <div className="text-[#8a8a8a] text-xs w-28 shrink-0 truncate">{label}</div>
+                    <div className="flex-1 bg-[#1a1a1a] rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="h-1.5 rounded-full bg-[#f59e0b] transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="text-[#5a5a5a] text-xs w-4 text-right shrink-0">{count}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Action Button */}
         <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <button
@@ -367,14 +421,41 @@ Please help extract the core lesson and rule from this experience.
       {/* Lesson Extraction Form */}
       {showForm && (
         <div className="oura-card p-8 mb-8 border-l-4 border-[#f59e0b] animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <h2 className="text-2xl font-bold text-white mb-6">
-            {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
-          </h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-2xl font-bold text-white">
+              {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
+            </h2>
+            <span className="text-sm text-[#5a5a5a] font-light tabular-nums">
+              <span className={completedSteps === 7 ? 'text-[#22c55e]' : 'text-[#f59e0b]'}>
+                {completedSteps}
+              </span>
+              <span>/7 complete</span>
+            </span>
+          </div>
+
+          {/* Step progress bar */}
+          <div className="mb-8">
+            <div className="flex items-center gap-1.5 mb-2">
+              {formSteps.map((step, i) => (
+                <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
+                  <div className={`h-1.5 w-full rounded-full transition-all duration-300 ${
+                    step.done ? 'bg-[#f59e0b]' : 'bg-[#1a1a1a]'
+                  }`} />
+                  <span className={`text-[9px] uppercase tracking-wide leading-none transition-colors duration-200 ${
+                    step.done ? 'text-[#f59e0b]' : 'text-[#3a3a3a]'
+                  }`}>{step.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="space-y-6">
             {/* Event Category */}
             <div>
-              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-4">Event Category</label>
+              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-4">
+                <span className={newLesson.eventCategory ? 'text-[#f59e0b]' : 'text-[#8a8a8a]'}>Event Category</span>
+                {newLesson.eventCategory && <span className="text-[#22c55e] text-xs">✓</span>}
+              </label>
               <div className="grid grid-cols-3 gap-3">
                 {eventCategories.map(cat => (
                   <button
@@ -396,8 +477,9 @@ Please help extract the core lesson and rule from this experience.
 
             {/* The Event */}
             <div>
-              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                The Event <span className="text-[#f59e0b]">*</span>
+              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
+                <span className={newLesson.eventDescription?.trim() ? 'text-[#f59e0b]' : 'text-[#8a8a8a]'}>The Event</span>
+                {newLesson.eventDescription?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">What actually happened (no interpretation, just facts)</p>
               <textarea
@@ -412,8 +494,9 @@ Please help extract the core lesson and rule from this experience.
 
             {/* My Assumption */}
             <div>
-              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                My Assumption <span className="text-[#f59e0b]">*</span>
+              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
+                <span className={newLesson.myAssumption?.trim() ? 'text-[#f59e0b]' : 'text-[#8a8a8a]'}>My Assumption</span>
+                {newLesson.myAssumption?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">What you believed that turned out to be false</p>
               <textarea
@@ -427,8 +510,9 @@ Please help extract the core lesson and rule from this experience.
 
             {/* The Signal I Ignored */}
             <div>
-              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                The Signal I Ignored <span className="text-[#f59e0b]">*</span>
+              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
+                <span className={newLesson.signalIgnored?.trim() ? 'text-[#f59e0b]' : 'text-[#8a8a8a]'}>The Signal I Ignored</span>
+                {newLesson.signalIgnored?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">The warning you noticed but discounted</p>
               <textarea
@@ -442,8 +526,9 @@ Please help extract the core lesson and rule from this experience.
 
             {/* The Cost */}
             <div>
-              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                The Cost <span className="text-[#f59e0b]">*</span>
+              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
+                <span className={(newLesson.costs.length > 0 && newLesson.costDescription?.trim()) ? 'text-[#f59e0b]' : 'text-[#8a8a8a]'}>The Cost</span>
+                {(newLesson.costs.length > 0 && newLesson.costDescription?.trim()) ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">Real consequences (select all that apply)</p>
 
@@ -476,8 +561,9 @@ Please help extract the core lesson and rule from this experience.
 
             {/* The Lesson */}
             <div>
-              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                The Lesson <span className="text-[#f59e0b]">*</span>
+              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
+                <span className={newLesson.extractedLesson?.trim() ? 'text-[#f59e0b]' : 'text-[#8a8a8a]'}>The Lesson</span>
+                {newLesson.extractedLesson?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">One sentence. Brutally precise.</p>
               <input
@@ -491,8 +577,9 @@ Please help extract the core lesson and rule from this experience.
 
             {/* The Rule Going Forward */}
             <div>
-              <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                The Rule Going Forward <span className="text-[#f59e0b]">*</span>
+              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
+                <span className={newLesson.ruleGoingForward?.trim() ? 'text-[#f59e0b]' : 'text-[#8a8a8a]'}>The Rule Going Forward</span>
+                {newLesson.ruleGoingForward?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">An enforceable constraint, not advice</p>
               <input
@@ -527,7 +614,7 @@ Please help extract the core lesson and rule from this experience.
                 disabled={loading}
                 className="px-6 py-3 bg-[#a855f7] hover:bg-[#9333ea] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-2xl transition-all duration-300 font-medium"
               >
-                🔮 Seek Oracle Extraction
+                🔮 Ask Oracle to Extract Lesson & Rule
               </button>
 
               <button
