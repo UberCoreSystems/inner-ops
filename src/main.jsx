@@ -3,7 +3,10 @@ import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
+import { initAnalytics } from './utils/analytics';
 import './index.css';
+
+initAnalytics();
 
 // Sentry is only active when VITE_SENTRY_DSN is set.
 // Get your DSN from https://sentry.io → Project Settings → Client Keys.

@@ -5,6 +5,7 @@ import { authService } from './utils/authService';
 import { toasterConfig } from './utils/toast';
 import logger from './utils/logger';
 import { checkFirebaseConnection } from './firebase';
+import { identify, resetAnalytics } from './utils/analytics';
 import './App.css';
 
 // Core components (loaded immediately)
@@ -70,6 +71,7 @@ function App() {
         const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
           if (firebaseUser) {
             logger.log("🔐 Existing user found:", firebaseUser.uid, firebaseUser.email);
+            identify(firebaseUser.uid, { email: firebaseUser.email });
           } else {
             logger.log("🔐 No authenticated user - waiting for login");
           }

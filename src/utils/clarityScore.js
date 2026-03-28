@@ -3,6 +3,18 @@
 const calculationCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Temporal decay: recent activity counts more than old activity
+const getTemporalWeight = (createdAt) => {
+  if (!createdAt) return 0.5;
+  const d = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
+  if (isNaN(d.getTime())) return 0.5;
+  const daysAgo = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
+  if (daysAgo <= 30) return 1.0;
+  if (daysAgo <= 90) return 0.6;
+  if (daysAgo <= 180) return 0.3;
+  return 0.1;
+};
+
 export const clarityScoreUtils = {
   // Base scoring system - Much more conservative and progress-focused
   SCORING: {
@@ -43,8 +55,13 @@ export const clarityScoreUtils = {
     
     let totalScore = 0;
 
-    // Journal scoring - higher weight for consistency
-    totalScore += journalEntries.length * clarityScoreUtils.SCORING.JOURNAL_ENTRY;
+    // Journal scoring — temporal decay applied, minimum 50 chars to count
+    const journalScore = journalEntries.reduce((sum, entry) => {
+      const content = entry.content || entry.text || '';
+      if (content.length < 50) return sum; // too short to score
+      return sum + clarityScoreUtils.SCORING.JOURNAL_ENTRY * getTemporalWeight(entry.createdAt);
+    }, 0);
+    totalScore += journalScore;
     
     // Streak bonus for journaling (consecutive days) - more conservative
     const journalStreak = clarityScoreUtils.calculateJournalStreak(journalEntries);
@@ -81,15 +98,15 @@ export const clarityScoreUtils = {
     killListScore = Math.floor(killListScore * completionMultiplier);
     totalScore += killListScore;
 
-    // Hard Lessons scoring - turning pain into wisdom
+    // Hard Lessons scoring — require real content (min 30 chars in extractedLesson)
     let hardLessonsScore = 0;
     hardLessons.forEach(lesson => {
-      // Base score for extracting a lesson
-      hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_EXTRACTED;
-      
-      // Bonus for finalizing with a rule going forward (shows commitment to change)
-      if (lesson.isFinalized && lesson.ruleGoingForward) {
-        hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_FINALIZED;
+      const hasContent = (lesson.extractedLesson || '').trim().length >= 30
+        || (lesson.eventDescription || '').trim().length >= 30;
+      if (!hasContent) return; // no points for empty/trivial lessons
+      hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_EXTRACTED * getTemporalWeight(lesson.createdAt);
+      if (lesson.isFinalized && lesson.ruleGoingForward?.trim().length >= 20) {
+        hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_FINALIZED * getTemporalWeight(lesson.createdAt);
       }
     });
     totalScore += hardLessonsScore;
@@ -98,13 +115,14 @@ export const clarityScoreUtils = {
     const weeklyBlackMirrorBonuses = clarityScoreUtils.calculateWeeklyBlackMirrorBonuses(blackMirrorEntries);
     totalScore += weeklyBlackMirrorBonuses;
 
-    // Relapse Radar scoring - reward self-awareness
+    // Relapse Radar scoring — capped at 10 entries to prevent gaming,
+    // and only entries with meaningful reflection (>50 chars) count
     let relapseAwarenessBonus = 0;
-    relapseEntries.forEach(entry => {
-      // Base bonus for self-awareness and honesty
+    const scorableRelapse = relapseEntries
+      .filter(e => (e.reflection || '').trim().length >= 20)
+      .slice(0, 10); // hard cap — logging fake relapses beyond 10 earns nothing
+    scorableRelapse.forEach(entry => {
       relapseAwarenessBonus += clarityScoreUtils.SCORING.RELAPSE_AWARENESS;
-      
-      // Additional bonus for detailed reflection
       if (entry.reflection && entry.reflection.length > 100) {
         relapseAwarenessBonus += clarityScoreUtils.SCORING.RELAPSE_REFLECTION;
       }
@@ -118,7 +136,7 @@ export const clarityScoreUtils = {
       weeklyBlackMirrorChecks: Math.floor(blackMirrorEntries.length / 7),
       relapseAwarenessEntries: relapseEntries.length,
       breakdown: {
-        journal: journalEntries.length * clarityScoreUtils.SCORING.JOURNAL_ENTRY,
+        journal: Math.floor(journalScore),
         killList: killListScore,
         hardLessons: hardLessonsScore,
         blackMirror: weeklyBlackMirrorBonuses,

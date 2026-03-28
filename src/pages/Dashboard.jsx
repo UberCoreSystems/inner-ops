@@ -41,6 +41,9 @@ export default function Dashboard() {
   const [rawUserData, setRawUserData] = useState(null);
   const [calculatingClarity, setCalculatingClarity] = useState(false);
 
+  // Early warning signal
+  const [earlyWarning, setEarlyWarning] = useState(null);
+
   // Collapsible section states
   const [killListExpanded, setKillListExpanded] = useState(true);
   const [insightsExpanded, setInsightsExpanded] = useState(true);
@@ -389,6 +392,35 @@ export default function Dashboard() {
           const scoreData = await clarityScoreUtils.calculateClarityScore(rawUserData);
           const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
           setClarityScore({ ...scoreData, rank });
+
+          // Compute early warning signal
+          const NEGATIVE_MOODS = new Set(['heavy','hollow','foggy','chaotic']);
+          const POSITIVE_MOODS = new Set(['electric','light','radiant','triumphant','focused','sharp','steady','calm']);
+          const recentJournal = (rawUserData.journalEntries || []).slice(0, 7);
+          const moodDots = recentJournal.map(e => {
+            if (NEGATIVE_MOODS.has(e.mood)) return 'red';
+            if (POSITIVE_MOODS.has(e.mood)) return 'green';
+            return 'gray';
+          });
+          const negativeCount = moodDots.filter(m => m === 'red').length;
+          const last5negative = moodDots.slice(0, 5).filter(m => m === 'red').length;
+          const daysSinceRelapse = stats.streakDays;
+          const daysSinceJournal = recentJournal.length > 0 ? (() => {
+            const raw = recentJournal[0].createdAt;
+            const d = raw?.toDate ? raw.toDate() : new Date(raw);
+            return isNaN(d.getTime()) ? 99 : Math.floor((Date.now() - d.getTime()) / 86400000);
+          })() : 99;
+
+          let level = 'clear';
+          const signals = [];
+          if (daysSinceRelapse !== null && daysSinceRelapse < 3) { level = 'high'; signals.push('Recent relapse within 72 hours'); }
+          if (last5negative >= 3) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Predominantly negative mood over last 5 entries'); }
+          if (daysSinceJournal >= 5) { level = level === 'high' ? 'high' : 'elevated'; signals.push(`No journal entry in ${daysSinceJournal} days`); }
+          if (negativeCount >= 2 && daysSinceRelapse < 14) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Negative mood pattern following recent relapse'); }
+
+          if (level !== 'clear' || recentJournal.length >= 3) {
+            setEarlyWarning({ level, signals, moodDots, daysSinceRelapse, daysSinceJournal });
+          }
           
           logger.log("✅ Dashboard: Clarity score calculated successfully", {
             score: scoreData.totalScore,
@@ -549,6 +581,58 @@ export default function Dashboard() {
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <DailyPrompt onJournalClick={() => setQuickJournalOpen(true)} />
         </section>
+
+        {/* Early Warning Widget */}
+        {earlyWarning && (
+          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
+            <div className={`oura-card p-5 border-l-4 ${
+              earlyWarning.level === 'high' ? 'border-[#ef4444]' :
+              earlyWarning.level === 'elevated' ? 'border-[#f59e0b]' :
+              'border-[#22c55e]'
+            }`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className={`text-xs font-medium uppercase tracking-widest ${
+                      earlyWarning.level === 'high' ? 'text-[#ef4444]' :
+                      earlyWarning.level === 'elevated' ? 'text-[#f59e0b]' :
+                      'text-[#22c55e]'
+                    }`}>
+                      {earlyWarning.level === 'high' ? 'High Risk' :
+                       earlyWarning.level === 'elevated' ? 'Elevated Risk' : 'On Track'}
+                    </span>
+                    {earlyWarning.daysSinceRelapse !== null && (
+                      <span className="text-[#5a5a5a] text-xs">
+                        {earlyWarning.daysSinceRelapse === 0 ? 'relapsed today' : `${earlyWarning.daysSinceRelapse}d since last relapse`}
+                      </span>
+                    )}
+                  </div>
+                  {earlyWarning.signals.length > 0 && (
+                    <div className="space-y-1 mb-3">
+                      {earlyWarning.signals.map((s, i) => (
+                        <p key={i} className="text-[#8a8a8a] text-sm">{s}</p>
+                      ))}
+                    </div>
+                  )}
+                  {/* Mood dots — last 7 journal entries, left = most recent */}
+                  {earlyWarning.moodDots.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#3a3a3a] text-xs mr-1">Mood</span>
+                      {earlyWarning.moodDots.map((color, i) => (
+                        <div
+                          key={i}
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: color === 'red' ? '#ef4444' : color === 'green' ? '#22c55e' : '#2a2a2a' }}
+                        />
+                      ))}
+                      <span className="text-[#3a3a3a] text-xs ml-1">← recent</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Main Score Section - Oura Triple Ring Style */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>

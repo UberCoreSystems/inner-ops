@@ -4,24 +4,34 @@ import React, { useEffect, useState } from 'react';
  * Oura-style Circular Progress Ring Component
  * Creates the signature stacked ring visualization
  */
-export const CircularProgressRing = React.memo(function CircularProgressRing({ 
-  progress = 0, 
-  size = 120, 
-  strokeWidth = 8, 
+// Detect reduced motion preference once at module load — does not change mid-session
+const prefersReducedMotion =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+export const CircularProgressRing = React.memo(function CircularProgressRing({
+  progress = 0,
+  size = 120,
+  strokeWidth = 8,
   color = '#00d4aa',
   trackColor = '#1a1a1a',
   showGlow = true,
   animateOnMount = true,
-  children 
+  label,
+  children
 }) {
-  const [animatedProgress, setAnimatedProgress] = useState(animateOnMount ? 0 : progress);
-  
+  const [animatedProgress, setAnimatedProgress] = useState(
+    animateOnMount && !prefersReducedMotion ? 0 : progress
+  );
+
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const offset = circumference - (animatedProgress / 100) * circumference;
-  
+  const ariaLabel = label ?? `${Math.round(progress)}% progress`;
+  const transition = prefersReducedMotion ? 'none' : 'stroke-dashoffset 1s ease-out';
+
   useEffect(() => {
-    if (animateOnMount) {
+    if (animateOnMount && !prefersReducedMotion) {
       const timer = setTimeout(() => {
         setAnimatedProgress(progress);
       }, 100);
@@ -33,7 +43,12 @@ export const CircularProgressRing = React.memo(function CircularProgressRing({
 
   return (
     <div className="oura-ring" style={{ width: size, height: size }}>
-      <svg width={size} height={size}>
+      <svg
+        width={size}
+        height={size}
+        role="img"
+        aria-label={ariaLabel}
+      >
         {/* Glow effect layer */}
         {showGlow && (
           <circle
@@ -46,14 +61,14 @@ export const CircularProgressRing = React.memo(function CircularProgressRing({
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             fill="none"
-            style={{ 
+            style={{
               filter: 'blur(8px)',
               opacity: 0.4,
-              transition: 'stroke-dashoffset 1s ease-out'
+              transition,
             }}
           />
         )}
-        
+
         {/* Track */}
         <circle
           className="oura-ring-track"
@@ -63,7 +78,7 @@ export const CircularProgressRing = React.memo(function CircularProgressRing({
           strokeWidth={strokeWidth}
           stroke={trackColor}
         />
-        
+
         {/* Progress */}
         <circle
           className="oura-ring-progress"
@@ -74,13 +89,13 @@ export const CircularProgressRing = React.memo(function CircularProgressRing({
           stroke={color}
           strokeDasharray={circumference}
           strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+          style={{ transition }}
         />
       </svg>
-      
+
       {/* Center content */}
       {children && (
-        <div 
+        <div
           className="absolute inset-0 flex items-center justify-center"
           style={{ width: size, height: size }}
         >
@@ -101,23 +116,31 @@ export const TripleRing = React.memo(function TripleRing({
     { progress: 85, color: '#a855f7', label: 'Focus' }
   ],
   size = 200,
-  centerContent
+  centerContent,
+  ariaLabel,
 }) {
   const baseStrokeWidth = 10;
   const gap = 14;
+  const compositeLabel = ariaLabel ??
+    rings.map((r) => `${r.label}: ${Math.round(r.progress)}%`).join(', ');
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
+    <div
+      className="relative"
+      style={{ width: size, height: size, maxWidth: '100%' }}
+      role="img"
+      aria-label={compositeLabel}
+    >
       {rings.map((ring, index) => {
         const ringSize = size - (index * gap * 2);
         const offset = index * gap;
-        
+
         return (
           <div
             key={index}
             className="absolute"
-            style={{ 
-              top: offset, 
+            style={{
+              top: offset,
               left: offset,
               width: ringSize,
               height: ringSize
@@ -129,11 +152,12 @@ export const TripleRing = React.memo(function TripleRing({
               strokeWidth={baseStrokeWidth}
               color={ring.color}
               showGlow={true}
+              label={`${ring.label}: ${Math.round(ring.progress)}%`}
             />
           </div>
         );
       })}
-      
+
       {/* Center content */}
       {centerContent && (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -170,9 +194,11 @@ export const ScoreCard = React.memo(function ScoreCard({
   };
 
   return (
-    <div 
-      className={`oura-card ${sizeClasses[size]} cursor-pointer group`}
+    <div
+      className={`oura-card ${sizeClasses[size]}${onClick ? ' cursor-pointer' : ''} group`}
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-[#8a8a8a] text-sm font-medium uppercase tracking-wider">

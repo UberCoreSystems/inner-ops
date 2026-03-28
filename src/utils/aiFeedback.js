@@ -1,4 +1,6 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getUserProfile } from './userProfile';
+import { track } from './analytics';
 
 const logger = {
   info: (...args) => console.info(...args),
@@ -473,14 +475,25 @@ export const callLLM = async (promptBundle, generationContext) => {
     };
     const tone = toneMap[userPrompt.selectedLenses?.[0]] || 'stoic';
 
+    // Load user profile for Oracle context (non-blocking — falls back gracefully)
+    const profile = await getUserProfile().catch(() => null);
+    const userContext = {
+      ...(userPrompt.userContext || {}),
+      ...(profile?.primaryDriver && { primaryDriver: profile.primaryDriver }),
+      ...(profile?.feedbackStyle && { feedbackStyle: profile.feedbackStyle }),
+      ...(profile?.focusStatement && { focusStatement: profile.focusStatement }),
+    };
+
     const result = await oracleFn({
       entryText: userPrompt.entryText,
       moduleName: userPrompt.moduleName,
-      userContext: userPrompt.userContext || {},
+      userContext,
       tone,
     });
 
     const { feedback } = result.data;
+
+    track('oracle_called', { module: userPrompt.moduleName, tone });
 
     // Claude returned real prose — skip the template formatter entirely
     return { _rawClaudeResponse: true, rawText: feedback || '' };

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/utils/aiFeedback.test.js"
+    "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js"
   },
   "keywords": [],
   "author": "",
@@ -34,6 +34,7 @@
     "framer-motion": "^12.14.0",
     "openai": "^4.103.0",
     "postcss": "^8.4.31",
+    "posthog-js": "^1.364.1",
     "react-hot-toast": "^2.6.0",
     "react-refresh": "^0.17.0",
     "react-router-dom": "^7.6.1",
