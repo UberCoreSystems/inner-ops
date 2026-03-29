@@ -6,6 +6,7 @@ import OracleModal from './OracleModal';
 import VirtualizedList from './VirtualizedList';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import { getAnalyticsReport } from '../utils/blackMirrorAnalytics';
 
 const philosophicalQuotes = [
   "He who is not satisfied with a little, is satisfied with nothing. - Epicurus",
@@ -39,9 +40,12 @@ const BlackMirror = () => {
   const [entries, setEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [aiFeedback, setAiFeedback] = useState('');
   const [loadingFeedback, setLoadingFeedback] = useState(false);
   const [showOracleModal, setShowOracleModal] = useState(false);
+  const [analyticsReport, setAnalyticsReport] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // Calculate Black Mirror Index - stable reference
   const calculateBlackMirrorIndex = useCallback((screenTimeValue, mentalFogValue, interactionValue, unconsciousCheckValue) => {
@@ -92,19 +96,36 @@ const BlackMirror = () => {
   }, [entries, searchQuery]);
 
   // Load entries on component mount
-  useEffect(() => {
-    const loadEntries = async () => {
-      try {
-        const savedEntries = await readUserData('blackMirrorEntries');
-        setEntries(savedEntries || []);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          logger.error('Error loading entries:', error);
-        }
-      }
-    };
-    loadEntries();
+  const loadEntries = useCallback(async () => {
+    setLoadError(false);
+    try {
+      const savedEntries = await readUserData('blackMirrorEntries');
+      setEntries(savedEntries || []);
+    } catch (error) {
+      logger.error('Error loading entries:', error);
+      setLoadError(true);
+    }
   }, []);
+
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
+
+  const loadAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const report = await getAnalyticsReport();
+      setAnalyticsReport(report);
+    } catch (err) {
+      logger.error('Analytics report failed:', err);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
 
   // Voice input handler
   const handleVoiceInput = useCallback((transcript) => {
@@ -168,7 +189,8 @@ const BlackMirror = () => {
       // Save to Firebase
       const savedEntry = await writeData('blackMirrorEntries', entryData);
       setEntries(prev => [savedEntry, ...prev.slice(0, 49)]);
-      
+      loadAnalytics();
+
       ouraToast.success('Black Mirror entry logged');
 
       // Reset form
@@ -184,7 +206,7 @@ const BlackMirror = () => {
     } finally {
       setLoading(false);
     }
-  }, [screenTime, mentalFog, interactionLevel, unconsciousCheck, reflection, calculateBlackMirrorIndex, philosophicalInsight, entries]);
+  }, [screenTime, mentalFog, interactionLevel, unconsciousCheck, reflection, calculateBlackMirrorIndex, philosophicalInsight, entries, loadAnalytics]);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -389,7 +411,17 @@ const BlackMirror = () => {
           </div>
         </div>
 
-        {filteredEntries.length > 0 ? (
+        {loadError ? (
+          <div className="oura-card p-10 text-center border border-oura-border">
+            <p className="text-red-400 mb-4 text-sm">Failed to load entries. Please check your connection.</p>
+            <button
+              onClick={loadEntries}
+              className="px-5 py-2.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded-xl hover:bg-red-500/20 transition-colors text-sm font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        ) : filteredEntries.length > 0 ? (
           <VirtualizedList
             items={filteredEntries}
             itemHeight={280}
@@ -500,6 +532,75 @@ const BlackMirror = () => {
                 </>
               )}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Pattern Analysis */}
+      <div className="oura-card p-6 mt-8 animate-fade-in-up animation-delay-300">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-light text-white tracking-tight">Pattern Analysis</h2>
+          {analyticsLoading && (
+            <span className="text-xs text-gray-600 animate-pulse">Analyzing...</span>
+          )}
+        </div>
+
+        {!analyticsReport ? (
+          <p className="text-gray-600 text-sm">Loading analysis...</p>
+        ) : analyticsReport.data.meta.counts.blackMirror < 3 ? (
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center text-2xl">
+              🔍
+            </div>
+            <h3 className="text-lg font-light text-white mb-2">Not enough data yet</h3>
+            <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
+              Pattern detection requires at least 3 Black Mirror entries, 3 journal entries, and 2 relapse entries.
+            </p>
+            <div className="grid grid-cols-3 gap-3 max-w-xs mx-auto">
+              {[
+                { label: 'Black Mirror', count: analyticsReport.data.meta.counts.blackMirror, need: 3 },
+                { label: 'Journal', count: analyticsReport.data.meta.counts.journal, need: 3 },
+                { label: 'Relapse', count: analyticsReport.data.meta.counts.relapse, need: 2 },
+              ].map(({ label, count, need }) => (
+                <div key={label} className="bg-oura-darker p-3 rounded-xl text-center">
+                  <span className={`text-xl font-light block ${count >= need ? 'text-green-400' : 'text-white'}`}>{count}</span>
+                  <span className="text-gray-500 text-xs block">{label}</span>
+                  <span className="text-gray-600 text-xs block">need {need}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="px-3 py-1.5 bg-oura-darker rounded-full text-gray-400">
+                {analyticsReport.insights.patterns_detected} pattern{analyticsReport.insights.patterns_detected !== 1 ? 's' : ''} detected
+              </span>
+              <span className="px-3 py-1.5 bg-oura-darker rounded-full text-gray-600">
+                {analyticsReport.data.meta.counts.blackMirror} BM · {analyticsReport.data.meta.counts.journal} journal · {analyticsReport.data.meta.counts.relapse} relapse
+              </span>
+            </div>
+
+            {[
+              { key: 'behavioral_patterns', label: 'Behavioral Patterns', data: analyticsReport.insights.behavioral_patterns },
+              { key: 'avoidance_patterns', label: 'Avoidance Patterns', data: analyticsReport.insights.avoidance_patterns },
+              { key: 'identity_vs_behavior_gaps', label: 'Identity vs Behavior Gaps', data: analyticsReport.insights.identity_vs_behavior_gaps },
+            ].map(({ key, label, data }) => (
+              <div key={key}>
+                <h3 className="text-xs uppercase tracking-widest text-[#5a5a5a] mb-3">{label}</h3>
+                <ul className="space-y-2">
+                  {data.map((insight, i) => (
+                    insight === 'Insufficient data to generate insight' ? (
+                      <li key={i} className="text-gray-600 text-sm italic px-1">Insufficient data to generate insight</li>
+                    ) : (
+                      <li key={i} className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl leading-relaxed">
+                        {insight}
+                      </li>
+                    )
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </div>

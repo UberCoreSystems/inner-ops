@@ -48,6 +48,7 @@ export default function HardLessons() {
   const [lessons, setLessons] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -81,9 +82,16 @@ export default function HardLessons() {
 
   const loadHardLessons = async () => {
     setInitialLoading(true);
-    const savedLessons = await readUserData('hardLessons');
-    setLessons(savedLessons || []);
-    setInitialLoading(false);
+    setLoadError(false);
+    try {
+      const savedLessons = await readUserData('hardLessons');
+      setLessons(savedLessons || []);
+    } catch (error) {
+      logger.error('❌ Error loading hard lessons:', error);
+      setLoadError(true);
+    } finally {
+      setInitialLoading(false);
+    }
   };
 
   const costFrequency = useMemo(() => {
@@ -662,7 +670,17 @@ Please help extract the core lesson and rule from this experience.
           </div>
 
           <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
-            {filteredLessons.length > 0 ? (
+            {loadError ? (
+              <div className="oura-card p-12 text-center">
+                <p className="text-[#ef4444] mb-4 text-sm">Failed to load hard lessons. Please check your connection.</p>
+                <button
+                  onClick={loadHardLessons}
+                  className="px-5 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 rounded-xl hover:bg-[#ef4444]/20 transition-colors text-sm font-medium"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : filteredLessons.length > 0 ? (
               <VirtualizedList
                 items={filteredLessons}
                 itemHeight={420}

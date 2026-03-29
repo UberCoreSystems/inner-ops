@@ -190,6 +190,7 @@ export default function Journal() {
   const [entries, setEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
@@ -392,6 +393,7 @@ export default function Journal() {
 
   const loadJournalEntries = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const savedEntries = await readUserData('journalEntries');
       logger.log("📔 Journal page: Loaded entries:", savedEntries.length);
@@ -401,7 +403,7 @@ export default function Journal() {
       setEntries(savedEntries);
     } catch (error) {
       logger.error("❌ Error loading journal entries:", error);
-      setEntries([]);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -976,7 +978,17 @@ export default function Journal() {
             </div>
 
             <div className={`fade-pane ${showSkeleton ? 'hidden' : 'visible'}`}>
-              {filteredEntries.length > 0 ? (
+              {loadError ? (
+                <div className="oura-card p-10 text-center">
+                  <p className="text-[#ef4444] mb-4 text-sm">Failed to load journal entries. Please check your connection.</p>
+                  <button
+                    onClick={loadJournalEntries}
+                    className="px-5 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 rounded-xl hover:bg-[#ef4444]/20 transition-colors text-sm font-medium"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : filteredEntries.length > 0 ? (
                 <div className="space-y-4 max-h-[800px] overflow-y-auto pr-4">
                   {filteredEntries.map((entry, mapIndex) => {
                     const moodOption = moodOptions.find(m => m.value === entry.mood);

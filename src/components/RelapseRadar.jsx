@@ -50,6 +50,7 @@ const RelapseRadar = () => {
   const [relapseEntries, setRelapseEntries] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [aiInsights, setAiInsights] = useState([]);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
@@ -74,15 +75,17 @@ const RelapseRadar = () => {
   }, []);
 
   const loadRelapseEntries = async () => {
+    setLoadError(false);
     try {
       const entries = await readUserData('relapseEntries');
       setRelapseEntries(entries);
-      
+
       // Generate AI insights based on patterns
       const insights = aiUtils.analyzeRelapsePatterns(entries);
       setAiInsights(insights);
     } catch (error) {
       logger.error("Error loading relapse entries:", error);
+      setLoadError(true);
     }
   };
 
@@ -385,7 +388,19 @@ const RelapseRadar = () => {
         </button>
       </div>
 
-      {relapseEntries.length > 0 && (
+      {loadError && (
+        <div className="mt-10 oura-card p-8 text-center">
+          <p className="text-[#ef4444] mb-4 text-sm">Failed to load relapse entries. Please check your connection.</p>
+          <button
+            onClick={loadRelapseEntries}
+            className="px-5 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 rounded-xl hover:bg-[#ef4444]/20 transition-colors text-sm font-medium"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loadError && relapseEntries.length > 0 && (
         <div className="mt-10">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
             <h3 className="text-2xl font-light text-white tracking-tight">

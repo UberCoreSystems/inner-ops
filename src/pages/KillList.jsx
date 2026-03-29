@@ -82,6 +82,7 @@ const KillList = () => {
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [filterStatus, setFilterStatus] = useState('all');
@@ -155,12 +156,13 @@ const KillList = () => {
     try {
       logger.log("📡 KillList: Loading targets for user:", user.uid);
       setLoading(true);
+      setLoadError(false);
       const targetsData = await readUserData('killTargets');
       logger.log(`📋 KillList: Loaded ${targetsData.length} kill targets`);
       setTargets(targetsData);
     } catch (error) {
       logger.error('❌ KillList: Error loading targets:', error);
-      setTargets([]);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -1061,7 +1063,17 @@ const KillList = () => {
           </div>
 
           <div className={`fade-pane ${showSkeleton ? 'hidden' : 'visible'}`}>
-            {filteredTargets.length > 0 ? (
+            {loadError ? (
+              <div className="oura-card p-12 text-center animate-fade-in-up">
+                <p className="text-[#ef4444] mb-4 text-sm">Failed to load kill targets. Please check your connection.</p>
+                <button
+                  onClick={loadTargets}
+                  className="px-5 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 rounded-xl hover:bg-[#ef4444]/20 transition-colors text-sm font-medium"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : filteredTargets.length > 0 ? (
               <VirtualizedList
                 items={filteredTargets}
                 renderItem={renderTargetItem}
