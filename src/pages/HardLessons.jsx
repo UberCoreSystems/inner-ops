@@ -145,6 +145,16 @@ export default function HardLessons() {
   };
 
   const validateLesson = () => {
+    const fieldLabels = {
+      eventCategory: 'Event Category',
+      eventDescription: 'Event Description',
+      myAssumption: 'My Assumption',
+      signalIgnored: 'Signal Ignored',
+      costDescription: 'Cost Description',
+      extractedLesson: 'Extracted Lesson',
+      ruleGoingForward: 'Rule Going Forward',
+    };
+
     const required = [
       'eventCategory',
       'eventDescription',
@@ -157,7 +167,7 @@ export default function HardLessons() {
 
     for (const field of required) {
       if (!newLesson[field]?.trim()) {
-        ouraToast.warning(`Please complete: ${field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`);
+        ouraToast.warning(`Please complete: ${fieldLabels[field] ?? field}`);
         return false;
       }
     }

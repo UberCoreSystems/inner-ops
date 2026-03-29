@@ -166,6 +166,8 @@ const BlackMirror = () => {
       setLoadingFeedback(true);
       setShowOracleModal(true);
 
+      let finalEntry = entryData;
+
       try {
         const pastEntries = entries.length > 0 ? entries.slice(0, 3).map(e => `Index: ${e.blackMirrorIndex}, Screen: ${e.screenTime}h`) : [];
         const fogLabel = mentalFog <= 3 ? 'sharp' : mentalFog <= 6 ? 'moderate' : 'heavy';
@@ -177,7 +179,7 @@ const BlackMirror = () => {
           reflection ? `My reflection on this: ${reflection}` : 'I haven\'t examined what I\'m actually escaping into the screen from.',
         ].filter(Boolean).join(' ');
         const feedback = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
-        entryData.oracleFeedback = feedback;
+        finalEntry = { ...entryData, oracleFeedback: feedback };
         setAiFeedback(feedback);
       } catch (feedbackError) {
         logger.error('Error generating feedback:', feedbackError);
@@ -187,7 +189,7 @@ const BlackMirror = () => {
       setLoadingFeedback(false);
 
       // Save to Firebase
-      const savedEntry = await writeData('blackMirrorEntries', entryData);
+      const savedEntry = await writeData('blackMirrorEntries', finalEntry);
       setEntries(prev => [savedEntry, ...prev.slice(0, 49)]);
       loadAnalytics();
 
