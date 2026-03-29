@@ -280,9 +280,11 @@ export default function Journal() {
 
   // Dynamic AI insights generation
   useEffect(() => {
+    let isMounted = true;
+
     const generateDynamicInsights = async () => {
       // Only generate if we have meaningful content and haven't generated recently
-      if (entry.length < 50 || 
+      if (entry.length < 50 ||
           (aiInsights.lastUpdated && Date.now() - aiInsights.lastUpdated < 5000)) {
         return;
       }
@@ -300,19 +302,21 @@ export default function Journal() {
 
         // Get recent entries for pattern analysis
         const recentEntries = entries.slice(0, 3);
-        
+
         // Generate contextual insights
         const insights = await generateContextualInsights(currentContext, recentEntries);
-        
+
+        if (!isMounted) return;
         setAiInsights({
           reflections: insights,
           isGenerating: false,
           lastUpdated: Date.now()
         });
       } catch (error) {
+        if (!isMounted) return;
         logger.error('Error generating dynamic insights:', error);
-        setAiInsights(prev => ({ 
-          ...prev, 
+        setAiInsights(prev => ({
+          ...prev,
           isGenerating: false,
           reflections: ['Insights are temporarily unavailable. Continue writing to explore your thoughts.']
         }));
@@ -321,7 +325,10 @@ export default function Journal() {
 
     // Debounce the insight generation
     const timeoutId = setTimeout(generateDynamicInsights, 2000);
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      isMounted = false;
+    };
   }, [entry, mood, intensity, entries]);
 
   // Generate contextual insights based on current writing
@@ -711,7 +718,7 @@ export default function Journal() {
                       </div>
                     ) : (
                       aiInsights.reflections.map((insight, idx) => (
-                        <div key={`${aiInsights.lastUpdated}-${idx}`} className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl transition-all duration-300 ease-in-out">
+                        <div key={insight} className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl transition-all duration-300 ease-in-out">
                           {insight}
                         </div>
                       ))

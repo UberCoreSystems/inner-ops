@@ -87,10 +87,9 @@ const KillList = () => {
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTargets, setSelectedTargets] = useState(new Set());
-  const [bulkActionMode, setBulkActionMode] = useState(false);
   const targetsRef = useRef([]);
   const pendingTargetDeletes = useRef(new Map());
+  const newTargetInputRef = useRef(null);
   
   // Celebration state
   const [celebration, setCelebration] = useState({ show: false, targetName: '' });
@@ -130,15 +129,13 @@ const KillList = () => {
     targetsRef.current = targets;
   }, [targets]);
 
-  // Get current user from auth service
+  // Subscribe to auth state so we don't miss a late Firebase Auth resolution
   useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    setUser(currentUser);
-    logger.log("👤 KillList: Current user:", currentUser?.uid);
-    
-    if (currentUser) {
-      loadTargets();
-    }
+    const unsubscribe = authService.onAuthStateChanged((currentUser) => {
+      setUser(currentUser);
+      logger.log("👤 KillList: Current user:", currentUser?.uid);
+    });
+    return unsubscribe;
   }, []);
 
   // Get today's date in YYYY-MM-DD format
@@ -215,8 +212,8 @@ const KillList = () => {
 
       try {
         const categoryLabel = categories.find(c => c.value === targetData.category)?.label || targetData.category;
-        const entryText = `I've just named a new target to eliminate: "${targetData.title}" — a ${categoryLabel}. I'm making a contract with myself to kill this pattern. I've been tolerating this long enough and I'm declaring it as something I will eliminate. This is kill contract number ${targets.length + 1}.`;
-        const feedback = await generateAIFeedback('killList', entryText, targets.slice(-3).map(t => t.title));
+        const entryText = `I've just named a new target to eliminate: "${targetData.title}" — a ${categoryLabel}. I'm making a contract with myself to kill this pattern. I've been tolerating this long enough and I'm declaring it as something I will eliminate. This is kill contract number ${targetsRef.current.length + 1}.`;
+        const feedback = await generateAIFeedback('killList', entryText, targetsRef.current.slice(-3).map(t => t.title));
 
         setOracleModal({ isOpen: true, content: feedback, isLoading: false });
       } catch (error) {
@@ -935,6 +932,7 @@ const KillList = () => {
                   Target Name
                 </label>
                 <input
+                  ref={newTargetInputRef}
                   type="text"
                   value={newTarget}
                   onChange={(e) => setNewTarget(e.target.value)}
@@ -1113,7 +1111,7 @@ const KillList = () => {
                   </button>
                 ) : (
                   <button
-                    onClick={() => document.querySelector('input[placeholder="Enter a new kill target..."]')?.focus()}
+                    onClick={() => newTargetInputRef.current?.focus()}
                     className="px-6 py-2 bg-[#ef4444] hover:bg-[#dc2626] text-white rounded-lg transition-all duration-300 font-medium text-sm"
                   >
                     {filterStatus === 'active' ? 'Create New Target' : 'Add Your First Target'}

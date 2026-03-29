@@ -304,6 +304,7 @@ const RelapseRadar = () => {
       {step === 2 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">What patterns emerged?</h3>
+          <p className="text-gray-500 text-sm">Skip if none apply.</p>
           <div className="grid grid-cols-1 gap-3">
             {relapseHabits.map((habit) => (
               <button
@@ -325,6 +326,7 @@ const RelapseRadar = () => {
       {step === 3 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">Any substance use?</h3>
+          <p className="text-gray-500 text-sm">Skip if none apply.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {substanceOptions.map((substance) => (
               <button
@@ -381,7 +383,7 @@ const RelapseRadar = () => {
         </button>
         <button
           onClick={nextStep}
-          disabled={loading || submitSuccess || (step === 1 && !selectedSelf) || (step === 4 && !reflection.trim())}
+          disabled={loading || submitSuccess || (step === 1 && !selectedSelf)}
           className="px-6 py-3 bg-oura-amber text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-amber-500 transition-all duration-200"
         >
           {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 4 ? 'Submit' : 'Next')}
