@@ -212,12 +212,9 @@ const KillList = () => {
       setOracleModal({ isOpen: true, content: '', isLoading: true });
 
       try {
-        const feedback = await generateAIFeedback('killList', {
-          action: 'targetAdded',
-          target: targetData.title,
-          category: targetData.category,
-          totalTargets: targets.length + 1
-        }, targets);
+        const categoryLabel = categories.find(c => c.value === targetData.category)?.label || targetData.category;
+        const entryText = `I've just named a new target to eliminate: "${targetData.title}" — a ${categoryLabel}. I'm making a contract with myself to kill this pattern. I've been tolerating this long enough and I'm declaring it as something I will eliminate. This is kill contract number ${targets.length + 1}.`;
+        const feedback = await generateAIFeedback('killList', entryText, targets.slice(-3).map(t => t.title));
 
         setOracleModal({ isOpen: true, content: feedback, isLoading: false });
       } catch (error) {
@@ -278,12 +275,10 @@ const KillList = () => {
         setOracleModal({ isOpen: true, content: '', isLoading: true });
 
         try {
-          const feedback = await generateAIFeedback('killList', {
-            action: 'targetCompleted',
-            target: completedTarget?.title || 'target',
-            category: completedTarget?.category,
-            completedTargets: targetsRef.current.filter(t => t.status === 'killed').length + 1
-          }, targetsRef.current);
+          const killedCount = targetsRef.current.filter(t => t.status === 'killed').length + 1;
+          const completedCategoryLabel = categories.find(c => c.value === completedTarget?.category)?.label || completedTarget?.category || 'target';
+          const completionText = `I killed it. "${completedTarget?.title || 'my target'}" — a ${completedCategoryLabel} I committed to eliminating. That's ${killedCount} confirmed kills. I finished what I started. Now I need to make sure I understand what actually made this one killable so I can repeat it.`;
+          const feedback = await generateAIFeedback('killList', completionText, targetsRef.current.slice(-3).map(t => t.title));
 
           setOracleModal({ isOpen: true, content: feedback, isLoading: false });
         } catch (error) {
@@ -401,12 +396,10 @@ const KillList = () => {
       setOracleModal({ isOpen: true, content: '', isLoading: true });
       
       try {
-        const feedback = await generateAIFeedback('killList', {
-          action: 'targetEscaped',
-          target: escapedTarget?.title || 'target',
-          category: escapedTarget?.category,
-          escapedTargets: targetsRef.current.filter(t => t.status === 'escaped').length + 1
-        }, targetsRef.current);
+        const escapedCount = targetsRef.current.filter(t => t.status === 'escaped').length + 1;
+        const escapedCategoryLabel = categories.find(c => c.value === escapedTarget?.category)?.label || escapedTarget?.category || 'target';
+        const escapeText = `"${escapedTarget?.title || 'my target'}" escaped today — it got away from me. This is a ${escapedCategoryLabel} I said I would eliminate, and I failed to hold the line. That's ${escapedCount} escapes on my record now. I need to face what actually happened rather than the excuse I'll tell myself.`;
+        const feedback = await generateAIFeedback('killList', escapeText, targetsRef.current.slice(-3).map(t => t.title));
         setOracleModal({ isOpen: true, content: feedback, isLoading: false });
       } catch (error) {
         logger.error('Oracle feedback error:', error);

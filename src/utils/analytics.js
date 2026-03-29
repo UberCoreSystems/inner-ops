@@ -2,43 +2,45 @@
 // Only activates when VITE_POSTHOG_KEY is set — safe to deploy without it.
 // To enable: add VITE_POSTHOG_KEY=your_project_api_key to your .env file.
 // Get your key from app.posthog.com → Project Settings → Project API Key.
+//
+// Uses a lazy dynamic import so posthog-js is never loaded unless the key is
+// configured. This prevents the package from affecting the app bundle or
+// causing load errors when analytics is not set up.
 
-import posthog from 'posthog-js';
+let ph = null;
 
-let initialized = false;
-
-export const initAnalytics = () => {
-  if (initialized || !import.meta.env.VITE_POSTHOG_KEY) return;
-  try {
-    posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
-      api_host: import.meta.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com',
-      capture_pageview: true,   // auto-tracks page views on route changes
-      autocapture: false,        // manual control — we track only meaningful events
-      persistence: 'localStorage',
-    });
-    initialized = true;
-  } catch {
-    // analytics errors must never affect app functionality
-  }
+const load = () => {
+  if (ph) return Promise.resolve(ph);
+  if (!import.meta.env.VITE_POSTHOG_KEY) return Promise.resolve(null);
+  return import('posthog-js')
+    .then((mod) => {
+      const posthog = mod.default ?? mod;
+      posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
+        api_host: import.meta.env.VITE_POSTHOG_HOST ?? 'https://us.i.posthog.com',
+        capture_pageview: true,
+        autocapture: false,
+        persistence: 'localStorage',
+      });
+      ph = posthog;
+      return ph;
+    })
+    .catch(() => null);
 };
 
+// Call at app startup to eagerly load posthog when the key is set.
+export const initAnalytics = () => { load(); };
+
+// Fire-and-forget — never throws, never blocks.
 export const track = (event, properties = {}) => {
-  if (!initialized) return;
-  try {
-    posthog.capture(event, properties);
-  } catch {}
+  if (!import.meta.env.VITE_POSTHOG_KEY) return;
+  load().then((posthog) => { try { posthog?.capture(event, properties); } catch {} });
 };
 
 export const identify = (userId, traits = {}) => {
-  if (!initialized) return;
-  try {
-    posthog.identify(userId, traits);
-  } catch {}
+  if (!import.meta.env.VITE_POSTHOG_KEY) return;
+  load().then((posthog) => { try { posthog?.identify(userId, traits); } catch {} });
 };
 
 export const resetAnalytics = () => {
-  if (!initialized) return;
-  try {
-    posthog.reset();
-  } catch {}
+  try { ph?.reset(); } catch {}
 };

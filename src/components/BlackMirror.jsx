@@ -147,7 +147,15 @@ const BlackMirror = () => {
 
       try {
         const pastEntries = entries.length > 0 ? entries.slice(0, 3).map(e => `Index: ${e.blackMirrorIndex}, Screen: ${e.screenTime}h`) : [];
-        const feedback = await generateAIFeedback('Black Mirror', `Screen time: ${screenTime}h, Index: ${calculatedIndex}`, pastEntries);
+        const fogLabel = mentalFog <= 3 ? 'sharp' : mentalFog <= 6 ? 'moderate' : 'heavy';
+        const interactionLabel = interactionLevel <= 3 ? 'low' : interactionLevel <= 6 ? 'moderate' : 'high';
+        const blackMirrorText = [
+          `My screen time today was ${screenTime} hours, giving me a Black Mirror index of ${calculatedIndex}/100.`,
+          `Mental fog: ${mentalFog}/10 (${fogLabel}). Quality of real-world interaction: ${interactionLevel}/10 (${interactionLabel}).`,
+          unconsciousCheck ? 'I caught myself reaching for my phone without any conscious intention — purely automatic.' : '',
+          reflection ? `My reflection on this: ${reflection}` : 'I haven\'t examined what I\'m actually escaping into the screen from.',
+        ].filter(Boolean).join(' ');
+        const feedback = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
         entryData.oracleFeedback = feedback;
         setAiFeedback(feedback);
       } catch (feedbackError) {
