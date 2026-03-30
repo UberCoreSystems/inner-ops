@@ -428,23 +428,20 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
           /* Oracle Response */
           <div className="p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#a855f7] to-[#6366f1] flex items-center justify-center">
-                <span className="text-lg">🔮</span>
+              <div className="w-8 h-8 rounded-lg bg-[#a855f7]/10 border border-[#a855f7]/20 flex items-center justify-center">
+                <div className="w-2 h-2 rounded-full bg-[#a855f7]" />
               </div>
-              <div>
-                <h3 className="text-white font-light">The Oracle Speaks</h3>
-                <p className="text-[#5a5a5a] text-xs">Reflection on your entry</p>
-              </div>
+              <span className="text-xs font-medium uppercase tracking-widest text-[#888]">Oracle</span>
             </div>
-            
+
             {oracleLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="w-8 h-8 border-2 border-[#a855f7]/30 border-t-[#a855f7] rounded-full animate-spin" />
               </div>
             ) : (
-              <div className="bg-[#1a1a1a]/50 rounded-xl p-4 mb-6">
-                <p className="text-[#8a8a8a] text-sm leading-relaxed italic">
-                  "{oracleResponse}"
+              <div className="bg-[#0a0a0a] border border-[#1a1a1a] border-l-2 border-l-[#a855f7] rounded-xl p-4 mb-6">
+                <p className="text-[#f5f5f5] text-sm leading-relaxed">
+                  {oracleResponse}
                 </p>
               </div>
             )}

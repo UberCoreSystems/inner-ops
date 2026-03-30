@@ -194,8 +194,7 @@ export default function Journal() {
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
-  const [currentEntryInput, setCurrentEntryInput] = useState(''); // Track original input for oracle follow-up
-  const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry is being answered
+  const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry the modal is for
   const pendingEntryDeletes = useRef(new Map());
   
   // State for rotating prompts
@@ -206,7 +205,27 @@ export default function Journal() {
   // Entry editing state
   const [editingEntryId, setEditingEntryId] = useState(null);
 
-  const journalPrompts = [
+  // Extract the Oracle's closing question from recent entries (last sentence ending with ?)
+  const oraclePrompts = useMemo(() => {
+    try {
+      const questions = [];
+      for (const e of entries.slice(0, 10)) {
+        if (!e.oracleJudgment || typeof e.oracleJudgment !== 'string') continue;
+        // Grab the last sentence that ends with a question mark
+        const sentences = e.oracleJudgment.split(/(?<=[?])\s+/).filter(Boolean);
+        const lastQ = [...sentences].reverse().find((s) => s.trim().endsWith('?'));
+        if (lastQ && lastQ.trim().length > 15 && lastQ.trim().length < 200) {
+          questions.push(lastQ.trim());
+        }
+        if (questions.length >= 3) break;
+      }
+      return questions;
+    } catch {
+      return [];
+    }
+  }, [entries]);
+
+  const basePrompts = [
     "What am I most grateful for today?",
     "What challenged me and how did I handle it?",
     "What patterns am I noticing in my behavior?",
@@ -216,6 +235,12 @@ export default function Journal() {
     "What fear held me back today?",
     "What am I learning about myself?"
   ];
+
+  // Oracle questions surface first, then the standard prompts
+  const journalPrompts = useMemo(
+    () => [...oraclePrompts, ...basePrompts],
+    [oraclePrompts]
+  );
 
   useEffect(() => {
     loadJournalEntries();
@@ -230,8 +255,6 @@ export default function Journal() {
       const haystack = [
         entry.content,
         entry.oracleJudgment,
-        entry.userResponse,
-        entry.oracleFollowUp,
         moodLabel,
         entry.category
       ]
@@ -463,7 +486,6 @@ export default function Journal() {
       const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}`;
       const pastEntries = entries.slice(-3).map(e => e.content);
 
-      setCurrentEntryInput(inputText);
       setOracleModal({ isOpen: true, content: '', isLoading: true });
 
       const feedback = await generateAIFeedback('journal', inputText, pastEntries);
@@ -474,7 +496,6 @@ export default function Journal() {
         mood,
         intensity,
         oracleJudgment: feedback,
-        oracleFollowUp: null,
       });
       setEntries(prev => [newEntry, ...prev]);
       setCurrentEntryId(newEntry.id);
@@ -574,39 +595,18 @@ export default function Journal() {
     pendingEntryDeletes.current.set(entryId, { timeoutId, entry: entryToDelete, index: entryIndex, toastId });
   };
 
-  // Save oracle follow-up response
-  const handleOracleFollowUpSaved = async (followUpData) => {
+  // Save oracle reaction
+  const handleOracleReaction = async (reactionId) => {
     if (!currentEntryId) return;
 
     try {
-      // followUpData can be either:
-      // 1. Legacy: just the oracleFollowUp string
-      // 2. New: object with { userResponse, oracleFollowUp }
-      const updatePayload = typeof followUpData === 'string' 
-        ? { oracleFollowUp: followUpData }
-        : { 
-            userResponse: followUpData.userResponse,
-            oracleFollowUp: followUpData.oracleFollowUp
-          };
-
-      logger.log('Saving oracle follow-up with payload:', updatePayload);
-
-      // Update the entry with the oracle follow-up using updateData
-      await updateData('journalEntries', currentEntryId, updatePayload);
-
-      // Update local state
-      setEntries(prev => 
-        prev.map(e => e.id === currentEntryId ? {
-          ...e,
-          ...updatePayload
-        } : e)
+      await updateData('journalEntries', currentEntryId, { oracleReaction: reactionId });
+      setEntries(prev =>
+        prev.map(e => e.id === currentEntryId ? { ...e, oracleReaction: reactionId } : e)
       );
-
-      logger.log('✅ Oracle follow-up saved successfully for entry:', currentEntryId, 'with data:', updatePayload);
-      ouraToast.success('Oracle\'s reflection saved');
+      logger.log('Oracle reaction saved:', reactionId, 'for entry:', currentEntryId);
     } catch (error) {
-      logger.error('❌ Error saving oracle follow-up:', error);
-      ouraToast.error('Could not save oracle follow-up response');
+      logger.error('Error saving oracle reaction:', error);
     }
   };
 
@@ -876,7 +876,11 @@ export default function Journal() {
                         const currentPrompt = journalPrompts[currentPromptIndex];
                         setEntry(prev => prev + (prev ? '\n\n' : '') + currentPrompt + '\n');
                       }}
-                      className={`text-center p-5 bg-gradient-to-r from-[#a855f7] to-[#4da6ff] hover:from-[#9333ea] hover:to-[#3b82f6] text-white rounded-2xl text-sm font-medium transition-all duration-600 transform ${
+                      className={`text-center p-5 ${
+                        currentPromptIndex < oraclePrompts.length
+                          ? 'bg-gradient-to-r from-[#a855f7]/80 to-[#a855f7]/40 hover:from-[#a855f7] hover:to-[#a855f7]/60 border border-[#a855f7]/30'
+                          : 'bg-gradient-to-r from-[#a855f7] to-[#4da6ff] hover:from-[#9333ea] hover:to-[#3b82f6]'
+                      } text-white rounded-2xl text-sm font-medium transition-all duration-600 transform ${
                         promptVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
                       } min-h-[5rem] flex items-center justify-center shadow-lg hover:shadow-xl max-w-2xl mx-auto w-full`}
                       style={{
@@ -890,7 +894,9 @@ export default function Journal() {
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-[#5a5a5a] mb-2">
-                      Prompt {currentPromptIndex + 1} of {journalPrompts.length} • Click to add to your entry
+                      {currentPromptIndex < oraclePrompts.length
+                        ? 'From the Oracle • Click to continue this thread'
+                        : `Prompt ${currentPromptIndex - oraclePrompts.length + 1} of ${basePrompts.length} • Click to add to your entry`}
                     </p>
                     <div className="flex justify-center space-x-1">
                       {journalPrompts.map((_, index) => (
@@ -996,7 +1002,7 @@ export default function Journal() {
                   </button>
                 </div>
               ) : filteredEntries.length > 0 ? (
-                <div className="space-y-4 max-h-[800px] overflow-y-auto pr-4">
+                <div className="space-y-4">
                   {filteredEntries.map((entry, mapIndex) => {
                     const moodOption = moodOptions.find(m => m.value === entry.mood);
                     const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
@@ -1050,25 +1056,41 @@ export default function Journal() {
                         <p className="text-[#d1d1d1] leading-relaxed mb-4">{entry.content}</p>
 
                         {entry.oracleJudgment && (
-                          <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#a855f7]/20 rounded-2xl">
-                            <h4 className="text-[#a855f7] font-medium text-sm mb-3 uppercase tracking-wider">📜 Oracle's Judgment</h4>
-                            <div className="text-[#d8b4fe] text-sm leading-relaxed whitespace-pre-line">
-                              {entry.oracleJudgment}
+                          <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#1a1a1a] border-l-2 border-l-[#a855f7] rounded-2xl">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-[#888] font-medium text-xs uppercase tracking-widest">Oracle</h4>
+                              {entry.oracleReaction && typeof entry.oracleReaction === 'string' && (
+                                <span className={`text-xs px-2 py-0.5 rounded-lg border ${
+                                  entry.oracleReaction === 'landed' ? 'text-[#22c55e] border-[#22c55e]/30 bg-[#22c55e]/10' :
+                                  entry.oracleReaction === 'disagree' ? 'text-[#ef4444] border-[#ef4444]/30 bg-[#ef4444]/10' :
+                                  entry.oracleReaction === 'sit' ? 'text-[#f59e0b] border-[#f59e0b]/30 bg-[#f59e0b]/10' :
+                                  'text-[#5a5a5a] border-[#5a5a5a]/30 bg-[#5a5a5a]/10'
+                                }`}>
+                                  {entry.oracleReaction === 'landed' && 'Landed'}
+                                  {entry.oracleReaction === 'disagree' && 'Disagreed'}
+                                  {entry.oracleReaction === 'sit' && 'Sitting with it'}
+                                  {entry.oracleReaction === 'missed' && 'Missed'}
+                                </span>
+                              )}
                             </div>
-                            
-                            {entry.userResponse && (
-                              <div className="mt-4 pt-4 border-t border-[#a855f7]/20">
-                                <h5 className="text-[#d1d1d1] font-medium text-sm mb-2 uppercase tracking-wider">💭 Your Response</h5>
+                            <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
+                              {typeof entry.oracleJudgment === 'string' ? entry.oracleJudgment : JSON.stringify(entry.oracleJudgment)}
+                            </div>
+
+                            {/* Legacy: show old follow-up data if present */}
+                            {entry.userResponse && typeof entry.userResponse === 'string' && (
+                              <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+                                <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Your Response</h5>
                                 <div className="text-[#d1d1d1] text-sm leading-relaxed whitespace-pre-line">
                                   {entry.userResponse}
                                 </div>
                               </div>
                             )}
-                            
-                            {entry.oracleFollowUp && (
-                              <div className="mt-4 pt-4 border-t border-[#a855f7]/20">
-                                <h5 className="text-[#d8b4fe] font-medium text-sm mb-2 uppercase tracking-wider">✨ Oracle's Deeper Reflection</h5>
-                                <div className="text-[#d8b4fe] text-sm leading-relaxed whitespace-pre-line italic">
+
+                            {entry.oracleFollowUp && typeof entry.oracleFollowUp === 'string' && (
+                              <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+                                <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Oracle — Reflection</h5>
+                                <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
                                   {entry.oracleFollowUp}
                                 </div>
                               </div>
@@ -1135,12 +1157,11 @@ export default function Journal() {
         isOpen={oracleModal.isOpen}
         onClose={() => {
           setOracleModal({ isOpen: false, content: '', isLoading: false });
-          setCurrentEntryInput('');
           setCurrentEntryId(null);
         }}
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
-        onFollowUpSaved={handleOracleFollowUpSaved}
+        onReaction={handleOracleReaction}
       />
     </div>
   );
