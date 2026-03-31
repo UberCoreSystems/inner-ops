@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
@@ -182,7 +183,11 @@ const IntensityRing = ({ level, selected, onClick }) => {
   );
 };
 
+// Pain/failure signals that suggest a journal entry contains a hard lesson
+const PAIN_SIGNALS = /\b(mistake|regret|fail|failed|failure|lost|betrayed|betrayal|trusted|cost me|paid for|learned the hard way|should have|shouldn't have|never again|boundary|violated|ignored|warning|hurt|burned|screwed up|blew it|ruined|wrecked)\b/i;
+
 export default function Journal() {
+  const navigate = useNavigate();
   const [entry, setEntry] = useState('');
   const [mood, setMood] = useState('focused');
   const [selectedCategory, setSelectedCategory] = useState('Grounded');
@@ -607,6 +612,31 @@ export default function Journal() {
       logger.log('Oracle reaction saved:', reactionId, 'for entry:', currentEntryId);
     } catch (error) {
       logger.error('Error saving oracle reaction:', error);
+    }
+  };
+
+  // Extract hard lesson from journal entry — creates a draft stub and navigates
+  const extractLessonFromEntry = async (journalEntry) => {
+    try {
+      await writeData('hardLessons', {
+        eventCategory: '',
+        eventDescription: journalEntry.content,
+        myAssumption: '',
+        signalIgnored: '',
+        costs: [],
+        costDescription: '',
+        extractedLesson: '',
+        ruleGoingForward: '',
+        isFinalized: false,
+        isScarStub: false,
+        sourceJournalId: journalEntry.id,
+        createdAt: new Date().toISOString(),
+      });
+      ouraToast.success('Draft lesson created — complete the extraction');
+      navigate('/hardlessons');
+    } catch (error) {
+      logger.error('Error creating lesson from journal:', error);
+      ouraToast.error('Failed to create lesson');
     }
   };
 
@@ -1094,6 +1124,17 @@ export default function Journal() {
                                   {entry.oracleFollowUp}
                                 </div>
                               </div>
+                            )}
+
+                            {/* Extract Lesson bridge — shows on entries with pain/failure signals */}
+                            {PAIN_SIGNALS.test(entry.content || '') && (
+                              <button
+                                onClick={() => extractLessonFromEntry(entry)}
+                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#f59e0b] hover:text-[#fbbf24] transition-colors w-full"
+                              >
+                                <span>⚡</span>
+                                <span>This sounds like it cost you something. Extract the lesson.</span>
+                              </button>
                             )}
                           </div>
                         )}

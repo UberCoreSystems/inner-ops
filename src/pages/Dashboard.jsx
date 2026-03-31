@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { readUserData, debugInspectAllFirebaseData, previewDataMigration, executeDataMigration, findDuplicateDocuments, removeDuplicateDocuments } from '../utils/firebaseUtils';
+import { Link, useNavigate } from 'react-router-dom';
+import { readUserData, writeData, debugInspectAllFirebaseData, previewDataMigration, executeDataMigration, findDuplicateDocuments, removeDuplicateDocuments } from '../utils/firebaseUtils';
 import { migrateOldDataToFirestore, findOldData } from '../utils/dataMigration';
 import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
@@ -12,11 +12,13 @@ import DailyPrompt from '../components/DailyPrompt';
 import { CircularProgressRing, TripleRing, ScoreCard, InsightCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
+import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 
 const isDevEnvironment = import.meta.env.DEV;
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [quickJournalOpen, setQuickJournalOpen] = useState(false);
   const [stats, setStats] = useState({
@@ -44,9 +46,47 @@ export default function Dashboard() {
   // Early warning signal
   const [earlyWarning, setEarlyWarning] = useState(null);
 
+  // Sunday Autopsy
+  const [autopsyText, setAutopsyText] = useState('');
+  const [autopsySaving, setAutopsySaving] = useState(false);
+  const [autopsyDismissed, setAutopsyDismissed] = useState(false);
+
   // Collapsible section states
   const [killListExpanded, setKillListExpanded] = useState(true);
   const [insightsExpanded, setInsightsExpanded] = useState(true);
+
+  // Sunday Autopsy — show on Sundays, dismiss once used or closed this session
+  const isSunday = new Date().getDay() === 0;
+  const showAutopsy = isSunday && !autopsyDismissed && !loading;
+
+  const submitAutopsy = async () => {
+    if (!autopsyText.trim()) return;
+    setAutopsySaving(true);
+    try {
+      await writeData('hardLessons', {
+        eventCategory: '',
+        eventDescription: autopsyText.trim(),
+        myAssumption: '',
+        signalIgnored: '',
+        costs: [],
+        costDescription: '',
+        extractedLesson: '',
+        ruleGoingForward: '',
+        isFinalized: false,
+        isScarStub: false,
+        isWeeklyAutopsy: true,
+        createdAt: new Date().toISOString(),
+      });
+      ouraToast.success('Week captured — expand the lesson when you\'re ready');
+      setAutopsyText('');
+      setAutopsyDismissed(true);
+    } catch (error) {
+      logger.error('Error saving weekly autopsy:', error);
+      ouraToast.error('Failed to save');
+    } finally {
+      setAutopsySaving(false);
+    }
+  };
 
   // Delay showing skeleton to prevent flicker on fast loads
   useEffect(() => {
@@ -629,6 +669,45 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Sunday Autopsy — weekly lesson capture */}
+        {showAutopsy && (
+          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.09s' }}>
+            <div className="oura-card p-6 border-l-4 border-[#f59e0b]">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-white text-sm font-medium mb-1">What did this week cost you?</h3>
+                  <p className="text-[#5a5a5a] text-xs">Name one thing you'd handle differently. This becomes a Hard Lesson draft.</p>
+                </div>
+                <button
+                  onClick={() => setAutopsyDismissed(true)}
+                  className="text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors shrink-0"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={autopsyText}
+                  onChange={(e) => setAutopsyText(e.target.value)}
+                  placeholder="I should have..."
+                  className="flex-1 p-3 bg-[#0a0a0a] text-white text-sm rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#2a2a2a]"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && autopsyText.trim()) submitAutopsy(); }}
+                />
+                <button
+                  onClick={submitAutopsy}
+                  disabled={autopsySaving || !autopsyText.trim()}
+                  className="px-4 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white text-sm font-medium rounded-xl transition-all shrink-0"
+                >
+                  {autopsySaving ? '...' : 'Capture'}
+                </button>
               </div>
             </div>
           </section>

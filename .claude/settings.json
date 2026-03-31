@@ -2,6 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(firebase deploy:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\boliv\\.claude\\plans"
     ]
   }
 }

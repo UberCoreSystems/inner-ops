@@ -56,6 +56,11 @@ export default function HardLessons() {
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const pendingLessonDeletes = useRef(new Map());
 
+  // Scar Inventory state (first-time guided flow)
+  const [scarInventory, setScarInventory] = useState(['', '', '']);
+  const [showScarFlow, setShowScarFlow] = useState(false);
+  const [savingScars, setSavingScars] = useState(false);
+
   useEffect(() => {
     loadHardLessons();
   }, []);
@@ -91,6 +96,48 @@ export default function HardLessons() {
       setLoadError(true);
     } finally {
       setInitialLoading(false);
+    }
+  };
+
+  // Show scar flow when lessons load empty (first time)
+  useEffect(() => {
+    if (!initialLoading && lessons.length === 0) {
+      setShowScarFlow(true);
+    }
+  }, [initialLoading, lessons.length]);
+
+  const submitScarInventory = async () => {
+    const filled = scarInventory.filter(s => s.trim().length > 0);
+    if (filled.length === 0) return;
+
+    setSavingScars(true);
+    try {
+      const newLessons = [];
+      for (const scar of filled) {
+        const stub = await writeData('hardLessons', {
+          eventCategory: '',
+          eventDescription: scar.trim(),
+          myAssumption: '',
+          signalIgnored: '',
+          costs: [],
+          costDescription: '',
+          extractedLesson: '',
+          ruleGoingForward: '',
+          isFinalized: false,
+          isScarStub: true,
+          createdAt: new Date().toISOString(),
+        });
+        newLessons.push(stub);
+      }
+      setLessons(prev => [...newLessons, ...prev]);
+      setShowScarFlow(false);
+      setScarInventory(['', '', '']);
+      ouraToast.success(`${filled.length} scar${filled.length > 1 ? 's' : ''} recorded. Expand them when you're ready.`);
+    } catch (error) {
+      logger.error('Error saving scar inventory:', error);
+      ouraToast.error('Failed to save scars');
+    } finally {
+      setSavingScars(false);
     }
   };
 
@@ -699,6 +746,37 @@ Please help extract the core lesson and rule from this experience.
                   const category = eventCategories.find(cat => cat.value === lesson.eventCategory);
                   const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
 
+                  // Scar stubs get a compact card
+                  if (lesson.isScarStub && !lesson.extractedLesson) {
+                    return (
+                      <div key={lesson.id} className="oura-card p-5 border-dashed border-[#f59e0b]/30">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[#f59e0b] text-xs uppercase tracking-widest font-medium">Scar</span>
+                              <span className="text-[#2a2a2a] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <p className="text-[#d1d1d1] text-sm leading-relaxed truncate">{lesson.eventDescription}</p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-4 shrink-0">
+                            <button
+                              onClick={() => editLesson(lesson)}
+                              className="px-4 py-2 text-xs font-medium bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30 rounded-xl hover:bg-[#f59e0b]/20 transition-colors"
+                            >
+                              Extract Lesson
+                            </button>
+                            <button
+                              onClick={() => deleteLesson(lesson.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div key={lesson.id} className={`oura-card p-6 ${
                       lesson.isFinalized
@@ -708,10 +786,10 @@ Please help extract the core lesson and rule from this experience.
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex items-center space-x-3">
                           <div className="w-12 h-12 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
-                            <span className="text-2xl">{category?.icon}</span>
+                            <span className="text-2xl">{category?.icon || '⚡'}</span>
                           </div>
                           <div>
-                            <h3 className="text-white font-medium">{category?.label}</h3>
+                            <h3 className="text-white font-medium">{category?.label || 'Uncategorized'}</h3>
                             <div className="flex items-center space-x-3 text-xs text-[#5a5a5a] mt-1">
                               <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
                               <span className={`px-2 py-1 rounded-lg ${
@@ -790,55 +868,93 @@ Please help extract the core lesson and rule from this experience.
                 }}
               />
             ) : (
-              <div className="oura-card p-12 text-center">
-                <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center text-2xl">
-                  ⚡
-                </div>
-                <h3 className="text-lg font-light text-white mb-2">
-                  {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No Hard Lessons Extracted Yet'}
-                </h3>
-                <p className="text-[#5a5a5a] mb-6 text-sm">
-                  {searchQuery.trim()
-                    ? 'Try a different keyword or clear the search.'
-                    : 'Turn a painful event into an enforceable rule you never pay for twice.'}
-                </p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                  {searchQuery.trim() ? (
+              <div>
+                {searchQuery.trim() ? (
+                  <div className="oura-card p-12 text-center">
+                    <h3 className="text-lg font-light text-white mb-2">{`No matches for "${searchQuery.trim()}"`}</h3>
+                    <p className="text-[#5a5a5a] mb-6 text-sm">Try a different keyword or clear the search.</p>
                     <button
                       onClick={() => setSearchQuery('')}
                       className="px-6 py-3 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
                     >
                       Clear Search
                     </button>
-                  ) : (
-                    <>
+                  </div>
+                ) : showScarFlow ? (
+                  /* ── Scar Inventory: first-time guided flow ── */
+                  <div className="oura-card p-8 border-l-4 border-[#f59e0b] animate-fade-in-up">
+                    <h2 className="text-2xl font-light text-white mb-2">Before you extract your first lesson, name 3 events that left you scarred.</h2>
+                    <p className="text-[#5a5a5a] text-sm mb-8">No analysis. No explanation. Just name the events. You can extract the full lesson later.</p>
+
+                    <div className="space-y-4">
+                      {scarInventory.map((scar, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-[#f59e0b] text-sm font-medium tabular-nums w-5 shrink-0">{i + 1}.</span>
+                          <input
+                            type="text"
+                            value={scar}
+                            onChange={(e) => setScarInventory(prev => {
+                              const next = [...prev];
+                              next[i] = e.target.value;
+                              return next;
+                            })}
+                            placeholder={
+                              i === 0 ? 'The trust I gave that was used against me...' :
+                              i === 1 ? 'The warning I ignored that cost me...' :
+                              'The decision I made that changed everything...'
+                            }
+                            className="flex-1 p-4 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#2a2a2a]"
+                            autoFocus={i === 0}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 mt-8">
+                      <button
+                        onClick={submitScarInventory}
+                        disabled={savingScars || scarInventory.every(s => !s.trim())}
+                        className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-2xl transition-all duration-300 font-medium"
+                      >
+                        {savingScars ? 'Saving...' : 'Record These Scars'}
+                      </button>
                       <button
                         onClick={() => {
+                          setShowScarFlow(false);
                           setShowForm(true);
                           setTimeout(() => {
                             document.getElementById('hard-lessons-event')?.focus();
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }, 0);
                         }}
-                        className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
+                        className="px-6 py-3 bg-transparent border border-[#1a1a1a] text-[#5a5a5a] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
                       >
-                        Extract Your First Lesson
+                        Skip — I'll extract a full lesson now
                       </button>
-                      <button
-                        onClick={() => {
-                          setShowForm(true);
-                          setTimeout(() => {
-                            document.getElementById('hard-lessons-event')?.focus();
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }, 0);
-                        }}
-                        className="px-6 py-3 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
-                      >
-                        Start the Framework
-                      </button>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Standard empty state (after scar flow dismissed or skipped) ── */
+                  <div className="oura-card p-12 text-center">
+                    <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center text-2xl">
+                      ⚡
+                    </div>
+                    <h3 className="text-lg font-light text-white mb-2">No Hard Lessons Extracted Yet</h3>
+                    <p className="text-[#5a5a5a] mb-6 text-sm">Turn a painful event into an enforceable rule you never pay for twice.</p>
+                    <button
+                      onClick={() => {
+                        setShowForm(true);
+                        setTimeout(() => {
+                          document.getElementById('hard-lessons-event')?.focus();
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }, 0);
+                      }}
+                      className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
+                    >
+                      Extract Your First Lesson
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
