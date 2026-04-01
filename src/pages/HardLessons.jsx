@@ -322,7 +322,7 @@ Please help extract the core lesson and rule from this experience.
       return;
     }
 
-    setNewLesson(lesson);
+    setNewLesson({ ...lesson, isScarStub: false, isWeeklyAutopsy: false });
     setEditingLesson(lesson);
     setShowForm(true);
   };
@@ -745,6 +745,37 @@ Please help extract the core lesson and rule from this experience.
                 renderItem={({ item: lesson }) => {
                   const category = eventCategories.find(cat => cat.value === lesson.eventCategory);
                   const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
+
+                  // Weekly autopsy stubs get a compact card with "Expand Autopsy" CTA
+                  if (lesson.isWeeklyAutopsy && !lesson.isFinalized) {
+                    return (
+                      <div key={lesson.id} className="oura-card p-5 border-dashed border-[#6366f1]/30">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[#6366f1] text-xs uppercase tracking-widest font-medium">Weekly Autopsy</span>
+                              <span className="text-[#2a2a2a] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <p className="text-[#d1d1d1] text-sm leading-relaxed truncate">{lesson.eventDescription}</p>
+                          </div>
+                          <div className="flex items-center gap-2 ml-4 shrink-0">
+                            <button
+                              onClick={() => editLesson(lesson)}
+                              className="px-4 py-2 text-xs font-medium bg-[#6366f1]/10 text-[#6366f1] border border-[#6366f1]/30 rounded-xl hover:bg-[#6366f1]/20 transition-colors"
+                            >
+                              Expand Autopsy
+                            </button>
+                            <button
+                              onClick={() => deleteLesson(lesson.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   // Scar stubs get a compact card
                   if (lesson.isScarStub && !lesson.extractedLesson) {
