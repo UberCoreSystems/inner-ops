@@ -58,11 +58,20 @@ const CATEGORY_ICONS = {
   ),
 };
 
-const PRIORITY_LEVELS = [
-  { value: 'high', label: 'High', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '🔥' },
-  { value: 'medium', label: 'Medium', color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '⚡' },
-  { value: 'low', label: 'Low', color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '🌱' },
+const DIFFICULTY_TIERS = [
+  { value: 'surface', label: 'Surface', description: 'Quick fix — 7 day streak to kill', streakToKill: 7, points: 10, color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '🌱' },
+  { value: 'deep', label: 'Deep', description: 'Ingrained pattern — 21 day streak', streakToKill: 21, points: 25, color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '⚡' },
+  { value: 'core', label: 'Core', description: 'Identity-level — 60 day streak', streakToKill: 60, points: 50, color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '🔥' },
 ];
+
+// Legacy priority → difficulty mapping for existing targets
+const PRIORITY_TO_DIFFICULTY = { high: 'core', medium: 'deep', low: 'surface' };
+const getDifficulty = (target) => target.difficulty || PRIORITY_TO_DIFFICULTY[target.priority] || 'deep';
+const getTier = (target) => DIFFICULTY_TIERS.find(t => t.value === getDifficulty(target)) || DIFFICULTY_TIERS[1];
+const getStreakToKill = (target) => getTier(target).streakToKill;
+
+const MILESTONES = [3, 7, 14, 30, 60, 90];
+const todayKey = () => new Date().toISOString().split('T')[0];
 
 const CATEGORIES = [
   { value: 'bad-habit', label: 'Bad Habit', color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10' },
@@ -78,7 +87,9 @@ const KillList = () => {
   const [targets, setTargets] = useState([]);
   const [newTarget, setNewTarget] = useState('');
   const [newTargetCategory, setNewTargetCategory] = useState('bad-habit');
-  const [newTargetPriority, setNewTargetPriority] = useState('medium');
+  const [newTargetDifficulty, setNewTargetDifficulty] = useState('deep');
+  const [autopsyTarget, setAutopsyTarget] = useState(null);
+  const [autopsyData, setAutopsyData] = useState({ context: '', rationalization: '', prevention: '' });
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(true);
@@ -100,7 +111,6 @@ const KillList = () => {
   const [updatingReflection, setUpdatingReflection] = useState({});
   const [user, setUser] = useState(null);
 
-  const priorityLevels = useMemo(() => PRIORITY_LEVELS, []);
   const categories = useMemo(() => CATEGORIES, []);
   const categoryIcons = useMemo(() => CATEGORY_ICONS, []);
 
@@ -179,13 +189,19 @@ const KillList = () => {
     logger.log("🎯 Adding new kill target:", newTarget.trim());
     
     try {
+      const tier = DIFFICULTY_TIERS.find(t => t.value === newTargetDifficulty) || DIFFICULTY_TIERS[1];
       const targetData = {
         title: newTarget.trim(),
         description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label.split(' ').slice(1).join(' ') || 'target'}`,
         category: newTargetCategory,
-        priority: newTargetPriority,
+        difficulty: newTargetDifficulty,
         status: 'active',
-        progress: 0,
+        streak: 0,
+        longestStreak: 0,
+        checkIns: [],
+        lastCheckIn: null,
+        milestonesReached: [],
+        escapeData: [],
         targetDate: getTodaysDate(),
         createdAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
@@ -205,7 +221,7 @@ const KillList = () => {
       
       setNewTarget('');
       setNewTargetCategory('bad-habit');
-      setNewTargetPriority('medium');
+      setNewTargetDifficulty('deep');
 
       // Generate Oracle feedback
       setOracleModal({ isOpen: true, content: '', isLoading: true });
@@ -232,67 +248,133 @@ const KillList = () => {
     }
   };
 
-  const updateProgress = useCallback(async (targetId, newProgress) => {
+  // Daily check-in: "Held the line" or "It got me"
+  const dailyCheckIn = useCallback(async (targetId, held, note = '') => {
     try {
-      logger.log("📊 KillList: Updating progress for target:", targetId, "to", newProgress);
-      
+      const target = targetsRef.current.find(t => t.id === targetId);
+      if (!target) return;
+      const today = todayKey();
+      if (target.lastCheckIn === today) {
+        ouraToast.info('Already checked in on this target today');
+        return;
+      }
+
+      const currentStreak = target.streak || 0;
+      const newStreak = held ? currentStreak + 1 : 0;
+      const longestStreak = Math.max(target.longestStreak || 0, newStreak);
+      const newCheckIn = { date: today, held, ...(note ? { note } : {}) };
+      const checkIns = [...(target.checkIns || []), newCheckIn];
+      const tier = getTier(target);
+
+      // Check for milestone
+      const milestonesReached = [...(target.milestonesReached || [])];
+      const hitMilestone = held && MILESTONES.includes(newStreak) && !milestonesReached.includes(newStreak);
+      if (hitMilestone) milestonesReached.push(newStreak);
+
+      // Check for kill (streak reached threshold)
+      const isKill = held && newStreak >= tier.streakToKill;
+
       const targetUpdate = {
-        progress: newProgress,
-        lastUpdated: new Date()
+        streak: newStreak,
+        longestStreak,
+        checkIns,
+        lastCheckIn: today,
+        milestonesReached,
+        lastUpdated: new Date(),
       };
 
-      // If progress reaches 100%, mark as killed
-      if (newProgress >= 100) {
+      if (isKill) {
         targetUpdate.status = 'killed';
         targetUpdate.completedAt = new Date();
       }
 
       await updateData('killTargets', targetId, targetUpdate);
-      logger.log("✅ KillList: Progress updated successfully");
 
-      // Update local state immediately
-      setTargets(prev => prev.map(target => 
-        target.id === targetId 
-          ? { ...target, ...targetUpdate }
-          : target
+      // Update local state
+      setTargets(prev => prev.map(t =>
+        t.id === targetId ? { ...t, ...targetUpdate } : t
       ));
 
-      // Show celebration and Oracle feedback for completion
-      if (newProgress >= 100) {
-        const completedTarget = targetsRef.current.find(t => t.id === targetId);
-        
-        ouraToast.achievement(`Target eliminated: ${completedTarget?.title || 'Target'}`);
-        
-        // Trigger celebration animation
-        setCelebration({ show: true, targetName: completedTarget?.title || 'Target' });
-        
-        // Auto-hide celebration after 3 seconds
-        setTimeout(() => {
-          setCelebration({ show: false, targetName: '' });
-        }, 3000);
-        
-        setOracleModal({ isOpen: true, content: '', isLoading: true });
+      if (isKill) {
+        // Kill celebration
+        ouraToast.achievement(`Target eliminated: ${target.title} — ${newStreak} day streak`);
+        setCelebration({ show: true, targetName: target.title });
+        setTimeout(() => setCelebration({ show: false, targetName: '' }), 3000);
 
+        setOracleModal({ isOpen: true, content: '', isLoading: true });
         try {
           const killedCount = targetsRef.current.filter(t => t.status === 'killed').length + 1;
-          const completedCategoryLabel = categories.find(c => c.value === completedTarget?.category)?.label || completedTarget?.category || 'target';
-          const completionText = `I killed it. "${completedTarget?.title || 'my target'}" — a ${completedCategoryLabel} I committed to eliminating. That's ${killedCount} confirmed kills. I finished what I started. Now I need to make sure I understand what actually made this one killable so I can repeat it.`;
-          const feedback = await generateAIFeedback('killList', completionText, targetsRef.current.slice(-3).map(t => t.title));
-
+          const categoryLabel = categories.find(c => c.value === target.category)?.label || target.category;
+          const completionText = `I killed it. "${target.title}" — a ${categoryLabel} (${tier.label} difficulty). ${newStreak} consecutive days holding the line. That's ${killedCount} confirmed kills. This one took real consistency.`;
+          const feedback = await generateAIFeedback('killList', completionText, []);
           setOracleModal({ isOpen: true, content: feedback, isLoading: false });
-        } catch (error) {
-          logger.error('Oracle feedback error:', error);
-          setOracleModal({ 
-            isOpen: true, 
-            content: "The Oracle witnesses your triumph through veiled sight... Victory is still yours, warrior.", 
-            isLoading: false 
-          });
-        }
+        } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. The Oracle acknowledges your consistency.', isLoading: false }); }
+      } else if (hitMilestone) {
+        // Milestone Oracle feedback
+        ouraToast.success(`${newStreak}-day milestone on "${target.title}"`);
+        setOracleModal({ isOpen: true, content: '', isLoading: true });
+        try {
+          const milestoneText = `I've held the line against "${target.title}" for ${newStreak} consecutive days. This is a ${tier.label.toLowerCase()} pattern (${tier.streakToKill} days to kill). ${newStreak === 3 ? 'Just getting started.' : newStreak < 14 ? 'Building momentum.' : newStreak < 30 ? 'Deep into the fight now.' : 'This is becoming part of who I am.'} ${target.escapeData?.length ? `I've escaped ${target.escapeData.length} time${target.escapeData.length > 1 ? 's' : ''} before.` : ''}`;
+          const feedback = await generateAIFeedback('killList', milestoneText, []);
+          setOracleModal({ isOpen: true, content: feedback, isLoading: false });
+        } catch { setOracleModal({ isOpen: false, content: '', isLoading: false }); }
+      } else if (held) {
+        ouraToast.success(`Day ${newStreak} — streak continues`);
+      } else {
+        // Streak broken — open autopsy
+        setAutopsyTarget(target);
+        ouraToast.warning(`Streak reset on "${target.title}"`);
       }
+
     } catch (error) {
-      logger.error('Error updating progress:', error);
+      logger.error('Error during check-in:', error);
     }
-  }, []);
+  }, [categories]);
+
+  // Submit escape autopsy
+  const submitAutopsy = useCallback(async () => {
+    if (!autopsyTarget) return;
+    const { context, rationalization, prevention } = autopsyData;
+    if (!context.trim() || !rationalization.trim()) {
+      ouraToast.warning('Fill in what happened and what you told yourself');
+      return;
+    }
+
+    try {
+      const newEscapeEntry = {
+        date: todayKey(),
+        context: context.trim(),
+        rationalization: rationalization.trim(),
+        prevention: prevention.trim() || null,
+        streakAtEscape: autopsyTarget.streak || 0,
+      };
+      const escapeData = [...(autopsyTarget.escapeData || []), newEscapeEntry];
+
+      await updateData('killTargets', autopsyTarget.id, {
+        escapeData,
+        lastUpdated: new Date(),
+      });
+
+      setTargets(prev => prev.map(t =>
+        t.id === autopsyTarget.id ? { ...t, escapeData } : t
+      ));
+
+      // Oracle feedback on escape
+      setOracleModal({ isOpen: true, content: '', isLoading: true });
+      try {
+        const escapeText = `"${autopsyTarget.title}" got me today. I was on a ${autopsyTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''} This is escape number ${escapeData.length}.`;
+        const feedback = await generateAIFeedback('killList', escapeText, []);
+        setOracleModal({ isOpen: true, content: feedback, isLoading: false });
+      } catch { setOracleModal({ isOpen: true, content: 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false }); }
+
+      setAutopsyTarget(null);
+      setAutopsyData({ context: '', rationalization: '', prevention: '' });
+      ouraToast.success('Escape autopsy recorded');
+    } catch (error) {
+      logger.error('Error saving autopsy:', error);
+      ouraToast.error('Failed to save autopsy');
+    }
+  }, [autopsyTarget, autopsyData]);
 
   const deleteTarget = useCallback(async (targetId) => {
     const targetToDelete = targetsRef.current.find(t => t.id === targetId);
@@ -369,9 +451,16 @@ const KillList = () => {
   }, []);
 
   const markAsEscaped = useCallback(async (targetId) => {
+    // Open autopsy flow instead of immediately escaping
+    const target = targetsRef.current.find(t => t.id === targetId);
+    if (target) {
+      setAutopsyTarget(target);
+      return;
+    }
+
     try {
       logger.log("🏃 KillList: Marking target as escaped:", targetId);
-      
+
       const targetUpdate = {
         status: 'escaped',
         escapedAt: new Date(),
@@ -574,17 +663,13 @@ const KillList = () => {
     const escaped = targets.filter(t => t.status === 'escaped').length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    // Avg days from creation to kill
-    const killedWithDates = targets.filter(t => t.status === 'killed' && t.createdAt && (t.killedAt || t.updatedAt));
-    const avgDaysToKill = killedWithDates.length > 0
-      ? Math.round(killedWithDates.reduce((sum, t) => {
-          const start = t.createdAt?.toDate?.()?.getTime() ?? t.createdAt;
-          const end = (t.killedAt ?? t.updatedAt)?.toDate?.()?.getTime() ?? (t.killedAt ?? t.updatedAt);
-          return sum + Math.max(0, (end - start) / (1000 * 60 * 60 * 24));
-        }, 0) / killedWithDates.length)
+    // Average streak at kill
+    const killedTargets = targets.filter(t => t.status === 'killed' && (t.streak || t.longestStreak));
+    const avgStreakToKill = killedTargets.length > 0
+      ? Math.round(killedTargets.reduce((sum, t) => sum + (t.streak || t.longestStreak || 0), 0) / killedTargets.length)
       : null;
 
-    // Category distribution (active + killed)
+    // Category distribution
     const catCounts = {};
     targets.forEach(t => {
       if (t.category) catCounts[t.category] = (catCounts[t.category] || 0) + 1;
@@ -593,250 +678,191 @@ const KillList = () => {
       .sort((a, b) => b[1] - a[1])
       .map(([cat, count]) => ({ cat, count }));
 
-    return { total, completed, active, escaped, completionRate, avgDaysToKill, categoryDist };
+    // Difficulty distribution
+    const diffCounts = { surface: 0, deep: 0, core: 0 };
+    targets.forEach(t => {
+      const d = getDifficulty(t);
+      diffCounts[d] = (diffCounts[d] || 0) + 1;
+    });
+
+    return { total, completed, active, escaped, completionRate, avgStreakToKill, categoryDist, diffCounts };
   }, [targets]);
 
-  const getProgressColor = (progress) => {
-    if (progress < 25) return 'bg-red-500';
-    if (progress < 50) return 'bg-orange-500';
-    if (progress < 75) return 'bg-yellow-500';
-    if (progress < 100) return 'bg-blue-500';
-    return 'bg-green-500';
+  const getStreakColor = (streak, target) => {
+    const threshold = getStreakToKill(target);
+    const pct = streak / threshold;
+    if (pct >= 1) return '#22c55e';
+    if (pct >= 0.5) return '#f59e0b';
+    if (pct >= 0.2) return '#4da6ff';
+    return '#ef4444';
   };
 
   const renderTargetItem = useCallback(({ item: target, index }) => {
     const category = categories.find(c => c.value === target.category) || categories[0];
-    const priority = priorityLevels.find(p => p.value === target.priority) || priorityLevels[1];
-    
-    // Priority-based card styling
-    const priorityCardClass = target.status !== 'killed' && target.status !== 'escaped'
-      ? target.priority === 'high' 
-        ? 'priority-high' 
-        : target.priority === 'low' 
-          ? 'priority-low' 
-          : 'priority-medium'
-      : '';
+    const tier = getTier(target);
+    const streak = target.streak || 0;
+    const threshold = tier.streakToKill;
+    const daysActive = Math.floor((Date.now() - new Date(target.createdAt).getTime()) / 86400000);
+    const checkedInToday = target.lastCheckIn === todayKey();
+    const latestEscape = target.escapeData?.length ? target.escapeData[target.escapeData.length - 1] : null;
     
     return (
-      <div key={target.id} className={`oura-card p-5 hover:border-[#ef4444]/30 transition-all duration-300 ${priorityCardClass}`}>
-        <div className="flex items-center justify-between mb-3">
-          {editingTarget === target.id ? (
-            <div className="flex-1 flex gap-2">
-              <input
-                type="text"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                className="flex-1 bg-gray-700 text-white p-2 rounded border border-gray-600 focus:border-red-500 focus:outline-none"
-                autoFocus
-              />
-              <button
-                onClick={saveEdit}
-                className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-              >
-                Save
-              </button>
-              <button
-                onClick={cancelEdit}
-                className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <h3 className={`font-medium ${target.status === 'killed' ? 'line-through text-[#5a5a5a]' : 'text-white'}`}>
-                    {target.title}
-                  </h3>
-                  {/* Priority Badge */}
-                  {target.status !== 'killed' && target.status !== 'escaped' && (
-                    <span className={`text-xs px-2 py-0.5 rounded-lg flex items-center gap-1 ${priority.color} ${priority.bgColor} ${target.priority === 'high' ? 'animate-priority-pulse' : ''}`}>
-                      {priority.icon} {priority.label}
-                    </span>
-                  )}
-                  <span className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${category.color} ${category.bgColor}`}>
-                    {categoryIcons[target.category]}
+      <div key={target.id} className="oura-card p-5 hover:border-[#2a2a2a] transition-all duration-300">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1 min-w-0">
+            {editingTarget === target.id ? (
+              <div className="flex gap-2 mb-2">
+                <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} className="flex-1 bg-[#0a0a0a] text-white p-2 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm" autoFocus />
+                <button onClick={saveEdit} className="px-3 py-2 bg-[#22c55e]/10 text-[#22c55e] rounded-xl text-xs">Save</button>
+                <button onClick={cancelEdit} className="px-3 py-2 bg-[#1a1a1a] text-[#5a5a5a] rounded-xl text-xs">Cancel</button>
+              </div>
+            ) : (
+              <>
+                <h3 className={`font-medium ${target.status === 'killed' ? 'line-through text-[#5a5a5a]' : 'text-white'}`}>
+                  {target.title}
+                </h3>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-lg ${tier.color} ${tier.bgColor}`}>
+                    {tier.icon} {tier.label}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded-lg ${category.color} ${category.bgColor}`}>
                     {category.label}
                   </span>
-                  <span className={`text-xs px-2 py-1 rounded-lg uppercase font-medium ${
+                  <span className={`text-xs px-2 py-0.5 rounded-lg uppercase font-medium ${
                     target.status === 'killed' ? 'bg-[#22c55e]/10 text-[#22c55e]' :
                     target.status === 'escaped' ? 'bg-[#ef4444]/10 text-[#ef4444]' :
                     'bg-[#f59e0b]/10 text-[#f59e0b]'
                   }`}>
                     {target.status}
                   </span>
+                  <span className="text-[#3a3a3a] text-xs">Day {daysActive}</span>
                 </div>
-                <p className="text-sm text-[#8a8a8a] mb-1">{target.description}</p>
-                <p className="text-xs text-gray-400">
-                  Created: {target.createdAt instanceof Date ? target.createdAt.toLocaleDateString() : new Date(target.createdAt).toLocaleDateString()}
-                  {target.targetDate && (
-                    <span className="ml-2">
-                      • Target Date: {new Date(target.targetDate).toLocaleDateString()}
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => startEditing(target)}
-                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-                >
-                  Edit
+              </>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-1.5 shrink-0 ml-3">
+            {editingTarget !== target.id && (
+              <>
+                <button onClick={() => startEditing(target)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#1a1a1a] text-[#5a5a5a] hover:text-white text-xs transition-colors">
+                  ✏️
                 </button>
-                {target.status !== 'killed' && target.status !== 'escaped' && (
-                  <>
-                    <button
-                      onClick={() => updateProgress(target.id, 100)}
-                      className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 font-medium"
-                    >
-                      ⚡ Kill Now
-                    </button>
-                    <button
-                      onClick={() => markAsEscaped(target.id)}
-                      className="px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
-                    >
-                      🏃 Escaped
-                    </button>
-                  </>
-                )}
                 {target.status === 'escaped' && (
-                  <button
-                    onClick={() => reactivateTarget(target.id)}
-                    className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
-                  >
-                    🎯 Reactivate
+                  <button onClick={() => reactivateTarget(target.id)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#a855f7]/10 text-[#a855f7] hover:bg-[#a855f7]/20 text-xs transition-colors" title="Reactivate">
+                    🎯
                   </button>
                 )}
-                <button
-                  onClick={() => deleteTarget(target.id)}
-                  className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-                >
-                  Delete
+                <button onClick={() => deleteTarget(target.id)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 text-xs transition-colors">
+                  🗑️
                 </button>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
         {editingTarget !== target.id && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Progress</span>
-              <span className="text-sm font-medium text-white">{target.progress || 0}%</span>
-            </div>
-            
-            {/* Visual Progress Bar */}
-            <div className="w-full bg-gray-700 rounded-full h-3 border border-gray-600">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(target.progress || 0)}`}
-                style={{ width: `${target.progress || 0}%` }}
-              ></div>
-            </div>
-            
-            {/* Interactive Range Slider */}
-            {target.status !== 'killed' && (
-              <div className="relative">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={target.progress || 0}
-                  onChange={(e) => updateProgress(target.id, parseInt(e.target.value))}
-                  className="w-full h-3 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+            {/* Streak progress bar */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 bg-[#1a1a1a] rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-2 rounded-full transition-all duration-500"
                   style={{
-                    background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${target.progress || 0}%, #374151 ${target.progress || 0}%, #374151 100%)`
+                    width: `${Math.min(100, (streak / threshold) * 100)}%`,
+                    backgroundColor: getStreakColor(streak, target),
                   }}
                 />
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>0%</span>
-                  <span>25%</span>
-                  <span>50%</span>
-                  <span>75%</span>
-                  <span>100%</span>
-                </div>
               </div>
-            )}
+              <span className="text-xs text-[#5a5a5a] shrink-0 tabular-nums">{streak} / {threshold}d</span>
+            </div>
 
-            {/* Killed Status Message */}
-            {target.status === 'killed' && (
-              <div className="text-center p-3 bg-green-900/20 border border-green-500/30 rounded-lg">
-                <span className="text-green-400 font-medium">🎯 TARGET ELIMINATED</span>
-                {target.completedAt && (
-                  <div className="text-xs text-green-300 mt-1">
-                    Completed: {new Date(target.completedAt).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Escaped Status Message */}
-            {target.status === 'escaped' && (
-              <div className="text-center p-3 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
-                <span className="text-yellow-400 font-medium">🏃 TARGET ESCAPED</span>
-                {target.escapedAt && (
-                  <div className="text-xs text-yellow-300 mt-1">
-                    Escaped: {new Date(target.escapedAt).toLocaleDateString()}
-                  </div>
-                )}
-                <div className="text-xs text-yellow-200 mt-1">
-                  Sometimes strategic retreat is necessary. Regroup and try again when ready.
-                </div>
-              </div>
-            )}
-
-            {/* Reflection Notes Section */}
-            <div className="border-t border-[#1a1a1a] pt-4 mt-4">
-              <button
-                onClick={() => setShowReflection(prev => ({ 
-                  ...prev, 
-                  [target.id]: !prev[target.id] 
-                }))}
-                className="flex items-center gap-2 text-sm text-[#8a8a8a] hover:text-white transition-colors mb-3"
-              >
-                📝 Reflection Notes
-                <span className="text-xs">
-                  {showReflection[target.id] ? '▼' : '▶'}
+            {/* Streak hero + milestone badges */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl font-light tabular-nums" style={{ color: getStreakColor(streak, target) }}>
+                  {streak}
                 </span>
-              </button>
-
-              {showReflection[target.id] && (
-                <div className="space-y-3">
-                  <textarea
-                    value={reflectionNotes[target.id] || ''}
-                    onChange={(e) => setReflectionNotes(prev => ({
-                      ...prev,
-                      [target.id]: e.target.value
-                    }))}
-                    placeholder="How did this target challenge you? What did you learn?"
-                    className="w-full h-20 p-3 bg-[#0a0a0a] text-white border border-[#1a1a1a] rounded-xl text-sm resize-none focus:outline-none focus:border-[#a855f7] transition-colors"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => saveReflectionNote(target.id)}
-                      disabled={updatingReflection[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-4 py-2 text-sm bg-[#00d4aa] text-black rounded-xl hover:bg-[#00e6b8] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-colors font-medium"
-                    >
-                      {updatingReflection[target.id] ? '⏳' : '💾'} Save
-                    </button>
-                    <button
-                      onClick={() => clearReflectionNote(target.id)}
-                      disabled={updatingReflection[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-4 py-2 text-sm bg-[#ef4444]/10 text-[#ef4444] rounded-xl hover:bg-[#ef4444]/20 disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-colors font-medium"
-                    >
-                      {updatingReflection[target.id] ? '⏳' : '🗑️'} Clear
-                    </button>
-                  </div>
+                <span className="text-[#5a5a5a] text-xs">day streak</span>
+                {target.longestStreak > 0 && target.longestStreak > streak && (
+                  <span className="text-[#2a2a2a] text-xs">best: {target.longestStreak}</span>
+                )}
+              </div>
+              {/* Milestone dots */}
+              {(target.milestonesReached || []).length > 0 && (
+                <div className="flex items-center gap-1">
+                  {MILESTONES.filter(m => m <= threshold).map(m => (
+                    <div
+                      key={m}
+                      className={`w-2 h-2 rounded-full ${(target.milestonesReached || []).includes(m) ? '' : 'bg-[#1a1a1a]'}`}
+                      style={(target.milestonesReached || []).includes(m) ? { backgroundColor: getStreakColor(streak, target) } : undefined}
+                      title={`${m}-day milestone`}
+                    />
+                  ))}
                 </div>
               )}
             </div>
+
+            {/* Daily check-in buttons (active targets only, once per day) */}
+            {target.status === 'active' && !checkedInToday && (
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => dailyCheckIn(target.id, true)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 hover:bg-[#22c55e]/20 transition-all"
+                >
+                  Held the line
+                </button>
+                <button
+                  onClick={() => dailyCheckIn(target.id, false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 hover:bg-[#ef4444]/20 transition-all"
+                >
+                  It got me
+                </button>
+              </div>
+            )}
+
+            {/* Already checked in today */}
+            {target.status === 'active' && checkedInToday && (
+              <div className="text-center py-2 text-[#3a3a3a] text-xs">
+                Checked in today
+              </div>
+            )}
+
+            {/* Killed status */}
+            {target.status === 'killed' && (
+              <div className="text-center p-3 bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-xl">
+                <span className="text-[#22c55e] text-sm font-medium">TARGET ELIMINATED</span>
+                <span className="text-[#5a5a5a] text-xs ml-2">{streak}-day streak</span>
+              </div>
+            )}
+
+            {/* Escaped — show latest autopsy if exists */}
+            {target.status === 'escaped' && (
+              <div className="p-3 bg-[#ef4444]/5 border border-[#ef4444]/20 rounded-xl space-y-2">
+                <span className="text-[#ef4444] text-xs font-medium uppercase tracking-widest">Escaped</span>
+                {latestEscape && (
+                  <div className="text-[#5a5a5a] text-xs space-y-1">
+                    <p><span className="text-[#8a8a8a]">What happened:</span> {latestEscape.context}</p>
+                    <p><span className="text-[#8a8a8a]">Told myself:</span> {latestEscape.rationalization}</p>
+                    {latestEscape.prevention && <p><span className="text-[#8a8a8a]">Would have stopped it:</span> {latestEscape.prevention}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Escape count */}
+            {(target.escapeData || []).length > 0 && target.status !== 'escaped' && (
+              <div className="text-[#3a3a3a] text-xs">
+                {target.escapeData.length} escape{target.escapeData.length > 1 ? 's' : ''} recorded
+              </div>
+            )}
           </div>
         )}
       </div>
     );
-    }, [editingTarget, editValue, updateProgress, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, categories, priorityLevels,
-      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote, categoryIcons]);
+    }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, dailyCheckIn, categories, categoryIcons,
+      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote]);
 
   return (
     <div className="min-h-screen bg-black">
@@ -902,13 +928,13 @@ const KillList = () => {
                 </div>
               </div>
 
-              {/* Avg days to kill */}
+              {/* Avg streak to kill */}
               <div className="flex flex-col justify-center">
-                <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Avg Days to Kill</div>
-                {stats.avgDaysToKill !== null ? (
+                <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Avg Streak to Kill</div>
+                {stats.avgStreakToKill !== null ? (
                   <div>
-                    <span className={`text-4xl font-light tabular-nums ${stats.avgDaysToKill <= 7 ? 'text-[#22c55e]' : stats.avgDaysToKill <= 21 ? 'text-[#f59e0b]' : 'text-[#ef4444]'}`}>
-                      {stats.avgDaysToKill}
+                    <span className={`text-4xl font-light tabular-nums ${stats.avgStreakToKill <= 7 ? 'text-[#22c55e]' : stats.avgStreakToKill <= 21 ? 'text-[#f59e0b]' : 'text-[#ef4444]'}`}>
+                      {stats.avgStreakToKill}
                     </span>
                     <span className="text-[#5a5a5a] text-sm ml-2">days</span>
                     <div className="text-[#5a5a5a] text-xs mt-1">across {targets.filter(t => t.status === 'killed').length} confirmed kills</div>
@@ -919,6 +945,87 @@ const KillList = () => {
               </div>
             </div>
           )}
+
+          {/* Kill Patterns — strategic intelligence (3+ killed targets required) */}
+          {targets.filter(t => t.status === 'killed').length >= 3 && (() => {
+            const killed = targets.filter(t => t.status === 'killed');
+            const allEscapes = targets.flatMap(t => (t.escapeData || []));
+
+            // Category win rate
+            const catStats = {};
+            targets.forEach(t => {
+              if (!t.category) return;
+              if (!catStats[t.category]) catStats[t.category] = { kills: 0, escapes: 0 };
+              if (t.status === 'killed') catStats[t.category].kills++;
+              const escCount = (t.escapeData || []).length;
+              catStats[t.category].escapes += escCount;
+            });
+
+            // Most common escape day
+            const escapeDays = [0,0,0,0,0,0,0]; // Sun-Sat
+            allEscapes.forEach(e => {
+              if (e.date) escapeDays[new Date(e.date).getDay()]++;
+            });
+            const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const peakEscapeDay = escapeDays.some(d => d > 0)
+              ? dayNames[escapeDays.indexOf(Math.max(...escapeDays))]
+              : null;
+
+            // Avg streak by difficulty
+            const diffStreaks = { surface: [], deep: [], core: [] };
+            killed.forEach(t => {
+              const d = getDifficulty(t);
+              diffStreaks[d]?.push(t.streak || t.longestStreak || 0);
+            });
+            const avgStreak = (arr) => arr.length ? Math.round(arr.reduce((a,b) => a+b, 0) / arr.length) : null;
+
+            return (
+              <div className="mt-6 oura-card p-5 animate-fade-in-up">
+                <h3 className="text-xs text-[#5a5a5a] uppercase tracking-widest mb-4">Kill Patterns</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {/* Category win rates */}
+                  <div>
+                    <div className="text-[#3a3a3a] text-xs uppercase tracking-widest mb-2">By Category</div>
+                    {Object.entries(catStats).sort((a,b) => b[1].kills - a[1].kills).slice(0, 4).map(([cat, s]) => {
+                      const catDef = CATEGORIES.find(c => c.value === cat);
+                      return (
+                        <div key={cat} className="flex items-center justify-between py-1">
+                          <span className={`text-xs ${catDef?.color || 'text-[#5a5a5a]'}`}>{catDef?.label || cat}</span>
+                          <span className="text-[#5a5a5a] text-xs tabular-nums">{s.kills}K / {s.escapes}E</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Streaks by difficulty + escape day */}
+                  <div>
+                    <div className="text-[#3a3a3a] text-xs uppercase tracking-widest mb-2">Avg Streak to Kill</div>
+                    {['surface', 'deep', 'core'].map(d => {
+                      const avg = avgStreak(diffStreaks[d]);
+                      const tier = DIFFICULTY_TIERS.find(t => t.value === d);
+                      return avg !== null ? (
+                        <div key={d} className="flex items-center justify-between py-1">
+                          <span className={`text-xs ${tier?.color || 'text-[#5a5a5a]'}`}>{tier?.label || d}</span>
+                          <span className="text-[#5a5a5a] text-xs tabular-nums">{avg} days</span>
+                        </div>
+                      ) : null;
+                    })}
+                    {peakEscapeDay && (
+                      <div className="mt-3 pt-3 border-t border-[#1a1a1a]">
+                        <span className="text-[#3a3a3a] text-xs">Peak escape day: </span>
+                        <span className="text-[#ef4444] text-xs font-medium">{peakEscapeDay}</span>
+                      </div>
+                    )}
+                    {allEscapes.length > 0 && (
+                      <div className="mt-1">
+                        <span className="text-[#3a3a3a] text-xs">Total escapes: </span>
+                        <span className="text-[#5a5a5a] text-xs tabular-nums">{allEscapes.length}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </section>
 
         {/* Add New Target */}
@@ -968,30 +1075,26 @@ const KillList = () => {
                 </div>
               </div>
 
-              {/* Priority Level */}
+              {/* Difficulty Tier */}
               <div>
                 <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                  Priority Level
+                  Difficulty
                 </label>
                 <div className="grid grid-cols-3 gap-3">
-                  {priorityLevels.map((priority) => (
+                  {DIFFICULTY_TIERS.map((d) => (
                     <button
-                      key={priority.value}
+                      key={d.value}
                       type="button"
-                      onClick={() => setNewTargetPriority(priority.value)}
+                      onClick={() => setNewTargetDifficulty(d.value)}
                       className={`p-4 rounded-xl border transition-all duration-200 flex flex-col items-center gap-2 ${
-                        newTargetPriority === priority.value
-                          ? `${priority.bgColor} ${priority.color} ${priority.borderColor} border-2 scale-105`
+                        newTargetDifficulty === d.value
+                          ? `${d.bgColor} ${d.color} ${d.borderColor} border-2 scale-105`
                           : 'bg-[#0a0a0a] text-[#5a5a5a] border-[#1a1a1a] hover:border-[#2a2a2a] hover:text-[#8a8a8a]'
                       }`}
                     >
-                      <span className="text-2xl">{priority.icon}</span>
-                      <span className="text-sm font-medium">{priority.label}</span>
-                      <span className="text-xs opacity-70">
-                        {priority.value === 'high' && 'Urgent - tackle first'}
-                        {priority.value === 'medium' && 'Important - steady focus'}
-                        {priority.value === 'low' && 'Minor - when ready'}
-                      </span>
+                      <span className="text-2xl">{d.icon}</span>
+                      <span className="text-sm font-medium">{d.label}</span>
+                      <span className="text-xs opacity-70">{d.description}</span>
                     </button>
                   ))}
                 </div>
@@ -1121,6 +1224,43 @@ const KillList = () => {
             )}
           </div>
         </div>
+
+        {/* Escape Autopsy Modal */}
+        {autopsyTarget && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-medium">Escape Autopsy: {autopsyTarget.title}</h3>
+                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '' }); }} className="text-[#3a3a3a] hover:text-white transition-colors">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <p className="text-[#5a5a5a] text-sm mb-5">Streak was {autopsyTarget.streak || 0} days. Capture what happened so the pattern becomes visible.</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">What was happening right before?</label>
+                  <textarea value={autopsyData.context} onChange={(e) => setAutopsyData(prev => ({ ...prev, context: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#2a2a2a]" placeholder="The environment, state of mind, time of day..." />
+                </div>
+                <div>
+                  <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">What did you tell yourself?</label>
+                  <textarea value={autopsyData.rationalization} onChange={(e) => setAutopsyData(prev => ({ ...prev, rationalization: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#2a2a2a]" placeholder="The rationalization that made it feel okay..." />
+                </div>
+                <div>
+                  <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">What would have stopped it? <span className="text-[#3a3a3a]">(optional)</span></label>
+                  <input type="text" value={autopsyData.prevention} onChange={(e) => setAutopsyData(prev => ({ ...prev, prevention: e.target.value }))} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#2a2a2a]" placeholder="One thing that would have changed the outcome..." />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={submitAutopsy} disabled={!autopsyData.context.trim() || !autopsyData.rationalization.trim()} className="flex-1 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-xl font-medium text-sm transition-all">
+                  Record Autopsy
+                </button>
+                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '' }); }} className="px-6 py-3 bg-[#1a1a1a] text-[#5a5a5a] hover:text-white rounded-xl text-sm transition-colors">
+                  Skip
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Oracle Modal */}
         <OracleModal

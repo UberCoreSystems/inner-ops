@@ -55,9 +55,13 @@ export default function Dashboard() {
   const [killListExpanded, setKillListExpanded] = useState(true);
   const [insightsExpanded, setInsightsExpanded] = useState(true);
 
-  // Sunday Autopsy — show on Sundays, dismiss once used or closed this session
+  // Sunday Autopsy — show on Sundays
   const isSunday = new Date().getDay() === 0;
   const showAutopsy = isSunday && !autopsyDismissed && !loading;
+
+  // Monday Kill Report
+  const [killReportDismissed, setKillReportDismissed] = useState(false);
+  const isMonday = new Date().getDay() === 1;
 
   const submitAutopsy = async () => {
     if (!autopsyText.trim()) return;
@@ -712,6 +716,49 @@ export default function Dashboard() {
             </div>
           </section>
         )}
+
+        {/* Monday Kill Report */}
+        {isMonday && !killReportDismissed && !loading && rawUserData?.killTargets?.length > 0 && (() => {
+          const now = Date.now();
+          const weekAgo = now - 7 * 86400000;
+          const activeTargets = rawUserData.killTargets.filter(t => t.status === 'active' || t.status === 'killed');
+          const held = activeTargets.filter(t => {
+            const recentChecks = (t.checkIns || []).filter(c => new Date(c.date).getTime() > weekAgo);
+            return recentChecks.length > 0 && recentChecks.every(c => c.held);
+          }).length;
+          const escaped = activeTargets.filter(t => {
+            const recentChecks = (t.checkIns || []).filter(c => new Date(c.date).getTime() > weekAgo);
+            return recentChecks.some(c => !c.held);
+          }).length;
+          const untouched = activeTargets.filter(t => {
+            const recentChecks = (t.checkIns || []).filter(c => new Date(c.date).getTime() > weekAgo);
+            return recentChecks.length === 0;
+          }).length;
+          if (held === 0 && escaped === 0 && untouched === 0) return null;
+          return (
+            <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.092s' }}>
+              <div className="oura-card p-5 border-l-4 border-[#4da6ff]">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-white text-sm font-medium mb-1">Last Week's Record</h3>
+                    <p className="text-[#5a5a5a] text-xs">Across {activeTargets.length} active battle{activeTargets.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <button onClick={() => setKillReportDismissed(true)} className="text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors shrink-0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="flex items-center gap-4">
+                  {held > 0 && <span className="text-[#22c55e] text-sm"><span className="text-lg font-medium tabular-nums">{held}</span> held</span>}
+                  {escaped > 0 && <span className="text-[#ef4444] text-sm"><span className="text-lg font-medium tabular-nums">{escaped}</span> escaped</span>}
+                  {untouched > 0 && <span className="text-[#5a5a5a] text-sm"><span className="text-lg font-medium tabular-nums">{untouched}</span> untouched</span>}
+                </div>
+                {untouched > 0 && (
+                  <p className="text-[#3a3a3a] text-xs mt-2">{untouched} target{untouched > 1 ? 's' : ''} had zero check-ins last week.</p>
+                )}
+              </div>
+            </section>
+          );
+        })()}
 
         {/* Main Score Section - Oura Triple Ring Style */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>

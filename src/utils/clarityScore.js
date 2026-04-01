@@ -20,8 +20,10 @@ export const clarityScoreUtils = {
   SCORING: {
     JOURNAL_ENTRY: 2,
     KILL_TARGET_ADDED: 1, // Very low - just for tracking
-    KILL_TARGET_PROGRESS: 2, // per 10% progress - actual work matters
-    KILL_TARGET_COMPLETED: 25, // Completion is what really counts
+    KILL_TARGET_COMPLETED_SURFACE: 10, // Surface difficulty (7-day streak)
+    KILL_TARGET_COMPLETED_DEEP: 25, // Deep difficulty (21-day streak)
+    KILL_TARGET_COMPLETED_CORE: 50, // Core difficulty (60-day streak)
+    KILL_TARGET_STREAK_BONUS: 1, // per 7-day streak milestone on active targets
     RELAPSE_AWARENESS: 8, // bonus for self-awareness and honesty
     RELAPSE_REFLECTION: 5, // additional bonus for detailed reflection
     BLACK_MIRROR_CHECK: 5, // weekly bonus
@@ -69,18 +71,24 @@ export const clarityScoreUtils = {
     if (journalStreak >= 30) totalScore += 40; // Monthly streak bonus
     if (journalStreak >= 90) totalScore += 75; // Quarterly streak bonus
 
-    // Kill List scoring with completion rate multiplier
+    // Kill List scoring with completion rate multiplier and difficulty tiers
     let killListScore = 0;
     let completedTargets = 0;
-    
+    const DIFF_MAP = { high: 'core', medium: 'deep', low: 'surface' };
+
     killTargets.forEach(target => {
       killListScore += clarityScoreUtils.SCORING.KILL_TARGET_ADDED;
-      
-      const progress = target.progress || 0;
-      killListScore += Math.floor(progress / 10) * clarityScoreUtils.SCORING.KILL_TARGET_PROGRESS;
-      
-      if (progress === 100) {
-        killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED;
+
+      // Streak bonus: 1 point per 7-day milestone reached on active targets
+      const streak = target.streak || 0;
+      killListScore += Math.floor(streak / 7) * clarityScoreUtils.SCORING.KILL_TARGET_STREAK_BONUS;
+
+      const isKilled = target.status === 'killed' || target.progress === 100;
+      if (isKilled) {
+        const difficulty = target.difficulty || DIFF_MAP[target.priority] || 'deep';
+        if (difficulty === 'core') killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_CORE;
+        else if (difficulty === 'surface') killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_SURFACE;
+        else killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_DEEP;
         completedTargets++;
       }
     });
@@ -132,7 +140,7 @@ export const clarityScoreUtils = {
     const result = {
       totalScore: Math.floor(totalScore),
       journalStreak,
-      killTargetsCompleted: killTargets.filter(t => t.progress === 100).length,
+      killTargetsCompleted: killTargets.filter(t => t.status === 'killed' || t.progress === 100).length,
       weeklyBlackMirrorChecks: Math.floor(blackMirrorEntries.length / 7),
       relapseAwarenessEntries: relapseEntries.length,
       breakdown: {

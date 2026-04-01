@@ -6,27 +6,20 @@ import {
 } from 'firebase/firestore';
 import { getDb } from '../firebase';
 import { generateAIFeedback } from '../utils/aiFeedback';
-import { useTodaysKillTargets } from '../hooks/useKillTargets';
+import { useActiveKillTargets } from '../hooks/useKillTargets';
 import OracleModal from './OracleModal';
 import { AppIcon } from './AppIcons';
 import { SkeletonList, SkeletonKillTarget } from './SkeletonLoader';
 import logger from '../utils/logger';
 
 const KillListDashboard = React.memo(function KillListDashboard() {
-  // Use the custom hook for today's kill targets with all functions
-  const { 
-    targets: todaysTargets, 
-    loading, 
-    error, 
-    refetch, 
+  // Use all active targets (not just today's)
+  const {
+    targets: todaysTargets,
+    loading,
+    error,
     stats,
-    markAsKilled,
-    markAsEscaped,
-    markAsActive,
-    toggleTargetStatus,
-    updateReflectionNote,
-    clearReflectionNote
-  } = useTodaysKillTargets(true); // Enable real-time updates
+  } = useActiveKillTargets(true);
   
   const [updating, setUpdating] = useState({});
   const [reflectionNotes, setReflectionNotes] = useState({});
@@ -269,13 +262,13 @@ const KillListDashboard = React.memo(function KillListDashboard() {
               <circle cx="40" cy="40" r="4" fill="#ef4444" opacity="0.9" />
             </svg>
           </div>
-          <h3 className="text-xl font-light text-white mb-2">No Targets Set</h3>
-          <p className="text-[#5a5a5a] text-sm mb-6 max-w-xs mx-auto">Define what you're eliminating today to track your progress.</p>
-          <button 
+          <h3 className="text-xl font-light text-white mb-2">No Active Battles</h3>
+          <p className="text-[#5a5a5a] text-sm mb-6 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
+          <button
             onClick={() => window.location.href = '/killlist'}
             className="px-6 py-3 bg-[#ef4444] text-white text-sm font-medium rounded-xl hover:bg-[#dc2626] transition-all hover:shadow-lg hover:shadow-[#ef4444]/20"
           >
-            Set Today's Targets
+            Start a Kill Contract
           </button>
         </div>
       </div>
@@ -294,18 +287,9 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             </svg>
           </div>
           <div>
-            <h2 className="text-lg font-light text-white">Today's Targets</h2>
+            <h2 className="text-lg font-light text-white">Active Battles</h2>
             <p className="text-[#5a5a5a] text-sm font-light">
-              <span className="text-[#22c55e]">{stats.killed} killed</span>
-              <span className="mx-2">•</span>
-              <span className="text-[#f59e0b]">{stats.escaped} escaped</span>
-              <span className="mx-2">•</span>
               <span className="text-[#4da6ff]">{stats.active} active</span>
-              {stats.total > 0 && (
-                <span className="ml-3 text-[#5a5a5a]">
-                  {stats.completionRate.toFixed(0)}%
-                </span>
-              )}
             </p>
           </div>
         </div>

@@ -326,12 +326,73 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 };
 
 /**
- * Hook specifically for today's kill targets
+ * Hook specifically for today's kill targets (legacy — date-filtered)
  * @param {boolean} realtime - Whether to use real-time updates
  * @returns {object} { targets, loading, error, refetch, stats }
  */
 export const useTodaysKillTargets = (realtime = false) => {
   return useKillTargetsForDate(new Date(), realtime);
+};
+
+/**
+ * Hook for ALL active kill targets regardless of creation date.
+ * Used by the Dashboard "Active Battles" widget.
+ */
+export const useActiveKillTargets = (realtime = true) => {
+  const [targets, setTargets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cleanup;
+    const setup = async () => {
+      const auth = await getAuth();
+      const db = await getDb();
+      const userId = auth.currentUser?.uid;
+      if (!userId) { setLoading(false); setTargets([]); return; }
+
+      const q = query(
+        collection(db, 'killTargets'),
+        where('userId', '==', userId),
+        where('status', '==', 'active')
+      );
+
+      if (realtime) {
+        const unsub = onSnapshot(q, (snap) => {
+          const fetched = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id, ...data,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
+              lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
+            };
+          });
+          // Sort: highest streak first, then longest active
+          fetched.sort((a, b) => (b.streak || 0) - (a.streak || 0) || new Date(a.createdAt) - new Date(b.createdAt));
+          setTargets(fetched);
+          setLoading(false);
+          setError(null);
+        }, (err) => { setError(err.message); setLoading(false); });
+        cleanup = () => unsub();
+      } else {
+        try {
+          const snap = await getDocs(q);
+          const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setTargets(fetched);
+        } catch (err) { setError(err.message); }
+        setLoading(false);
+      }
+    };
+    setup();
+    return () => cleanup?.();
+  }, [realtime]);
+
+  const stats = {
+    total: targets.length,
+    active: targets.length,
+  };
+
+  return { targets, loading, error, stats };
 };
 
 /**

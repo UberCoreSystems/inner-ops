@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { saveUserProfile } from '../utils/userProfile';
+import { writeData } from '../utils/firebaseUtils';
 import { track } from '../utils/analytics';
 import logger from '../utils/logger';
 
@@ -24,13 +25,17 @@ export default function Onboarding() {
   const [driver, setDriver] = useState('');
   const [feedbackStyle, setFeedbackStyle] = useState('');
   const [focusStatement, setFocusStatement] = useState('');
+  const [killTarget, setKillTarget] = useState('');
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
+
+  const TOTAL_STEPS = 5; // 0=welcome, 1=driver, 2=style, 3=focus, 4=kill target
 
   const canAdvance = () => {
     if (step === 1) return !!driver;
     if (step === 2) return !!feedbackStyle;
     if (step === 3) return focusStatement.trim().length >= 8;
+    if (step === 4) return true; // kill target is optional
     return true;
   };
 
@@ -43,7 +48,29 @@ export default function Onboarding() {
         focusStatement: focusStatement.trim(),
         onboardingCompletedAt: new Date().toISOString(),
       });
-      track('onboarding_completed', { primaryDriver: driver, feedbackStyle });
+
+      // Create kill target if provided
+      if (killTarget.trim()) {
+        await writeData('killTargets', {
+          title: killTarget.trim(),
+          description: 'First kill contract — set during onboarding',
+          category: 'bad-habit',
+          difficulty: 'core',
+          status: 'active',
+          streak: 0,
+          longestStreak: 0,
+          checkIns: [],
+          lastCheckIn: null,
+          milestonesReached: [],
+          escapeData: [],
+          targetDate: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          reflectionNotes: '',
+        });
+      }
+
+      track('onboarding_completed', { primaryDriver: driver, feedbackStyle, hasKillTarget: !!killTarget.trim() });
     } catch (err) {
       logger.error('Failed to save profile:', err);
     } finally {
@@ -53,7 +80,7 @@ export default function Onboarding() {
   };
 
   const handleNext = () => {
-    if (step < 3) {
+    if (step < TOTAL_STEPS - 1) {
       setStep(step + 1);
     } else {
       handleComplete();
@@ -66,7 +93,7 @@ export default function Onboarding() {
 
         {/* Progress bar */}
         <div className="flex gap-1.5 mb-10">
-          {[0, 1, 2, 3].map((i) => (
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
             <div
               key={i}
               className={`h-0.5 flex-1 rounded-full transition-all duration-500 ${i <= step ? 'bg-white' : 'bg-[#1a1a1a]'}`}
@@ -160,6 +187,22 @@ export default function Onboarding() {
           </div>
         )}
 
+        {/* Step 4: Kill target seed */}
+        {step === 4 && (
+          <div className="animate-fade-in-up">
+            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">One more thing</p>
+            <h2 className="text-2xl font-light text-white mb-3">Name the one pattern that's costing you the most right now.</h2>
+            <p className="text-[#5a5a5a] text-sm mb-8">This becomes your first kill contract. You can skip this and add targets later.</p>
+            <input
+              type="text"
+              value={killTarget}
+              onChange={(e) => setKillTarget(e.target.value)}
+              placeholder="e.g. Doomscrolling at night, avoiding hard conversations, porn..."
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none placeholder-[#3a3a3a] transition-colors"
+            />
+          </div>
+        )}
+
         {/* Navigation */}
         <div className="flex justify-between items-center mt-12">
           {step > 0 ? (
@@ -183,7 +226,7 @@ export default function Onboarding() {
             disabled={!canAdvance() || saving}
             className="px-8 py-3 bg-white text-black font-medium rounded-2xl disabled:opacity-20 hover:bg-gray-100 transition-all duration-200 text-sm"
           >
-            {saving ? 'Saving...' : step === 3 ? 'Enter' : 'Continue'}
+            {saving ? 'Saving...' : step === TOTAL_STEPS - 1 ? 'Enter' : 'Continue'}
           </button>
         </div>
 
