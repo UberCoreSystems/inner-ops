@@ -19,6 +19,13 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     loading,
     error,
     stats,
+    refetch,
+    toggleTargetStatus,
+    markAsKilled,
+    markAsEscaped,
+    markAsActive,
+    updateReflectionNote,
+    clearReflectionNote,
   } = useActiveKillTargets(true);
   
   const [updating, setUpdating] = useState({});

@@ -335,7 +335,7 @@ export const useTodaysKillTargets = (realtime = false) => {
 };
 
 /**
- * Hook for ALL active kill targets regardless of creation date.
+ * Hook for ALL kill targets regardless of creation date or status.
  * Used by the Dashboard "Active Battles" widget.
  */
 export const useActiveKillTargets = (realtime = true) => {
@@ -353,8 +353,7 @@ export const useActiveKillTargets = (realtime = true) => {
 
       const q = query(
         collection(db, 'killTargets'),
-        where('userId', '==', userId),
-        where('status', '==', 'active')
+        where('userId', '==', userId)
       );
 
       if (realtime) {
@@ -365,10 +364,16 @@ export const useActiveKillTargets = (realtime = true) => {
               id: d.id, ...data,
               createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
               lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
+              completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null),
             };
           });
-          // Sort: highest streak first, then longest active
-          fetched.sort((a, b) => (b.streak || 0) - (a.streak || 0) || new Date(a.createdAt) - new Date(b.createdAt));
+          // Sort: active first, then highest streak, then longest active
+          fetched.sort((a, b) => {
+            const statusOrder = { active: 0, killed: 1, escaped: 2 };
+            const statusDiff = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+            if (statusDiff !== 0) return statusDiff;
+            return (b.streak || 0) - (a.streak || 0) || new Date(a.createdAt) - new Date(b.createdAt);
+          });
           setTargets(fetched);
           setLoading(false);
           setError(null);
@@ -377,7 +382,15 @@ export const useActiveKillTargets = (realtime = true) => {
       } else {
         try {
           const snap = await getDocs(q);
-          const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const fetched = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id, ...data,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
+              lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
+              completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null),
+            };
+          });
           setTargets(fetched);
         } catch (err) { setError(err.message); }
         setLoading(false);
@@ -387,12 +400,85 @@ export const useActiveKillTargets = (realtime = true) => {
     return () => cleanup?.();
   }, [realtime]);
 
-  const stats = {
-    total: targets.length,
-    active: targets.length,
+  const refetch = () => {
+    // Real-time mode self-updates; one-time mode requires re-mount — no-op here
   };
 
-  return { targets, loading, error, stats };
+  // Toggle target status between different states
+  const toggleTargetStatus = async (targetId, newStatus) => {
+    try {
+      const auth = await getAuth();
+      const db = await getDb();
+      if (!auth.currentUser) throw new Error('No authenticated user');
+      const targetRef = doc(db, 'killTargets', targetId);
+      const updateData = {
+        status: newStatus,
+        lastUpdated: serverTimestamp(),
+        completedAt: newStatus === 'killed' ? serverTimestamp() : null,
+      };
+      await updateDoc(targetRef, updateData);
+      return true;
+    } catch (err) {
+      logger.error('Error updating target status:', err);
+      throw err;
+    }
+  };
+
+  const markAsKilled = (targetId) => toggleTargetStatus(targetId, 'killed');
+  const markAsEscaped = (targetId) => toggleTargetStatus(targetId, 'escaped');
+  const markAsActive = (targetId) => toggleTargetStatus(targetId, 'active');
+
+  const updateReflectionNote = async (targetId, reflectionNote) => {
+    try {
+      const auth = await getAuth();
+      const db = await getDb();
+      if (!auth.currentUser) throw new Error('No authenticated user');
+      const targetRef = doc(db, 'killTargets', targetId);
+      await updateDoc(targetRef, { reflectionNotes: reflectionNote.trim(), lastUpdated: serverTimestamp() });
+      return true;
+    } catch (err) {
+      logger.error('Error updating reflection note:', err);
+      throw err;
+    }
+  };
+
+  const clearReflectionNote = async (targetId) => {
+    try {
+      const auth = await getAuth();
+      const db = await getDb();
+      if (!auth.currentUser) throw new Error('No authenticated user');
+      const targetRef = doc(db, 'killTargets', targetId);
+      await updateDoc(targetRef, { reflectionNotes: '', lastUpdated: serverTimestamp() });
+      return true;
+    } catch (err) {
+      logger.error('Error clearing reflection note:', err);
+      throw err;
+    }
+  };
+
+  const stats = {
+    total: targets.length,
+    killed: targets.filter(t => t.status === 'killed').length,
+    escaped: targets.filter(t => t.status === 'escaped').length,
+    active: targets.filter(t => t.status === 'active').length,
+    completionRate: targets.length > 0
+      ? (targets.filter(t => t.status === 'killed').length / targets.length) * 100
+      : 0,
+  };
+
+  return {
+    targets,
+    loading,
+    error,
+    stats,
+    refetch,
+    toggleTargetStatus,
+    markAsKilled,
+    markAsEscaped,
+    markAsActive,
+    updateReflectionNote,
+    clearReflectionNote,
+  };
 };
 
 /**
