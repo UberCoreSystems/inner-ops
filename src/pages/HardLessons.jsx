@@ -99,9 +99,9 @@ export default function HardLessons() {
     }
   };
 
-  // Show scar flow when lessons load empty (first time)
+  // Show scar flow when lessons load empty (first time), unless skipped this session
   useEffect(() => {
-    if (!initialLoading && lessons.length === 0) {
+    if (!initialLoading && lessons.length === 0 && !sessionStorage.getItem('scar_flow_skipped')) {
       setShowScarFlow(true);
     }
   }, [initialLoading, lessons.length]);
@@ -951,6 +951,7 @@ Please help extract the core lesson and rule from this experience.
                       </button>
                       <button
                         onClick={() => {
+                          sessionStorage.setItem('scar_flow_skipped', 'true');
                           setShowScarFlow(false);
                           setShowForm(true);
                           setTimeout(() => {

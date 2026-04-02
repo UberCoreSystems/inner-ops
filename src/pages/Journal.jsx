@@ -494,7 +494,6 @@ export default function Journal() {
       setOracleModal({ isOpen: true, content: '', isLoading: true });
 
       const feedback = await generateAIFeedback('journal', inputText, pastEntries);
-      setOracleModal({ isOpen: true, content: feedback, isLoading: false });
 
       const newEntry = await writeData('journalEntries', {
         content: entry,
@@ -504,6 +503,8 @@ export default function Journal() {
       });
       setEntries(prev => [newEntry, ...prev]);
       setCurrentEntryId(newEntry.id);
+
+      setOracleModal({ isOpen: true, content: feedback, isLoading: false });
 
       ouraToast.success('Journal entry saved');
       setEntry('');
@@ -1046,8 +1047,8 @@ export default function Journal() {
                       <div key={entry.id} className="oura-card p-6">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
-                              <span className="text-xl">{moodOption?.emoji}</span>
+                            <div className="w-10 h-10 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center" style={{ color: moodOption?.color }}>
+                              <span className="w-5 h-5 block">{MoodIcons[moodOption?.value]}</span>
                             </div>
                             <div>
                               <p className="text-white text-sm font-medium">{moodOption?.label}</p>

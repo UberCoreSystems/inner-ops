@@ -372,7 +372,7 @@ export const useActiveKillTargets = (realtime = true) => {
             const statusOrder = { active: 0, killed: 1, escaped: 2 };
             const statusDiff = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
             if (statusDiff !== 0) return statusDiff;
-            return (b.streak || 0) - (a.streak || 0) || new Date(a.createdAt) - new Date(b.createdAt);
+            return (b.streak || 0) - (a.streak || 0) || new Date(b.createdAt) - new Date(a.createdAt);
           });
           setTargets(fetched);
           setLoading(false);
@@ -390,6 +390,12 @@ export const useActiveKillTargets = (realtime = true) => {
               lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
               completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null),
             };
+          });
+          fetched.sort((a, b) => {
+            const statusOrder = { active: 0, killed: 1, escaped: 2 };
+            const statusDiff = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+            if (statusDiff !== 0) return statusDiff;
+            return (b.streak || 0) - (a.streak || 0) || new Date(b.createdAt) - new Date(a.createdAt);
           });
           setTargets(fetched);
         } catch (err) { setError(err.message); }

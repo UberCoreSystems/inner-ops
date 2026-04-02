@@ -49,7 +49,15 @@ export default function Dashboard() {
   // Sunday Autopsy
   const [autopsyText, setAutopsyText] = useState('');
   const [autopsySaving, setAutopsySaving] = useState(false);
-  const [autopsyDismissed, setAutopsyDismissed] = useState(false);
+  const autopsySessionKey = (() => {
+    const today = new Date();
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - today.getDay());
+    return `autopsy_dismissed_${sunday.toISOString().split('T')[0]}`;
+  })();
+  const [autopsyDismissed, setAutopsyDismissed] = useState(
+    () => sessionStorage.getItem(autopsySessionKey) === 'true'
+  );
 
   // Collapsible section states
   const [killListExpanded, setKillListExpanded] = useState(true);
@@ -83,6 +91,7 @@ export default function Dashboard() {
       });
       ouraToast.success('Week captured — expand the lesson when you\'re ready');
       setAutopsyText('');
+      sessionStorage.setItem(autopsySessionKey, 'true');
       setAutopsyDismissed(true);
     } catch (error) {
       logger.error('Error saving weekly autopsy:', error);
@@ -688,7 +697,7 @@ export default function Dashboard() {
                   <p className="text-[#5a5a5a] text-xs">Name one thing you'd handle differently. This becomes a Hard Lesson draft.</p>
                 </div>
                 <button
-                  onClick={() => setAutopsyDismissed(true)}
+                  onClick={() => { sessionStorage.setItem(autopsySessionKey, 'true'); setAutopsyDismissed(true); }}
                   className="text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors shrink-0"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

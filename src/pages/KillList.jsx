@@ -317,7 +317,7 @@ const KillList = () => {
           const milestoneText = `I've held the line against "${target.title}" for ${newStreak} consecutive days. This is a ${tier.label.toLowerCase()} pattern (${tier.streakToKill} days to kill). ${newStreak === 3 ? 'Just getting started.' : newStreak < 14 ? 'Building momentum.' : newStreak < 30 ? 'Deep into the fight now.' : 'This is becoming part of who I am.'} ${target.escapeData?.length ? `I've escaped ${target.escapeData.length} time${target.escapeData.length > 1 ? 's' : ''} before.` : ''}`;
           const feedback = await generateAIFeedback('killList', milestoneText, []);
           setOracleModal({ isOpen: true, content: feedback, isLoading: false });
-        } catch { setOracleModal({ isOpen: false, content: '', isLoading: false }); }
+        } catch { setOracleModal({ isOpen: true, content: 'Milestone reached. The Oracle marks your progress. Hold the line.', isLoading: false }); }
       } else if (held) {
         ouraToast.success(`Day ${newStreak} — streak continues`);
       } else {
