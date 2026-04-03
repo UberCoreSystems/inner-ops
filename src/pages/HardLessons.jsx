@@ -54,6 +54,7 @@ export default function HardLessons() {
   const [showForm, setShowForm] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
   const pendingLessonDeletes = useRef(new Map());
 
   // Scar Inventory state (first-time guided flow)
@@ -105,6 +106,32 @@ export default function HardLessons() {
       setShowScarFlow(true);
     }
   }, [initialLoading, lessons.length]);
+
+  // Auto-open the form if we arrived with an Oracle-extracted draft (from Journal bridge)
+  useEffect(() => {
+    if (initialLoading || lessons.length === 0) return;
+    const extracted = lessons.find(l => l.isOracleExtracted && !l.isFinalized && !l._autoOpened);
+    if (extracted) {
+      // Mark it so we don't re-trigger on subsequent renders
+      extracted._autoOpened = true;
+      setNewLesson({
+        eventCategory: extracted.eventCategory || '',
+        eventDescription: extracted.eventDescription || '',
+        myAssumption: extracted.myAssumption || '',
+        signalIgnored: extracted.signalIgnored || '',
+        costs: Array.isArray(extracted.costs) ? extracted.costs : [],
+        costDescription: extracted.costDescription || '',
+        extractedLesson: extracted.extractedLesson || '',
+        ruleGoingForward: extracted.ruleGoingForward || '',
+        isFinalized: false,
+      });
+      setEditingLesson(extracted);
+      setShowForm(true);
+      setShowScarFlow(false);
+      // Scroll to top after a tick so the form is visible
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+    }
+  }, [initialLoading, lessons]);
 
   const submitScarInventory = async () => {
     const filled = scarInventory.filter(s => s.trim().length > 0);
@@ -227,9 +254,14 @@ export default function HardLessons() {
     return true;
   };
 
+  const handleOracleReaction = (reactionId) => {
+    setPendingOracleReaction(reactionId);
+  };
+
   const seekOracleExtraction = async () => {
     if (!validateLesson()) return;
 
+    setPendingOracleReaction(null);
     setOracleModal({ isOpen: true, content: '', isLoading: true });
 
     try {
@@ -265,7 +297,8 @@ Please help extract the core lesson and rule from this experience.
       const lessonData = {
         ...newLesson,
         isFinalized: finalize,
-        finalizedAt: finalize ? new Date().toISOString() : null
+        finalizedAt: finalize ? new Date().toISOString() : null,
+        ...(pendingOracleReaction ? { oracleReaction: pendingOracleReaction } : {})
       };
 
       if (editingLesson) {
@@ -1000,6 +1033,7 @@ Please help extract the core lesson and rule from this experience.
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         title="Oracle's Extraction Wisdom"
+        onReaction={handleOracleReaction}
       />
       </div>
     </div>

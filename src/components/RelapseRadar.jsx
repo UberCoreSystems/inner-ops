@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
-import { writeData, readUserData } from '../utils/firebaseUtils';
+import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { aiUtils } from '../utils/aiUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from './VoiceInputButton';
@@ -54,6 +54,7 @@ const RelapseRadar = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [aiInsights, setAiInsights] = useState([]);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const [currentEntryId, setCurrentEntryId] = useState(null);
 
   useEffect(() => {
     const setupAuthListener = async () => {
@@ -148,6 +149,15 @@ const RelapseRadar = () => {
     );
   };
 
+  const handleOracleReaction = async (reactionId) => {
+    if (!currentEntryId) return;
+    try {
+      await updateData('relapseEntries', currentEntryId, { oracleReaction: reactionId });
+    } catch (error) {
+      logger.error('Error saving Oracle reaction:', error);
+    }
+  };
+
   const submitRelapseEntry = async () => {
     try {
       setLoading(true);
@@ -159,10 +169,7 @@ const RelapseRadar = () => {
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
       const oracleFeedback = await generateAIFeedback('relapse', entryText, pastReflections);
       
-      // Show Oracle feedback in modal
-      setOracleModal({ isOpen: true, content: oracleFeedback, isLoading: false });
-
-      // Save the entry with Oracle feedback immediately
+      // Save the entry before revealing reactions so currentEntryId is set
       const entry = {
         selectedSelf,
         selectedHabits,
@@ -171,8 +178,12 @@ const RelapseRadar = () => {
         oracleFeedback
       };
 
-      await writeData('relapseEntries', entry);
-      setRelapseEntries(prev => [entry, ...prev]);
+      const savedEntry = await writeData('relapseEntries', entry);
+      setCurrentEntryId(savedEntry.id);
+      setRelapseEntries(prev => [savedEntry, ...prev]);
+
+      // Show Oracle feedback in modal
+      setOracleModal({ isOpen: true, content: oracleFeedback, isLoading: false });
       
       ouraToast.success('Relapse check-in logged');
 
@@ -474,9 +485,10 @@ const RelapseRadar = () => {
       {/* Oracle Modal */}
       <OracleModal
         isOpen={oracleModal.isOpen}
-        onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
+        onClose={() => { setOracleModal({ isOpen: false, content: '', isLoading: false }); setCurrentEntryId(null); }}
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
+        onReaction={handleOracleReaction}
       />
     </div>
   );

@@ -155,6 +155,7 @@ function buildSystemPrompt(moduleName, tone) {
     hardlessons: "This is a Hard Lesson extraction — the user is converting a painful experience into an enforceable rule.",
     blackmirror: "This is a Black Mirror entry — the user is examining his screen time, digital consumption, and its effect on his clarity. He has logged concrete data (hours, fog level, interaction quality).",
     emergency: "This is an EMERGENCY — the user is in the middle of an acute struggle right now. An urge, a crisis, intense pressure. He reached for help instead of acting out.",
+    lessonextraction: "STRUCTURED_EXTRACTION",
   };
 
   const toneColors = {
@@ -170,6 +171,30 @@ function buildSystemPrompt(moduleName, tone) {
   const toneNote = toneColors[tone] ? `\nTone color: ${toneColors[tone]}` : "";
   const isEmergency = normalizedModule === "emergency";
   const wordLimit = isEmergency ? "100–150 words." : "150–220 words.";
+
+  // Lesson extraction — returns structured JSON, not prose
+  if (normalizedModule === "lessonextraction") {
+    return `You are an analytical advisor. A man wrote a journal entry that contains pain, failure, regret, or a costly decision. Your job is to extract a Hard Lesson from it.
+
+Read the entry carefully. Then return ONLY a valid JSON object with these fields:
+
+{
+  "eventDescription": "What actually happened — facts only, stripped of emotion and narrative. 1-2 sentences.",
+  "myAssumption": "What he believed or assumed that turned out to be false. Start with 'I assumed...' or 'I believed...'",
+  "signalIgnored": "The warning sign he noticed but dismissed. Start with 'I ignored...' or 'I noticed but dismissed...'",
+  "costDescription": "What it actually cost him — be specific and concrete.",
+  "extractedLesson": "The core lesson in one sentence. Brutally precise.",
+  "ruleGoingForward": "An enforceable rule — not advice. Format: 'If... then...' or 'Never...' or 'Always...'",
+  "suggestedCategory": "One of: relationship_misjudgment, leadership_error, boundary_failure, overconfidence, underestimation, ignored_intuition, trust_without_verification, other",
+  "suggestedCosts": ["Array of applicable cost types from: emotional, financial, relational, physical, professional, time"]
+}
+
+Rules:
+- Return ONLY the JSON object. No explanation, no preamble, no markdown code blocks.
+- Every field must be filled. Do not leave any empty.
+- The rule must be enforceable — something he can actually follow, not a wish.
+- Be specific to what he wrote. Do not generalize.`;
+  }
 
   if (isEmergency) {
     return `You are the Oracle — a grounded, immediate presence.

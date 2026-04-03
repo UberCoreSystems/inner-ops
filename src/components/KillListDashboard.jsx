@@ -166,6 +166,17 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     });
   };
 
+  const handleOracleReaction = async (reactionId) => {
+    if (!oracleModal.target) return;
+    try {
+      const db = getDb();
+      const targetRef = doc(db, 'killTargets', oracleModal.target.id);
+      await updateDoc(targetRef, { oracleReaction: reactionId });
+    } catch (error) {
+      logger.error('Error saving Oracle reaction:', error);
+    }
+  };
+
   // Handle Oracle feedback generation and save it
   const handleOracleFeedbackGenerated = async (targetId, feedback) => {
     setOracleFeedbacks(prev => ({ ...prev, [targetId]: feedback }));
@@ -528,6 +539,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             handleOracleFeedbackGenerated(oracleModal.target.id, feedback);
           }
         }}
+        onReaction={handleOracleReaction}
       />
     </div>
   );

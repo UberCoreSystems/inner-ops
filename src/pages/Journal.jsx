@@ -616,28 +616,79 @@ export default function Journal() {
     }
   };
 
-  // Extract hard lesson from journal entry — creates a draft stub and navigates
+  // Extract hard lesson from journal entry — Oracle analyzes, then navigates with pre-filled data
+  const [extracting, setExtracting] = useState(null); // entry ID being extracted
   const extractLessonFromEntry = async (journalEntry) => {
+    setExtracting(journalEntry.id);
     try {
+      // Ask Oracle to extract structured lesson fields from journal content
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+
+      const result = await oracleFn({
+        entryText: journalEntry.content,
+        moduleName: 'lessonExtraction',
+        userContext: {},
+        tone: 'stoic',
+      });
+
+      // Parse the structured JSON from Oracle
+      let extracted = {};
+      try {
+        const raw = (result.data.feedback || '').trim();
+        // Strip markdown code blocks if present
+        const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+        extracted = JSON.parse(cleaned);
+      } catch {
+        logger.warn('Oracle returned non-JSON for lesson extraction, using journal content as fallback');
+      }
+
+      // Create a pre-filled draft lesson
       await writeData('hardLessons', {
-        eventCategory: '',
-        eventDescription: journalEntry.content,
-        myAssumption: '',
-        signalIgnored: '',
-        costs: [],
-        costDescription: '',
-        extractedLesson: '',
-        ruleGoingForward: '',
+        eventCategory: extracted.suggestedCategory || '',
+        eventDescription: extracted.eventDescription || journalEntry.content,
+        myAssumption: extracted.myAssumption || '',
+        signalIgnored: extracted.signalIgnored || '',
+        costs: Array.isArray(extracted.suggestedCosts) ? extracted.suggestedCosts : [],
+        costDescription: extracted.costDescription || '',
+        extractedLesson: extracted.extractedLesson || '',
+        ruleGoingForward: extracted.ruleGoingForward || '',
         isFinalized: false,
         isScarStub: false,
+        isOracleExtracted: true,
         sourceJournalId: journalEntry.id,
         createdAt: new Date().toISOString(),
       });
-      ouraToast.success('Draft lesson created — complete the extraction');
+
+      ouraToast.success('Oracle extracted a lesson — review and finalize it');
       navigate('/hardlessons');
     } catch (error) {
-      logger.error('Error creating lesson from journal:', error);
-      ouraToast.error('Failed to create lesson');
+      logger.error('Error extracting lesson from journal:', error);
+      // Fallback: create a basic draft with just the journal content
+      try {
+        await writeData('hardLessons', {
+          eventCategory: '',
+          eventDescription: journalEntry.content,
+          myAssumption: '',
+          signalIgnored: '',
+          costs: [],
+          costDescription: '',
+          extractedLesson: '',
+          ruleGoingForward: '',
+          isFinalized: false,
+          isScarStub: false,
+          sourceJournalId: journalEntry.id,
+          createdAt: new Date().toISOString(),
+        });
+        ouraToast.success('Draft lesson created — complete the extraction');
+        navigate('/hardlessons');
+      } catch (fallbackError) {
+        logger.error('Fallback also failed:', fallbackError);
+        ouraToast.error('Failed to create lesson');
+      }
+    } finally {
+      setExtracting(null);
     }
   };
 
@@ -1131,10 +1182,20 @@ export default function Journal() {
                             {PAIN_SIGNALS.test(entry.content || '') && (
                               <button
                                 onClick={() => extractLessonFromEntry(entry)}
-                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#f59e0b] hover:text-[#fbbf24] transition-colors w-full"
+                                disabled={extracting === entry.id}
+                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#f59e0b] hover:text-[#fbbf24] disabled:text-[#3a3a3a] transition-colors w-full"
                               >
-                                <span>⚡</span>
-                                <span>This sounds like it cost you something. Extract the lesson.</span>
+                                {extracting === entry.id ? (
+                                  <>
+                                    <span className="inline-block w-3 h-3 border border-[#f59e0b] border-t-transparent rounded-full animate-spin" />
+                                    <span>Oracle is extracting the lesson...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>⚡</span>
+                                    <span>This sounds like it cost you something. Extract the lesson.</span>
+                                  </>
+                                )}
                               </button>
                             )}
                           </div>

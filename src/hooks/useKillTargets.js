@@ -335,10 +335,12 @@ export const useTodaysKillTargets = (realtime = false) => {
 };
 
 /**
- * Hook for ALL kill targets regardless of creation date or status.
+ * Hook for ALL kill targets regardless of creation date.
+ * Returns all targets for stats, but `activeTargets` filtered to active only.
  * Used by the Dashboard "Active Battles" widget.
  */
 export const useActiveKillTargets = (realtime = true) => {
+  const [allTargets, setAllTargets] = useState([]);
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -356,25 +358,27 @@ export const useActiveKillTargets = (realtime = true) => {
         where('userId', '==', userId)
       );
 
+      const parseTargets = (snap) => {
+        const fetched = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id, ...data,
+            createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
+            lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
+            completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null),
+          };
+        });
+        // Active targets sorted by streak then age
+        const active = fetched
+          .filter(t => t.status === 'active')
+          .sort((a, b) => (b.streak || 0) - (a.streak || 0) || new Date(a.createdAt) - new Date(b.createdAt));
+        setAllTargets(fetched);
+        setTargets(active);
+      };
+
       if (realtime) {
         const unsub = onSnapshot(q, (snap) => {
-          const fetched = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id, ...data,
-              createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
-              lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
-              completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null),
-            };
-          });
-          // Sort: active first, then highest streak, then longest active
-          fetched.sort((a, b) => {
-            const statusOrder = { active: 0, killed: 1, escaped: 2 };
-            const statusDiff = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
-            if (statusDiff !== 0) return statusDiff;
-            return (b.streak || 0) - (a.streak || 0) || new Date(b.createdAt) - new Date(a.createdAt);
-          });
-          setTargets(fetched);
+          parseTargets(snap);
           setLoading(false);
           setError(null);
         }, (err) => { setError(err.message); setLoading(false); });
@@ -382,22 +386,7 @@ export const useActiveKillTargets = (realtime = true) => {
       } else {
         try {
           const snap = await getDocs(q);
-          const fetched = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id, ...data,
-              createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
-              lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
-              completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null),
-            };
-          });
-          fetched.sort((a, b) => {
-            const statusOrder = { active: 0, killed: 1, escaped: 2 };
-            const statusDiff = (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
-            if (statusDiff !== 0) return statusDiff;
-            return (b.streak || 0) - (a.streak || 0) || new Date(b.createdAt) - new Date(a.createdAt);
-          });
-          setTargets(fetched);
+          parseTargets(snap);
         } catch (err) { setError(err.message); }
         setLoading(false);
       }
@@ -463,17 +452,18 @@ export const useActiveKillTargets = (realtime = true) => {
   };
 
   const stats = {
-    total: targets.length,
-    killed: targets.filter(t => t.status === 'killed').length,
-    escaped: targets.filter(t => t.status === 'escaped').length,
-    active: targets.filter(t => t.status === 'active').length,
-    completionRate: targets.length > 0
-      ? (targets.filter(t => t.status === 'killed').length / targets.length) * 100
+    total: allTargets.length,
+    killed: allTargets.filter(t => t.status === 'killed').length,
+    escaped: allTargets.filter(t => t.status === 'escaped').length,
+    active: targets.length,
+    completionRate: allTargets.length > 0
+      ? (allTargets.filter(t => t.status === 'killed').length / allTargets.length) * 100
       : 0,
   };
 
   return {
-    targets,
+    targets,       // active only — displayed in the widget
+    allTargets,    // all statuses — for stats and patterns
     loading,
     error,
     stats,
