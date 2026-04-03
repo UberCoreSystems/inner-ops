@@ -573,7 +573,7 @@ const BlackMirror = () => {
 
         {!analyticsReport ? (
           <p className="text-gray-600 text-sm">Loading analysis...</p>
-        ) : analyticsReport.data.meta.counts.blackMirror < 3 ? (
+        ) : (analyticsReport.data.meta.counts.blackMirror < 3 || analyticsReport.data.meta.counts.journal < 3 || analyticsReport.data.meta.counts.relapse < 2) ? (
           <div className="py-6 text-center">
             <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center text-2xl">
               🔍
