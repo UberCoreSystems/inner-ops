@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import logger from '../utils/logger';
+import { ouraToast } from '../utils/toast';
 
 const REACTIONS = [
   { id: 'landed',   label: 'This landed',           color: '#22c55e', icon: '◉' },
@@ -63,10 +64,15 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     }
   };
 
-  const handleReaction = (reactionId) => {
+  const handleReaction = async (reactionId) => {
     setSelectedReaction(reactionId);
     if (onReaction) {
-      onReaction(reactionId);
+      try {
+        await onReaction(reactionId);
+        ouraToast.success('Reaction saved', { duration: 1500 });
+      } catch (error) {
+        logger.error('Failed to save Oracle reaction:', error);
+      }
     }
   };
 
