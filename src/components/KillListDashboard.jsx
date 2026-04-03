@@ -196,18 +196,24 @@ const KillListDashboard = React.memo(function KillListDashboard() {
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'high': return 'text-[#ef4444]';
-      case 'medium': return 'text-[#f59e0b]';
-      case 'low': return 'text-[#22c55e]';
+      case 'high':
+      case 'core': return 'text-[#ef4444]';
+      case 'medium':
+      case 'deep': return 'text-[#f59e0b]';
+      case 'low':
+      case 'surface': return 'text-[#22c55e]';
       default: return 'text-[#5a5a5a]';
     }
   };
 
   const getPriorityIcon = (priority) => {
     switch (priority) {
-      case 'high': return <span className="w-2 h-2 rounded-full bg-[#ef4444] inline-block" style={{ boxShadow: '0 0 8px #ef4444' }}></span>;
-      case 'medium': return <span className="w-2 h-2 rounded-full bg-[#f59e0b] inline-block" style={{ boxShadow: '0 0 8px #f59e0b' }}></span>;
-      case 'low': return <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block" style={{ boxShadow: '0 0 8px #22c55e' }}></span>;
+      case 'high':
+      case 'core': return <span className="w-2 h-2 rounded-full bg-[#ef4444] inline-block" style={{ boxShadow: '0 0 8px #ef4444' }}></span>;
+      case 'medium':
+      case 'deep': return <span className="w-2 h-2 rounded-full bg-[#f59e0b] inline-block" style={{ boxShadow: '0 0 8px #f59e0b' }}></span>;
+      case 'low':
+      case 'surface': return <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block" style={{ boxShadow: '0 0 8px #22c55e' }}></span>;
       default: return <span className="w-2 h-2 rounded-full bg-[#5a5a5a] inline-block"></span>;
     }
   };
@@ -317,16 +323,16 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  {getPriorityIcon(target.priority)}
+                  {getPriorityIcon(target.priority || target.difficulty)}
                   <h3 className="font-medium text-white">{target.title}</h3>
-                  <span className={`px-2 py-0.5 text-xs font-light rounded-full border ${getStatusColor(target.status)}`}>
-                    {target.status.toUpperCase()}
+                  <span className={`px-2 py-0.5 text-xs font-light rounded-full border ${getStatusColor(target.status || 'active')}`}>
+                    {(target.status || 'active').toUpperCase()}
                   </span>
                 </div>
                 <p className="text-[#8a8a8a] text-sm mb-3 font-light">{target.description}</p>
                 <div className="flex items-center gap-4 text-xs text-[#5a5a5a]">
-                  <span className={getPriorityColor(target.priority)}>
-                    {target.priority.toUpperCase()} PRIORITY
+                  <span className={getPriorityColor(target.priority || target.difficulty)}>
+                    {(target.difficulty || target.priority || 'deep').toUpperCase()}
                   </span>
                   {target.completedAt && (
                     <span>
