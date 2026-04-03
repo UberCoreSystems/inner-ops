@@ -699,7 +699,7 @@ const KillList = () => {
                   }`}>
                     {target.status}
                   </span>
-                  <span className="text-[#3a3a3a] text-xs">Day {daysActive}</span>
+                  <span className="text-[#3a3a3a] text-xs">Day {daysActive} · {new Date(target.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: new Date(target.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })}</span>
                 </div>
               </>
             )}
@@ -836,7 +836,7 @@ const KillList = () => {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
           <h1 className="text-3xl font-bold text-white mb-2">Kill List</h1>
-          <p className="text-[#8a8a8a]">Eliminate negative patterns and destructive habits</p>
+          <p className="text-[#8a8a8a]">Name what needs to die. Hold the contract.</p>
         </header>
 
         {/* Stats */}
