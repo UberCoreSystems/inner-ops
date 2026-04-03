@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { authService } from '../utils/authService';
-import { writeData, readUserData, updateData, deleteData } from '../utils/firebaseUtils';
+import { writeData, updateData, deleteData, subscribeToUserData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
@@ -153,34 +153,40 @@ const KillList = () => {
     return new Date().toISOString().split('T')[0];
   };
 
-  // Load targets from Firebase
-  const loadTargets = useCallback(async () => {
-    if (!user) {
-      logger.log("⏳ KillList: Waiting for user authentication...");
-      return;
-    }
-
-    try {
-      logger.log("📡 KillList: Loading targets for user:", user.uid);
-      setLoading(true);
-      setLoadError(false);
-      const targetsData = await readUserData('killTargets');
-      logger.log(`📋 KillList: Loaded ${targetsData.length} kill targets`);
-      setTargets(targetsData);
-    } catch (error) {
-      logger.error('❌ KillList: Error loading targets:', error);
-      setLoadError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  // Set up real-time listener when user changes
+  // Set up real-time Firestore listener when user changes
   useEffect(() => {
-    if (user) {
-      loadTargets();
-    }
-  }, [user, loadTargets]);
+    if (!user) return;
+
+    let unsubscribe = null;
+    let mounted = true;
+
+    setLoading(true);
+    setLoadError(false);
+    logger.log("📡 KillList: Subscribing to kill targets for user:", user.uid);
+
+    subscribeToUserData('killTargets', (data) => {
+      if (!mounted) return;
+      logger.log(`📋 KillList: Received ${data.length} kill targets from snapshot`);
+      setTargets(data);
+      setLoading(false);
+    }).then((unsub) => {
+      if (mounted) {
+        unsubscribe = unsub;
+      } else {
+        unsub();
+      }
+    }).catch((error) => {
+      if (!mounted) return;
+      logger.error('❌ KillList: Subscription error:', error);
+      setLoadError(true);
+      setLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user]);
 
   const addTarget = async () => {
     if (!newTarget.trim() || loading) return;

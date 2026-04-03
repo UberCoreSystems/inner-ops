@@ -1,4 +1,4 @@
-import { doc, setDoc, collection, query, where, getDocs, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { enableAnonymousAuth, enableDevMode, getCurrentUserOrMock, getAuth, getDb } from '../firebase.js';
 import logger from './logger';
 import { localStorageUtils } from './localStorage';
@@ -269,6 +269,58 @@ export const readTestData = async (collectionName) => {
 };
 
 export const readData = readUserData;
+
+// Subscribe to real-time updates for a user-scoped collection.
+// Calls `callback(data)` immediately on first snapshot and on every change.
+// Returns a Promise that resolves to an unsubscribe function.
+export const subscribeToUserData = async (collectionName, callback) => {
+  try {
+    const auth = await getAuth();
+    const db = await getDb();
+    const user = auth.currentUser;
+
+    if (!user) {
+      logger.warn("⚠️ User not authenticated - cannot subscribe to Firestore data");
+      callback([]);
+      return () => {};
+    }
+
+    const colRef = collection(db, collectionName);
+    const q = query(colRef, where("userId", "==", user.uid));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(docSnap => {
+        const docData = docSnap.data();
+        let createdAt = new Date();
+        if (docData.timestamp?.toDate) {
+          createdAt = docData.timestamp.toDate();
+        } else if (docData.createdAt?.toDate) {
+          createdAt = docData.createdAt.toDate();
+        } else if (typeof docData.createdAt === 'string') {
+          createdAt = new Date(docData.createdAt);
+        } else if (typeof docData.timestamp === 'string') {
+          createdAt = new Date(docData.timestamp);
+        }
+        return {
+          id: docSnap.id,
+          ...docData,
+          createdAt,
+          timestamp: createdAt,
+        };
+      });
+      data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      callback(data);
+    }, (error) => {
+      logger.error(`❌ Firestore subscription error for ${collectionName}:`, error);
+    });
+
+    return unsubscribe;
+  } catch (error) {
+    logger.error(`❌ Failed to set up subscription for ${collectionName}:`, error);
+    callback([]);
+    return () => {};
+  }
+};
 
 // Write user data (for collections like arrays of entries)
 export const writeUserData = async (collectionName, dataArray) => {
