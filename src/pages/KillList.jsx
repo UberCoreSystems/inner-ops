@@ -352,11 +352,13 @@ const KillList = () => {
 
       await updateData('killTargets', autopsyTarget.id, {
         escapeData,
+        status: 'escaped',
+        escapedAt: new Date(),
         lastUpdated: new Date(),
       });
 
       setTargets(prev => prev.map(t =>
-        t.id === autopsyTarget.id ? { ...t, escapeData } : t
+        t.id === autopsyTarget.id ? { ...t, escapeData, status: 'escaped', escapedAt: new Date() } : t
       ));
 
       // Oracle feedback on escape
@@ -450,56 +452,11 @@ const KillList = () => {
     pendingTargetDeletes.current.set(targetId, { timeoutId, target: targetToDelete, index: targetIndex, toastId });
   }, []);
 
-  const markAsEscaped = useCallback(async (targetId) => {
-    // Open autopsy flow instead of immediately escaping
+  const markAsEscaped = useCallback((targetId) => {
+    // Always opens autopsy flow — status update happens in submitAutopsy()
     const target = targetsRef.current.find(t => t.id === targetId);
     if (target) {
       setAutopsyTarget(target);
-      return;
-    }
-
-    try {
-      logger.log("🏃 KillList: Marking target as escaped:", targetId);
-
-      const targetUpdate = {
-        status: 'escaped',
-        escapedAt: new Date(),
-        lastUpdated: new Date()
-      };
-
-      await updateData('killTargets', targetId, targetUpdate);
-      logger.log("✅ KillList: Target marked as escaped");
-      
-      ouraToast.warning('Target marked as escaped');
-
-      // Update local state immediately
-      setTargets(prev => prev.map(target => 
-        target.id === targetId 
-          ? { ...target, ...targetUpdate }
-          : target
-      ));
-
-      // Show Oracle feedback for escaped target
-      const escapedTarget = targetsRef.current.find(t => t.id === targetId);
-      setOracleModal({ isOpen: true, content: '', isLoading: true });
-      
-      try {
-        const escapedCount = targetsRef.current.filter(t => t.status === 'escaped').length + 1;
-        const escapedCategoryLabel = categories.find(c => c.value === escapedTarget?.category)?.label || escapedTarget?.category || 'target';
-        const escapeText = `"${escapedTarget?.title || 'my target'}" escaped today — it got away from me. This is a ${escapedCategoryLabel} I said I would eliminate, and I failed to hold the line. That's ${escapedCount} escapes on my record now. I need to face what actually happened rather than the excuse I'll tell myself.`;
-        const feedback = await generateAIFeedback('killList', escapeText, targetsRef.current.slice(-3).map(t => t.title));
-        setOracleModal({ isOpen: true, content: feedback, isLoading: false });
-      } catch (error) {
-        logger.error('Oracle feedback error:', error);
-        setOracleModal({ 
-          isOpen: true, 
-          content: "The Oracle recognizes the strategic value of retreat. Sometimes the warrior must withdraw to fight another day. Study your patterns and return stronger.", 
-          isLoading: false 
-        });
-      }
-    } catch (error) {
-      logger.error('❌ KillList: Error marking target as escaped:', error);
-      ouraToast.error('Failed to mark target as escaped');
     }
   }, []);
 
