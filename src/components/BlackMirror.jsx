@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { writeData, readUserData } from '../utils/firebaseUtils';
+import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
@@ -44,8 +44,10 @@ const BlackMirror = () => {
   const [aiFeedback, setAiFeedback] = useState('');
   const [loadingFeedback, setLoadingFeedback] = useState(false);
   const [showOracleModal, setShowOracleModal] = useState(false);
+  const [currentEntryId, setCurrentEntryId] = useState(null);
   const [analyticsReport, setAnalyticsReport] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [expandedFeedback, setExpandedFeedback] = useState(new Set());
 
   // Calculate Black Mirror Index - stable reference
   const calculateBlackMirrorIndex = useCallback((screenTimeValue, mentalFogValue, interactionValue, unconsciousCheckValue) => {
@@ -141,6 +143,15 @@ const BlackMirror = () => {
     return 'text-green-400';
   }, []);
 
+  const handleOracleReaction = async (reactionId) => {
+    if (!currentEntryId) return;
+    try {
+      await updateData('blackMirrorEntries', currentEntryId, { oracleReaction: reactionId });
+    } catch (error) {
+      logger.error('Error saving Oracle reaction:', error);
+    }
+  };
+
   // Handle form submission
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
@@ -186,12 +197,13 @@ const BlackMirror = () => {
         setAiFeedback('The Oracle remains silent for now...');
       }
 
-      setLoadingFeedback(false);
-
-      // Save to Firebase
+      // Save to Firebase before revealing reactions so currentEntryId is set
       const savedEntry = await writeData('blackMirrorEntries', finalEntry);
+      setCurrentEntryId(savedEntry.id);
       setEntries(prev => [savedEntry, ...prev.slice(0, 49)]);
       loadAnalytics();
+
+      setLoadingFeedback(false);
 
       ouraToast.success('Black Mirror entry logged');
 
@@ -474,11 +486,23 @@ const BlackMirror = () => {
                   <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-red rounded-xl">
                     <h4 className="text-oura-red font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
                     <div className="text-gray-300 text-xs leading-relaxed">
-                      {entry.oracleFeedback.length > 200 ? 
-                        `${entry.oracleFeedback.substring(0, 200)}...` : 
-                        entry.oracleFeedback
+                      {entry.oracleFeedback.length > 200 && !expandedFeedback.has(entry.id)
+                        ? `${entry.oracleFeedback.substring(0, 200)}...`
+                        : entry.oracleFeedback
                       }
                     </div>
+                    {entry.oracleFeedback.length > 200 && (
+                      <button
+                        onClick={() => setExpandedFeedback(prev => {
+                          const next = new Set(prev);
+                          next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id);
+                          return next;
+                        })}
+                        className="mt-2 text-oura-red text-xs hover:text-red-400 transition-colors"
+                      >
+                        {expandedFeedback.has(entry.id) ? 'Show less' : 'Show more'}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -610,9 +634,10 @@ const BlackMirror = () => {
       {/* Oracle Modal */}
       <OracleModal
         isOpen={showOracleModal}
-        onClose={() => setShowOracleModal(false)}
+        onClose={() => { setShowOracleModal(false); setCurrentEntryId(null); }}
         feedback={aiFeedback}
         loading={loadingFeedback}
+        onReaction={handleOracleReaction}
       />
     </div>
     </div>
