@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { writeData, readUserData, deleteData } from '../utils/firebaseUtils';
+import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import VirtualizedList from '../components/VirtualizedList';
@@ -55,7 +55,9 @@ export default function HardLessons() {
   const [editingLesson, setEditingLesson] = useState(null);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
+  const [pendingOracleWisdom, setPendingOracleWisdom] = useState('');
   const pendingLessonDeletes = useRef(new Map());
+  const autoOpenedIds = useRef(new Set());
 
   // Scar Inventory state (first-time guided flow)
   const [scarInventory, setScarInventory] = useState(['', '', '']);
@@ -110,10 +112,10 @@ export default function HardLessons() {
   // Auto-open the form if we arrived with an Oracle-extracted draft (from Journal bridge)
   useEffect(() => {
     if (initialLoading || lessons.length === 0) return;
-    const extracted = lessons.find(l => l.isOracleExtracted && !l.isFinalized && !l._autoOpened);
+    const extracted = lessons.find(l => l.isOracleExtracted && !l.isFinalized && !autoOpenedIds.current.has(l.id));
     if (extracted) {
-      // Mark it so we don't re-trigger on subsequent renders
-      extracted._autoOpened = true;
+      // Track in a session ref so reloads of lessons state don't re-trigger the effect
+      autoOpenedIds.current.add(extracted.id);
       setNewLesson({
         eventCategory: extracted.eventCategory || '',
         eventDescription: extracted.eventDescription || '',
@@ -262,6 +264,7 @@ export default function HardLessons() {
     if (!validateLesson()) return;
 
     setPendingOracleReaction(null);
+    setPendingOracleWisdom('');
     setOracleModal({ isOpen: true, content: '', isLoading: true });
 
     try {
@@ -276,6 +279,7 @@ Please help extract the core lesson and rule from this experience.
 `;
 
       const oracleWisdom = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
+      setPendingOracleWisdom(oracleWisdom);
       setOracleModal({ isOpen: true, content: oracleWisdom, isLoading: false });
 
     } catch (error) {
@@ -298,7 +302,8 @@ Please help extract the core lesson and rule from this experience.
         ...newLesson,
         isFinalized: finalize,
         finalizedAt: finalize ? new Date().toISOString() : null,
-        ...(pendingOracleReaction ? { oracleReaction: pendingOracleReaction } : {})
+        ...(pendingOracleReaction ? { oracleReaction: pendingOracleReaction } : {}),
+        ...(pendingOracleWisdom ? { oracleWisdom: pendingOracleWisdom } : {})
       };
 
       if (editingLesson) {
@@ -309,9 +314,8 @@ Please help extract the core lesson and rule from this experience.
           return;
         }
 
-        lessonData.id = editingLesson.id;
         lessonData.originalCreatedAt = editingLesson.createdAt;
-        await writeData('hardLessons', lessonData, editingLesson.id);
+        await updateData('hardLessons', editingLesson.id, lessonData);
       } else {
         await writeData('hardLessons', lessonData);
       }
@@ -347,6 +351,8 @@ Please help extract the core lesson and rule from this experience.
     });
     setShowForm(false);
     setEditingLesson(null);
+    setPendingOracleWisdom('');
+    setPendingOracleReaction(null);
   };
 
   const editLesson = (lesson) => {
@@ -926,6 +932,17 @@ Please help extract the core lesson and rule from this experience.
                             {lesson.ruleGoingForward}
                           </p>
                         </div>
+
+                        {/* Oracle wisdom — saved from extraction */}
+                        {lesson.oracleWisdom && typeof lesson.oracleWisdom === 'string' && (
+                          <div className="border-t border-[#1a1a1a] pt-5">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-[#a855f7]" />
+                              <h4 className="text-[#5a5a5a] font-medium text-xs uppercase tracking-wider">Oracle</h4>
+                            </div>
+                            <p className="text-[#8a8a8a] text-sm leading-relaxed">{lesson.oracleWisdom}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
