@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
-import VirtualizedList from '../components/VirtualizedList';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
@@ -783,11 +782,8 @@ Please help extract the core lesson and rule from this experience.
                 </button>
               </div>
             ) : filteredLessons.length > 0 ? (
-              <VirtualizedList
-                items={filteredLessons}
-                itemHeight={420}
-                maxHeight={800}
-                renderItem={({ item: lesson }) => {
+              <div className="space-y-4">
+                {filteredLessons.map((lesson) => {
                   const category = eventCategories.find(cat => cat.value === lesson.eventCategory);
                   const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
 
@@ -952,8 +948,8 @@ Please help extract the core lesson and rule from this experience.
                       </div>
                     </div>
                   );
-                }}
-              />
+                })}
+              </div>
             ) : (
               <div>
                 {searchQuery.trim() ? (
