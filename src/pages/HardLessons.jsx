@@ -875,7 +875,7 @@ Please help extract the core lesson and rule from this experience.
                           </div>
                         </div>
 
-                        <div className="flex space-x-2">
+                        <div className="flex space-x-2 items-center">
                           {!lesson.isFinalized && (
                             <button
                               onClick={() => editLesson(lesson)}
@@ -891,6 +891,9 @@ Please help extract the core lesson and rule from this experience.
                             >
                               🗑️
                             </button>
+                          )}
+                          {lesson.isFinalized && (
+                            <span className="text-[#8a8a8a] text-xs">Permanent record. Create a new entry if the rule was violated again.</span>
                           )}
                         </div>
                       </div>
