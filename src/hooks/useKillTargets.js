@@ -344,6 +344,7 @@ export const useActiveKillTargets = (realtime = true) => {
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cleanup;
@@ -393,10 +394,12 @@ export const useActiveKillTargets = (realtime = true) => {
     };
     setup();
     return () => cleanup?.();
-  }, [realtime]);
+  }, [realtime, retryKey]);
 
   const refetch = () => {
-    // Real-time mode self-updates; one-time mode requires re-mount — no-op here
+    setError(null);
+    setLoading(true);
+    setRetryKey(k => k + 1);
   };
 
   // Toggle target status between different states
