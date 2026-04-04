@@ -553,6 +553,12 @@ Please help extract the core lesson and rule from this experience.
             </div>
           </div>
 
+          {newLesson.isOracleFailed && (
+            <div className="mb-6 px-4 py-3 rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/5 text-sm text-[#ef4444]">
+              Oracle extraction failed. The event description below is raw journal content — edit it before finalizing.
+            </div>
+          )}
+
           <div className="space-y-6">
             {/* Event Category */}
             <div>

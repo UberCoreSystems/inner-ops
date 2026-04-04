@@ -678,10 +678,11 @@ export default function Journal() {
           ruleGoingForward: '',
           isFinalized: false,
           isScarStub: false,
+          isOracleFailed: true,
           sourceJournalId: journalEntry.id,
           createdAt: new Date().toISOString(),
         });
-        ouraToast.success('Draft lesson created — complete the extraction');
+        ouraToast.error('Oracle unavailable — draft created from your entry. Fill in the remaining fields manually.');
         navigate('/hardlessons');
       } catch (fallbackError) {
         logger.error('Fallback also failed:', fallbackError);
@@ -1178,8 +1179,8 @@ export default function Journal() {
                               </div>
                             )}
 
-                            {/* Extract Lesson bridge — shows on entries with pain/failure signals */}
-                            {PAIN_SIGNALS.test(entry.content || '') && (
+                            {/* Extract Lesson bridge — primary trigger for entries with pain/failure signals */}
+                            {PAIN_SIGNALS.test(entry.content || '') ? (
                               <button
                                 onClick={() => extractLessonFromEntry(entry)}
                                 disabled={extracting === entry.id}
@@ -1195,6 +1196,21 @@ export default function Journal() {
                                     <span>⚡</span>
                                     <span>This sounds like it cost you something. Extract the lesson.</span>
                                   </>
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => extractLessonFromEntry(entry)}
+                                disabled={extracting === entry.id}
+                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#3a3a3a] hover:text-[#5a5a5a] disabled:text-[#2a2a2a] transition-colors w-full"
+                              >
+                                {extracting === entry.id ? (
+                                  <>
+                                    <span className="inline-block w-3 h-3 border border-[#3a3a3a] border-t-transparent rounded-full animate-spin" />
+                                    <span>Extracting lesson...</span>
+                                  </>
+                                ) : (
+                                  <span>Extract hard lesson</span>
                                 )}
                               </button>
                             )}
