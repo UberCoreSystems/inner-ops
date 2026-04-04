@@ -795,7 +795,7 @@ Please help extract the core lesson and rule from this experience.
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-[#6366f1] text-xs uppercase tracking-widest font-medium">Weekly Autopsy</span>
-                              <span className="text-[#2a2a2a] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                              <span className="text-[#5a5a5a] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
                             </div>
                             <p className="text-[#d1d1d1] text-sm leading-relaxed truncate">{lesson.eventDescription}</p>
                           </div>
@@ -826,7 +826,7 @@ Please help extract the core lesson and rule from this experience.
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-[#f59e0b] text-xs uppercase tracking-widest font-medium">Scar</span>
-                              <span className="text-[#2a2a2a] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                              <span className="text-[#5a5a5a] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
                             </div>
                             <p className="text-[#d1d1d1] text-sm leading-relaxed truncate">{lesson.eventDescription}</p>
                           </div>
