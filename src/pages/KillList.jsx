@@ -94,6 +94,7 @@ const KillList = () => {
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [filterStatus, setFilterStatus] = useState('all');
@@ -153,6 +154,8 @@ const KillList = () => {
     return new Date().toISOString().split('T')[0];
   };
 
+  const loadTargets = () => setRetryKey(k => k + 1);
+
   // Set up real-time Firestore listener when user changes
   useEffect(() => {
     if (!user) return;
@@ -186,7 +189,7 @@ const KillList = () => {
       mounted = false;
       if (unsubscribe) unsubscribe();
     };
-  }, [user]);
+  }, [user, retryKey]);
 
   const addTarget = async () => {
     if (!newTarget.trim() || loading) return;
@@ -627,9 +630,9 @@ const KillList = () => {
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     // Average streak at kill
-    const killedTargets = targets.filter(t => t.status === 'killed' && (t.streak || t.longestStreak));
+    const killedTargets = targets.filter(t => t.status === 'killed' && t.streak);
     const avgStreakToKill = killedTargets.length > 0
-      ? Math.round(killedTargets.reduce((sum, t) => sum + (t.streak || t.longestStreak || 0), 0) / killedTargets.length)
+      ? Math.round(killedTargets.reduce((sum, t) => sum + t.streak, 0) / killedTargets.length)
       : null;
 
     // Category distribution
@@ -1138,12 +1141,7 @@ const KillList = () => {
                 </button>
               </div>
             ) : filteredTargets.length > 0 ? (
-              <VirtualizedList
-                items={filteredTargets}
-                renderItem={renderTargetItem}
-                itemHeight={220}
-                maxHeight={600}
-              />
+              <div>{filteredTargets.map((item, index) => renderTargetItem(item, index))}</div>
             ) : (
               <div className="oura-card p-12 text-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
                 <div className="text-6xl mb-4 opacity-30">🎯</div>
