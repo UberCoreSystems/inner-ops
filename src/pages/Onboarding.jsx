@@ -4,6 +4,7 @@ import { saveUserProfile } from '../utils/userProfile';
 import { writeData } from '../utils/firebaseUtils';
 import { track } from '../utils/analytics';
 import logger from '../utils/logger';
+import ouraToast from '../utils/toast';
 
 const DRIVERS = [
   { value: 'addiction', label: 'Breaking an addiction or compulsive pattern' },
@@ -71,11 +72,12 @@ export default function Onboarding() {
       }
 
       track('onboarding_completed', { primaryDriver: driver, feedbackStyle, hasKillTarget: !!killTarget.trim() });
+      navigate('/dashboard');
     } catch (err) {
       logger.error('Failed to save profile:', err);
+      ouraToast.error('Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
-      navigate('/dashboard');
     }
   };
 

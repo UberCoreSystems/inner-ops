@@ -348,13 +348,13 @@ const BlackMirror = () => {
           <div className="oura-card border-l-4 border-oura-red p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-light text-white tracking-tight">Black Mirror Index</h3>
-              <span className={`text-4xl font-light ${currentIndex > 0 ? getIndexColor(currentIndex) : 'text-gray-400'}`}>
-                {currentIndex > 0 ? currentIndex : '—'}
+              <span className={`text-4xl font-light ${currentIndex != null ? getIndexColor(currentIndex) : 'text-gray-400'}`}>
+                {currentIndex != null ? currentIndex : '—'}
               </span>
             </div>
             <p className="text-gray-400 text-sm italic mb-4 leading-relaxed">"{philosophicalInsight}"</p>
 
-            {currentIndex > 0 && (
+            {currentIndex != null && (
               <div className="mt-4 p-4 bg-oura-darker rounded-2xl">
                 <h4 className="text-oura-red font-light text-sm mb-2 tracking-wide">ANALYSIS</h4>
                 <p className="text-gray-300 text-sm leading-relaxed">

@@ -41,6 +41,7 @@ export const clarityScoreUtils = {
       relapseCount: userData.relapseEntries?.length || 0,
       blackMirrorCount: userData.blackMirrorEntries?.length || 0,
       lastUpdate: Math.max(
+        0,
         ...[userData.journalEntries, userData.killTargets, userData.relapseEntries, userData.blackMirrorEntries]
           .filter(arr => arr && arr.length > 0)
           .map(arr => new Date(arr[0].createdAt).getTime())
