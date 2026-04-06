@@ -573,10 +573,10 @@ export default function Dashboard() {
   const activeKillTargets = stats.killTargets || 0;
   
   // Cap each at 100% to prevent one area from inflating overall score
-  const journalProgress = Math.min(100, (stats.journalEntries / journalGoal) * 100);
-  const killProgress = Math.min(100, (activeKillTargets / killGoal) * 100);
-  const lessonsProgress = Math.min(100, (stats.hardLessons / lessonsGoal) * 100);
-  const mirrorProgress = Math.min(100, ((stats.blackMirrorEntries || 0) / mirrorGoal) * 100);
+  const journalProgress = Math.min(100, (countRecentEntries(rawUserData?.journalEntries) / journalGoal) * 100);
+  const killProgress = Math.min(100, (countRecentEntries(rawUserData?.killTargets?.filter(t => t.status === 'active')) / killGoal) * 100);
+  const lessonsProgress = Math.min(100, (countRecentEntries(rawUserData?.hardLessons) / lessonsGoal) * 100);
+  const mirrorProgress = Math.min(100, (countRecentEntries(rawUserData?.blackMirrorEntries) / mirrorGoal) * 100);
   
   // Weighted average with clear rationale:
   // - Journal (35%): Daily reflection is foundational to self-awareness
@@ -730,7 +730,7 @@ export default function Dashboard() {
         {isMonday && !killReportDismissed && !loading && rawUserData?.killTargets?.length > 0 && (() => {
           const now = Date.now();
           const weekAgo = now - 7 * 86400000;
-          const activeTargets = rawUserData.killTargets.filter(t => t.status === 'active' || t.status === 'killed');
+          const activeTargets = rawUserData.killTargets.filter(t => t.status === 'active');
           const held = activeTargets.filter(t => {
             const recentChecks = (t.checkIns || []).filter(c => new Date(c.date).getTime() > weekAgo);
             return recentChecks.length > 0 && recentChecks.every(c => c.held);
