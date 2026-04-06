@@ -515,7 +515,7 @@ export default function Dashboard() {
   
   const getPreviousRankThreshold = (score) => {
     if (score >= 1000) return 750;
-    if (score >= 750) return 500;
+    if (score >= 750) return 750;
     if (score >= 500) return 300;
     if (score >= 300) return 150;
     if (score >= 150) return 75;
