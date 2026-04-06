@@ -471,7 +471,7 @@ export default function Dashboard() {
           if (daysSinceJournal >= 5) { level = level === 'high' ? 'high' : 'elevated'; signals.push(`No journal entry in ${daysSinceJournal} days`); }
           if (negativeCount >= 2 && daysSinceRelapse < 14) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Negative mood pattern following recent relapse'); }
 
-          if (level !== 'clear' || recentJournal.length >= 3) {
+          if (level !== 'clear' && recentJournal.length >= 3) {
             setEarlyWarning({ level, signals, moodDots, daysSinceRelapse, daysSinceJournal });
           }
           
