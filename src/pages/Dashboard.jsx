@@ -502,33 +502,28 @@ export default function Dashboard() {
   const masteryPercent = Math.min(100, (clarityScore.totalScore / MASTERY_SCORE) * 100);
   
   // Also calculate rank progress for display context
+  const RANK_TIERS = [0, 25, 75, 150, 300, 500, 750, 1000];
+
   const getCurrentRankThreshold = (score) => {
-    if (score >= 1000) return 1000;
-    if (score >= 750) return 1000;
-    if (score >= 500) return 750;
-    if (score >= 300) return 500;
-    if (score >= 150) return 300;
-    if (score >= 75) return 150;
-    if (score >= 25) return 75;
-    return 25;
-  };
-  
-  const getPreviousRankThreshold = (score) => {
-    if (score >= 1000) return 750;
-    if (score >= 750) return 750;
-    if (score >= 500) return 300;
-    if (score >= 300) return 150;
-    if (score >= 150) return 75;
-    if (score >= 75) return 25;
-    if (score >= 25) return 0;
+    // Returns the floor of the tier the score currently sits in
+    for (let i = RANK_TIERS.length - 1; i >= 0; i--) {
+      if (score >= RANK_TIERS[i]) return RANK_TIERS[i];
+    }
     return 0;
   };
-  
-  const nextRankThreshold = getCurrentRankThreshold(clarityScore.totalScore);
-  const previousRankThreshold = getPreviousRankThreshold(clarityScore.totalScore);
+
+  const getNextRankThreshold = (score) => {
+    // Returns the ceiling of the current tier (floor of the next rank)
+    const current = getCurrentRankThreshold(score);
+    const idx = RANK_TIERS.indexOf(current);
+    return RANK_TIERS[Math.min(idx + 1, RANK_TIERS.length - 1)];
+  };
+
+  const currentRankFloor = getCurrentRankThreshold(clarityScore.totalScore);
+  const nextRankThreshold = getNextRankThreshold(clarityScore.totalScore);
   const pointsToNextRank = nextRankThreshold - clarityScore.totalScore;
-  const rangeSize = nextRankThreshold - previousRankThreshold;
-  const progressInRange = clarityScore.totalScore - previousRankThreshold;
+  const rangeSize = nextRankThreshold - currentRankFloor;
+  const progressInRange = clarityScore.totalScore - currentRankFloor;
   
   // Clarity Ring: Progress within current rank toward next rank
   // This gives actionable short-term motivation
