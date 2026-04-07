@@ -96,57 +96,6 @@ export const aiUtils = {
     return insights;
   },
 
-  // Analyze relapse patterns and provide recovery insights
-  analyzeRelapsePatterns: (relapseEntries) => {
-    if (relapseEntries.length === 0) {
-      return ["🌱 No relapse entries yet. Focus on building strong preventive habits and self-awareness."];
-    }
-
-    const insights = [];
-
-    // Common relapse selves
-    const selvesCount = relapseEntries.reduce((acc, entry) => {
-      acc[entry.selectedSelf] = (acc[entry.selectedSelf] || 0) + 1;
-      return acc;
-    }, {});
-
-    const topSelf = Object.entries(selvesCount).sort((a, b) => b[1] - a[1])[0];
-    if (topSelf) {
-      const selfInsights = {
-        'The Addict': 'Your addictive patterns need comprehensive support. Consider professional help and building strong accountability systems.',
-        'The Victim': 'Notice when you shift into victim mentality. Practice taking responsibility for what you can control.',
-        'The Procrastinator': 'Break tasks into smaller steps and focus on progress over perfection.',
-        'The Pessimist': 'Challenge negative thoughts with evidence. Practice gratitude and positive reframing.',
-        'The Perfectionist': 'Embrace "good enough" and celebrate progress. Perfection often prevents completion.',
-        'The People-Pleaser': 'Your worth isn\'t determined by others\' approval. Practice setting healthy boundaries.',
-        'The Imposter': 'Recognize your actual accomplishments. You belong and have valuable contributions to make.',
-        'The Self-Saboteur': 'Notice the voice that undermines your success. Ask what it\'s trying to protect you from.'
-      };
-
-      insights.push(`Most Common Pattern: ${topSelf[0]} - ${selfInsights[topSelf[0]]}`);
-    }
-
-    // Common habits
-    const allHabits = relapseEntries.flatMap(entry => entry.selectedHabits || []);
-    const habitCount = allHabits.reduce((acc, habit) => {
-      acc[habit] = (acc[habit] || 0) + 1;
-      return acc;
-    }, {});
-
-    const topHabit = Object.entries(habitCount).sort((a, b) => b[1] - a[1])[0];
-    if (topHabit) {
-      insights.push(`Primary Trigger Habit: ${topHabit[0]} - Create specific strategies to interrupt this pattern.`);
-    }
-
-    // Recovery recommendations
-    if (relapseEntries.length >= 3) {
-      insights.push("🔄 Multiple entries show you're building self-awareness. This recognition is the first step to lasting change.");
-      insights.push("💪 Consider what worked during your longest streak and how to recreate those conditions.");
-    }
-
-    return insights;
-  },
-
   // AI-powered insights and feedback system
   generateActionSteps: (userData) => {
     const steps = [];

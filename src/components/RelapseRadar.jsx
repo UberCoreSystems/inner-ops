@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
-import { aiUtils } from '../utils/aiUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
@@ -52,7 +51,6 @@ const RelapseRadar = () => {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [aiInsights, setAiInsights] = useState([]);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [currentEntryId, setCurrentEntryId] = useState(null);
 
@@ -90,10 +88,6 @@ const RelapseRadar = () => {
     try {
       const entries = await readUserData('relapseEntries');
       setRelapseEntries(entries);
-
-      // Generate AI insights based on patterns
-      const insights = aiUtils.analyzeRelapsePatterns(entries);
-      setAiInsights(insights);
     } catch (error) {
       logger.error("Error loading relapse entries:", error);
       setLoadError(true);
@@ -121,6 +115,29 @@ const RelapseRadar = () => {
     const latest = sorted[0].createdAt?.toDate?.() ?? (sorted[0].timestamp ? new Date(sorted[0].timestamp) : null);
     if (!latest) return null;
     return Math.floor((Date.now() - latest.getTime()) / (1000 * 60 * 60 * 24));
+  }, [relapseEntries]);
+
+  const topHabit = useMemo(() => {
+    const allHabits = relapseEntries.flatMap(e => e.selectedHabits || []);
+    if (allHabits.length === 0) return null;
+    const counts = {};
+    allHabits.forEach(h => { counts[h] = (counts[h] || 0) + 1; });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return top ? { name: top[0], count: top[1] } : null;
+  }, [relapseEntries]);
+
+  const weeklyEntryCounts = useMemo(() => {
+    const now = Date.now();
+    const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+    let thisWeek = 0;
+    let lastWeek = 0;
+    relapseEntries.forEach(e => {
+      const t = e.createdAt?.toDate?.()?.getTime() ?? e.timestamp ?? 0;
+      const age = now - t;
+      if (age < oneWeekMs) thisWeek++;
+      else if (age < 2 * oneWeekMs) lastWeek++;
+    });
+    return { thisWeek, lastWeek };
   }, [relapseEntries]);
 
   const filteredRelapseEntries = useMemo(() => {
@@ -238,16 +255,29 @@ const RelapseRadar = () => {
           <h2 className="text-3xl font-light text-white tracking-tight">Relapse Radar</h2>
           <div className="text-sm text-gray-500">Step {step} of 4</div>
         </div>
-        {/* AI Insights */}
-        {aiInsights.length > 0 && step === 1 && (
+        {/* Pattern Data */}
+        {relapseEntries.length > 0 && step === 1 && (
           <div className="mb-6 oura-card border-l-4 border-oura-purple p-5">
-            <h3 className="text-oura-purple font-light text-base mb-4 tracking-wide">AI RECOVERY INSIGHTS</h3>
+            <h3 className="text-oura-purple font-light text-base mb-4 tracking-wide">PATTERN DATA</h3>
             <div className="space-y-2">
-              {aiInsights.map((insight, idx) => (
-                <div key={idx} className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl leading-relaxed">
-                  {insight}
+              {archetypeFrequency[0] && (
+                <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
+                  Top archetype: {archetypeFrequency[0].name} ({archetypeFrequency[0].count}×)
                 </div>
-              ))}
+              )}
+              {topHabit && (
+                <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
+                  Top trigger: {topHabit.name} ({topHabit.count}×)
+                </div>
+              )}
+              {daysSinceLastRelapse !== null && (
+                <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
+                  Last entry: {daysSinceLastRelapse === 0 ? 'today' : `${daysSinceLastRelapse}d ago`}
+                </div>
+              )}
+              <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
+                This week: {weeklyEntryCounts.thisWeek} {weeklyEntryCounts.thisWeek === 1 ? 'entry' : 'entries'} / Last week: {weeklyEntryCounts.lastWeek}
+              </div>
             </div>
           </div>
         )}
