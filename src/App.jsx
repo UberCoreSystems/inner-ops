@@ -10,12 +10,12 @@ import './App.css';
 
 // Core components (loaded immediately)
 import Navbar from './components/Navbar';
-import BlackMirror from './components/BlackMirror';
 import AuthForm from './components/AuthForm';
 import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy-loaded pages (code splitting)
+const BlackMirror = React.lazy(() => import('./components/BlackMirror'));
 const KillList = React.lazy(() => import('./pages/KillList'));
 const Journal = React.lazy(() => import('./pages/Journal'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));

@@ -112,8 +112,8 @@ const KillList = () => {
   const [updatingReflection, setUpdatingReflection] = useState({});
   const [user, setUser] = useState(null);
 
-  const categories = useMemo(() => CATEGORIES, []);
-  const categoryIcons = useMemo(() => CATEGORY_ICONS, []);
+  const categories = CATEGORIES;
+  const categoryIcons = CATEGORY_ICONS;
 
   // Delay showing skeleton to prevent flicker
   useEffect(() => {
