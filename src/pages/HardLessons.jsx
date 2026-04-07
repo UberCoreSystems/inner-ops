@@ -160,7 +160,7 @@ export default function HardLessons() {
       setLessons(prev => [...newLessons, ...prev]);
       setShowScarFlow(false);
       setScarInventory(['', '', '']);
-      ouraToast.success(`${filled.length} scar${filled.length > 1 ? 's' : ''} recorded. Expand them when you're ready.`);
+      ouraToast.success(`${filled.length} scar${filled.length > 1 ? 's' : ''} recorded. Complete each record to lock in the lesson.`);
     } catch (error) {
       logger.error('Error saving scar inventory:', error);
       ouraToast.error('Failed to save scars');

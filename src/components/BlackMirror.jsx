@@ -355,8 +355,9 @@ const BlackMirror = () => {
                 <p className="text-gray-300 text-sm leading-relaxed">
                   {currentIndex >= 40 ? "SEVERE: Time for serious digital habit changes." :
                    currentIndex >= 25 ? "HIGH: Set stronger boundaries to protect your attention." :
-                   currentIndex < 8 ? "EXCELLENT: Maintaining healthy digital boundaries!" :
-                   "Moderate usage noted. You're building awareness."}
+                   currentIndex >= 15 ? "ELEVATED: Approaching high distraction. Identify and cut the source." :
+                   currentIndex < 8 ? "EXCELLENT: Maintaining healthy digital boundaries." :
+                   "MODERATE: Usage is creeping. Name the pattern before it compounds."}
                 </p>
               </div>
             )}
