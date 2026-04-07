@@ -417,7 +417,9 @@ export default function Journal() {
         heavy: "Heavy feelings often carry important messages. What is yours telling you?",
         light: "Lightness is a gift. How can you share this feeling with others?",
         focused: "Your concentration is a superpower. What deserves this level of attention?",
-        radiant: "Your inner light is shining. Let others feel this warmth."
+        radiant: "Your inner light is shining. Let others feel this warmth.",
+        steady: "Stability is a foundation. What can you build from this position?",
+        calm: "Still water sees clearly. What do you notice from this state?"
       };
       
       insights.push(moodInsights[mood] || "What patterns are you noticing in your inner world today?");
