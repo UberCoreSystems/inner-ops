@@ -57,21 +57,31 @@ const RelapseRadar = () => {
   const [currentEntryId, setCurrentEntryId] = useState(null);
 
   useEffect(() => {
+    let mounted = true;
+    let unsubscribe = null;
+
     const setupAuthListener = async () => {
       const auth = await getAuth();
-      const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!mounted) return;
+      const unsub = onAuthStateChanged(auth, (user) => {
+        if (!mounted) return;
         if (user) {
           loadRelapseEntries();
         } else {
           setRelapseEntries([]);
         }
       });
-      return unsubscribe;
+      if (mounted) {
+        unsubscribe = unsub;
+      } else {
+        unsub();
+      }
     };
 
-    let unsubscribePromise = setupAuthListener();
+    setupAuthListener();
     return () => {
-      unsubscribePromise.then(unsub => unsub?.());
+      mounted = false;
+      if (unsubscribe) unsubscribe();
     };
   }, []);
 
