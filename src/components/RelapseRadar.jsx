@@ -209,7 +209,7 @@ const RelapseRadar = () => {
       logger.error("Error generating Oracle feedback:", error);
       setOracleModal({ 
         isOpen: true, 
-        content: "The Oracle senses disturbance in the spiritual realm... Your journey is still witnessed. Please try again in a moment.", 
+        content: "Oracle unavailable. Check-in recorded.", 
         isLoading: false 
       });
     } finally {

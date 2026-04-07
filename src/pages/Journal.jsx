@@ -518,7 +518,7 @@ export default function Journal() {
       logger.error("Error saving journal entry:", error);
       setOracleModal({
         isOpen: true,
-        content: "The Oracle encounters interference in the cosmic currents... Your thoughts are still sacred. Please try again in a moment.",
+        content: "Oracle unavailable. Entry saved. Submit again to request feedback.",
         isLoading: false
       });
     } finally {

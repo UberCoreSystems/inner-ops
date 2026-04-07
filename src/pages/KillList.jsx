@@ -245,7 +245,7 @@ const KillList = () => {
         logger.error('Oracle feedback error:', error);
         setOracleModal({ 
           isOpen: true, 
-          content: "The Oracle's wisdom flows through ancient channels. Your contract has been sealed in the ethereal realm. Pursue your target with unwavering focus.", 
+          content: "Oracle unavailable. Target added.", 
           isLoading: false 
         });
       }
