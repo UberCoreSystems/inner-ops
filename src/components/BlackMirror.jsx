@@ -233,11 +233,6 @@ const BlackMirror = () => {
           <p className="text-gray-400 text-base md:text-lg mb-4">
             Track mindless scrolling and its impact on consciousness
           </p>
-          <div className="oura-card p-4 border-l-4 border-oura-red">
-            <p className="text-sm text-gray-300">
-              📱 Weekly check: +25 clarity points | Low index (&lt;10): +10 bonus points
-            </p>
-          </div>
         </div>
 
         {/* Index History Sparkline */}

@@ -228,10 +228,6 @@ const RelapseRadar = () => {
           <h2 className="text-3xl font-light text-white tracking-tight">Relapse Radar</h2>
           <div className="text-sm text-gray-500">Step {step} of 4</div>
         </div>
-        <div className="mb-6 oura-card border-l-4 border-oura-amber p-4">
-          <p className="text-gray-300 text-sm leading-relaxed">✨ Self-awareness bonus: Submitting entries rewards your honesty and growth mindset (+30 points, +20 for detailed reflection)</p>
-        </div>
-        
         {/* AI Insights */}
         {aiInsights.length > 0 && step === 1 && (
           <div className="mb-6 oura-card border-l-4 border-oura-purple p-5">
