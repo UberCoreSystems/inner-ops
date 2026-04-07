@@ -236,7 +236,7 @@ export default function Journal() {
     "What patterns am I noticing in my behavior?",
     "What triggered strong emotions today?",
     "What would I do differently if I could replay today?",
-    "What small win can I celebrate today?",
+    "What action produced the most leverage today?",
     "What fear held me back today?",
     "What am I learning about myself?"
   ];
@@ -376,7 +376,7 @@ export default function Journal() {
     }
     
     if (content.toLowerCase().includes('grateful') || content.toLowerCase().includes('thankful')) {
-      insights.push("Expansion: How can you build on this gratitude throughout your day?");
+      insights.push("What specifically are you grateful for, and what does that reveal about your values?");
     }
     
     // Mood and intensity insights
@@ -385,7 +385,7 @@ export default function Journal() {
     }
     
     if (mood === 'hollow' || mood === 'heavy') {
-      insights.push("These feelings often signal unmet needs. What might your soul be asking for?");
+      insights.push("These states often precede behavioral regression. What specifically triggered this?");
     }
     
     // Pattern analysis with recent entries
@@ -400,29 +400,29 @@ export default function Journal() {
     
     // Writing depth insights
     if (wordCount > 200) {
-      insights.push("Deep dive detected. You're processing something significant. Trust the writing process.");
+      insights.push("Extended entry. What's driving this volume?");
     } else if (wordCount < 50 && content.length > 0) {
-      insights.push("Short and sweet. Sometimes the most powerful insights come in few words.");
+      insights.push("Low word count. What's not being said?");
     }
     
     // Default insight if none triggered
     if (insights.length === 0) {
       const moodInsights = {
         electric: "This energy is powerful. How can you direct it toward your goals?",
-        foggy: "Clarity will come. Sometimes we need to sit in the fog to appreciate the sunshine.",
+        foggy: "Foggy state. What was clear recently that is no longer clear?",
         sharp: "Your focus is cutting through noise. What truth is emerging?",
-        hollow: "Empty spaces create room for new growth. What wants to fill this space?",
-        chaotic: "Chaos precedes creation. What is trying to be born from this turbulence?",
-        triumphant: "Victory tastes sweet. How will you build on this success?",
-        heavy: "Heavy feelings often carry important messages. What is yours telling you?",
-        light: "Lightness is a gift. How can you share this feeling with others?",
-        focused: "Your concentration is a superpower. What deserves this level of attention?",
-        radiant: "Your inner light is shining. Let others feel this warmth.",
+        hollow: "What specifically is absent right now?",
+        chaotic: "What is triggering the scatter? Name the source.",
+        triumphant: "What made this outcome possible? What would replicate it?",
+        heavy: "Heavy state. What is its specific source?",
+        light: "Low-resistance state. What's the highest-value move right now?",
+        focused: "Sharp state. What deserves this level of attention?",
+        radiant: "High-output state. What needs to be locked in right now?",
         steady: "Stability is a foundation. What can you build from this position?",
         calm: "Still water sees clearly. What do you notice from this state?"
       };
       
-      insights.push(moodInsights[mood] || "What patterns are you noticing in your inner world today?");
+      insights.push(moodInsights[mood] || "What behavioral pattern is most active right now?");
     }
     
     return insights.slice(0, 3); // Limit to 3 insights max
