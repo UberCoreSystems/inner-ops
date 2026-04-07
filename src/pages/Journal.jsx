@@ -533,10 +533,6 @@ export default function Journal() {
 
     if (!entryToDelete) return;
 
-    if (!window.confirm('Delete this journal entry? You can undo within 5 seconds.')) {
-      return;
-    }
-
     logger.log("🗑️ Journal: Deleting entry:", entryId);
 
     // Optimistic UI update

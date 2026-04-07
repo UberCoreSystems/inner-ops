@@ -393,10 +393,6 @@ const KillList = () => {
 
     if (!targetToDelete) return;
 
-    if (!window.confirm('Delete this target? You can undo within 5 seconds.')) {
-      return;
-    }
-
     logger.log("🗑️ KillList: Deleting target:", targetId);
 
     setTargets(prev => prev.filter(target => target.id !== targetId));
