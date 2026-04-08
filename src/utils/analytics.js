@@ -40,7 +40,3 @@ export const identify = (userId, traits = {}) => {
   if (!import.meta.env.VITE_POSTHOG_KEY) return;
   load().then((posthog) => { try { posthog?.identify(userId, traits); } catch {} });
 };
-
-export const resetAnalytics = () => {
-  try { ph?.reset(); } catch {}
-};

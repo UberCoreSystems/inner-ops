@@ -170,4 +170,3 @@ export const dataMigration = {
 // Export individual functions for easy access
 export const migrateOldDataToFirestore = () => dataMigration.migrateToFirestore();
 export const findOldData = () => dataMigration.findAllOldData();
-export const clearOldData = (confirmed) => dataMigration.clearOldLocalStorage(confirmed);

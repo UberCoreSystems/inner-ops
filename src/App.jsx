@@ -5,7 +5,7 @@ import { authService } from './utils/authService';
 import { toasterConfig } from './utils/toast';
 import logger from './utils/logger';
 import { checkFirebaseConnection } from './firebase';
-import { identify, resetAnalytics } from './utils/analytics';
+import { identify } from './utils/analytics';
 import './App.css';
 
 // Core components (loaded immediately)
