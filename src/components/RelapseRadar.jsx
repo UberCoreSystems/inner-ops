@@ -456,7 +456,7 @@ const RelapseRadar = () => {
         </div>
       )}
 
-      {!loadError && relapseEntries.length > 0 && (
+      {!loadError && (relapseEntries.length > 0 ? (
         <div className="mt-10">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
             <h3 className="text-2xl font-light text-white tracking-tight">
@@ -523,7 +523,15 @@ const RelapseRadar = () => {
             </div>
           )}
         </div>
-      )}
+      ) : (
+        <div className="mt-10 oura-card p-10 text-center">
+          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center text-2xl">
+            🧭
+          </div>
+          <h3 className="text-lg font-light text-white mb-2">No relapse entries logged</h3>
+          <p className="text-gray-500 text-sm">Log a check-in above. Patterns only become visible once you track them.</p>
+        </div>
+      ))}
 
       {/* Oracle Modal */}
       <OracleModal
