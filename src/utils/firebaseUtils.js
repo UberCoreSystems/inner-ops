@@ -241,7 +241,9 @@ export const readUserData = async (collectionName, requireAuth = false) => {
     if (error.code === 'permission-denied') {
       logger.error("💡 Hint: Check your Firestore security rules. You may need to allow reads for anonymous users or update the rules for testing.");
     }
-
+    if (error.code?.startsWith('auth/')) {
+      throw error;
+    }
     return [];
   }
 };

@@ -87,13 +87,21 @@ function App() {
       }
     };
 
-    let unsubscribe;
-    setupAuth().then(unsub => { unsubscribe = unsub; });
+    let cleanup = null;
+    let isMounted = true;
+
+    setupAuth().then(unsub => {
+      if (isMounted) {
+        cleanup = unsub;
+      } else {
+        // Component unmounted before Promise resolved — unsubscribe immediately
+        unsub();
+      }
+    });
 
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      isMounted = false;
+      if (cleanup) cleanup();
     };
   }, []);
 
