@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
@@ -42,6 +42,7 @@ const substanceOptions = [
 ];
 
 const RelapseRadar = () => {
+  const mountedRef = useRef(true);
   const [step, setStep] = useState(1);
   const [selectedSelf, setSelectedSelf] = useState('');
   const [selectedHabits, setSelectedHabits] = useState([]);
@@ -57,21 +58,21 @@ const RelapseRadar = () => {
   const [currentEntryId, setCurrentEntryId] = useState(null);
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
     let unsubscribe = null;
 
     const setupAuthListener = async () => {
       const auth = await getAuth();
-      if (!mounted) return;
+      if (!mountedRef.current) return;
       const unsub = onAuthStateChanged(auth, (user) => {
-        if (!mounted) return;
+        if (!mountedRef.current) return;
         if (user) {
           loadRelapseEntries();
         } else {
           setRelapseEntries([]);
         }
       });
-      if (mounted) {
+      if (mountedRef.current) {
         unsubscribe = unsub;
       } else {
         unsub();
@@ -80,19 +81,19 @@ const RelapseRadar = () => {
 
     setupAuthListener();
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       if (unsubscribe) unsubscribe();
     };
   }, []);
 
   const loadRelapseEntries = async () => {
-    setLoadError(false);
+    if (mountedRef.current) setLoadError(false);
     try {
       const entries = await readUserData('relapseEntries');
-      setRelapseEntries(entries);
+      if (mountedRef.current) setRelapseEntries(entries);
     } catch (error) {
       logger.error("Error loading relapse entries:", error);
-      setLoadError(true);
+      if (mountedRef.current) setLoadError(true);
     }
   };
 
