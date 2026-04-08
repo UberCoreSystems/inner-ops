@@ -1,7 +1,6 @@
 import { doc, setDoc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { enableAnonymousAuth, enableDevMode, getCurrentUserOrMock, getAuth, getDb } from '../firebase.js';
 import logger from './logger';
-import { localStorageUtils } from './localStorage';
 
 // Development mode flag - set to false to use real authentication and preserve user data
 const DEV_MODE = false; // Set to true only for testing without real user accounts
@@ -83,45 +82,6 @@ const getLocalStorageFallback = (collectionName) => {
     });
   } catch (error) {
     logger.warn(`⚠️ Could not read from localStorage for ${collectionName}:`, error.message);
-    return [];
-  }
-};
-
-// Recover historical data from top-level collections and migrate to user-scoped collections
-export const recoverHistoricalData = async (collectionName) => {
-  try {
-    const user = await ensureAuthenticated();
-    const db = await getDb();
-    
-    logger.log("🔄 Attempting to recover historical data from", collectionName);
-    
-    // Try to read all documents from top-level collection
-    const colRef = collection(db, collectionName);
-    const querySnapshot = await getDocs(colRef);
-    
-    const allDocs = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    
-    logger.log(`📋 Found ${allDocs.length} historical documents in ${collectionName}`);
-    
-    if (allDocs.length === 0) {
-      return [];
-    }
-    
-    // Filter by current user's data (those with matching userId or no userId)
-    const userDocs = allDocs.filter(doc => !doc.userId || doc.userId === user.uid);
-    
-    logger.log(`✅ Recovered ${userDocs.length} documents for current user from historical data`);
-    
-    return userDocs.sort((a, b) => {
-      const dateA = a.timestamp?.toDate?.() || new Date(a.createdAt || 0);
-      const dateB = b.timestamp?.toDate?.() || new Date(b.createdAt || 0);
-      return dateB - dateA;
-    });
-  } catch (error) {
-    logger.warn("⚠️ Could not recover historical data:", error.message);
     return [];
   }
 };
@@ -250,28 +210,6 @@ export const readUserData = async (collectionName, requireAuth = false) => {
   }
 };
 
-// Simple read function for testing (no auth required)
-export const readTestData = async (collectionName) => {
-  try {
-    logger.log("🧪 Reading test data from", collectionName, "(no auth required)");
-    const db = await getDb();
-    const colRef = collection(db, collectionName);
-    const querySnapshot = await getDocs(colRef);
-    
-    const data = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().timestamp?.toDate?.() || new Date()
-    }));
-
-    logger.log("✅ Test data read successfully:", data.length, "documents");
-    return data;
-  } catch (error) {
-    logger.error("❌ Test data read error:", error);
-    return [];
-  }
-};
-
 export const readData = readUserData;
 
 // Subscribe to real-time updates for a user-scoped collection.
@@ -349,101 +287,6 @@ export const writeUserData = async (collectionName, dataArray) => {
   } catch (error) {
     logger.error(`❌ Failed to write user data to ${collectionName}:`, error);
     throw error;
-  }
-};
-
-// Simple write test that doesn't require any authentication
-export const writeTestDataNoAuth = async (collectionName, data) => {
-  try {
-    logger.log("🧪 Writing test data without authentication to", collectionName);
-    const db = await getDb();
-    
-    const testPayload = {
-      ...data,
-      timestamp: serverTimestamp(),
-      testMode: true,
-      noAuth: true,
-      createdAt: new Date().toISOString()
-    };
-
-    const docRef = await addDoc(collection(db, collectionName), testPayload);
-    logger.log("✅ No-auth test data written successfully:", docRef.id);
-    return { id: docRef.id, ...testPayload };
-  } catch (error) {
-    logger.error("❌ No-auth test write failed:", error);
-    if (error.code === 'permission-denied') {
-      logger.error("💡 Hint: Firestore rules may require authentication. Check your rules for the collection:", collectionName);
-    }
-    throw error;
-  }
-};
-
-// Firebase connection test
-export const testFirebaseConnection = async () => {
-  try {
-    logger.log("🔥 Testing Firebase connection...");
-    
-    // Test 1: Check if we can get current user
-    const auth = await getAuth();
-    const currentUser = auth.currentUser;
-    logger.log("Current user:", currentUser ? currentUser.uid : "None");
-    
-    // Test 2: Try to enable anonymous auth
-    let testUser;
-    try {
-      testUser = await ensureAuthenticated();
-      logger.log("✅ Authentication successful:", testUser.uid);
-    } catch (authError) {
-      logger.error("❌ Authentication failed:", authError);
-      return {
-        success: false,
-        error: "Authentication failed",
-        details: authError.message
-      };
-    }
-    
-    // Test 3: Try to read data
-    try {
-      const testData = await readUserData('test-connection');
-      logger.log("✅ Read test successful, found", testData.length, "documents");
-    } catch (readError) {
-      logger.error("❌ Read test failed:", readError);
-      return {
-        success: false,
-        error: "Read operation failed",
-        details: readError.message
-      };
-    }
-    
-    // Test 4: Try to write data
-    try {
-      const writeResult = await writeData('test-connection', {
-        message: "Connection test",
-        timestamp: new Date().toISOString()
-      });
-      logger.log("✅ Write test successful:", writeResult.id);
-    } catch (writeError) {
-      logger.error("❌ Write test failed:", writeError);
-      return {
-        success: false,
-        error: "Write operation failed",
-        details: writeError.message
-      };
-    }
-    
-    return {
-      success: true,
-      message: "All Firebase operations working correctly",
-      userId: testUser.uid
-    };
-    
-  } catch (error) {
-    logger.error("❌ Firebase connection test failed:", error);
-    return {
-      success: false,
-      error: "Connection test failed",
-      details: error.message
-    };
   }
 };
 
