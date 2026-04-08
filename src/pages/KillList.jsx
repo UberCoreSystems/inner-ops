@@ -101,6 +101,7 @@ const KillList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const targetsRef = useRef([]);
   const pendingTargetDeletes = useRef(new Map());
+  const skipNextSnapshot = useRef(false);
   const newTargetInputRef = useRef(null);
   
   // Celebration state
@@ -169,6 +170,10 @@ const KillList = () => {
 
     subscribeToUserData('killTargets', (data) => {
       if (!mounted) return;
+      if (skipNextSnapshot.current) {
+        skipNextSnapshot.current = false;
+        return;
+      }
       logger.log(`📋 KillList: Received ${data.length} kill targets from snapshot`);
       setTargets(data);
       setLoading(false);
@@ -201,7 +206,7 @@ const KillList = () => {
       const tier = DIFFICULTY_TIERS.find(t => t.value === newTargetDifficulty) || DIFFICULTY_TIERS[1];
       const targetData = {
         title: newTarget.trim(),
-        description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label.split(' ').slice(1).join(' ') || 'target'}`,
+        description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label || 'target'}`,
         category: newTargetCategory,
         difficulty: newTargetDifficulty,
         status: 'active',
@@ -223,7 +228,9 @@ const KillList = () => {
       const savedTarget = await writeData('killTargets', targetData);
       logger.log('✅ Kill target saved successfully:', savedTarget.id);
       
-      // Update local state immediately for better UX
+      // Update local state immediately for better UX; suppress the concurrent
+      // real-time snapshot to prevent it from overwriting the optimistic state.
+      skipNextSnapshot.current = true;
       setTargets(prev => [savedTarget, ...prev]);
       
       ouraToast.success('Target added to Kill List');

@@ -201,10 +201,16 @@ export const readUserData = async (collectionName, requireAuth = false) => {
 
     const colRef = collection(db, collectionName);
     let data = [];
-    
-    // STEP 1: Read only user-scoped data
-    logger.log("🔍 Reading user-scoped data for user:", user.uid);
-    const userScopedQuery = query(colRef, where("userId", "==", user.uid));
+
+    // STEP 1: Re-validate auth before the async query to guard against logout
+    // between the initial check and query execution.
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      logger.warn("⚠️ User logged out before Firestore query executed");
+      return [];
+    }
+    logger.log("🔍 Reading user-scoped data for user:", currentUser.uid);
+    const userScopedQuery = query(colRef, where("userId", "==", currentUser.uid));
     const userScopedSnapshot = await getDocs(userScopedQuery);
 
     data = userScopedSnapshot.docs.map(doc => {

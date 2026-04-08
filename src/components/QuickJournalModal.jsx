@@ -3,6 +3,7 @@ import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import { InlineErrorBoundary } from './ErrorBoundary';
 
 // Custom SVG mood icons - Oura-style geometric designs (matching Journal.jsx)
 const MoodIcons = {
@@ -262,6 +263,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
   if (!isOpen) return null;
 
   return (
+    <InlineErrorBoundary name="QuickJournalModal">
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       {/* Backdrop */}
       <div 
@@ -456,6 +458,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
         )}
       </div>
     </div>
+    </InlineErrorBoundary>
   );
 });
 

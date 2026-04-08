@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import logger from '../utils/logger';
 import { ouraToast } from '../utils/toast';
+import { InlineErrorBoundary } from './ErrorBoundary';
 
 const REACTIONS = [
   { id: 'landed',   label: 'This landed',           color: '#22c55e', icon: '◉' },
@@ -81,6 +82,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   if (!isOpen) return null;
 
   return (
+    <InlineErrorBoundary name="OracleModal">
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-black rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col border border-[#1a1a1a]">
 
@@ -184,6 +186,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         </div>
       </div>
     </div>
+    </InlineErrorBoundary>
   );
 };
 

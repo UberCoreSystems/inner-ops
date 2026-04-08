@@ -78,5 +78,8 @@ export default {
       },
     },
   },
+  safelist: [
+    'duration-[4000ms]',
+  ],
   plugins: [],
 }

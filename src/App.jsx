@@ -37,10 +37,8 @@ const PageLoader = () => (
 // Lazy-initialize Firebase when needed
 const lazyInitializeFirebase = async () => {
   try {
-    // Just initialize without forcing anonymous auth
-    // Let authService handle authentication properly
-    const { getAuth } = await import('firebase/auth');
-    const auth = getAuth();
+    const { getAuth } = await import('./firebase');
+    const auth = await getAuth();
     logger.log("✅ Firebase initialized");
     return auth;
   } catch (error) {
