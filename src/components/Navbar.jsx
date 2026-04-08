@@ -65,12 +65,6 @@ export default function Navbar({ onLogout, user }) {
     { path: '/relapse', label: 'Relapse', mobileLabel: 'Relapse', icon: Icons.relapse },
   ];
 
-  const getUserDisplayName = () => {
-    if (user?.displayName) return user.displayName;
-    if (user?.email) return user.email.split('@')[0];
-    return 'Warrior';
-  };
-
   return (
     <>
       {/* Top bar */}
@@ -119,7 +113,7 @@ export default function Navbar({ onLogout, user }) {
                 }`}
               >
                 <span className="opacity-80">{Icons.profile}</span>
-                <span className="hidden sm:inline">{getUserDisplayName()}</span>
+                <span className="hidden sm:inline">{authService.getUserDisplayName() || 'Warrior'}</span>
               </Link>
               <button
                 onClick={onLogout}

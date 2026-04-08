@@ -6,6 +6,14 @@ import { localStorageUtils } from './localStorage';
 // Development mode flag - set to false to use real authentication and preserve user data
 const DEV_MODE = false; // Set to true only for testing without real user accounts
 
+const normalizeDocTimestamp = (docData) => {
+  if (docData.timestamp?.toDate) return docData.timestamp.toDate();
+  if (docData.createdAt?.toDate) return docData.createdAt.toDate();
+  if (typeof docData.createdAt === 'string') return new Date(docData.createdAt);
+  if (typeof docData.timestamp === 'string') return new Date(docData.timestamp);
+  return new Date();
+};
+
 // Mapping of collection names to localStorage keys
 const LOCALSTORAGE_KEYS = {
   'journalEntries': 'inner_ops_journal_entries',
@@ -215,23 +223,12 @@ export const readUserData = async (collectionName, requireAuth = false) => {
 
     data = userScopedSnapshot.docs.map(doc => {
         const docData = doc.data();
-        // Ensure createdAt is always a proper Date object
-        let createdAt = new Date();
-        if (docData.timestamp?.toDate) {
-          createdAt = docData.timestamp.toDate();
-        } else if (docData.createdAt?.toDate) {
-          createdAt = docData.createdAt.toDate();
-        } else if (typeof docData.createdAt === 'string') {
-          createdAt = new Date(docData.createdAt);
-        } else if (typeof docData.timestamp === 'string') {
-          createdAt = new Date(docData.timestamp);
-        }
-        
+        const createdAt = normalizeDocTimestamp(docData);
         return {
           id: doc.id,
           ...docData,
-          createdAt: createdAt,
-          timestamp: createdAt // Ensure both fields are Date objects
+          createdAt,
+          timestamp: createdAt,
         };
     });
 
@@ -299,16 +296,7 @@ export const subscribeToUserData = async (collectionName, callback) => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(docSnap => {
         const docData = docSnap.data();
-        let createdAt = new Date();
-        if (docData.timestamp?.toDate) {
-          createdAt = docData.timestamp.toDate();
-        } else if (docData.createdAt?.toDate) {
-          createdAt = docData.createdAt.toDate();
-        } else if (typeof docData.createdAt === 'string') {
-          createdAt = new Date(docData.createdAt);
-        } else if (typeof docData.timestamp === 'string') {
-          createdAt = new Date(docData.timestamp);
-        }
+        const createdAt = normalizeDocTimestamp(docData);
         return {
           id: docSnap.id,
           ...docData,

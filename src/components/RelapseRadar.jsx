@@ -8,6 +8,7 @@ import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import { useOracleModal } from '../hooks/useOracleModal';
 
 const relapseSelves = [
   'The Addict',
@@ -47,11 +48,12 @@ const RelapseRadar = () => {
   const [substanceUse, setSubstanceUse] = useState([]);
   const [reflection, setReflection] = useState('');
   const [relapseEntries, setRelapseEntries] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null);
 
   useEffect(() => {
@@ -140,6 +142,11 @@ const RelapseRadar = () => {
     return { thisWeek, lastWeek };
   }, [relapseEntries]);
 
+  useEffect(() => {
+    const id = setTimeout(() => setSearchQuery(searchInput), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
   const filteredRelapseEntries = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return relapseEntries;
@@ -190,12 +197,12 @@ const RelapseRadar = () => {
       setLoading(true);
       
       // Show Oracle modal with loading state
-      setOracleModal({ isOpen: true, content: '', isLoading: true });
-      
+      openOracleLoading();
+
       const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}`;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
       const oracleFeedback = await generateAIFeedback('relapse', entryText, pastReflections);
-      
+
       // Save the entry before revealing reactions so currentEntryId is set
       const entry = {
         selectedSelf,
@@ -210,8 +217,8 @@ const RelapseRadar = () => {
       setRelapseEntries(prev => [savedEntry, ...prev]);
 
       // Show Oracle feedback in modal
-      setOracleModal({ isOpen: true, content: oracleFeedback, isLoading: false });
-      
+      openOracleWithContent(oracleFeedback);
+
       ouraToast.success('Relapse check-in logged');
 
       // Clear form
@@ -221,14 +228,10 @@ const RelapseRadar = () => {
       setReflection('');
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
-      
+
     } catch (error) {
       logger.error("Error generating Oracle feedback:", error);
-      setOracleModal({ 
-        isOpen: true, 
-        content: "Oracle unavailable. Check-in recorded.", 
-        isLoading: false 
-      });
+      openOracleWithContent("Oracle unavailable. Check-in recorded.");
     } finally {
       setLoading(false);
     }
@@ -277,6 +280,10 @@ const RelapseRadar = () => {
               )}
               <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
                 This week: {weeklyEntryCounts.thisWeek} {weeklyEntryCounts.thisWeek === 1 ? 'entry' : 'entries'} / Last week: {weeklyEntryCounts.lastWeek}
+              </div>
+              <div className="text-gray-400 text-sm bg-oura-darker p-3 rounded-xl">
+                Clarity scoring cap: {Math.min(relapseEntries.length, 20)}/20 entries scored
+                {relapseEntries.length >= 20 && <span className="text-yellow-500 ml-2">— cap reached</span>}
               </div>
             </div>
           </div>
@@ -461,14 +468,14 @@ const RelapseRadar = () => {
             <div className="relative w-full sm:w-72">
               <input
                 type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search entries..."
                 className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-amber focus:outline-none transition-colors"
               />
-              {searchQuery && (
+              {searchInput && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => { setSearchInput(''); setSearchQuery(''); }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
                 >
                   Clear
@@ -507,7 +514,7 @@ const RelapseRadar = () => {
               </p>
               {searchQuery.trim() && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => { setSearchInput(''); setSearchQuery(''); }}
                   className="mt-3 px-4 py-2 bg-oura-card border border-oura-border text-gray-300 rounded-xl hover:text-white hover:border-gray-500 transition-all text-xs"
                 >
                   Clear Search
@@ -521,7 +528,7 @@ const RelapseRadar = () => {
       {/* Oracle Modal */}
       <OracleModal
         isOpen={oracleModal.isOpen}
-        onClose={() => { setOracleModal({ isOpen: false, content: '', isLoading: false }); setCurrentEntryId(null); }}
+        onClose={() => { closeOracle(); setCurrentEntryId(null); }}
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}

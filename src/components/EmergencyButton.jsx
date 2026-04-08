@@ -5,6 +5,8 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from './OracleModal';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import { useBreathing } from '../hooks/useBreathing';
+import { useOracleModal } from '../hooks/useOracleModal';
 
 // Quick grounding techniques
 const groundingTechniques = [
@@ -42,14 +44,13 @@ const mantras = [
 const EmergencyButton = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState('main'); // main, breathing, reflection, complete
-  const [breathPhase, setBreathPhase] = useState('ready'); // ready, inhale, hold1, exhale, hold2
-  const [breathCount, setBreathCount] = useState(0);
   const [reflection, setReflection] = useState('');
   const [intensity, setIntensity] = useState(5);
   const [trigger, setTrigger] = useState('');
   const [loading, setLoading] = useState(false);
-  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
   const [randomMantra, setRandomMantra] = useState('');
+  const { breathPhase, breathCount, start: startBreathCycle, reset: resetBreathing, getInstruction: getBreathingInstruction, getColor: getBreathingColor } = useBreathing();
+  const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const navigate = useNavigate();
 
   // Get random mantra when modal opens
@@ -59,33 +60,9 @@ const EmergencyButton = () => {
     }
   }, [isOpen]);
 
-  // Box breathing timer
-  useEffect(() => {
-    if (step !== 'breathing' || breathPhase === 'ready' || breathPhase === 'complete') return;
-
-    const phases = ['inhale', 'hold1', 'exhale', 'hold2'];
-    const currentIndex = phases.indexOf(breathPhase);
-    
-    const timer = setTimeout(() => {
-      if (breathPhase === 'hold2') {
-        if (breathCount >= 3) {
-          setBreathPhase('complete');
-        } else {
-          setBreathPhase('inhale');
-          setBreathCount(prev => prev + 1);
-        }
-      } else {
-        setBreathPhase(phases[currentIndex + 1]);
-      }
-    }, 4000);
-
-    return () => clearTimeout(timer);
-  }, [breathPhase, breathCount, step]);
-
   const startBreathing = () => {
     setStep('breathing');
-    setBreathPhase('inhale');
-    setBreathCount(0);
+    startBreathCycle();
   };
 
   const handleQuickLog = async () => {
@@ -106,20 +83,16 @@ const EmergencyButton = () => {
       ouraToast.success('Emergency moment logged');
 
       // Get Oracle guidance
-      setOracleModal({ isOpen: true, content: '', isLoading: true });
-      
+      openOracleLoading();
+
       const context = `Emergency struggle moment. Intensity: ${intensity}/10. Trigger: ${trigger || 'unspecified'}. Reflection: ${reflection || 'none provided'}`;
       const oracleFeedback = await generateAIFeedback('emergency', context, []);
-      
-      setOracleModal({ isOpen: true, content: oracleFeedback, isLoading: false });
+
+      openOracleWithContent(oracleFeedback);
       setStep('complete');
     } catch (error) {
       logger.error('Error logging emergency:', error);
-      setOracleModal({ 
-        isOpen: true, 
-        content: "Your struggle is witnessed. Even in chaos, you reached for help - that's strength. Take a deep breath. This moment will pass.", 
-        isLoading: false 
-      });
+      openOracleWithContent("Your struggle is witnessed. Even in chaos, you reached for help - that's strength. Take a deep breath. This moment will pass.");
       setStep('complete');
     } finally {
       setLoading(false);
@@ -134,32 +107,10 @@ const EmergencyButton = () => {
   const resetAndClose = () => {
     setIsOpen(false);
     setStep('main');
-    setBreathPhase('ready');
-    setBreathCount(0);
+    resetBreathing();
     setReflection('');
     setIntensity(5);
     setTrigger('');
-  };
-
-  const getBreathingInstruction = () => {
-    switch (breathPhase) {
-      case 'inhale': return 'Breathe In...';
-      case 'hold1': return 'Hold...';
-      case 'exhale': return 'Breathe Out...';
-      case 'hold2': return 'Hold...';
-      case 'complete': return 'Well Done';
-      default: return 'Ready';
-    }
-  };
-
-  const getBreathingColor = () => {
-    switch (breathPhase) {
-      case 'inhale': return 'bg-blue-500';
-      case 'hold1': case 'hold2': return 'bg-purple-500';
-      case 'exhale': return 'bg-green-500';
-      case 'complete': return 'bg-oura-cyan';
-      default: return 'bg-gray-500';
-    }
   };
 
   return (
@@ -394,7 +345,7 @@ const EmergencyButton = () => {
       {/* Oracle Modal */}
       <OracleModal
         isOpen={oracleModal.isOpen}
-        onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
+        onClose={closeOracle}
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
       />

@@ -505,9 +505,15 @@ export const aggregateCrossModuleData = async () => {
   if (journalResult.status === 'rejected') logger.warn('blackMirrorAnalytics: journalEntries fetch failed', journalResult.reason);
   if (relapseResult.status === 'rejected') logger.warn('blackMirrorAnalytics: relapseEntries fetch failed', relapseResult.reason);
 
-  const blackMirror = (bmResult.status      === 'fulfilled' ? bmResult.value      || [] : []).map(normalizeBMEntry);
-  const journal     = (journalResult.status === 'fulfilled' ? journalResult.value || [] : []).map(normalizeJournalEntry);
-  const relapse     = (relapseResult.status === 'fulfilled' ? relapseResult.value || [] : []).map(normalizeRelapseEntry);
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const withinLookback = (entry) => {
+    const d = entry.createdAt ? new Date(entry.createdAt) : null;
+    return d && d >= cutoff;
+  };
+
+  const blackMirror = (bmResult.status      === 'fulfilled' ? bmResult.value      || [] : []).map(normalizeBMEntry).filter(withinLookback);
+  const journal     = (journalResult.status === 'fulfilled' ? journalResult.value || [] : []).map(normalizeJournalEntry).filter(withinLookback);
+  const relapse     = (relapseResult.status === 'fulfilled' ? relapseResult.value || [] : []).map(normalizeRelapseEntry).filter(withinLookback);
 
   return {
     blackMirror,

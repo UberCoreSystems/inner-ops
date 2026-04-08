@@ -38,6 +38,7 @@ const BlackMirror = () => {
   const [unconsciousCheck, setUnconsciousCheck] = useState(false);
   const [reflection, setReflection] = useState('');
   const [entries, setEntries] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -96,6 +97,11 @@ const BlackMirror = () => {
       return haystack.includes(normalizedQuery);
     });
   }, [entries, searchQuery]);
+
+  useEffect(() => {
+    const id = setTimeout(() => setSearchQuery(searchInput), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
   // Load entries on component mount
   const loadEntries = useCallback(async () => {
@@ -405,14 +411,14 @@ const BlackMirror = () => {
           <div className="relative w-full sm:w-72">
             <input
               type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search history..."
               className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-red focus:outline-none transition-colors"
             />
-            {searchQuery && (
+            {searchInput && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => { setSearchInput(''); setSearchQuery(''); }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
               >
                 Clear
@@ -526,7 +532,7 @@ const BlackMirror = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               {searchQuery.trim() ? (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => { setSearchInput(''); setSearchQuery(''); }}
                   className="px-6 py-2.5 bg-transparent border border-oura-border text-gray-300 hover:text-white hover:border-gray-500 rounded-xl transition-all duration-300 font-medium text-sm"
                 >
                   Clear Search

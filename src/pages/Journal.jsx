@@ -5,6 +5,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ouraToast from '../utils/toast';
+import { useOracleModal } from '../hooks/useOracleModal';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
 
@@ -193,12 +194,13 @@ export default function Journal() {
   const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [intensity, setIntensity] = useState(3);
   const [entries, setEntries] = useState([]);
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
-  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry the modal is for
   const pendingEntryDeletes = useRef(new Map());
   
@@ -250,6 +252,11 @@ export default function Journal() {
   useEffect(() => {
     loadJournalEntries();
   }, []);
+
+  useEffect(() => {
+    const id = setTimeout(() => setSearchQuery(searchInput), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
   const filteredEntries = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -304,7 +311,7 @@ export default function Journal() {
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [journalPrompts.length, isTextareaFocused]);
+  }, [journalPrompts, isTextareaFocused]);
 
   // Dynamic AI insights generation
   useEffect(() => {
@@ -493,7 +500,7 @@ export default function Journal() {
       const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}`;
       const pastEntries = entries.slice(-3).map(e => e.content);
 
-      setOracleModal({ isOpen: true, content: '', isLoading: true });
+      openOracleLoading();
 
       const feedback = await generateAIFeedback('journal', inputText, pastEntries);
 
@@ -506,7 +513,7 @@ export default function Journal() {
       setEntries(prev => [newEntry, ...prev]);
       setCurrentEntryId(newEntry.id);
 
-      setOracleModal({ isOpen: true, content: feedback, isLoading: false });
+      openOracleWithContent(feedback);
 
       ouraToast.success('Journal entry saved');
       setEntry('');
@@ -516,11 +523,7 @@ export default function Journal() {
 
     } catch (error) {
       logger.error("Error saving journal entry:", error);
-      setOracleModal({
-        isOpen: true,
-        content: "Oracle unavailable. Entry saved. Submit again to request feedback.",
-        isLoading: false
-      });
+      openOracleWithContent("Oracle unavailable. Entry saved. Submit again to request feedback.");
     } finally {
       setLoading(false);
     }
@@ -1051,14 +1054,14 @@ export default function Journal() {
             <div className="relative w-full sm:w-80">
               <input
                 type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search entries..."
                 className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#00d4aa] focus:outline-none transition-colors"
               />
-              {searchQuery && (
+              {searchInput && (
                 <button
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => { setSearchInput(''); setSearchQuery(''); }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a5a5a] hover:text-white text-xs"
                 >
                   Clear
@@ -1234,7 +1237,7 @@ export default function Journal() {
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                     {searchQuery.trim() ? (
                       <button
-                        onClick={() => setSearchQuery('')}
+                        onClick={() => { setSearchInput(''); setSearchQuery(''); }}
                         className="px-6 py-2.5 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
                       >
                         Clear Search
@@ -1273,7 +1276,7 @@ export default function Journal() {
       <OracleModal
         isOpen={oracleModal.isOpen}
         onClose={() => {
-          setOracleModal({ isOpen: false, content: '', isLoading: false });
+          closeOracle();
           setCurrentEntryId(null);
         }}
         content={oracleModal.content}

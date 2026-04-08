@@ -3,6 +3,7 @@ import { writeData, readUserData, deleteData, updateData } from '../utils/fireba
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import ouraToast from '../utils/toast';
+import { useOracleModal } from '../hooks/useOracleModal';
 import logger from '../utils/logger';
 import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
 
@@ -52,7 +53,7 @@ export default function HardLessons() {
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
-  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
   const [pendingOracleWisdom, setPendingOracleWisdom] = useState('');
   const pendingLessonDeletes = useRef(new Map());
@@ -264,7 +265,7 @@ export default function HardLessons() {
 
     setPendingOracleReaction(null);
     setPendingOracleWisdom('');
-    setOracleModal({ isOpen: true, content: '', isLoading: true });
+    openOracleLoading();
 
     try {
       const extractionPrompt = `
@@ -279,15 +280,11 @@ Please help extract the core lesson and rule from this experience.
 
       const oracleWisdom = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
       setPendingOracleWisdom(oracleWisdom);
-      setOracleModal({ isOpen: true, content: oracleWisdom, isLoading: false });
+      openOracleWithContent(oracleWisdom);
 
     } catch (error) {
       logger.error('Error seeking Oracle extraction:', error);
-      setOracleModal({
-        isOpen: true,
-        content: 'The Oracle cannot pierce the veil at this moment. Trust your own extraction of wisdom.',
-        isLoading: false
-      });
+      openOracleWithContent('The Oracle cannot pierce the veil at this moment. Trust your own extraction of wisdom.');
     }
   };
 
@@ -1051,7 +1048,7 @@ Please help extract the core lesson and rule from this experience.
       {/* Oracle Modal */}
       <OracleModal
         isOpen={oracleModal.isOpen}
-        onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
+        onClose={closeOracle}
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         title="Oracle's Extraction Wisdom"
