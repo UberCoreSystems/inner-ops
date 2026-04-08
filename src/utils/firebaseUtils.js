@@ -241,10 +241,9 @@ export const readUserData = async (collectionName, requireAuth = false) => {
     return data;
   } catch (error) {
     logger.error("❌ Firestore read error:", error);
-    if (error.code === 'permission-denied') {
-      logger.error("💡 Hint: Check your Firestore security rules. You may need to allow reads for anonymous users or update the rules for testing.");
-    }
-    if (error.code?.startsWith('auth/')) {
+    if (error.code === 'permission-denied' || error.code?.startsWith('auth/')) {
+      // Auth-related failures must surface to callers — do not return empty data silently.
+      // Callers are responsible for showing error state or redirecting to login.
       throw error;
     }
     return [];
