@@ -16,7 +16,7 @@ export function SkeletonBox({ width = '100%', height = '1rem', className = '' })
 /**
  * Skeleton Circle - For avatars, circular progress rings
  */
-export function SkeletonCircle({ size = '3rem', className = '' }) {
+function SkeletonCircle({ size = '3rem', className = '' }) {
   return (
     <div 
       className={`skel-surface skel-animate rounded-full ${className}`}
@@ -25,20 +25,8 @@ export function SkeletonCircle({ size = '3rem', className = '' }) {
   );
 }
 
-/**
- * Skeleton Ring - Mimics Oura-style circular progress rings
- */
-export function SkeletonRing({ size = 120, strokeWidth = 8, className = '' }) {
-  return (
-    <div 
-      className={`skel-surface skel-animate rounded-full border border-[#1f1f2a] ${className}`}
-      style={{ width: size, height: size, padding: strokeWidth }}
-    />
-  );
-}
-
 // Dashboard hero placeholder: simple score block
-export function SkeletonScoreBlock({ size = 200 }) {
+function SkeletonScoreBlock({ size = 200 }) {
   return (
     <div className="flex flex-col items-center gap-4" style={{ minHeight: size }}>
       <SkeletonCircle size={size * 0.45} />
@@ -66,32 +54,9 @@ export function SkeletonCard({ className = '' }) {
 }
 
 /**
- * Skeleton Score Card - For Oura-style score cards
- */
-export function SkeletonScoreCard({ className = '' }) {
-  return (
-    <div className={`skel-surface rounded-xl p-6 ${className}`}>
-      <div className="flex items-center justify-between mb-6">
-        <SkeletonBox width="50%" height="1rem" />
-        <SkeletonCircle size="1.5rem" />
-      </div>
-      <div className="flex items-center gap-4 mb-4">
-        <SkeletonCircle size="4rem" />
-        <div className="flex-1">
-          <SkeletonBox width="60%" height="1.5rem" className="mb-2" />
-          <SkeletonBox width="80%" height="0.875rem" />
-        </div>
-      </div>
-      <SkeletonBox width="100%" height="0.75rem" className="mb-2" />
-      <SkeletonBox width="90%" height="0.75rem" />
-    </div>
-  );
-}
-
-/**
  * Skeleton Insight Card - For AI insights/action steps
  */
-export function SkeletonInsightCard({ className = '' }) {
+function SkeletonInsightCard({ className = '' }) {
   return (
     <div className={`skel-surface rounded-xl p-6 ${className}`}>
       <div className="flex items-start gap-3 mb-3">
@@ -109,7 +74,7 @@ export function SkeletonInsightCard({ className = '' }) {
 /**
  * Skeleton Activity Item - For recent activity list
  */
-export function SkeletonActivityItem({ className = '' }) {
+function SkeletonActivityItem({ className = '' }) {
   return (
     <div className={`flex items-center gap-4 p-4 skel-surface ${className}`}>
       <SkeletonCircle size="2.5rem" />
@@ -232,59 +197,11 @@ export function SkeletonDashboard() {
   );
 }
 
-/**
- * Skeleton Journal Page - Full journal loading state
- */
-export function SkeletonJournalPage() {
-  return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Header */}
-      <SkeletonBox width="40%" height="2rem" className="mb-8" />
-      
-      {/* Journal Entries */}
-      <SkeletonList count={3} ItemComponent={SkeletonJournalEntry} />
-    </div>
-  );
-}
-
-/**
- * Skeleton KillList Page - Full kill list loading state
- */
-export function SkeletonKillListPage() {
-  return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <SkeletonBox width="15rem" height="2rem" />
-        <SkeletonBox width="8rem" height="2.5rem" className="rounded-lg" />
-      </div>
-      
-      {/* Filter Tabs */}
-      <div className="flex gap-4 mb-6">
-        <SkeletonBox width="5rem" height="2rem" className="rounded-lg" />
-        <SkeletonBox width="5rem" height="2rem" className="rounded-lg" />
-        <SkeletonBox width="5rem" height="2rem" className="rounded-lg" />
-      </div>
-      
-      {/* Kill Targets */}
-      <SkeletonList count={4} ItemComponent={SkeletonKillTarget} />
-    </div>
-  );
-}
-
 export default {
   Box: SkeletonBox,
-  Circle: SkeletonCircle,
-  Ring: SkeletonRing,
-  ScoreBlock: SkeletonScoreBlock,
   Card: SkeletonCard,
-  ScoreCard: SkeletonScoreCard,
-  InsightCard: SkeletonInsightCard,
-  ActivityItem: SkeletonActivityItem,
   JournalEntry: SkeletonJournalEntry,
   KillTarget: SkeletonKillTarget,
   List: SkeletonList,
   Dashboard: SkeletonDashboard,
-  JournalPage: SkeletonJournalPage,
-  KillListPage: SkeletonKillListPage
 };
