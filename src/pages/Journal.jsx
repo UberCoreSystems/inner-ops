@@ -329,7 +329,7 @@ export default function Journal() {
       try {
         // Create context from current entry state
         const currentContext = {
-          mood: moodOptions.find(m => m.value === mood)?.label || mood,
+          mood,
           intensity,
           content: entry,
           wordCount: entry.trim().split(/\s+/).length
