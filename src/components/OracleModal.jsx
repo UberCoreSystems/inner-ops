@@ -90,7 +90,16 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         <div className="p-6 flex-1 overflow-y-auto">
           {isCurrentlyLoading ? (
             /* ── Loading state ── */
-            <div className="flex flex-col items-center justify-center py-16">
+            <div className="flex flex-col items-center justify-center py-16 relative">
+              {/* Dismiss button — always visible so user is never trapped on Oracle failure */}
+              <button
+                onClick={onClose}
+                className="absolute top-0 right-0 text-[#3a3a3a] hover:text-[#8a8a8a] transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
               {/* Breathing ring */}
               <div className="relative w-16 h-16 mb-6">
                 <div className="absolute inset-0 rounded-full border border-[#2a2a2a]" />
