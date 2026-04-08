@@ -19,17 +19,18 @@ export const clarityScoreUtils = {
   // Base scoring system - Much more conservative and progress-focused
   SCORING: {
     JOURNAL_ENTRY: 2,
-    KILL_TARGET_ADDED: 1, // Very low - just for tracking
-    KILL_TARGET_COMPLETED_SURFACE: 10, // Surface difficulty (7-day streak)
-    KILL_TARGET_COMPLETED_DEEP: 25, // Deep difficulty (21-day streak)
-    KILL_TARGET_COMPLETED_CORE: 50, // Core difficulty (60-day streak)
-    KILL_TARGET_STREAK_BONUS: 1, // per 7-day streak milestone on active targets
-    RELAPSE_AWARENESS: 8, // bonus for self-awareness and honesty
-    RELAPSE_REFLECTION: 5, // additional bonus for detailed reflection
-    BLACK_MIRROR_CHECK: 5, // weekly bonus
-    BLACK_MIRROR_LOW_INDEX: 3, // bonus for low index (<10)
-    HARD_LESSON_EXTRACTED: 10, // Base score for extracting a lesson from pain
-    HARD_LESSON_FINALIZED: 15, // Additional bonus for finalizing with a rule going forward
+    KILL_TARGET_ADDED: 2, // Adding a target = real commitment
+    KILL_TARGET_COMPLETED_SURFACE: 20, // Surface difficulty (7-day streak)
+    KILL_TARGET_COMPLETED_DEEP: 50, // Deep difficulty (21-day streak)
+    KILL_TARGET_COMPLETED_CORE: 100, // Core difficulty (60-day streak)
+    KILL_TARGET_STREAK_BONUS: 5, // per 7-day streak milestone on active targets
+    RELAPSE_AWARENESS: 10, // bonus for self-awareness and honesty
+    RELAPSE_REFLECTION: 8, // additional bonus for detailed reflection
+    RELAPSE_SCORING_CAP: 20, // max entries that earn points
+    BLACK_MIRROR_CHECK: 8, // weekly bonus
+    BLACK_MIRROR_LOW_INDEX: 5, // bonus for low index (<10)
+    HARD_LESSON_EXTRACTED: 15, // Base score for extracting a lesson from pain
+    HARD_LESSON_FINALIZED: 25, // Additional bonus for finalizing with a rule going forward
   },
 
   // Calculate total clarity score from user data
@@ -77,16 +78,24 @@ export const clarityScoreUtils = {
     let completedTargets = 0;
     const DIFF_MAP = { high: 'core', medium: 'deep', low: 'surface' };
 
+    // Note: Kill target completions intentionally have NO temporal decay.
+    // Conquering a behavioral pattern is a permanent victory — unlike Hard Lessons
+    // (whose urgency fades), a killed target remains killed. Decay would misrepresent
+    // the permanence of behavioral elimination. This is by design.
     killTargets.forEach(target => {
       killListScore += clarityScoreUtils.SCORING.KILL_TARGET_ADDED;
 
-      // Streak bonus: 1 point per 7-day milestone reached on active targets
+      // Streak bonus: points per 7-day milestone reached on active targets
       const streak = target.streak || 0;
       killListScore += Math.floor(streak / 7) * clarityScoreUtils.SCORING.KILL_TARGET_STREAK_BONUS;
 
       const isKilled = target.status === 'killed' || target.progress === 100;
       if (isKilled) {
-        const difficulty = target.difficulty || DIFF_MAP[target.priority] || 'deep';
+        const mappedDiff = DIFF_MAP[target.priority];
+        if (!target.difficulty && !mappedDiff) {
+          console.warn(`[clarityScore] Kill target "${target.name || target.id}" has no difficulty or recognized priority — defaulting to 'deep'`);
+        }
+        const difficulty = target.difficulty || mappedDiff || 'deep';
         if (difficulty === 'core') killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_CORE;
         else if (difficulty === 'surface') killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_SURFACE;
         else killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_DEEP;
@@ -94,15 +103,13 @@ export const clarityScoreUtils = {
       }
     });
     
-    // Apply completion rate multiplier to prevent gaming the system
+    // Completion rate multiplier: bonus-only — adding targets should never be penalized
     const completionRate = killTargets.length > 0 ? completedTargets / killTargets.length : 0;
-    let completionMultiplier = 1;
-    
+    let completionMultiplier = 1.0; // baseline — no penalty for having incomplete targets
+
     if (completionRate >= 0.8) completionMultiplier = 1.5; // 80%+ completion rate bonus
     else if (completionRate >= 0.6) completionMultiplier = 1.2; // 60%+ completion rate bonus
-    else if (completionRate >= 0.4) completionMultiplier = 1.0; // 40%+ completion rate normal
-    else if (completionRate >= 0.2) completionMultiplier = 0.8; // 20%+ completion rate penalty
-    else completionMultiplier = 0.5; // Under 20% completion rate heavy penalty
+    // below 60%: stays at 1.0 — no penalty, no incentive to hide targets
     
     killListScore = Math.floor(killListScore * completionMultiplier);
     totalScore += killListScore;
@@ -129,7 +136,7 @@ export const clarityScoreUtils = {
     let relapseAwarenessBonus = 0;
     const scorableRelapse = relapseEntries
       .filter(e => (e.reflection || '').trim().length >= 20)
-      .slice(0, 10); // hard cap — logging fake relapses beyond 10 earns nothing
+      .slice(0, clarityScoreUtils.SCORING.RELAPSE_SCORING_CAP); // hard cap — entries beyond cap earn nothing
     scorableRelapse.forEach(entry => {
       relapseAwarenessBonus += clarityScoreUtils.SCORING.RELAPSE_AWARENESS;
       if (entry.reflection && entry.reflection.length > 100) {
@@ -203,8 +210,10 @@ export const clarityScoreUtils = {
     const weeksWithChecks = new Set();
     
     blackMirrorEntries.forEach(entry => {
-      const checkDate = new Date(entry.createdAt);
-      const weekKey = `${checkDate.getFullYear()}-${Math.floor(checkDate.getTime() / (7 * 24 * 60 * 60 * 1000))}`;
+      const checkDate = entry.createdAt?.toDate ? entry.createdAt.toDate() : new Date(entry.createdAt);
+      // Use UTC values to prevent week-boundary misbucketing across timezones
+      const utcMs = Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth(), checkDate.getUTCDate());
+      const weekKey = `${checkDate.getUTCFullYear()}-${Math.floor(utcMs / (7 * 24 * 60 * 60 * 1000))}`;
       
       if (!weeksWithChecks.has(weekKey)) {
         weeksWithChecks.add(weekKey);
@@ -223,7 +232,7 @@ export const clarityScoreUtils = {
   // Get clarity rank based on score - Much more realistic progression
   // Icons updated for Oura-style minimalist aesthetic
   getClarityRank: (score) => {
-    if (score >= 1000) return { rank: 'Clarity Master', icon: '◆', color: 'text-yellow-400' }; // Diamond - mastery
+    if (score >= 1100) return { rank: 'Clarity Master', icon: '◆', color: 'text-yellow-400' }; // Diamond - mastery
     if (score >= 750) return { rank: 'Clarity Expert', icon: '◈', color: 'text-purple-400' }; // Diamond outline - expertise
     if (score >= 500) return { rank: 'Clarity Seeker', icon: '◉', color: 'text-red-400' }; // Circle target - seeking
     if (score >= 300) return { rank: 'Clarity Practitioner', icon: '◎', color: 'text-blue-400' }; // Double circle - practice

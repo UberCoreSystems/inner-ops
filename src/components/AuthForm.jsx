@@ -284,8 +284,8 @@ export default function AuthForm({ onAuthSuccess }) {
             </svg>
             <div className="w-8 h-px bg-[#1a1a1a]" />
           </div>
-          <p className="text-[#3a3a3a] text-xs">Your data is encrypted and secure</p>
-          <p className="text-[#5a5a5a] text-xs mt-1">The Oracle awaits your commitment</p>
+          <p className="text-[#5a5a5a] text-xs">Your data is private, encrypted, and user-scoped — no one else sees it</p>
+          <p className="text-[#3a3a3a] text-xs mt-1">The Oracle awaits your commitment</p>
         </div>
       </div>
     </div>

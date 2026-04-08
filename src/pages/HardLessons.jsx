@@ -373,10 +373,6 @@ Please help extract the core lesson and rule from this experience.
 
     if (!lesson) return;
 
-    if (!window.confirm('Delete this Hard Lesson? You can undo within 5 seconds.')) {
-      return;
-    }
-
     setLessons(prev => prev.filter(l => l.id !== lessonId));
 
     const existingPending = pendingLessonDeletes.current.get(lessonId);

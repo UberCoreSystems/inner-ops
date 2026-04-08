@@ -233,7 +233,7 @@ export default function Journal() {
   }, [entries]);
 
   const basePrompts = [
-    "What am I most grateful for today?",
+    "What did I avoid today, and what did I tell myself to justify it?",
     "What challenged me and how did I handle it?",
     "What patterns am I noticing in my behavior?",
     "What triggered strong emotions today?",

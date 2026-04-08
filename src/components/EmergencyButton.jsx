@@ -281,7 +281,7 @@ const EmergencyButton = () => {
                       type="text"
                       value={trigger}
                       onChange={(e) => setTrigger(e.target.value)}
-                      placeholder="e.g., stress, boredom, seeing an ex's post..."
+                      placeholder="e.g., shame spiral after a bad decision, craving 3 hours into avoidance..."
                       className="w-full p-4 bg-oura-darker text-white rounded-2xl border border-oura-border focus:border-oura-amber focus:outline-none"
                     />
                   </div>
@@ -291,7 +291,7 @@ const EmergencyButton = () => {
                     <textarea
                       value={reflection}
                       onChange={(e) => setReflection(e.target.value)}
-                      placeholder="What's really going on? No judgment..."
+                      placeholder="What were you avoiding? What story did you tell yourself right before this?"
                       className="w-full h-24 p-4 bg-oura-darker text-white rounded-2xl border border-oura-border focus:border-oura-amber focus:outline-none resize-none"
                     />
                   </div>

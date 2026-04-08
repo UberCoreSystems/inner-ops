@@ -498,11 +498,12 @@ export default function Dashboard() {
   
   // Mastery: Overall progress toward full mastery (0-1000 scale)
   // 1000 represents years of consistent practice - the full journey
-  const MASTERY_SCORE = 1000;
+  const MASTERY_SCORE = 1100;
   const masteryPercent = Math.min(100, (clarityScore.totalScore / MASTERY_SCORE) * 100);
-  
+
   // Also calculate rank progress for display context
-  const RANK_TIERS = [0, 25, 75, 150, 300, 500, 750, 1000];
+  // Final Expert→Master stretch is 350 pts (750→1100) vs 250 for all prior tiers — intentionally harder
+  const RANK_TIERS = [0, 25, 75, 150, 300, 500, 750, 1100];
 
   const getCurrentRankThreshold = (score) => {
     // Returns the floor of the tier the score currently sits in
