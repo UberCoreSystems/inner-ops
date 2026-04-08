@@ -7,6 +7,7 @@ import VirtualizedList from './VirtualizedList';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { getAnalyticsReport } from '../utils/blackMirrorAnalytics';
+import { SkeletonBox } from './SkeletonLoader';
 
 const philosophicalQuotes = [
   "He who is not satisfied with a little, is satisfied with nothing. - Epicurus",
@@ -49,6 +50,7 @@ const BlackMirror = () => {
   const [analyticsReport, setAnalyticsReport] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [expandedFeedback, setExpandedFeedback] = useState(new Set());
+  const [screenTimeError, setScreenTimeError] = useState('');
 
   // Calculate Black Mirror Index - stable reference
   const calculateBlackMirrorIndex = useCallback((screenTimeValue, mentalFogValue, interactionValue, unconsciousCheckValue) => {
@@ -161,7 +163,13 @@ const BlackMirror = () => {
   // Handle form submission
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!screenTime.trim()) return;
+
+    const parsedScreenTime = parseFloat(screenTime);
+    if (!screenTime.trim() || isNaN(parsedScreenTime) || parsedScreenTime < 0) {
+      setScreenTimeError('Enter a valid number of hours (e.g., 3.5).');
+      return;
+    }
+    setScreenTimeError('');
 
     setLoading(true);
 
@@ -169,7 +177,7 @@ const BlackMirror = () => {
       const calculatedIndex = calculateBlackMirrorIndex(screenTime, mentalFog, interactionLevel, unconsciousCheck);
 
       const entryData = {
-        screenTime: parseFloat(screenTime),
+        screenTime: parsedScreenTime,
         mentalFog,
         interactionLevel,
         unconsciousCheck,
@@ -200,7 +208,7 @@ const BlackMirror = () => {
         setAiFeedback(feedback);
       } catch (feedbackError) {
         logger.error('Error generating feedback:', feedbackError);
-        setAiFeedback('The Oracle remains silent for now...');
+        setAiFeedback('Oracle unavailable. Entry saved.');
       }
 
       // Save to Firebase before revealing reactions so currentEntryId is set
@@ -211,7 +219,7 @@ const BlackMirror = () => {
 
       setLoadingFeedback(false);
 
-      ouraToast.success('Black Mirror entry logged');
+      ouraToast.success(`Screen time logged. Index: ${calculatedIndex}.`);
 
       // Reset form
       setScreenTime('');
@@ -290,11 +298,12 @@ const BlackMirror = () => {
               min="0"
               max="24"
               value={screenTime}
-              onChange={(e) => setScreenTime(e.target.value)}
+              onChange={(e) => { setScreenTime(e.target.value); setScreenTimeError(''); }}
               className="w-full p-4 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-red focus:outline-none transition-all duration-200"
               placeholder="e.g., 3.5"
               required
             />
+            {screenTimeError && <p className="text-xs text-red-400 mt-2">{screenTimeError}</p>}
             <p className="text-xs text-gray-500 mt-2">Only count mindless scrolling, not productive screen time</p>
           </div>
 
@@ -359,11 +368,11 @@ const BlackMirror = () => {
               <div className="mt-4 p-4 bg-oura-darker rounded-2xl">
                 <h4 className="text-oura-red font-light text-sm mb-2 tracking-wide">ANALYSIS</h4>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  {currentIndex >= 40 ? "SEVERE: Time for serious digital habit changes." :
-                   currentIndex >= 25 ? "HIGH: Set stronger boundaries to protect your attention." :
-                   currentIndex >= 15 ? "ELEVATED: Approaching high distraction. Identify and cut the source." :
-                   currentIndex < 8 ? "EXCELLENT: Maintaining healthy digital boundaries." :
-                   "MODERATE: Usage is creeping. Name the pattern before it compounds."}
+                  {currentIndex >= 40 ? "SEVERE: Digital consumption has taken control. Immediate structural change required." :
+                   currentIndex >= 25 ? "HIGH: Attention is being extracted. Set hard limits now — not tomorrow." :
+                   currentIndex >= 15 ? "ELEVATED: Drift is in progress. Identify the specific trigger before this becomes a pattern." :
+                   currentIndex >= 8 ? "MODERATE: The pull is there. Don't normalize it — name it and cut it." :
+                   "CONTROLLED: Holding the line. Stay deliberate."}
                 </p>
               </div>
             )}
@@ -574,7 +583,11 @@ const BlackMirror = () => {
         </div>
 
         {!analyticsReport ? (
-          <p className="text-gray-600 text-sm">Loading analysis...</p>
+          <div className="space-y-3">
+            <SkeletonBox width="75%" height="1rem" />
+            <SkeletonBox width="50%" height="0.875rem" />
+            <SkeletonBox width="65%" height="0.875rem" />
+          </div>
         ) : (analyticsReport.data.meta.counts.blackMirror < 3 || analyticsReport.data.meta.counts.journal < 3 || analyticsReport.data.meta.counts.relapse < 2) ? (
           <div className="py-6 text-center">
             <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center text-2xl">
