@@ -283,8 +283,7 @@ const RelapseRadar = () => {
                 This week: {weeklyEntryCounts.thisWeek} {weeklyEntryCounts.thisWeek === 1 ? 'entry' : 'entries'} / Last week: {weeklyEntryCounts.lastWeek}
               </div>
               <div className="text-gray-400 text-sm bg-oura-darker p-3 rounded-xl">
-                Clarity scoring cap: {Math.min(relapseEntries.length, 20)}/20 entries scored
-                {relapseEntries.length >= 20 && <span className="text-yellow-500 ml-2">— cap reached</span>}
+                Total entries: {relapseEntries.length}
               </div>
             </div>
           </div>
