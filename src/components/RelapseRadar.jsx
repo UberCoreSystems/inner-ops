@@ -116,7 +116,7 @@ const RelapseRadar = () => {
       return bTime - aTime;
     });
     const latest = sorted[0].createdAt?.toDate?.() ?? (sorted[0].timestamp ? new Date(sorted[0].timestamp) : null);
-    if (!latest) return null;
+    if (!latest || isNaN(latest.getTime())) return null;
     return Math.floor((Date.now() - latest.getTime()) / (1000 * 60 * 60 * 24));
   }, [relapseEntries]);
 
@@ -215,7 +215,8 @@ const RelapseRadar = () => {
 
       const savedEntry = await writeData('relapseEntries', entry);
       setCurrentEntryId(savedEntry.id);
-      setRelapseEntries(prev => [savedEntry, ...prev]);
+      const now = new Date();
+      setRelapseEntries(prev => [{ ...savedEntry, createdAt: now, timestamp: now }, ...prev]);
 
       // Show Oracle feedback in modal
       openOracleWithContent(oracleFeedback);
