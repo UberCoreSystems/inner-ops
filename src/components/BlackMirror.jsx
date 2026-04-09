@@ -35,7 +35,7 @@ const philosophicalQuotes = [
 const BlackMirror = () => {
   const [screenTime, setScreenTime] = useState('');
   const [mentalFog, setMentalFog] = useState(5);
-  const [interactionLevel, setInteractionLevel] = useState(5);
+  const [interactionLevel, setInteractionLevel] = useState(2);
   const [unconsciousCheck, setUnconsciousCheck] = useState(false);
   const [reflection, setReflection] = useState('');
   const [entries, setEntries] = useState([]);
@@ -51,6 +51,8 @@ const BlackMirror = () => {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [expandedFeedback, setExpandedFeedback] = useState(new Set());
   const [screenTimeError, setScreenTimeError] = useState('');
+  const [triggerContext, setTriggerContext] = useState('');
+  const [triggerContextError, setTriggerContextError] = useState('');
 
   // Calculate Black Mirror Index - stable reference
   const calculateBlackMirrorIndex = useCallback((screenTimeValue, mentalFogValue, interactionValue, unconsciousCheckValue) => {
@@ -171,7 +173,19 @@ const BlackMirror = () => {
     }
     setScreenTimeError('');
 
+    if (!triggerContext.trim() || triggerContext.trim().length < 10) {
+      setTriggerContextError('Required — at least one sentence (10 characters minimum).');
+      return;
+    }
+    setTriggerContextError('');
+
     setLoading(true);
+
+    // Detect consecutive high BMI (threshold: 25) from the two most recent entries
+    const HIGH_BMI_THRESHOLD = 25;
+    const consecutiveHighBMI = entries.length >= 2 &&
+      entries[0].blackMirrorIndex >= HIGH_BMI_THRESHOLD &&
+      entries[1].blackMirrorIndex >= HIGH_BMI_THRESHOLD;
 
     try {
       const calculatedIndex = calculateBlackMirrorIndex(screenTime, mentalFog, interactionLevel, unconsciousCheck);
@@ -181,6 +195,7 @@ const BlackMirror = () => {
         mentalFog,
         interactionLevel,
         unconsciousCheck,
+        triggerContext: triggerContext.trim(),
         reflection: reflection.trim(),
         blackMirrorIndex: calculatedIndex,
         philosophicalInsight,
@@ -196,12 +211,14 @@ const BlackMirror = () => {
       try {
         const pastEntries = entries.length > 0 ? entries.slice(0, 3).map(e => `Index: ${e.blackMirrorIndex}, Screen: ${e.screenTime}h`) : [];
         const fogLabel = mentalFog <= 3 ? 'sharp' : mentalFog <= 6 ? 'moderate' : 'heavy';
-        const interactionLabel = interactionLevel <= 3 ? 'low' : interactionLevel <= 6 ? 'moderate' : 'high';
+        const interactionLabel = interactionLevel === 1 ? 'solo consumption' : interactionLevel === 2 ? 'mixed' : 'intentional connection';
         const blackMirrorText = [
           `My screen time today was ${screenTime} hours, giving me a Black Mirror index of ${calculatedIndex}/100.`,
-          `Mental fog: ${mentalFog}/10 (${fogLabel}). Quality of real-world interaction: ${interactionLevel}/10 (${interactionLabel}).`,
+          `Mental fog: ${mentalFog}/10 (${fogLabel}). Screen use pattern: ${interactionLabel}.`,
+          `What I was avoiding when I reached for my phone: ${triggerContext.trim()}`,
           unconsciousCheck ? 'I caught myself reaching for my phone without any conscious intention — purely automatic.' : '',
-          reflection ? `My reflection on this: ${reflection}` : 'I haven\'t examined what I\'m actually escaping into the screen from.',
+          reflection ? `My reflection on this: ${reflection}` : '',
+          consecutiveHighBMI ? 'User\'s BMI has been above threshold for 2 consecutive check-ins. Ask what specifically they will restrict — not whether they want to do better.' : '',
         ].filter(Boolean).join(' ');
         const feedback = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
         finalEntry = { ...entryData, oracleFeedback: feedback };
@@ -224,8 +241,9 @@ const BlackMirror = () => {
       // Reset form
       setScreenTime('');
       setMentalFog(5);
-      setInteractionLevel(5);
+      setInteractionLevel(2);
       setUnconsciousCheck(false);
+      setTriggerContext('');
       setReflection('');
 
     } catch (error) {
@@ -234,7 +252,7 @@ const BlackMirror = () => {
     } finally {
       setLoading(false);
     }
-  }, [screenTime, mentalFog, interactionLevel, unconsciousCheck, reflection, calculateBlackMirrorIndex, philosophicalInsight, entries, loadAnalytics]);
+  }, [screenTime, mentalFog, interactionLevel, unconsciousCheck, triggerContext, reflection, calculateBlackMirrorIndex, philosophicalInsight, entries, loadAnalytics]);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -308,6 +326,19 @@ const BlackMirror = () => {
           </div>
 
           <div>
+            <label className="block text-gray-400 text-sm font-medium mb-3">What were you avoiding when you reached for your phone?</label>
+            <textarea
+              value={triggerContext}
+              onChange={(e) => { setTriggerContext(e.target.value); setTriggerContextError(''); }}
+              rows={2}
+              className="w-full p-4 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-red focus:outline-none resize-none transition-all duration-200"
+              placeholder="Name the specific thing you were avoiding or escaping."
+              required
+            />
+            {triggerContextError && <p className="text-xs text-red-400 mt-2">{triggerContextError}</p>}
+          </div>
+
+          <div>
             <label className="block text-gray-400 text-sm font-medium mb-3">Mental Fog Level (1-10)</label>
             <input
               type="range"
@@ -325,19 +356,22 @@ const BlackMirror = () => {
           </div>
 
           <div>
-            <label className="block text-gray-400 text-sm font-medium mb-3">Real-World Human Interaction (1-10)</label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={interactionLevel}
-              onChange={(e) => setInteractionLevel(Number(e.target.value))}
-              className="w-full h-2 bg-oura-border rounded-full appearance-none cursor-pointer oura-slider"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-3">
-              <span>1 - Isolated</span>
-              <span className="text-white text-lg font-light">{interactionLevel}</span>
-              <span>10 - Very Social</span>
+            <label className="block text-gray-400 text-sm font-medium mb-3">Was most of your screen use solo consumption or intentional connection?</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { value: 1, label: 'Mostly solo consumption' },
+                { value: 2, label: 'Mixed' },
+                { value: 3, label: 'Mostly intentional connection' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setInteractionLevel(opt.value)}
+                  className={`p-3 rounded-2xl text-sm text-center transition-all duration-200 border ${interactionLevel === opt.value ? 'border-oura-red bg-oura-red/10 text-white' : 'border-oura-border bg-oura-card text-gray-400 hover:text-white hover:border-gray-500'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -400,7 +434,7 @@ const BlackMirror = () => {
 
           <button
             type="submit"
-            disabled={loading || !screenTime.trim()}
+            disabled={loading || !screenTime.trim() || triggerContext.trim().length < 10}
             className="w-full bg-oura-red hover:bg-red-600 disabled:bg-oura-border text-white font-light py-4 px-6 rounded-2xl transition-all duration-200 tracking-wide"
           >
             {loading ? 'Saving...' : 'Save Entry'}
@@ -474,7 +508,11 @@ const BlackMirror = () => {
                   </div>
                   <div className="bg-oura-darker p-3 rounded-xl">
                     <span className="text-gray-500 text-xs block mb-1">Interaction</span>
-                    <span className="text-white text-lg font-light">{entry.interactionLevel}/10</span>
+                    <span className="text-white text-sm font-light">
+                      {entry.interactionLevel <= 3
+                        ? (entry.interactionLevel === 1 ? 'Solo' : entry.interactionLevel === 2 ? 'Mixed' : 'Intentional')
+                        : `${entry.interactionLevel}/10`}
+                    </span>
                   </div>
                   <div className="bg-oura-darker p-3 rounded-xl">
                     <span className="text-gray-500 text-xs block mb-1">Unconscious</span>
@@ -483,6 +521,15 @@ const BlackMirror = () => {
                     </span>
                   </div>
                 </div>
+
+                {entry.triggerContext && (
+                  <div className="mb-3">
+                    <p className="text-gray-500 text-xs mb-2 uppercase tracking-wide">Avoidance Trigger</p>
+                    <p className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl leading-relaxed">
+                      {entry.triggerContext}
+                    </p>
+                  </div>
+                )}
 
                 {entry.reflection && (
                   <div className="mb-4">
