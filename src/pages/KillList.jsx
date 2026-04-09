@@ -6,7 +6,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
 import VirtualizedList from '../components/VirtualizedList';
-import { KillCelebration } from '../components/Confetti';
+import { KillConfirmation } from '../components/Confetti';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
@@ -1236,9 +1236,8 @@ const KillList = () => {
           isLoading={oracleModal.isLoading}
         />
         
-        {/* Kill Celebration Animation */}
-        <KillCelebration 
-          show={celebration.show} 
+        <KillConfirmation
+          show={celebration.show}
           targetName={celebration.targetName}
           onComplete={() => setCelebration({ show: false, targetName: '' })}
         />
