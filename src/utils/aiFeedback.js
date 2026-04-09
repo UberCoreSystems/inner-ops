@@ -1,5 +1,7 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getAuth as getFirebaseAuth } from 'firebase/auth';
 import { getUserProfile } from './userProfile';
+import { getBehavioralContext } from './getBehavioralContext';
 import { track } from './analytics';
 
 const logger = {
@@ -312,6 +314,35 @@ const buildAntiRepetitionData = ({ userId, moduleName, entryText, themes, lenses
   };
 };
 
+const buildCrossModuleInstruction = (behavioralContext) => {
+  if (!behavioralContext) return '';
+  const parts = [];
+  if (behavioralContext.dominantRelapseArchetype) {
+    parts.push(`Dominant relapse archetype (last 14d): ${behavioralContext.dominantRelapseArchetype}.`);
+  }
+  if (behavioralContext.recentRelapseCount > 0) {
+    parts.push(`Relapse entries in last 14 days: ${behavioralContext.recentRelapseCount}.`);
+  }
+  if (behavioralContext.activeKillTargets?.length) {
+    const targets = behavioralContext.activeKillTargets
+      .map(t => `${t.title} (streak: ${t.streak}, escapes: ${t.escapeCount})`)
+      .join('; ');
+    parts.push(`Active Kill List targets: ${targets}.`);
+  }
+  if (behavioralContext.violatedHardLessons?.length) {
+    const rules = behavioralContext.violatedHardLessons.map(l => `"${l.rule}"`).join(', ');
+    parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
+  }
+  if (behavioralContext.blackMirrorTrend) {
+    parts.push(`Black Mirror attention trend: ${behavioralContext.blackMirrorTrend}.`);
+  }
+  if (behavioralContext.journalMoodPattern) {
+    parts.push(`Dominant journal mood (last 7d): ${behavioralContext.journalMoodPattern}.`);
+  }
+  if (parts.length === 0) return '';
+  return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join('\n')}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
+};
+
 export const buildPrompt = ({
   moduleName,
   entryText,
@@ -320,15 +351,18 @@ export const buildPrompt = ({
   antiRepetitionData,
   userContext = {},
   priorFeedbackSummary = '',
-  userGoals = []
+  userGoals = [],
+  behavioralContext = null
 }) => {
-  const systemPrompt = `You are Inner Ops AI Feedback Engine. Voice: digital brother, direct, strategic, grounded.\nAvoid flattery, therapy tone, moralizing, and generic motivation.\nUse second-person voice.\nGround every claim in the user entry.\nPick 1-3 lenses only.\nNo fabricated quotes. Paraphrase thinkers only.\nIf context is missing, ask 1-2 pointed questions at the end.\nOutput strict JSON with keys: summary_mirror, core_pattern, chosen_lenses, analysis, prescriptions, journal_prompts, closing_charge.`;
+  const crossModuleInstruction = buildCrossModuleInstruction(behavioralContext);
+  const systemPrompt = `You are Inner Ops AI Feedback Engine. Voice: digital brother, direct, strategic, grounded.\nAvoid flattery, therapy tone, moralizing, and generic motivation.\nUse second-person voice.\nGround every claim in the user entry.\nPick 1-3 lenses only.\nNo fabricated quotes. Paraphrase thinkers only.\nIf context is missing, ask 1-2 pointed questions at the end.\nOutput strict JSON with keys: summary_mirror, core_pattern, chosen_lenses, analysis, prescriptions, journal_prompts, closing_charge.${crossModuleInstruction}`;
 
   const userPrompt = {
     moduleName,
     entryText,
     extractedThemes: themes,
     selectedLenses: lenses,
+    behavioralContext: behavioralContext || undefined,
     antiRepetition: {
       noveltyMode: antiRepetitionData.noveltyMode,
       similarity: antiRepetitionData.similarity,
@@ -489,6 +523,7 @@ export const callLLM = async (promptBundle, generationContext) => {
       moduleName: userPrompt.moduleName,
       userContext,
       tone,
+      ...(userPrompt.behavioralContext ? { behavioralContext: userPrompt.behavioralContext } : {}),
     });
 
     const { feedback } = result.data;
@@ -658,7 +693,8 @@ export const generateFeedback = async ({
   userContext = {},
   priorFeedbackSummary = '',
   userGoals = [],
-  userPreferences = {}
+  userPreferences = {},
+  behavioralContext = null
 }) => {
   const cleanEntry = normalizeWhitespace(entryText);
   const safeModuleName = normalizeWhitespace(moduleName || 'journal') || 'journal';
@@ -686,7 +722,8 @@ export const generateFeedback = async ({
     antiRepetitionData,
     userContext,
     priorFeedbackSummary,
-    userGoals
+    userGoals,
+    behavioralContext
   });
 
   try {
@@ -730,7 +767,7 @@ export const generateFeedback = async ({
   }
 };
 
-export const generateAIFeedback = async (moduleName, userInput, pastEntries = []) => {
+export const generateAIFeedback = async (moduleName, userInput, pastEntries = [], behavioralContext = null) => {
   try {
     const entryText = normalizeEntryText(userInput);
     const priorFeedbackSummary = Array.isArray(pastEntries)
@@ -741,10 +778,23 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
           .join(' | ')
       : '';
 
+    // Auto-fetch behavioral context when not explicitly provided
+    let resolvedContext = behavioralContext;
+    if (!resolvedContext) {
+      try {
+        const auth = getFirebaseAuth();
+        const uid = auth.currentUser?.uid;
+        if (uid) resolvedContext = await getBehavioralContext(uid);
+      } catch {
+        resolvedContext = null;
+      }
+    }
+
     const feedback = await generateFeedback({
       moduleName,
       entryText,
-      priorFeedbackSummary
+      priorFeedbackSummary,
+      behavioralContext: resolvedContext
     });
 
     // Real Claude response — return prose directly, no template formatting
