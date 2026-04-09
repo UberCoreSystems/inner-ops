@@ -23,6 +23,7 @@ const Relapse = React.lazy(() => import('./pages/Relapse'));
 const Profile = React.lazy(() => import('./pages/Profile'));
 const Onboarding = React.lazy(() => import('./pages/Onboarding'));
 const HardLessons = React.lazy(() => import('./pages/HardLessons'));
+const SynthesisBriefing = React.lazy(() => import('./pages/SynthesisBriefing'));
 
 // Fallback loader
 const PageLoader = () => (
@@ -252,6 +253,19 @@ function App() {
             } 
           />
           
+          <Route
+            path="/synthesis"
+            element={
+              <InlineErrorBoundary name="SynthesisBriefing">
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <SynthesisBriefing />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            }
+          />
+
           {/* Default Routes */}
           <Route path="/login" element={<Navigate to="/auth" />} />
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/auth" />} />
