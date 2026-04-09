@@ -90,7 +90,7 @@ const KillList = () => {
   const [newTargetCategory, setNewTargetCategory] = useState('bad-habit');
   const [newTargetDifficulty, setNewTargetDifficulty] = useState('deep');
   const [autopsyTarget, setAutopsyTarget] = useState(null);
-  const [autopsyData, setAutopsyData] = useState({ context: '', rationalization: '', prevention: '' });
+  const [autopsyData, setAutopsyData] = useState({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '' });
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(true);
@@ -116,6 +116,12 @@ const KillList = () => {
   const [showReflection, setShowReflection] = useState({});
   const [updatingReflection, setUpdatingReflection] = useState({});
   const [user, setUser] = useState(null);
+
+  // Implementation intentions (BER-126)
+  const [newIntention, setNewIntention] = useState({ trigger: '', response: '' });
+  const [showIntention, setShowIntention] = useState({});
+  const [reviseTarget, setReviseTarget] = useState(null);
+  const [reviseIntention, setReviseIntention] = useState({ trigger: '', response: '' });
 
   const categories = CATEGORIES;
   const categoryIcons = CATEGORY_ICONS;
@@ -202,6 +208,10 @@ const KillList = () => {
 
   const addTarget = async () => {
     if (!newTarget.trim() || loading) return;
+    if (newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20) {
+      ouraToast.warning('Implementation intention required — both fields need at least 20 characters');
+      return;
+    }
 
     setLoading(true);
     logger.log("🎯 Adding new kill target:", newTarget.trim());
@@ -217,6 +227,7 @@ const KillList = () => {
         streak: 0,
         longestStreak: 0,
         totalTrackedDays: 0,
+        implementationIntention: { trigger: newIntention.trigger.trim(), response: newIntention.response.trim() },
         checkIns: [],
         lastCheckIn: null,
         milestonesReached: [],
@@ -243,6 +254,7 @@ const KillList = () => {
       setNewTarget('');
       setNewTargetCategory('bad-habit');
       setNewTargetDifficulty('deep');
+      setNewIntention({ trigger: '', response: '' });
 
       // Generate Oracle feedback
       setOracleModal({ isOpen: true, content: '', isLoading: true });
@@ -357,9 +369,18 @@ const KillList = () => {
   // Submit escape autopsy
   const submitAutopsy = useCallback(async () => {
     if (!autopsyTarget) return;
-    const { context, rationalization, prevention } = autopsyData;
+    const { context, rationalization, prevention, intentionActivated, intentionFailReason } = autopsyData;
+    const hasIntention = !!autopsyTarget.implementationIntention?.trigger;
     if (!context.trim() || !rationalization.trim()) {
       ouraToast.warning('Fill in what happened and what you told yourself');
+      return;
+    }
+    if (hasIntention && !intentionActivated) {
+      ouraToast.warning('Specify whether your implementation intention activated');
+      return;
+    }
+    if (hasIntention && intentionActivated !== 'yes' && !intentionFailReason.trim()) {
+      ouraToast.warning('Explain why the implementation intention did not activate');
       return;
     }
 
@@ -370,6 +391,7 @@ const KillList = () => {
         rationalization: rationalization.trim(),
         prevention: prevention.trim() || null,
         streakAtEscape: autopsyTarget.streak || 0,
+        ...(hasIntention ? { intentionActivated, intentionFailReason: intentionActivated !== 'yes' ? intentionFailReason.trim() : null } : {}),
       };
       const escapeData = [...(autopsyTarget.escapeData || []), newEscapeEntry];
 
@@ -387,11 +409,15 @@ const KillList = () => {
       // Close autopsy form, show AVE prompt
       const capturedTarget = autopsyTarget;
       setAutopsyTarget(null);
-      setAutopsyData({ context: '', rationalization: '', prevention: '' });
+      setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '' });
       ouraToast.success('Escape autopsy recorded');
 
+      // Build Oracle context — include intention result when present
+      const intentionContext = hasIntention
+        ? ` Implementation intention status: ${intentionActivated}${intentionActivated !== 'yes' ? ` — reason it did not activate: ${intentionFailReason.trim()}` : ''}.`
+        : '';
       // Start Oracle fetch in parallel with AVE prompt display
-      const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''} This is escape number ${escapeData.length}.`;
+      const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''}${intentionContext} This is escape number ${escapeData.length}.`;
       const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).catch(() => null);
 
       // Show AVE circuit breaker — 3-second minimum lock before Oracle
@@ -609,6 +635,27 @@ const KillList = () => {
     setReflectionNotes(notes);
   }, [targets]);
 
+  const saveRevisedIntention = useCallback(async () => {
+    if (!reviseTarget) return;
+    if (reviseIntention.trigger.trim().length < 20 || reviseIntention.response.trim().length < 20) {
+      ouraToast.warning('Both intention fields need at least 20 characters');
+      return;
+    }
+    try {
+      const updatedIntention = { trigger: reviseIntention.trigger.trim(), response: reviseIntention.response.trim() };
+      await updateData('killTargets', reviseTarget.id, { implementationIntention: updatedIntention, lastUpdated: new Date() });
+      setTargets(prev => prev.map(t =>
+        t.id === reviseTarget.id ? { ...t, implementationIntention: updatedIntention } : t
+      ));
+      setReviseTarget(null);
+      setReviseIntention({ trigger: '', response: '' });
+      ouraToast.success('Implementation intention revised');
+    } catch (err) {
+      logger.error('Error saving revised intention:', err);
+      ouraToast.error('Failed to save intention');
+    }
+  }, [reviseTarget, reviseIntention]);
+
   const filteredTargets = useMemo(() => {
     const statusFiltered = (() => {
       switch (filterStatus) {
@@ -803,6 +850,43 @@ const KillList = () => {
               )}
             </div>
 
+            {/* Implementation intention — collapsed by default */}
+            {target.implementationIntention?.trigger && (
+              <div className="border-t border-[#1a1a1a] pt-3">
+                {(() => {
+                  const failedIntentions = (target.escapeData || []).filter(e => e.intentionActivated && e.intentionActivated !== 'yes').length;
+                  return (
+                    <>
+                      <button
+                        onClick={() => setShowIntention(prev => ({ ...prev, [target.id]: !prev[target.id] }))}
+                        className="flex items-center gap-2 text-[#3a3a3a] hover:text-[#5a5a5a] text-xs transition-colors w-full text-left"
+                      >
+                        <span className="uppercase tracking-widest">Implementation Intention</span>
+                        <span>{showIntention[target.id] ? '▲' : '▼'}</span>
+                      </button>
+                      {showIntention[target.id] && (
+                        <div className="mt-2 space-y-1 text-xs text-[#5a5a5a]">
+                          <p><span className="text-[#3a3a3a]">When:</span> {target.implementationIntention.trigger}</p>
+                          <p><span className="text-[#3a3a3a]">I will:</span> {target.implementationIntention.response}</p>
+                        </div>
+                      )}
+                      {failedIntentions >= 3 && (
+                        <div className="mt-2 p-3 bg-[#f59e0b]/5 border border-[#f59e0b]/20 rounded-xl">
+                          <p className="text-[#f59e0b] text-xs mb-2">Your implementation intention has not activated in {failedIntentions} escapes. The plan needs revision, not the person.</p>
+                          <button
+                            onClick={() => { setReviseTarget(target); setReviseIntention({ trigger: target.implementationIntention.trigger, response: target.implementationIntention.response }); }}
+                            className="text-xs px-3 py-1.5 bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30 rounded-lg hover:bg-[#f59e0b]/20 transition-colors"
+                          >
+                            Revise your intention
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* Daily check-in buttons (active targets only, once per day) */}
             {target.status === 'active' && !checkedInToday && (
               <div className="flex gap-2 pt-1">
@@ -861,7 +945,7 @@ const KillList = () => {
       </div>
     );
     }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, dailyCheckIn, categories, categoryIcons,
-      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote]);
+      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote, showIntention, setShowIntention, setReviseTarget, setReviseIntention]);
 
   return (
     <div className="min-h-screen bg-black">
@@ -1100,11 +1184,51 @@ const KillList = () => {
                 </div>
               </div>
 
+              {/* Implementation Intention — required */}
+              <div className="border-t border-[#1a1a1a] pt-6">
+                <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-1">
+                  When This Happens, I Will Do This Instead
+                </label>
+                <p className="text-[#3a3a3a] text-xs mb-4">Pre-decide your response to the trigger. Both fields required (min 20 chars).</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">
+                      When [describe the specific triggering condition]
+                    </label>
+                    <textarea
+                      value={newIntention.trigger}
+                      onChange={(e) => setNewIntention(prev => ({ ...prev, trigger: e.target.value }))}
+                      rows={2}
+                      placeholder="I feel the urge to [X] after [context]..."
+                      className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#2a2a2a] transition-colors"
+                    />
+                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.trigger.trim().length < 20 ? 'text-[#ef4444]/50' : 'text-[#3a3a3a]'}`}>
+                      {newIntention.trigger.trim().length}/20
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">
+                      I Will [describe the specific competing behavior]
+                    </label>
+                    <textarea
+                      value={newIntention.response}
+                      onChange={(e) => setNewIntention(prev => ({ ...prev, response: e.target.value }))}
+                      rows={2}
+                      placeholder="I will immediately [specific action] for at least [duration]..."
+                      className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#2a2a2a] transition-colors"
+                    />
+                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.response.trim().length < 20 ? 'text-[#ef4444]/50' : 'text-[#3a3a3a]'}`}>
+                      {newIntention.response.trim().length}/20
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Submit Button */}
               <div className="flex justify-end">
                 <button
                   onClick={addTarget}
-                  disabled={loading || !newTarget.trim()}
+                  disabled={loading || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20}
                   className="px-8 py-3 bg-[#ef4444] text-white rounded-2xl hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-all duration-300 font-medium"
                 >
                   {loading ? 'Adding Contract...' : 'Add Kill Contract'}
@@ -1231,18 +1355,89 @@ const KillList = () => {
           </div>
         )}
 
+        {/* Revise Implementation Intention Modal */}
+        {reviseTarget && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-medium">Revise Intention: {reviseTarget.title}</h3>
+                <button onClick={() => { setReviseTarget(null); setReviseIntention({ trigger: '', response: '' }); }} className="text-[#3a3a3a] hover:text-white transition-colors">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <p className="text-[#5a5a5a] text-sm mb-5">The plan failed. Revise the trigger or the competing behavior — not the standard.</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">When [triggering condition]</label>
+                  <textarea value={reviseIntention.trigger} onChange={(e) => setReviseIntention(prev => ({ ...prev, trigger: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm" />
+                  <div className={`text-xs mt-1 text-right tabular-nums ${reviseIntention.trigger.trim().length < 20 ? 'text-[#ef4444]/50' : 'text-[#3a3a3a]'}`}>{reviseIntention.trigger.trim().length}/20</div>
+                </div>
+                <div>
+                  <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">I will [competing behavior]</label>
+                  <textarea value={reviseIntention.response} onChange={(e) => setReviseIntention(prev => ({ ...prev, response: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm" />
+                  <div className={`text-xs mt-1 text-right tabular-nums ${reviseIntention.response.trim().length < 20 ? 'text-[#ef4444]/50' : 'text-[#3a3a3a]'}`}>{reviseIntention.response.trim().length}/20</div>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={saveRevisedIntention} disabled={reviseIntention.trigger.trim().length < 20 || reviseIntention.response.trim().length < 20} className="flex-1 py-3 bg-[#f59e0b] hover:bg-[#d97706] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-black rounded-xl font-medium text-sm transition-all">
+                  Save Revised Intention
+                </button>
+                <button onClick={() => { setReviseTarget(null); setReviseIntention({ trigger: '', response: '' }); }} className="px-6 py-3 bg-[#1a1a1a] text-[#5a5a5a] hover:text-white rounded-xl text-sm transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Escape Autopsy Modal */}
         {autopsyTarget && (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-white font-medium">Escape Autopsy: {autopsyTarget.title}</h3>
-                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '' }); }} className="text-[#3a3a3a] hover:text-white transition-colors">
+                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '' }); }} className="text-[#3a3a3a] hover:text-white transition-colors">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
               <p className="text-[#5a5a5a] text-sm mb-5">Streak was {autopsyTarget.streak || 0} days. Capture what happened so the pattern becomes visible.</p>
               <div className="space-y-4">
+                {/* Implementation intention check — only shown if target has one */}
+                {autopsyTarget.implementationIntention?.trigger && (
+                  <>
+                    <div>
+                      <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">Did your implementation intention activate? <span className="text-[#ef4444]">*</span></label>
+                      <div className="text-[#3a3a3a] text-xs mb-2 italic">{autopsyTarget.implementationIntention.trigger}</div>
+                      <div className="flex gap-2">
+                        {['yes', 'partially', 'no'].map(val => (
+                          <button
+                            key={val}
+                            onClick={() => setAutopsyData(prev => ({ ...prev, intentionActivated: val, intentionFailReason: val === 'yes' ? '' : prev.intentionFailReason }))}
+                            className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all border ${
+                              autopsyData.intentionActivated === val
+                                ? val === 'yes' ? 'bg-[#22c55e]/20 text-[#22c55e] border-[#22c55e]/40' : 'bg-[#ef4444]/20 text-[#ef4444] border-[#ef4444]/40'
+                                : 'bg-[#0a0a0a] text-[#5a5a5a] border-[#1a1a1a] hover:border-[#2a2a2a]'
+                            }`}
+                          >
+                            {val.charAt(0).toUpperCase() + val.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {autopsyData.intentionActivated && autopsyData.intentionActivated !== 'yes' && (
+                      <div>
+                        <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">Why didn't it activate? <span className="text-[#ef4444]">*</span></label>
+                        <input
+                          type="text"
+                          value={autopsyData.intentionFailReason}
+                          onChange={(e) => setAutopsyData(prev => ({ ...prev, intentionFailReason: e.target.value }))}
+                          className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#2a2a2a]"
+                          placeholder="The trigger was present but the plan didn't fire because..."
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
                 <div>
                   <label className="text-[#8a8a8a] text-xs uppercase tracking-widest mb-2 block">What was happening right before?</label>
                   <textarea value={autopsyData.context} onChange={(e) => setAutopsyData(prev => ({ ...prev, context: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#2a2a2a]" placeholder="The environment, state of mind, time of day..." />
@@ -1260,7 +1455,7 @@ const KillList = () => {
                 <button onClick={submitAutopsy} disabled={!autopsyData.context.trim() || !autopsyData.rationalization.trim()} className="flex-1 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-xl font-medium text-sm transition-all">
                   Record Autopsy
                 </button>
-                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '' }); }} className="px-6 py-3 bg-[#1a1a1a] text-[#5a5a5a] hover:text-white rounded-xl text-sm transition-colors">
+                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '' }); }} className="px-6 py-3 bg-[#1a1a1a] text-[#5a5a5a] hover:text-white rounded-xl text-sm transition-colors">
                   Skip
                 </button>
               </div>
