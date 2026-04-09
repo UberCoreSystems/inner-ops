@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { writeData, updateData, deleteData, subscribeToUserData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -843,6 +844,7 @@ const KillList = () => {
           </p>
           <h1 className="text-3xl font-bold text-white mb-2">Kill List</h1>
           <p className="text-[#8a8a8a]">Name what needs to die. Hold the contract.</p>
+          <p className="text-[#5a5a5a] text-xs mt-3">Patterns archived → <Link to="/hardlessons" className="text-[#8a8a8a] hover:text-white transition-colors">Hard Lessons</Link></p>
         </header>
 
         {/* Stats */}

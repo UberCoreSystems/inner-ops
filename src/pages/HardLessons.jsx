@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import OracleModal from '../components/OracleModal';
@@ -460,6 +461,7 @@ Please help extract the core lesson and rule from this experience.
               <span className="text-[#f59e0b] font-semibold">Purpose:</span> Ensure the same lesson is never paid for twice. Memory with teeth.
             </p>
           </div>
+          <p className="text-[#5a5a5a] text-xs mt-3">Lesson maps to active pattern → <Link to="/killlist" className="text-[#8a8a8a] hover:text-white transition-colors">Kill List</Link></p>
         </div>
 
         {/* Stats Overview */}
