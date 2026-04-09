@@ -1,4 +1,6 @@
 
+import logger from './logger';
+
 // Memoization cache for expensive calculations
 const calculationCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -93,7 +95,7 @@ export const clarityScoreUtils = {
       if (isKilled) {
         const mappedDiff = DIFF_MAP[target.priority];
         if (!target.difficulty && !mappedDiff) {
-          console.warn(`[clarityScore] Kill target "${target.name || target.id}" has no difficulty or recognized priority — defaulting to 'deep'`);
+          logger.warn(`[clarityScore] Kill target "${target.name || target.id}" has no difficulty or recognized priority — defaulting to 'deep'`);
         }
         const difficulty = target.difficulty || mappedDiff || 'deep';
         if (difficulty === 'core') killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_CORE;
