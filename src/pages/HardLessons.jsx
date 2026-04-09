@@ -42,7 +42,9 @@ export default function HardLessons() {
     costDescription: '',
     extractedLesson: '',
     ruleGoingForward: '',
-    isFinalized: false
+    isFinalized: false,
+    isRuleViolation: false,
+    violatedRuleId: null,
   });
 
   // Module state
@@ -64,6 +66,17 @@ export default function HardLessons() {
   const [scarInventory, setScarInventory] = useState(['', '', '']);
   const [showScarFlow, setShowScarFlow] = useState(false);
   const [savingScars, setSavingScars] = useState(false);
+
+  // BER-130: Rules Library + Rule Violation Detection
+  const [showRulesLibrary, setShowRulesLibrary] = useState(false);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [libraryFilterCost, setLibraryFilterCost] = useState('');
+  const [libraryFilterCategory, setLibraryFilterCategory] = useState('');
+  const [violationPrompt, setViolationPrompt] = useState({ visible: false, matchedRule: null });
+  const [pendingViolation, setPendingViolation] = useState({ isRuleViolation: false, violatedRuleId: null });
+  const [costPatternNarrative, setCostPatternNarrative] = useState('');
+  const [loadingNarrative, setLoadingNarrative] = useState(false);
+  const violationCheckedRef = useRef('');
 
   useEffect(() => {
     loadHardLessons();
@@ -212,6 +225,96 @@ export default function HardLessons() {
     });
   }, [lessons, searchQuery, eventCategories]);
 
+  // BER-130: finalized rules aggregated for the library
+  const finalizedRules = useMemo(() => {
+    const base = lessons
+      .filter(l => l.isFinalized && l.ruleGoingForward?.trim())
+      .map(l => ({
+        id: l.id,
+        rule: l.ruleGoingForward,
+        lesson: l,
+        violationCount: lessons.filter(x => x.isRuleViolation && x.violatedRuleId === l.id).length,
+      }))
+      .sort((a, b) => new Date(b.lesson.finalizedAt || b.lesson.createdAt) - new Date(a.lesson.finalizedAt || a.lesson.createdAt));
+
+    const q = librarySearch.trim().toLowerCase();
+    return base.filter(r => {
+      if (libraryFilterCost && !r.lesson.costs?.includes(libraryFilterCost)) return false;
+      if (libraryFilterCategory && r.lesson.eventCategory !== libraryFilterCategory) return false;
+      if (q && !r.rule.toLowerCase().includes(q) && !r.lesson.extractedLesson?.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [lessons, librarySearch, libraryFilterCost, libraryFilterCategory]);
+
+  // Simple keyword-based rule violation detection (no ML — token overlap)
+  const tokenizeSimple = (text) => String(text || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length > 3);
+
+  const findMatchingRule = useCallback((description) => {
+    const descTokens = new Set(tokenizeSimple(description));
+    if (descTokens.size < 3) return null;
+    const finalized = lessons.filter(l => l.isFinalized && l.ruleGoingForward?.trim());
+    let bestMatch = null;
+    let bestScore = 0;
+    finalized.forEach(l => {
+      const ruleTokens = tokenizeSimple(l.ruleGoingForward + ' ' + (l.extractedLesson || ''));
+      const ruleSet = new Set(ruleTokens);
+      let intersection = 0;
+      descTokens.forEach(t => { if (ruleSet.has(t)) intersection++; });
+      const score = intersection / Math.max(descTokens.size, ruleSet.size, 1);
+      if (score > bestScore) { bestScore = score; bestMatch = l; }
+    });
+    return bestScore >= 0.12 ? bestMatch : null;
+  }, [lessons]);
+
+  const handleEventDescriptionBlur = useCallback(() => {
+    const desc = newLesson.eventDescription.trim();
+    if (desc.length < 30 || desc === violationCheckedRef.current) return;
+    if (editingLesson?.id) return; // skip on edit of existing lesson
+    violationCheckedRef.current = desc;
+    const matched = findMatchingRule(desc);
+    if (matched) {
+      setViolationPrompt({ visible: true, matchedRule: matched });
+    }
+  }, [newLesson.eventDescription, findMatchingRule, editingLesson]);
+
+  const handleViolationConfirm = (isViolation) => {
+    if (isViolation && violationPrompt.matchedRule) {
+      setPendingViolation({ isRuleViolation: true, violatedRuleId: violationPrompt.matchedRule.id });
+      setNewLesson(prev => ({ ...prev, isRuleViolation: true, violatedRuleId: violationPrompt.matchedRule.id }));
+    } else {
+      setPendingViolation({ isRuleViolation: false, violatedRuleId: null });
+      setNewLesson(prev => ({ ...prev, isRuleViolation: false, violatedRuleId: null }));
+    }
+    setViolationPrompt({ visible: false, matchedRule: null });
+  };
+
+  const generateCostPatternNarrative = async () => {
+    if (loadingNarrative) return;
+    setLoadingNarrative(true);
+    try {
+      const byType = {};
+      lessons.filter(l => l.isFinalized && l.ruleGoingForward).forEach(l => {
+        (l.costs || []).forEach(c => {
+          if (!byType[c]) byType[c] = [];
+          byType[c].push(l.ruleGoingForward);
+        });
+      });
+      const grouped = Object.entries(byType)
+        .map(([type, rules]) => {
+          const label = costCategories.find(c => c.value === type)?.label || type;
+          return `${label}: ${rules.join('; ')}`;
+        })
+        .join('\n');
+      const prompt = `The following are the user's finalized behavioral rules, grouped by cost type they emerged from:\n\n${grouped}\n\nIdentify the dominant cost pattern in 2-3 sentences. Pattern identification only — no advice, no affirmation, no suggestions.`;
+      const result = await generateAIFeedback('hardLessons', prompt, []);
+      setCostPatternNarrative(result || '');
+    } catch {
+      setCostPatternNarrative('Pattern generation unavailable.');
+    } finally {
+      setLoadingNarrative(false);
+    }
+  };
+
   const handleCostToggle = (costValue) => {
     setNewLesson(prev => ({
       ...prev,
@@ -299,6 +402,8 @@ Please help extract the core lesson and rule from this experience.
         ...newLesson,
         isFinalized: finalize,
         finalizedAt: finalize ? new Date().toISOString() : null,
+        isRuleViolation: pendingViolation.isRuleViolation,
+        violatedRuleId: pendingViolation.violatedRuleId,
         ...(pendingOracleReaction ? { oracleReaction: pendingOracleReaction } : {}),
         ...(pendingOracleWisdom ? { oracleWisdom: pendingOracleWisdom } : {})
       };
@@ -344,12 +449,17 @@ Please help extract the core lesson and rule from this experience.
       costDescription: '',
       extractedLesson: '',
       ruleGoingForward: '',
-      isFinalized: false
+      isFinalized: false,
+      isRuleViolation: false,
+      violatedRuleId: null,
     });
     setShowForm(false);
     setEditingLesson(null);
     setPendingOracleWisdom('');
     setPendingOracleReaction(null);
+    setPendingViolation({ isRuleViolation: false, violatedRuleId: null });
+    setViolationPrompt({ visible: false, matchedRule: null });
+    violationCheckedRef.current = '';
   };
 
   const editLesson = (lesson) => {
@@ -506,14 +616,22 @@ Please help extract the core lesson and rule from this experience.
           </div>
         )}
 
-        {/* Action Button */}
-        <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        {/* Action Buttons */}
+        <div className="mb-8 animate-fade-in-up flex flex-wrap gap-3" style={{ animationDelay: '0.2s' }}>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => { setShowForm(!showForm); setShowRulesLibrary(false); }}
             className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
           >
             {showForm ? 'Cancel' : '⚡ Extract New Lesson'}
           </button>
+          {lessons.some(l => l.isFinalized && l.ruleGoingForward) && (
+            <button
+              onClick={() => { setShowRulesLibrary(!showRulesLibrary); setShowForm(false); }}
+              className={`px-6 py-3 rounded-2xl transition-all duration-300 font-medium border ${showRulesLibrary ? 'bg-white text-black border-white' : 'bg-transparent text-[#8a8a8a] border-[#2a2a2a] hover:border-[#f59e0b] hover:text-white'}`}
+            >
+              📋 Rules Library ({lessons.filter(l => l.isFinalized && l.ruleGoingForward).length})
+            </button>
+          )}
         </div>
 
       {/* Lesson Extraction Form */}
@@ -586,10 +704,16 @@ Please help extract the core lesson and rule from this experience.
                 {newLesson.eventDescription?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
               </label>
               <p className="text-xs text-[#5a5a5a] mb-3">What actually happened (no interpretation, just facts)</p>
+              {newLesson.isRuleViolation && newLesson.violatedRuleId && (
+                <div className="mb-3 px-4 py-2 rounded-xl bg-red-900/20 border border-red-500/30 text-red-400 text-xs">
+                  Rule violation flagged — this event will be marked as a repeated breach.
+                </div>
+              )}
               <textarea
                 id="hard-lessons-event"
                 value={newLesson.eventDescription}
                 onChange={(e) => setNewLesson(prev => ({ ...prev, eventDescription: e.target.value }))}
+                onBlur={handleEventDescriptionBlur}
                 rows={3}
                 className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
                 placeholder="Describe the concrete event that occurred..."
@@ -729,6 +853,119 @@ Please help extract the core lesson and rule from this experience.
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Rule Violation Overlay */}
+      {violationPrompt.visible && violationPrompt.matchedRule && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-8">
+            <h3 className="text-white text-lg font-light mb-2">Rule match detected</h3>
+            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">You have a prior rule that may apply to this event</p>
+            <div className="bg-[#0f0f0f] border-l-4 border-[#f59e0b] rounded-r-xl p-4 mb-6">
+              <p className="text-[#fbbf24] text-sm leading-relaxed">{violationPrompt.matchedRule.ruleGoingForward}</p>
+              <p className="text-[#5a5a5a] text-xs mt-2">From: {violationPrompt.matchedRule.extractedLesson}</p>
+            </div>
+            <p className="text-white text-base mb-6">Was this rule in effect when this happened?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleViolationConfirm(true)}
+                className="flex-1 px-5 py-3 bg-[#ef4444] hover:bg-[#dc2626] text-white rounded-xl font-medium transition-colors"
+              >
+                Yes — rule violated
+              </button>
+              <button
+                onClick={() => handleViolationConfirm(false)}
+                className="flex-1 px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#8a8a8a] hover:text-white rounded-xl font-medium transition-colors"
+              >
+                No — different situation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rules Library */}
+      {showRulesLibrary && (
+        <div className="mb-8 animate-fade-in-up">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+            <h2 className="text-2xl font-light text-white tracking-tight flex-1">Rules Library</h2>
+            <input
+              type="search"
+              value={librarySearch}
+              onChange={(e) => setLibrarySearch(e.target.value)}
+              placeholder="Search rules..."
+              className="w-full sm:w-64 px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm"
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            <button onClick={() => setLibraryFilterCost('')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${!libraryFilterCost ? 'bg-[#f59e0b] text-black font-medium' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}>All Costs</button>
+            {costCategories.map(c => (
+              <button key={c.value} onClick={() => setLibraryFilterCost(libraryFilterCost === c.value ? '' : c.value)} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${libraryFilterCost === c.value ? 'bg-[#f59e0b] text-black font-medium' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}>{c.icon} {c.label}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 mb-6">
+            <button onClick={() => setLibraryFilterCategory('')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${!libraryFilterCategory ? 'bg-[#2a2a2a] text-white' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}>All Categories</button>
+            {eventCategories.map(c => (
+              <button key={c.value} onClick={() => setLibraryFilterCategory(libraryFilterCategory === c.value ? '' : c.value)} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${libraryFilterCategory === c.value ? 'bg-[#2a2a2a] text-white' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}>{c.icon} {c.label}</button>
+            ))}
+          </div>
+
+          {/* Cost Pattern Narrative */}
+          <div className="oura-card p-5 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs text-[#5a5a5a] uppercase tracking-widest">Cost Pattern Analysis</h4>
+              <button
+                onClick={generateCostPatternNarrative}
+                disabled={loadingNarrative}
+                className="px-4 py-1.5 text-xs bg-[#1a1a1a] text-[#a855f7] border border-[#a855f7]/30 rounded-lg hover:bg-[#a855f7]/10 transition-colors disabled:opacity-40"
+              >
+                {loadingNarrative ? 'Analyzing...' : '🔮 Generate Pattern'}
+              </button>
+            </div>
+            {costPatternNarrative ? (
+              <p className="text-[#8a8a8a] text-sm leading-relaxed">{costPatternNarrative}</p>
+            ) : (
+              <p className="text-[#3a3a3a] text-sm">Pattern identification across all finalized rules, grouped by cost type.</p>
+            )}
+          </div>
+
+          {/* Rules List */}
+          {finalizedRules.length === 0 ? (
+            <div className="oura-card p-8 text-center">
+              <p className="text-[#5a5a5a] text-sm">No rules match the current filter.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {finalizedRules.map(({ id, rule, lesson, violationCount }) => {
+                const category = eventCategories.find(c => c.value === lesson.eventCategory);
+                const lessonCosts = costCategories.filter(c => lesson.costs?.includes(c.value));
+                return (
+                  <div key={id} className={`oura-card p-5 ${violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-[#fbbf24] font-medium leading-relaxed border-l-4 border-[#f59e0b] pl-3">{rule}</p>
+                        <p className="text-[#5a5a5a] text-xs mt-2">{lesson.extractedLesson}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                          {category && <span className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#8a8a8a] rounded-lg border border-[#2a2a2a]">{category.icon} {category.label}</span>}
+                          {lessonCosts.map(c => <span key={c.value} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#8a8a8a] rounded-lg border border-[#2a2a2a]">{c.icon} {c.label}</span>)}
+                          <span className="text-[10px] text-[#5a5a5a]">{new Date(lesson.finalizedAt || lesson.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      {violationCount > 0 && (
+                        <div className="shrink-0 text-center">
+                          <div className="text-red-400 text-xl font-light tabular-nums">{violationCount}</div>
+                          <div className="text-red-500/60 text-[10px] uppercase tracking-wider">violation{violationCount !== 1 ? 's' : ''}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -932,6 +1169,13 @@ Please help extract the core lesson and rule from this experience.
                             {lesson.ruleGoingForward}
                           </p>
                         </div>
+
+                        {/* Rule violation indicator */}
+                        {lesson.isRuleViolation && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-xl">
+                            <span className="text-red-400 text-xs font-medium uppercase tracking-wider">Rule Violation</span>
+                          </div>
+                        )}
 
                         {/* Oracle wisdom — saved from extraction */}
                         {lesson.oracleWisdom && typeof lesson.oracleWisdom === 'string' && (
