@@ -107,6 +107,9 @@ const KillList = () => {
   
   // Celebration state
   const [celebration, setCelebration] = useState({ show: false, targetName: '' });
+
+  // AVE circuit breaker prompt — shown after autopsy, before Oracle
+  const [avePrompt, setAvePrompt] = useState(false);
   
   // Reflection notes state
   const [reflectionNotes, setReflectionNotes] = useState({});
@@ -213,6 +216,7 @@ const KillList = () => {
         status: 'active',
         streak: 0,
         longestStreak: 0,
+        totalTrackedDays: 0,
         checkIns: [],
         lastCheckIn: null,
         milestonesReached: [],
@@ -279,6 +283,7 @@ const KillList = () => {
       const currentStreak = target.streak || 0;
       const newStreak = held ? currentStreak + 1 : 0;
       const longestStreak = Math.max(target.longestStreak || 0, newStreak);
+      const newTotalTrackedDays = (target.totalTrackedDays || 0) + 1;
       const newCheckIn = { date: today, held, ...(note ? { note } : {}) };
       const checkIns = [...(target.checkIns || []), newCheckIn];
       const tier = getTier(target);
@@ -294,6 +299,7 @@ const KillList = () => {
       const targetUpdate = {
         streak: newStreak,
         longestStreak,
+        totalTrackedDays: newTotalTrackedDays,
         checkIns,
         lastCheckIn: today,
         milestonesReached,
@@ -378,17 +384,29 @@ const KillList = () => {
         t.id === autopsyTarget.id ? { ...t, escapeData, status: 'escaped', escapedAt: new Date() } : t
       ));
 
-      // Oracle feedback on escape
-      setOracleModal({ isOpen: true, content: '', isLoading: true });
-      try {
-        const escapeText = `"${autopsyTarget.title}" got me today. I was on a ${autopsyTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''} This is escape number ${escapeData.length}.`;
-        const feedback = await generateAIFeedback('killList', escapeText, []);
-        setOracleModal({ isOpen: true, content: feedback, isLoading: false });
-      } catch { setOracleModal({ isOpen: true, content: 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false }); }
-
+      // Close autopsy form, show AVE prompt
+      const capturedTarget = autopsyTarget;
       setAutopsyTarget(null);
       setAutopsyData({ context: '', rationalization: '', prevention: '' });
       ouraToast.success('Escape autopsy recorded');
+
+      // Start Oracle fetch in parallel with AVE prompt display
+      const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''} This is escape number ${escapeData.length}.`;
+      const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).catch(() => null);
+
+      // Show AVE circuit breaker — 3-second minimum lock before Oracle
+      setAvePrompt(true);
+      setTimeout(async () => {
+        setAvePrompt(false);
+        setOracleModal({ isOpen: true, content: '', isLoading: true });
+        try {
+          const feedback = await oracleFetchPromise;
+          setOracleModal({ isOpen: true, content: feedback || 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false });
+        } catch {
+          setOracleModal({ isOpen: true, content: 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false });
+        }
+      }, 3000);
+
     } catch (error) {
       logger.error('Error saving autopsy:', error);
       ouraToast.error('Failed to save autopsy');
@@ -748,20 +766,31 @@ const KillList = () => {
               <span className="text-xs text-[#5a5a5a] shrink-0 tabular-nums">{streak} / {threshold}d</span>
             </div>
 
-            {/* Streak hero + milestone badges */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-light tabular-nums" style={{ color: getStreakColor(streak, target) }}>
-                  {streak}
-                </span>
-                <span className="text-[#5a5a5a] text-xs">day streak</span>
-                {target.longestStreak > 0 && target.longestStreak > streak && (
-                  <span className="text-[#2a2a2a] text-xs">best: {target.longestStreak}</span>
-                )}
+            {/* 3-metric row: Current Streak · Behavioral Record · Longest Run */}
+            <div className="flex items-start justify-between">
+              <div className="flex gap-5">
+                <div>
+                  <span className="text-2xl font-light tabular-nums" style={{ color: getStreakColor(streak, target) }}>
+                    {streak}
+                  </span>
+                  <div className="text-[#3a3a3a] text-xs mt-0.5">Current Streak</div>
+                </div>
+                <div>
+                  <span className="text-2xl font-light tabular-nums text-[#5a5a5a]">
+                    {target.totalTrackedDays || 0}
+                  </span>
+                  <div className="text-[#3a3a3a] text-xs mt-0.5">Behavioral Record</div>
+                </div>
+                <div>
+                  <span className="text-2xl font-light tabular-nums text-[#3a3a3a]">
+                    {target.longestStreak || 0}
+                  </span>
+                  <div className="text-[#3a3a3a] text-xs mt-0.5">Longest Run</div>
+                </div>
               </div>
               {/* Milestone dots */}
               {(target.milestonesReached || []).length > 0 && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 pt-1">
                   {MILESTONES.filter(m => m <= threshold).map(m => (
                     <div
                       key={m}
@@ -1190,6 +1219,17 @@ const KillList = () => {
             )}
           </div>
         </div>
+
+        {/* AVE Circuit Breaker — static prompt between autopsy and Oracle */}
+        {avePrompt && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-md w-full p-8 text-center">
+              <p className="text-white text-lg font-light leading-relaxed">
+                One breach does not end the war. The autopsy is complete. Return to discipline tomorrow.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Escape Autopsy Modal */}
         {autopsyTarget && (
