@@ -139,7 +139,7 @@ const EmergencyButton = () => {
                     {step === 'main' && "You're Not Alone"}
                     {step === 'breathing' && "Box Breathing"}
                     {step === 'reflection' && "Quick Check-In"}
-                    {step === 'complete' && "You Did It"}
+                    {step === 'complete' && "Protocol Complete"}
                   </h2>
                   <p className="text-gray-400 text-sm mt-1">{randomMantra}</p>
                 </div>
@@ -317,8 +317,8 @@ const EmergencyButton = () => {
               {/* Complete Step */}
               {step === 'complete' && (
                 <div className="space-y-6 animate-fade-in-up text-center">
-                  <div className="text-6xl">💪</div>
-                  <h3 className="text-2xl font-light text-white">You reached out. That's strength.</h3>
+                  <div className="text-6xl">✓</div>
+                  <h3 className="text-2xl font-light text-white">Session complete. You controlled it.</h3>
                   <p className="text-gray-400">Your struggle has been logged. The Oracle has guidance for you.</p>
                   
                   <div className="flex gap-3">
