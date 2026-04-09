@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { detectDriftSignals } from '../utils/detectDriftSignals';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import ouraToast from '../utils/toast';
@@ -41,6 +42,16 @@ const substanceOptions = [
   'None'
 ];
 
+const PRECURSOR_CONDITIONS = [
+  'Sleep deprived',
+  'Isolated',
+  'High stress',
+  'Major decision pending',
+  'Social pressure',
+  'Avoided something important',
+  'None of the above',
+];
+
 const RelapseRadar = () => {
   const mountedRef = useRef(true);
   const [step, setStep] = useState(1);
@@ -57,6 +68,12 @@ const RelapseRadar = () => {
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null);
 
+  // BER-128: precursor capture + drift detection
+  const [selectedPrecursors, setSelectedPrecursors] = useState([]);
+  const [precursorContext, setPrecursorContext] = useState('');
+  const [driftThreshold, setDriftThreshold] = useState(3);
+  const [killTargets, setKillTargets] = useState([]);
+
   useEffect(() => {
     mountedRef.current = true;
     let unsubscribe = null;
@@ -68,8 +85,12 @@ const RelapseRadar = () => {
         if (!mountedRef.current) return;
         if (user) {
           loadRelapseEntries();
+          readUserData('killTargets').then(targets => {
+            if (mountedRef.current) setKillTargets(targets || []);
+          }).catch(() => {});
         } else {
           setRelapseEntries([]);
+          setKillTargets([]);
         }
       });
       if (mountedRef.current) {
@@ -129,6 +150,36 @@ const RelapseRadar = () => {
     return top ? { name: top[0], count: top[1] } : null;
   }, [relapseEntries]);
 
+  const driftSignals = useMemo(() =>
+    detectDriftSignals(relapseEntries, killTargets, driftThreshold),
+    [relapseEntries, killTargets, driftThreshold]
+  );
+
+  const crossSignalTimeline = useMemo(() => {
+    const windowMs = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const events = [];
+
+    relapseEntries.forEach(e => {
+      const t = e.createdAt?.toDate?.()?.getTime() ?? e.timestamp ?? 0;
+      if (now - t < windowMs) {
+        events.push({ type: 'relapse', date: t, label: e.selectedSelf || 'Relapse', id: e.id });
+      }
+    });
+
+    killTargets.forEach(target => {
+      (target.escapeData || []).forEach(escape => {
+        if (!escape.date) return;
+        const t = new Date(escape.date).getTime();
+        if (now - t < windowMs) {
+          events.push({ type: 'escape', date: t, label: target.title, id: `${target.id}-${escape.date}` });
+        }
+      });
+    });
+
+    return events.sort((a, b) => b.date - a.date);
+  }, [relapseEntries, killTargets]);
+
   const weeklyEntryCounts = useMemo(() => {
     const now = Date.now();
     const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
@@ -168,6 +219,14 @@ const RelapseRadar = () => {
     });
   }, [relapseEntries, searchQuery]);
 
+  const handlePrecursorToggle = (condition) => {
+    setSelectedPrecursors(prev =>
+      prev.includes(condition)
+        ? prev.filter(p => p !== condition)
+        : [...prev, condition]
+    );
+  };
+
   const handleHabitToggle = (habit) => {
     setSelectedHabits(prev => 
       prev.includes(habit) 
@@ -200,7 +259,7 @@ const RelapseRadar = () => {
       // Show Oracle modal with loading state
       openOracleLoading();
 
-      const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}`;
+      const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}`;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
       const oracleFeedback = await generateAIFeedback('relapse', entryText, pastReflections);
 
@@ -210,7 +269,9 @@ const RelapseRadar = () => {
         selectedHabits,
         substanceUse,
         reflection,
-        oracleFeedback
+        oracleFeedback,
+        precursorConditions: selectedPrecursors,
+        precursorContext: precursorContext.trim() || null,
       };
 
       const savedEntry = await writeData('relapseEntries', entry);
@@ -228,6 +289,8 @@ const RelapseRadar = () => {
       setSelectedHabits([]);
       setSubstanceUse([]);
       setReflection('');
+      setSelectedPrecursors([]);
+      setPrecursorContext('');
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
 
@@ -240,7 +303,7 @@ const RelapseRadar = () => {
   };
 
   const nextStep = () => {
-    if (step < 4) {
+    if (step < 5) {
       setStep(step + 1);
     } else {
       submitRelapseEntry();
@@ -258,10 +321,10 @@ const RelapseRadar = () => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-light text-white tracking-tight">Relapse Radar</h2>
-          <div className="text-sm text-gray-500">Step {step} of 4</div>
+          <div className="text-sm text-gray-500">Step {step} of 5</div>
         </div>
         {/* Pattern Data */}
-        {relapseEntries.length > 0 && step === 1 && (
+        {relapseEntries.length > 0 && step === 2 && (
           <div className="mb-6 oura-card border-l-4 border-oura-purple p-5">
             <h3 className="text-oura-purple font-light text-base mb-4 tracking-wide">PATTERN DATA</h3>
             <div className="space-y-2">
@@ -290,8 +353,8 @@ const RelapseRadar = () => {
           </div>
         )}
 
-        {/* Days since last relapse + archetype frequency — step 1 only */}
-        {step === 1 && daysSinceLastRelapse !== null && (
+        {/* Days since last relapse + archetype frequency — step 2 only */}
+        {step === 2 && daysSinceLastRelapse !== null && (
           <div className="mb-6 flex items-center gap-3 oura-card p-4">
             <div className={`text-4xl font-light tabular-nums ${daysSinceLastRelapse === 0 ? 'text-red-400' : daysSinceLastRelapse < 3 ? 'text-oura-amber' : 'text-oura-cyan'}`}>
               {daysSinceLastRelapse}
@@ -303,7 +366,7 @@ const RelapseRadar = () => {
           </div>
         )}
 
-        {step === 1 && archetypeFrequency.length >= 2 && (
+        {step === 2 && archetypeFrequency.length >= 2 && (
           <div className="mb-6 oura-card p-5">
             <h3 className="text-xs text-gray-500 tracking-widest uppercase mb-4">Archetype Frequency</h3>
             <div className="space-y-2.5">
@@ -330,12 +393,58 @@ const RelapseRadar = () => {
         <div className="w-full bg-oura-border rounded-full h-2">
           <div
             className="bg-oura-amber h-2 rounded-full transition-all duration-300"
-            style={{ width: `${(step / 4) * 100}%` }}
+            style={{ width: `${(step / 5) * 100}%` }}
           ></div>
         </div>
       </div>
 
       {step === 1 && (
+        <div className="space-y-6 animate-fade-in-up">
+          <h3 className="text-xl font-light text-white tracking-tight">What conditions were present in the 24–48 hours before this?</h3>
+          <p className="text-gray-500 text-sm">Select all that apply. Select at least one before proceeding.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {PRECURSOR_CONDITIONS.map((condition) => (
+              <button
+                key={condition}
+                onClick={() => handlePrecursorToggle(condition)}
+                className={`p-4 rounded-2xl text-left transition-all duration-200 ${
+                  selectedPrecursors.includes(condition)
+                    ? 'bg-oura-amber text-black font-medium shadow-oura-glow-amber'
+                    : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
+                }`}
+              >
+                {condition}
+              </button>
+            ))}
+          </div>
+          <div>
+            <label className="text-gray-500 text-xs uppercase tracking-widest mb-2 block">One-sentence context <span className="text-gray-600">(optional)</span></label>
+            <input
+              type="text"
+              value={precursorContext}
+              onChange={(e) => setPrecursorContext(e.target.value)}
+              placeholder="Brief context — what was happening..."
+              className="w-full p-3 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-amber focus:outline-none text-sm transition-colors"
+            />
+          </div>
+        </div>
+      )}
+
+      {step === 2 && driftSignals.length > 0 && (
+        <div className="mb-6 space-y-2 animate-fade-in-up">
+          {driftSignals.map((signal, idx) => (
+            <div
+              key={idx}
+              className={`p-4 rounded-2xl border-l-4 ${signal.severity === 'warning' ? 'border-oura-amber bg-oura-amber/10' : 'border-oura-purple bg-oura-purple/10'}`}
+            >
+              <div className="text-white text-sm font-medium">{signal.description}</div>
+              {signal.detail && <div className="text-gray-400 text-xs mt-1">{signal.detail}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {step === 2 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">Which self showed up today?</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -356,7 +465,7 @@ const RelapseRadar = () => {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">What patterns emerged?</h3>
           <p className="text-gray-500 text-sm">Skip if none apply.</p>
@@ -378,7 +487,7 @@ const RelapseRadar = () => {
         </div>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">Any substance use?</h3>
           <p className="text-gray-500 text-sm">Skip if none apply.</p>
@@ -400,7 +509,7 @@ const RelapseRadar = () => {
         </div>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">Reflection</h3>
           <div className="relative">
@@ -438,10 +547,10 @@ const RelapseRadar = () => {
         </button>
         <button
           onClick={nextStep}
-          disabled={loading || submitSuccess || (step === 1 && !selectedSelf)}
+          disabled={loading || submitSuccess || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf)}
           className="px-6 py-3 bg-oura-amber text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-amber-500 transition-all duration-200"
         >
-          {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 4 ? 'Submit' : 'Next')}
+          {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 5 ? 'Submit' : 'Next')}
         </button>
       </div>
 
@@ -496,6 +605,13 @@ const RelapseRadar = () => {
                   <div className="text-gray-400 text-sm mt-3 leading-relaxed">
                     {entry.reflection?.substring(0, 100)}...
                   </div>
+                  {entry.precursorConditions?.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {entry.precursorConditions.map(c => (
+                        <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-oura-darker text-gray-400 border border-oura-border">{c}</span>
+                      ))}
+                    </div>
+                  )}
                   {entry.oracleFeedback && (
                     <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
                       <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
@@ -521,6 +637,28 @@ const RelapseRadar = () => {
                   Clear Search
                 </button>
               )}
+            </div>
+          )}
+
+          {crossSignalTimeline.length >= 2 && (
+            <div className="mt-8">
+              <h4 className="text-xs text-gray-500 tracking-widest uppercase mb-4">7-Day Cross-Signal Timeline</h4>
+              <div className="relative space-y-0">
+                {crossSignalTimeline.map((event, idx) => (
+                  <div key={event.id} className="flex items-start gap-3 pb-4">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${event.type === 'relapse' ? 'bg-oura-amber' : 'bg-red-500'}`} />
+                      {idx < crossSignalTimeline.length - 1 && <div className="w-px flex-1 bg-oura-border mt-1" style={{ minHeight: '24px' }} />}
+                    </div>
+                    <div className="pb-1">
+                      <div className="text-gray-300 text-sm">{event.label}</div>
+                      <div className={`text-xs mt-0.5 ${event.type === 'relapse' ? 'text-oura-amber' : 'text-red-400'}`}>
+                        {event.type === 'relapse' ? 'Relapse' : 'Kill List Escape'} · {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
