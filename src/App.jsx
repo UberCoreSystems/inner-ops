@@ -34,13 +34,14 @@ const PageLoader = () => (
   </div>
 );
 
-// Lazy-initialize Firebase when needed
+// Lazy-initialize Firebase when needed — primes the auth cache so
+// authService.onAuthStateChanged gets a synchronous subscription with a
+// valid unsubscribe. Auth must only be accessed through authService after this.
 const lazyInitializeFirebase = async () => {
   try {
     const { getAuth } = await import('./firebase');
-    const auth = await getAuth();
+    await getAuth();
     logger.log("✅ Firebase initialized");
-    return auth;
   } catch (error) {
     logger.warn("Firebase initialization error:", error.message);
   }
