@@ -284,7 +284,7 @@ Please help extract the core lesson and rule from this experience.
 
     } catch (error) {
       logger.error('Error seeking Oracle extraction:', error);
-      openOracleWithContent('The Oracle cannot pierce the veil at this moment. Trust your own extraction of wisdom.');
+      openOracleWithContent('Oracle unavailable. Extract your own lesson from the data.');
     }
   };
 

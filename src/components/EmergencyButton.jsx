@@ -92,7 +92,7 @@ const EmergencyButton = () => {
       setStep('complete');
     } catch (error) {
       logger.error('Error logging emergency:', error);
-      openOracleWithContent("Your struggle is witnessed. Even in chaos, you reached for help - that's strength. Take a deep breath. This moment will pass.");
+      openOracleWithContent("Oracle unavailable. Entry recorded.");
       setStep('complete');
     } finally {
       setLoading(false);
