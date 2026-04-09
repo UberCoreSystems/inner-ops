@@ -940,6 +940,21 @@ const KillList = () => {
                 {target.escapeData.length} escape{target.escapeData.length > 1 ? 's' : ''} recorded
               </div>
             )}
+
+            {/* BER-131: Repeated escape bridge to Hard Lessons (3+ escapes) */}
+            {(target.escapeData || []).length >= 3 && !sessionStorage.getItem(`hl_bridge_dismissed_${target.id}`) && (
+              <div className="mt-3 flex items-start gap-3 px-4 py-3 bg-[#f59e0b]/5 border border-[#f59e0b]/20 rounded-xl">
+                <div className="flex-1">
+                  <p className="text-[#8a8a8a] text-xs leading-relaxed">This pattern has repeated {target.escapeData.length} times without resolution. Document it in Hard Lessons?</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link to="/hard-lessons" onClick={() => {
+                    sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({ eventDescription: `${target.title} — ${target.escapeData.length} escapes recorded` }));
+                  }} className="px-3 py-1.5 bg-[#f59e0b]/10 text-[#fbbf24] border border-[#f59e0b]/30 rounded-lg text-xs hover:bg-[#f59e0b]/20 transition-colors">Document</Link>
+                  <button onClick={() => sessionStorage.setItem(`hl_bridge_dismissed_${target.id}`, '1')} className="px-3 py-1.5 bg-[#1a1a1a] text-[#5a5a5a] rounded-lg text-xs hover:text-white transition-colors">×</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

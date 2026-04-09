@@ -67,6 +67,10 @@ export default function HardLessons() {
   const [showScarFlow, setShowScarFlow] = useState(false);
   const [savingScars, setSavingScars] = useState(false);
 
+  // BER-131: Kill List bridge
+  const [bridgePrompt, setBridgePrompt] = useState({ visible: false, ruleText: '', difficulty: 'deep', lessonId: null });
+  const [bridgeAdded, setBridgeAdded] = useState(false);
+
   // BER-130: Rules Library + Rule Violation Detection
   const [showRulesLibrary, setShowRulesLibrary] = useState(false);
   const [librarySearch, setLibrarySearch] = useState('');
@@ -80,6 +84,16 @@ export default function HardLessons() {
 
   useEffect(() => {
     loadHardLessons();
+    // BER-131: handle pre-fill from Kill List bridge
+    const prefill = sessionStorage.getItem('hl_bridge_prefill');
+    if (prefill) {
+      try {
+        const data = JSON.parse(prefill);
+        setNewLesson(prev => ({ ...prev, eventDescription: data.eventDescription || '' }));
+        setShowForm(true);
+        sessionStorage.removeItem('hl_bridge_prefill');
+      } catch {}
+    }
   }, []);
 
   // Delay showing skeleton to prevent flicker
@@ -288,6 +302,50 @@ export default function HardLessons() {
     setViolationPrompt({ visible: false, matchedRule: null });
   };
 
+  // BER-131: add kill list target from bridge prompt or lesson card
+  const addToKillListFromBridge = async () => {
+    if (!bridgePrompt.ruleText.trim()) return;
+    try {
+      await writeData('killTargets', {
+        title: bridgePrompt.ruleText.trim(),
+        difficulty: bridgePrompt.difficulty,
+        status: 'active',
+        streak: 0,
+        longestStreak: 0,
+        totalTrackedDays: 0,
+        checkIns: [],
+        escapeData: [],
+        implementationIntention: null,
+        fromHardLessonId: bridgePrompt.lessonId,
+      });
+      setBridgeAdded(true);
+      ouraToast.success('Target added to Kill List');
+    } catch {
+      ouraToast.error('Failed to add to Kill List');
+    }
+  };
+
+  const addToKillListFromLesson = async (lesson) => {
+    if (!lesson.ruleGoingForward?.trim()) return;
+    try {
+      await writeData('killTargets', {
+        title: lesson.ruleGoingForward.trim(),
+        difficulty: 'deep',
+        status: 'active',
+        streak: 0,
+        longestStreak: 0,
+        totalTrackedDays: 0,
+        checkIns: [],
+        escapeData: [],
+        implementationIntention: null,
+        fromHardLessonId: lesson.id,
+      });
+      ouraToast.success('Target added to Kill List');
+    } catch {
+      ouraToast.error('Failed to add to Kill List');
+    }
+  };
+
   const generateCostPatternNarrative = async () => {
     if (loadingNarrative) return;
     setLoadingNarrative(true);
@@ -423,6 +481,19 @@ Please help extract the core lesson and rule from this experience.
       }
 
       await loadHardLessons();
+
+      // BER-131: bridge trigger 1 — rule violation → Kill List prompt
+      if (finalize && lessonData.isRuleViolation && lessonData.ruleGoingForward?.trim()) {
+        const dismissKey = `bridge_dismissed_${editingLesson?.id || 'new'}`;
+        const alreadyDismissed = sessionStorage.getItem(dismissKey);
+        if (!alreadyDismissed) {
+          const violationCount = lessons.filter(l => l.isRuleViolation && l.violatedRuleId === lessonData.violatedRuleId).length;
+          const suggestedDifficulty = violationCount >= 2 ? 'core' : 'deep';
+          setBridgePrompt({ visible: true, ruleText: lessonData.ruleGoingForward, difficulty: suggestedDifficulty, lessonId: editingLesson?.id || null });
+          setBridgeAdded(false);
+        }
+      }
+
       resetForm();
 
       if (finalize) {
@@ -856,6 +927,43 @@ Please help extract the core lesson and rule from this experience.
         </div>
       )}
 
+      {/* BER-131: Kill List Bridge Prompt */}
+      {bridgePrompt.visible && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-8">
+            {!bridgeAdded ? (
+              <>
+                <h3 className="text-white text-lg font-light mb-2">Rule violated. Make it a Kill List target?</h3>
+                <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-5">A rule in writing that doesn't produce behavioral warfare is decoration.</p>
+                <input
+                  type="text"
+                  value={bridgePrompt.ruleText}
+                  onChange={(e) => setBridgePrompt(prev => ({ ...prev, ruleText: e.target.value }))}
+                  className="w-full p-4 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm mb-4"
+                />
+                <div className="flex gap-2 mb-6">
+                  {[{ value: 'surface', label: 'Surface (7d)' }, { value: 'deep', label: 'Deep (21d)' }, { value: 'core', label: 'Core (60d)' }].map(d => (
+                    <button key={d.value} onClick={() => setBridgePrompt(prev => ({ ...prev, difficulty: d.value }))} className={`flex-1 px-3 py-2 rounded-lg text-xs transition-colors ${bridgePrompt.difficulty === d.value ? 'bg-[#f59e0b] text-black font-medium' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}>{d.label}</button>
+                  ))}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={addToKillListFromBridge} className="flex-1 px-5 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-xl font-medium transition-colors">Add to Kill List</button>
+                  <button onClick={() => {
+                    if (bridgePrompt.lessonId) sessionStorage.setItem(`bridge_dismissed_${bridgePrompt.lessonId}`, '1');
+                    setBridgePrompt(prev => ({ ...prev, visible: false }));
+                  }} className="px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#8a8a8a] hover:text-white rounded-xl font-medium transition-colors">Dismiss</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-white text-lg font-light mb-4">Target added to Kill List.</p>
+                <button onClick={() => setBridgePrompt(prev => ({ ...prev, visible: false }))} className="px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#8a8a8a] hover:text-white rounded-xl font-medium transition-colors">Close</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Rule Violation Overlay */}
       {violationPrompt.visible && violationPrompt.matchedRule && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -1169,6 +1277,16 @@ Please help extract the core lesson and rule from this experience.
                             {lesson.ruleGoingForward}
                           </p>
                         </div>
+
+                        {/* BER-131: Add to Kill List */}
+                        {lesson.isFinalized && lesson.ruleGoingForward?.trim() && (
+                          <button
+                            onClick={() => addToKillListFromLesson(lesson)}
+                            className="w-full px-4 py-2.5 bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#fbbf24] border border-[#f59e0b]/30 rounded-xl text-xs font-medium transition-colors text-left"
+                          >
+                            + Add to Kill List
+                          </button>
+                        )}
 
                         {/* Rule violation indicator */}
                         {lesson.isRuleViolation && (
