@@ -246,7 +246,7 @@ const EmergencyButton = () => {
                       <p className="text-oura-cyan">Excellent work. Your nervous system thanks you.</p>
                       <div className="flex gap-3">
                         <button
-                          onClick={() => { setBreathPhase('inhale'); setBreathCount(0); }}
+                          onClick={() => resetBreathing()}
                           className="flex-1 py-3 bg-oura-card border border-oura-border text-white rounded-2xl"
                         >
                           Another Round
