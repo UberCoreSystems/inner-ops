@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
@@ -73,6 +74,9 @@ const RelapseRadar = () => {
   const [precursorContext, setPrecursorContext] = useState('');
   const [driftThreshold, setDriftThreshold] = useState(3);
   const [killTargets, setKillTargets] = useState([]);
+
+  // BER-133: archetype-to-kill-list match prompt shown after submission
+  const [archetypeMatchPrompt, setArchetypeMatchPrompt] = useState(null); // { targetName, targetId, archetype }
 
   useEffect(() => {
     mountedRef.current = true;
@@ -180,6 +184,31 @@ const RelapseRadar = () => {
     return events.sort((a, b) => b.date - a.date);
   }, [relapseEntries, killTargets]);
 
+  // BER-133: active kill targets correlated with dominant archetype (48h escape window)
+  const archetypeKillTargets = useMemo(() => {
+    if (!archetypeFrequency[0]) return [];
+    const dominantArchetype = archetypeFrequency[0].name;
+    const archetypeEntries = relapseEntries.filter(e => e.selectedSelf === dominantArchetype);
+    const windowMs = 48 * 60 * 60 * 1000;
+    const activeTargets = killTargets.filter(t => t.status === 'active');
+
+    return activeTargets
+      .map(target => {
+        const correlatedEscapes = (target.escapeData || []).filter(escape => {
+          if (!escape.date) return false;
+          const escapeTime = new Date(escape.date).getTime();
+          return archetypeEntries.some(entry => {
+            const entryTime = entry.createdAt?.toDate?.()?.getTime() ?? entry.timestamp ?? 0;
+            return Math.abs(escapeTime - entryTime) < windowMs;
+          });
+        }).length;
+        return { target, correlatedEscapes };
+      })
+      .filter(({ correlatedEscapes }) => correlatedEscapes > 0)
+      .sort((a, b) => b.correlatedEscapes - a.correlatedEscapes)
+      .slice(0, 3);
+  }, [archetypeFrequency, relapseEntries, killTargets]);
+
   const weeklyEntryCounts = useMemo(() => {
     const now = Date.now();
     const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
@@ -284,6 +313,26 @@ const RelapseRadar = () => {
 
       ouraToast.success('Relapse check-in logged');
 
+      // BER-133: check for archetype-kill-list correlation on new entry
+      const submittedArchetype = selectedSelf;
+      const now = Date.now();
+      const windowMs = 48 * 60 * 60 * 1000;
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+      const activeTargets = killTargets.filter(t => t.status === 'active');
+      for (const target of activeTargets) {
+        const dismissKey = `rl_kl_arch_${submittedArchetype}_${target.id}`;
+        const dismissedAt = localStorage.getItem(dismissKey);
+        if (dismissedAt && now - parseInt(dismissedAt, 10) < sevenDaysMs) continue;
+        const hasCorrelatedEscape = (target.escapeData || []).some(escape => {
+          if (!escape.date) return false;
+          return Math.abs(new Date(escape.date).getTime() - now) < windowMs;
+        });
+        if (hasCorrelatedEscape) {
+          setArchetypeMatchPrompt({ targetName: target.title, targetId: target.id, archetype: submittedArchetype });
+          break;
+        }
+      }
+
       // Clear form
       setSelectedSelf('');
       setSelectedHabits([]);
@@ -387,6 +436,23 @@ const RelapseRadar = () => {
                 );
               })}
             </div>
+            {archetypeKillTargets.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-oura-border">
+                <div className="text-[10px] text-[#5a5a5a] uppercase tracking-widest mb-3">Active Kill List targets associated with this archetype:</div>
+                <div className="space-y-2">
+                  {archetypeKillTargets.map(({ target, correlatedEscapes }) => (
+                    <Link
+                      key={target.id}
+                      to="/killlist"
+                      className="flex items-center justify-between px-3 py-2.5 bg-oura-darker rounded-xl hover:bg-oura-border transition-colors"
+                    >
+                      <span className="text-gray-300 text-sm truncate">{target.title}</span>
+                      <span className="text-red-400 text-xs shrink-0 ml-2">{correlatedEscapes} correlated escape{correlatedEscapes !== 1 ? 's' : ''}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -534,6 +600,35 @@ const RelapseRadar = () => {
       {submitSuccess && (
         <div className="mb-6 oura-card border-l-4 border-oura-cyan p-4 animate-fade-in-up">
           <p className="text-gray-300 text-sm">✅ Relapse entry submitted successfully! Resetting form...</p>
+        </div>
+      )}
+
+      {archetypeMatchPrompt && (
+        <div className="mb-6 oura-card border border-oura-amber/30 bg-oura-amber/5 p-4 animate-fade-in-up">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <p className="text-gray-300 text-sm leading-relaxed">
+                <span className="text-oura-amber">{archetypeMatchPrompt.targetName}</span> has been escaped in similar contexts. Review the autopsy?
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                to="/killlist"
+                className="text-xs px-3 py-1.5 bg-oura-amber/20 text-oura-amber rounded-lg hover:bg-oura-amber/30 transition-colors"
+              >
+                Review
+              </Link>
+              <button
+                onClick={() => {
+                  localStorage.setItem(`rl_kl_arch_${archetypeMatchPrompt.archetype}_${archetypeMatchPrompt.targetId}`, Date.now().toString());
+                  setArchetypeMatchPrompt(null);
+                }}
+                className="text-gray-600 hover:text-gray-400 text-sm transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
