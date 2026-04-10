@@ -14,6 +14,7 @@ import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import { detectDriftSignals } from '../utils/detectDriftSignals';
 
 const isDevEnvironment = import.meta.env.DEV;
 
@@ -45,6 +46,9 @@ export default function Dashboard() {
 
   // Early warning signal
   const [earlyWarning, setEarlyWarning] = useState(null);
+
+  // Drift signals from detectDriftSignals
+  const [driftSignals, setDriftSignals] = useState([]);
 
   // Sunday Autopsy
   const [autopsyText, setAutopsyText] = useState('');
@@ -474,6 +478,12 @@ export default function Dashboard() {
           if (level !== 'clear' && recentJournal.length >= 3) {
             setEarlyWarning({ level, signals, moodDots, daysSinceRelapse, daysSinceJournal });
           }
+
+          // Compute behavioral drift signals (archetype frequency, precursor patterns, correlated escapes)
+          const detected = detectDriftSignals(rawUserData.relapseEntries || [], rawUserData.killTargets || []);
+          if (detected.length > 0) {
+            setDriftSignals(detected);
+          }
           
           logger.log("✅ Dashboard: Clarity score calculated successfully", {
             score: scoreData.totalScore,
@@ -678,6 +688,23 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Drift Signal Warning */}
+        {driftSignals.length > 0 && (
+          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.09s' }}>
+            <div className="oura-card p-5 border-l-4 border-[#f59e0b]">
+              <p className="text-xs font-medium uppercase tracking-widest text-[#f59e0b] mb-3">Relapse Radar — Drift Detected</p>
+              <div className="space-y-2">
+                {driftSignals.map((signal, idx) => (
+                  <div key={idx} className={`p-3 rounded-xl border-l-2 ${signal.severity === 'warning' ? 'border-[#f59e0b] bg-[#f59e0b]/5' : 'border-[#a855f7] bg-[#a855f7]/5'}`}>
+                    <p className="text-white text-sm">{signal.description}</p>
+                    {signal.detail && <p className="text-[#5a5a5a] text-xs mt-0.5">{signal.detail}</p>}
+                  </div>
+                ))}
               </div>
             </div>
           </section>
