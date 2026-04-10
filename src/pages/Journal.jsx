@@ -190,6 +190,7 @@ const PAIN_SIGNALS = /\b(mistake|regret|fail|failed|failure|lost|betrayed|betray
 export default function Journal() {
   const navigate = useNavigate();
   const [entry, setEntry] = useState('');
+  const [eventOccurredAt, setEventOccurredAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [mood, setMood] = useState('focused');
   const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [intensity, setIntensity] = useState(3);
@@ -497,7 +498,17 @@ export default function Journal() {
 
       // New entry — generate Oracle feedback
       const moodLabel = moodOptions.find(m => m.value === mood)?.label || mood;
-      const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}`;
+
+      // BER-139: proximity flag
+      const occurredAt = new Date(eventOccurredAt);
+      const nowMs = Date.now();
+      const gapHours = (nowMs - occurredAt.getTime()) / 3_600_000;
+      const entryProximityFlag = gapHours > 12 ? 'retrospective' : 'contemporaneous';
+      const proximityNote = entryProximityFlag === 'retrospective'
+        ? '\n[ENTRY CONTEXT: This entry was written significantly after the event. The user\'s recollection may be reconstructed rather than accurate. Weight behavioral specifics cautiously and probe for what details may have been edited by hindsight.]'
+        : '';
+
+      const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}${proximityNote}`;
       const pastEntries = entries.slice(-3).map(e => e.content);
 
       openOracleLoading();
@@ -508,6 +519,8 @@ export default function Journal() {
         content: entry,
         mood,
         intensity,
+        eventOccurredAt: occurredAt.toISOString(),
+        entryProximityFlag,
         oracleJudgment: feedback,
       });
       setEntries(prev => [newEntry, ...prev]);
@@ -519,6 +532,7 @@ export default function Journal() {
       setEntry('');
       setMood(moodOptions[0].value);
       setIntensity(3);
+      setEventOccurredAt(new Date().toISOString().slice(0, 16));
       setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
 
     } catch (error) {
@@ -1017,6 +1031,19 @@ export default function Journal() {
                   </div>
                 </div>
               </div>
+
+              {!editingEntryId && (
+                <div>
+                  <label className="block text-gray-500 text-xs uppercase tracking-widest mb-2 font-medium">When did this happen?</label>
+                  <input
+                    type="datetime-local"
+                    value={eventOccurredAt}
+                    max={new Date().toISOString().slice(0, 16)}
+                    onChange={(e) => setEventOccurredAt(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#00d4aa] focus:outline-none transition-colors text-sm"
+                  />
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <button

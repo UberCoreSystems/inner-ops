@@ -3,6 +3,7 @@ import { getAuth as getFirebaseAuth } from 'firebase/auth';
 import { getUserProfile } from './userProfile';
 import { getBehavioralContext } from './getBehavioralContext';
 import { track } from './analytics';
+import { detectEvasionMarkers } from './detectEvasionMarkers';
 
 const logger = {
   info: (...args) => console.info(...args),
@@ -357,10 +358,11 @@ export const buildPrompt = ({
   userContext = {},
   priorFeedbackSummary = '',
   userGoals = [],
-  behavioralContext = null
+  behavioralContext = null,
+  evasionNote = ''
 }) => {
   const crossModuleInstruction = buildCrossModuleInstruction(behavioralContext);
-  const systemPrompt = `You are Inner Ops AI Feedback Engine. Voice: digital brother, direct, strategic, grounded.\nAvoid flattery, therapy tone, moralizing, and generic motivation.\nUse second-person voice.\nGround every claim in the user entry.\nPick 1-3 lenses only.\nNo fabricated quotes. Paraphrase thinkers only.\nIf context is missing, ask 1-2 pointed questions at the end.\nOutput strict JSON with keys: summary_mirror, core_pattern, chosen_lenses, analysis, prescriptions, journal_prompts, closing_charge.${crossModuleInstruction}`;
+  const systemPrompt = `You are Inner Ops AI Feedback Engine. Voice: digital brother, direct, strategic, grounded.\nAvoid flattery, therapy tone, moralizing, and generic motivation.\nUse second-person voice.\nGround every claim in the user entry.\nPick 1-3 lenses only.\nNo fabricated quotes. Paraphrase thinkers only.\nIf context is missing, ask 1-2 pointed questions at the end.\nOutput strict JSON with keys: summary_mirror, core_pattern, chosen_lenses, analysis, prescriptions, journal_prompts, closing_charge.${crossModuleInstruction}${evasionNote}`;
 
   const userPrompt = {
     moduleName,
@@ -719,6 +721,16 @@ export const generateFeedback = async ({
     lenses
   });
 
+  // BER-138: evasion detection for Journal and Hard Lessons only
+  let evasionNote = '';
+  const evasionModules = ['journal', 'hardlessons', 'hard_lessons'];
+  if (evasionModules.includes(safeModuleName.toLowerCase())) {
+    const evasionMarkers = detectEvasionMarkers(cleanEntry);
+    if (evasionMarkers.count >= 2) {
+      evasionNote = '\n\nEVASION ALERT: The user\'s language contains significant avoidance markers. Your primary task is to break through the evasion. Name what they are avoiding. Do not accept the frame they have provided.';
+    }
+  }
+
   const promptBundle = buildPrompt({
     moduleName: safeModuleName,
     entryText: cleanEntry,
@@ -728,7 +740,8 @@ export const generateFeedback = async ({
     userContext,
     priorFeedbackSummary,
     userGoals,
-    behavioralContext
+    behavioralContext,
+    evasionNote
   });
 
   try {

@@ -78,6 +78,9 @@ const RelapseRadar = () => {
   // BER-133: archetype-to-kill-list match prompt shown after submission
   const [archetypeMatchPrompt, setArchetypeMatchPrompt] = useState(null); // { targetName, targetId, archetype }
 
+  // BER-139: event timestamp
+  const [eventOccurredAt, setEventOccurredAt] = useState(() => new Date().toISOString().slice(0, 16));
+
   // BER-136: capture entry text for Oracle regen
   const oracleEntryTextRef = useRef(null);
 
@@ -226,6 +229,15 @@ const RelapseRadar = () => {
     return { thisWeek, lastWeek };
   }, [relapseEntries]);
 
+  // BER-139: proximity ratio analytics
+  const proximityStats = useMemo(() => {
+    if (relapseEntries.length === 0) return null;
+    const retrospective = relapseEntries.filter(e => e.entryProximityFlag === 'retrospective').length;
+    const total = relapseEntries.length;
+    const contemporaneous = total - retrospective;
+    return { contemporaneous, retrospective, total };
+  }, [relapseEntries]);
+
   useEffect(() => {
     const id = setTimeout(() => setSearchQuery(searchInput), 300);
     return () => clearTimeout(id);
@@ -291,7 +303,16 @@ const RelapseRadar = () => {
       // Show Oracle modal with loading state
       openOracleLoading();
 
-      const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}`;
+      // BER-139: proximity flag
+      const occurredAt = new Date(eventOccurredAt);
+      const nowMs = Date.now();
+      const gapHours = (nowMs - occurredAt.getTime()) / 3_600_000;
+      const entryProximityFlag = gapHours > 12 ? 'retrospective' : 'contemporaneous';
+      const proximityNote = entryProximityFlag === 'retrospective'
+        ? ' [ENTRY CONTEXT: This entry was written significantly after the event. The user\'s recollection may be reconstructed rather than accurate. Weight behavioral specifics cautiously and probe for what details may have been edited by hindsight.]'
+        : '';
+
+      const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}${proximityNote}`;
       oracleEntryTextRef.current = entryText;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
       const oracleFeedback = await generateAIFeedback('relapse', entryText, pastReflections);
@@ -305,6 +326,8 @@ const RelapseRadar = () => {
         oracleFeedback,
         precursorConditions: selectedPrecursors,
         precursorContext: precursorContext.trim() || null,
+        eventOccurredAt: occurredAt.toISOString(),
+        entryProximityFlag,
       };
 
       const savedEntry = await writeData('relapseEntries', entry);
@@ -344,6 +367,7 @@ const RelapseRadar = () => {
       setReflection('');
       setSelectedPrecursors([]);
       setPrecursorContext('');
+      setEventOccurredAt(new Date().toISOString().slice(0, 16));
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
 
@@ -402,6 +426,11 @@ const RelapseRadar = () => {
               <div className="text-gray-400 text-sm bg-oura-darker p-3 rounded-xl">
                 Total entries: {relapseEntries.length}
               </div>
+              {proximityStats && proximityStats.total > 0 && (
+                <div className="text-gray-400 text-sm bg-oura-darker p-3 rounded-xl">
+                  Data quality: {Math.round((proximityStats.contemporaneous / proximityStats.total) * 100)}% contemporaneous / {Math.round((proximityStats.retrospective / proximityStats.total) * 100)}% retrospective
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -597,6 +626,16 @@ const RelapseRadar = () => {
                 disabled={loading}
               />
             </div>
+          </div>
+          <div>
+            <label className="block text-gray-500 text-xs uppercase tracking-widest mb-2 font-medium">When did this happen?</label>
+            <input
+              type="datetime-local"
+              value={eventOccurredAt}
+              max={new Date().toISOString().slice(0, 16)}
+              onChange={(e) => setEventOccurredAt(e.target.value)}
+              className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-amber focus:outline-none transition-colors text-sm"
+            />
           </div>
         </div>
       )}
