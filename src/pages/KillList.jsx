@@ -65,6 +65,39 @@ const DIFFICULTY_TIERS = [
   { value: 'core', label: 'Core', description: 'Identity-level — 60 day streak', streakToKill: 60, points: 50, color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '🔥' },
 ];
 
+// BER-134: Autopsy pattern aggregation for targets with 3+ escapes
+const STOP_WORDS = new Set(['i','the','a','an','was','it','in','to','of','and','my','me','at','just','this','that','when','if','is','not','but','had','did','would','could','were','felt','feel','so','do','be','have','by','from','what','they','we','he','she','then','about','on','with','very','really']);
+
+function aggregateAutopsyPatterns(escapeData) {
+  if (!escapeData || escapeData.length < 3) return null;
+
+  function topToken(strings) {
+    const counts = {};
+    strings.forEach(s => {
+      if (!s) return;
+      s.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).forEach(w => {
+        if (w.length > 3 && !STOP_WORDS.has(w)) counts[w] = (counts[w] || 0) + 1;
+      });
+    });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    return top ? top[0] : null;
+  }
+
+  const contexts = escapeData.map(e => e.context).filter(Boolean);
+  const rationalizations = escapeData.map(e => e.rationalization).filter(Boolean);
+  const preventionCount = escapeData.filter(e => e.prevention).length;
+  // If any prior escape had a prevention plan and there was a subsequent escape, it wasn't executed
+  const prevPlanNotExecuted = escapeData.slice(0, -1).some(e => e.prevention) && escapeData.length > 1;
+
+  return {
+    dominantContextTheme: topToken(contexts),
+    dominantRationalizationTheme: topToken(rationalizations),
+    preventionPlanCount: preventionCount,
+    prevPlanNotExecuted,
+    escapeCount: escapeData.length,
+  };
+}
+
 // Legacy priority → difficulty mapping for existing targets
 const PRIORITY_TO_DIFFICULTY = { high: 'core', medium: 'deep', low: 'surface' };
 const getDifficulty = (target) => target.difficulty || PRIORITY_TO_DIFFICULTY[target.priority] || 'deep';
@@ -119,6 +152,9 @@ const KillList = () => {
 
   // Implementation intentions (BER-126)
   const [newIntention, setNewIntention] = useState({ trigger: '', response: '' });
+
+  // BER-134: track expanded autopsy pattern panels per target
+  const [showAutopsyPattern, setShowAutopsyPattern] = useState({});
   const [showIntention, setShowIntention] = useState({});
   const [reviseTarget, setReviseTarget] = useState(null);
   const [reviseIntention, setReviseIntention] = useState({ trigger: '', response: '' });
@@ -416,8 +452,15 @@ const KillList = () => {
       const intentionContext = hasIntention
         ? ` Implementation intention status: ${intentionActivated}${intentionActivated !== 'yes' ? ` — reason it did not activate: ${intentionFailReason.trim()}` : ''}.`
         : '';
+
+      // BER-134: inject aggregated autopsy patterns for targets with 3+ escapes
+      const autopsyPatterns = aggregateAutopsyPatterns(escapeData);
+      const autopsyPatternContext = autopsyPatterns
+        ? ` AGGREGATE PATTERN (${autopsyPatterns.escapeCount} escapes): dominant context theme = "${autopsyPatterns.dominantContextTheme}"; dominant rationalization theme = "${autopsyPatterns.dominantRationalizationTheme}".${autopsyPatterns.prevPlanNotExecuted ? ' The user has filed prevention plans in prior autopsies that were not executed — call this out directly.' : ''} Address the pattern, not just this escape.`
+        : '';
+
       // Start Oracle fetch in parallel with AVE prompt display
-      const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''}${intentionContext} This is escape number ${escapeData.length}.`;
+      const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''}${intentionContext}${autopsyPatternContext} This is escape number ${escapeData.length}.`;
       const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).catch(() => null);
 
       // Show AVE circuit breaker — 3-second minimum lock before Oracle
@@ -941,6 +984,47 @@ const KillList = () => {
               </div>
             )}
 
+            {/* BER-134: Autopsy Pattern Intelligence — collapsed section after 3+ escapes */}
+            {(target.escapeData || []).length >= 3 && (() => {
+              const patterns = aggregateAutopsyPatterns(target.escapeData);
+              if (!patterns) return null;
+              const isExpanded = showAutopsyPattern[target.id];
+              return (
+                <div className="border border-[#1a1a1a] rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setShowAutopsyPattern(prev => ({ ...prev, [target.id]: !prev[target.id] }))}
+                    className="w-full flex items-center justify-between px-4 py-2.5 bg-[#0a0a0a] text-left hover:bg-[#1a1a1a] transition-colors"
+                  >
+                    <span className="text-[#5a5a5a] text-xs uppercase tracking-widest">Autopsy Pattern ({patterns.escapeCount} escapes)</span>
+                    <span className="text-[#3a3a3a] text-xs">{isExpanded ? '▲' : '▼'}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 py-3 space-y-2 bg-[#080808]">
+                      {patterns.dominantContextTheme && (
+                        <div className="text-xs">
+                          <span className="text-[#5a5a5a]">Context pattern: </span>
+                          <span className="text-[#8a8a8a]">"{patterns.dominantContextTheme}" appears across escapes</span>
+                        </div>
+                      )}
+                      {patterns.dominantRationalizationTheme && (
+                        <div className="text-xs">
+                          <span className="text-[#5a5a5a]">Rationalization pattern: </span>
+                          <span className="text-[#8a8a8a]">"{patterns.dominantRationalizationTheme}" appears across escapes</span>
+                        </div>
+                      )}
+                      <div className="text-xs">
+                        <span className="text-[#5a5a5a]">Prevention plans filed: </span>
+                        <span className="text-[#8a8a8a]">{patterns.preventionPlanCount} of {patterns.escapeCount}</span>
+                      </div>
+                      {patterns.prevPlanNotExecuted && (
+                        <div className="text-xs text-[#ef4444]">Prevention plans filed in prior autopsies were not executed.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* BER-131: Repeated escape bridge to Hard Lessons (3+ escapes) */}
             {(target.escapeData || []).length >= 3 && !sessionStorage.getItem(`hl_bridge_dismissed_${target.id}`) && (
               <div className="mt-3 flex items-start gap-3 px-4 py-3 bg-[#f59e0b]/5 border border-[#f59e0b]/20 rounded-xl">
@@ -960,7 +1044,8 @@ const KillList = () => {
       </div>
     );
     }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, dailyCheckIn, categories, categoryIcons,
-      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote, showIntention, setShowIntention, setReviseTarget, setReviseIntention]);
+      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote, showIntention, setShowIntention, setReviseTarget, setReviseIntention,
+      showAutopsyPattern, setShowAutopsyPattern]);
 
   return (
     <div className="min-h-screen bg-black">
