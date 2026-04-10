@@ -78,6 +78,9 @@ const RelapseRadar = () => {
   // BER-133: archetype-to-kill-list match prompt shown after submission
   const [archetypeMatchPrompt, setArchetypeMatchPrompt] = useState(null); // { targetName, targetId, archetype }
 
+  // BER-136: capture entry text for Oracle regen
+  const oracleEntryTextRef = useRef(null);
+
   useEffect(() => {
     mountedRef.current = true;
     let unsubscribe = null;
@@ -289,6 +292,7 @@ const RelapseRadar = () => {
       openOracleLoading();
 
       const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}`;
+      oracleEntryTextRef.current = entryText;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
       const oracleFeedback = await generateAIFeedback('relapse', entryText, pastReflections);
 
@@ -774,6 +778,8 @@ const RelapseRadar = () => {
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
+        entryText={oracleEntryTextRef.current || ''}
+        entryModuleName="Relapse Radar"
       />
     </div>
   );

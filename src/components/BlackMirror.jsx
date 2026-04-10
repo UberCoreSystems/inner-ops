@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import VoiceInputButton from './VoiceInputButton';
@@ -57,6 +57,9 @@ const BlackMirror = () => {
   // BER-135: relapse entries for correlation report
   const [relapseEntries, setRelapseEntries] = useState([]);
   const [showCorrelationReport, setShowCorrelationReport] = useState(false);
+
+  // BER-136: capture entry text for Oracle regen
+  const oracleEntryTextRef = useRef('');
 
   // Calculate Black Mirror Index - stable reference
   const calculateBlackMirrorIndex = useCallback((screenTimeValue, mentalFogValue, interactionValue, unconsciousCheckValue) => {
@@ -264,6 +267,7 @@ const BlackMirror = () => {
           consecutiveHighBMI ? 'User\'s BMI has been above threshold for 2 consecutive check-ins. Ask what specifically they will restrict — not whether they want to do better.' : '',
           correlationContext,
         ].filter(Boolean).join(' ');
+        oracleEntryTextRef.current = blackMirrorText;
         const feedback = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
         finalEntry = { ...entryData, oracleFeedback: feedback };
         setAiFeedback(feedback);
@@ -803,6 +807,8 @@ const BlackMirror = () => {
         feedback={aiFeedback}
         loading={loadingFeedback}
         onReaction={handleOracleReaction}
+        entryText={oracleEntryTextRef.current}
+        entryModuleName="Black Mirror"
       />
     </div>
     </div>

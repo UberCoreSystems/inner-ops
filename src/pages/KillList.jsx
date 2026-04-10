@@ -155,6 +155,9 @@ const KillList = () => {
 
   // BER-134: track expanded autopsy pattern panels per target
   const [showAutopsyPattern, setShowAutopsyPattern] = useState({});
+
+  // BER-136: capture Oracle entry text for regen
+  const oracleEntryTextRef = useRef('');
   const [showIntention, setShowIntention] = useState({});
   const [reviseTarget, setReviseTarget] = useState(null);
   const [reviseIntention, setReviseIntention] = useState({ trigger: '', response: '' });
@@ -461,6 +464,7 @@ const KillList = () => {
 
       // Start Oracle fetch in parallel with AVE prompt display
       const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''}${intentionContext}${autopsyPatternContext} This is escape number ${escapeData.length}.`;
+      oracleEntryTextRef.current = escapeText;
       const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).catch(() => null);
 
       // Show AVE circuit breaker — 3-second minimum lock before Oracle
@@ -1569,6 +1573,8 @@ const KillList = () => {
           onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
           content={oracleModal.content}
           isLoading={oracleModal.isLoading}
+          entryText={oracleEntryTextRef.current}
+          entryModuleName="Kill List"
         />
         
         <KillConfirmation

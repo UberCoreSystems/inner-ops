@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import logger from '../utils/logger';
 import { ouraToast } from '../utils/toast';
@@ -11,6 +12,27 @@ const REACTIONS = [
   { id: 'sit',      label: 'I need to sit with this', color: '#f59e0b', icon: '◎' },
   { id: 'missed',   label: 'This missed',            color: '#5a5a5a', icon: '○' },
 ];
+
+const MAX_REGEN = 3;
+
+// BER-136: call oracle CF directly with custom system prompt for regen/follow-up
+async function callOracleRaw(entryText, customSystemPrompt) {
+  try {
+    const functions = getFunctions();
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 20000 });
+    const result = await oracleFn({
+      entryText,
+      moduleName: 'oracle',
+      userContext: {},
+      tone: 'stoic',
+      customSystemPrompt,
+    });
+    return result.data?.feedback?.trim() || null;
+  } catch (err) {
+    logger.warn('Oracle raw call failed:', err?.message);
+    return null;
+  }
+}
 
 const OracleModal = ({
   isOpen,
@@ -24,10 +46,24 @@ const OracleModal = ({
   context = '',
   onFeedbackGenerated = null,
   onReaction = null,
+  // BER-136: entry context for regeneration and follow-up
+  entryText = '',
+  entryModuleName = '',
+  onFollowUpStored = null,
 }) => {
   const [oracleFeedback, setOracleFeedback] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedReaction, setSelectedReaction] = useState(null);
+
+  // BER-136: regeneration + follow-up state
+  const [displayFeedback, setDisplayFeedback] = useState('');
+  const [regenCount, setRegenCount] = useState(0);
+  const [regenLoading, setRegenLoading] = useState(false);
+  const [followUpText, setFollowUpText] = useState('');
+  const [showFollowUp, setShowFollowUp] = useState(false);
+  const [followUpResponse, setFollowUpResponse] = useState('');
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [followUpUsed, setFollowUpUsed] = useState(false);
 
   useEffect(() => {
     if (isOpen && target && moduleName && !feedback && !content) {
@@ -37,8 +73,21 @@ const OracleModal = ({
     }
     if (isOpen) {
       setSelectedReaction(null);
+      // Reset regen/follow-up on each new open
+      setRegenCount(0);
+      setFollowUpText('');
+      setShowFollowUp(false);
+      setFollowUpResponse('');
+      setFollowUpUsed(false);
+      setDisplayFeedback('');
     }
   }, [isOpen, target, moduleName, feedback, content]);
+
+  // Sync displayFeedback whenever the base feedback changes
+  useEffect(() => {
+    const base = feedback || content || oracleFeedback;
+    if (base) setDisplayFeedback(base);
+  }, [feedback, content, oracleFeedback]);
 
   const generateOracleFeedback = async () => {
     if (!target || !moduleName) return;
@@ -65,6 +114,45 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     }
   };
 
+  // BER-136: regenerate from a different confrontational angle
+  const handleRegenerate = async () => {
+    if (regenCount >= MAX_REGEN || regenLoading || !entryText) return;
+    setRegenLoading(true);
+    try {
+      const systemPrompt = `The user has already seen one perspective on this data. Approach the same data from a different confrontational angle. Do not repeat the same observation. Do not soften your assessment. Identify a different pattern, contradiction, or uncomfortable truth than the one already surfaced.`;
+      const result = await callOracleRaw(entryText, systemPrompt);
+      if (result) {
+        setDisplayFeedback(result);
+        setRegenCount(prev => prev + 1);
+        setFollowUpResponse('');
+        setShowFollowUp(false);
+        setFollowUpUsed(false);
+      } else {
+        ouraToast.error('Oracle unavailable. Try again.');
+      }
+    } finally {
+      setRegenLoading(false);
+    }
+  };
+
+  // BER-136: follow-up interrogation
+  const handleFollowUp = async () => {
+    if (!followUpText.trim() || followUpUsed || followUpLoading || !entryText) return;
+    setFollowUpLoading(true);
+    try {
+      const systemPrompt = `The user is challenging your assessment with the following pushback: "${followUpText.trim()}". Do not back down from your position. Do not affirm their pushback. Do not reframe it encouragingly. Address their specific challenge directly and unflinchingly. Stay confrontational.`;
+      const result = await callOracleRaw(`Original context: ${entryText}\n\nUser's challenge: ${followUpText.trim()}`, systemPrompt);
+      const response = result || 'Oracle unavailable. Challenge recorded.';
+      setFollowUpResponse(response);
+      setFollowUpUsed(true);
+      if (onFollowUpStored) {
+        onFollowUpStored({ followUpText: followUpText.trim(), followUpResponse: response });
+      }
+    } finally {
+      setFollowUpLoading(false);
+    }
+  };
+
   const handleReaction = async (reactionId) => {
     setSelectedReaction(reactionId);
     if (onReaction) {
@@ -77,8 +165,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     }
   };
 
-  const currentFeedback = feedback || content || oracleFeedback;
+  const currentFeedback = displayFeedback || feedback || content || oracleFeedback;
   const isCurrentlyLoading = loading || isLoadingProp || isGenerating;
+  const canRegen = !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
+  const canFollowUp = !!entryText && !followUpUsed && !followUpLoading && !isCurrentlyLoading && !!currentFeedback;
+
   if (!isOpen) return null;
 
   return (
@@ -146,6 +237,66 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               <div className="text-[#e0e0e0] text-[15px] leading-[1.75] font-light">
                 {currentFeedback || 'The Oracle awaits your query...'}
               </div>
+
+              {/* Follow-up response */}
+              {followUpResponse && (
+                <div className="border-l-2 border-[#5a5a5a] pl-4">
+                  <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Your challenge addressed</div>
+                  <div className="text-[#c0c0c0] text-sm leading-relaxed font-light">{followUpResponse}</div>
+                </div>
+              )}
+
+              {/* Follow-up input */}
+              {showFollowUp && !followUpUsed && (
+                <div className="space-y-3">
+                  <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">Challenge the Oracle's assessment</div>
+                  <textarea
+                    value={followUpText}
+                    onChange={e => setFollowUpText(e.target.value)}
+                    rows={2}
+                    className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#3a3a3a]"
+                    placeholder="State your specific pushback..."
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleFollowUp}
+                      disabled={!followUpText.trim() || followUpLoading}
+                      className="flex-1 py-2.5 text-sm font-medium rounded-xl transition-all bg-[#1a1a1a] border border-[#2a2a2a] text-[#8a8a8a] hover:text-white disabled:opacity-40"
+                    >
+                      {followUpLoading ? 'Processing...' : 'Submit'}
+                    </button>
+                    <button
+                      onClick={() => { setShowFollowUp(false); setFollowUpText(''); }}
+                      className="px-4 py-2.5 text-sm rounded-xl bg-transparent text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* BER-136: Regenerate + Go Deeper buttons */}
+              {currentFeedback && (canRegen || canFollowUp) && (
+                <div className="flex gap-2 flex-wrap">
+                  {canRegen && (
+                    <button
+                      onClick={handleRegenerate}
+                      disabled={regenLoading}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#5a5a5a] hover:border-[#2a2a2a] hover:text-[#8a8a8a] transition-all disabled:opacity-40"
+                    >
+                      {regenLoading ? 'Regenerating...' : `Regenerate · ${MAX_REGEN - regenCount} of ${MAX_REGEN} remaining`}
+                    </button>
+                  )}
+                  {canFollowUp && !showFollowUp && (
+                    <button
+                      onClick={() => setShowFollowUp(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#5a5a5a] hover:border-[#2a2a2a] hover:text-[#8a8a8a] transition-all"
+                    >
+                      Go deeper
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Divider */}
               <div className="border-t border-[#1a1a1a]" />
