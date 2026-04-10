@@ -45,6 +45,16 @@ const Icons = {
       <circle cx="12" cy="18" r="1" fill="currentColor" stroke="none" />
     </svg>
   ),
+  synthesis: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+      <circle cx="12" cy="5" r="2" />
+      <line x1="7" y1="12" x2="17" y2="12" opacity="0.6" />
+      <line x1="12" y1="7" x2="12" y2="19" opacity="0.6" />
+      <circle cx="12" cy="19" r="2" />
+    </svg>
+  ),
   profile: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="8" r="4" />
@@ -63,6 +73,7 @@ export default function Navbar({ onLogout, user }) {
     { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
     { path: '/blackmirror', label: 'Black Mirror', mobileLabel: 'Mirror', icon: Icons.blackMirror },
     { path: '/relapse', label: 'Relapse', mobileLabel: 'Relapse', icon: Icons.relapse },
+    { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis },
   ];
 
   return (
@@ -136,7 +147,7 @@ export default function Navbar({ onLogout, user }) {
 
       {/* Mobile bottom nav bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-oura-border">
-        <div className="grid grid-cols-6 h-16">
+        <div className="grid grid-cols-7 h-16">
           {navItems.map(item => {
             const isActive = location.pathname === item.path;
             return (
@@ -178,6 +189,14 @@ export default function Navbar({ onLogout, user }) {
                       <path d="M12 2L2 22h20L12 2z" />
                       <line x1="12" y1="9" x2="12" y2="14" opacity="0.7" />
                       <circle cx="12" cy="18" r="1" fill="currentColor" stroke="none" />
+                    </>}
+                    {item.path === '/synthesis' && <>
+                      <circle cx="5" cy="12" r="2" />
+                      <circle cx="19" cy="12" r="2" />
+                      <circle cx="12" cy="5" r="2" />
+                      <line x1="7" y1="12" x2="17" y2="12" opacity="0.6" />
+                      <line x1="12" y1="7" x2="12" y2="19" opacity="0.6" />
+                      <circle cx="12" cy="19" r="2" />
                     </>}
                   </svg>
                 </span>

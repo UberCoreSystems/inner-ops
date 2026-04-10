@@ -71,7 +71,7 @@ export default function SynthesisBriefing() {
     try {
       const briefing = await generateSynthesisBriefing(userId, cadence);
       setBriefings(prev => [briefing, ...prev]);
-      ouraToast.success('Briefing generated');
+      ouraToast.info('Briefing generated');
     } catch (err) {
       if (err.message?.startsWith('CADENCE_LOCK:')) {
         const lockDate = new Date(err.message.split(':').slice(1).join(':'));

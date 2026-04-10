@@ -109,7 +109,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
 
   // --- Convergence Point (cross-module pattern, rules-based) ---
   const convergencePoint = deriveConvergencePoint({
-    dominantArchetype, highEscapeTargets, violatedRules, dominantMood, recentRelapseCount, signalDelta
+    dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, dominantMood, recentRelapseCount, signalDelta
   });
 
   // BER-137: signal delta note on identity direction alignment
@@ -121,7 +121,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
 
   // --- Confrontation Question (LLM, strict prompt) ---
   const confrontationQuestion = await generateConfrontationQuestion({
-    convergencePoint, violatedRules, dominantArchetype, signalDelta, dominantMood,
+    convergencePoint, violatedRules, finalizedRules, dominantArchetype, signalDelta, dominantMood,
     recentRelapseCount, activeTargetCount: activeTargets.length, highEscapeTargets,
     identityDirection,
   });
@@ -150,7 +150,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
   return briefing;
 }
 
-function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violatedRules, dominantMood, recentRelapseCount, signalDelta }) {
+function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, dominantMood, recentRelapseCount, signalDelta }) {
   const signals = [];
 
   if (dominantArchetype && recentRelapseCount >= 2) {
@@ -162,6 +162,8 @@ function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violated
   }
   if (violatedRules.length > 0) {
     signals.push(`${violatedRules.length} finalized rule${violatedRules.length > 1 ? 's' : ''} violated`);
+  } else if (finalizedRules.length > 0 && (recentRelapseCount >= 2 || highEscapeTargets.length >= 1)) {
+    signals.push(`Behavioral drift active against ${finalizedRules.length} committed rule${finalizedRules.length > 1 ? 's' : ''}`);
   }
   if (dominantMood && ['anxious', 'low', 'frustrated', 'foggy', 'numb'].some(m => dominantMood.toLowerCase().includes(m))) {
     signals.push(`Journal mood pattern: ${dominantMood} dominant`);
@@ -181,6 +183,7 @@ async function generateConfrontationQuestion(data) {
     data.convergencePoint && `Pattern: ${data.convergencePoint}`,
     data.dominantArchetype && `Relapse archetype: ${data.dominantArchetype} (${data.recentRelapseCount} entries)`,
     data.violatedRules.length > 0 && `Violated rules: ${data.violatedRules.map(r => r.rule).join('; ')}`,
+    data.finalizedRules?.length > 0 && `Committed behavioral rules: ${data.finalizedRules.join('; ')}`,
     data.signalDelta && `Signal trend: ${data.signalDelta}`,
     data.dominantMood && `Journal mood: ${data.dominantMood}`,
     data.highEscapeTargets.length > 0 && `Kill List repeated failures: ${data.highEscapeTargets.map(t => t.title).join(', ')}`,
