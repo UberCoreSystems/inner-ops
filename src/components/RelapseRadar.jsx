@@ -342,17 +342,17 @@ const RelapseRadar = () => {
 
       // BER-133: check for archetype-kill-list correlation on new entry
       const submittedArchetype = selectedSelf;
-      const now = Date.now();
+      const archNow = Date.now();
       const windowMs = 48 * 60 * 60 * 1000;
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
       const activeTargets = killTargets.filter(t => t.status === 'active');
       for (const target of activeTargets) {
         const dismissKey = `rl_kl_arch_${submittedArchetype}_${target.id}`;
         const dismissedAt = localStorage.getItem(dismissKey);
-        if (dismissedAt && now - parseInt(dismissedAt, 10) < sevenDaysMs) continue;
+        if (dismissedAt && archNow - parseInt(dismissedAt, 10) < sevenDaysMs) continue;
         const hasCorrelatedEscape = (target.escapeData || []).some(escape => {
           if (!escape.date) return false;
-          return Math.abs(new Date(escape.date).getTime() - now) < windowMs;
+          return Math.abs(new Date(escape.date).getTime() - archNow) < windowMs;
         });
         if (hasCorrelatedEscape) {
           setArchetypeMatchPrompt({ targetName: target.title, targetId: target.id, archetype: submittedArchetype });
