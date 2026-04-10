@@ -87,8 +87,8 @@ export async function getBehavioralContext(userId) {
     let blackMirrorTrend = null;
     if ((blackMirrorEntries || []).length >= 4) {
       const sorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
-      const recent = sorted.slice(0, 2).map(e => e.phonePickups || e.screenTime || 0);
-      const older = sorted.slice(2, 4).map(e => e.phonePickups || e.screenTime || 0);
+      const recent = sorted.slice(0, 2).map(e => e.blackMirrorIndex || 0);
+      const older = sorted.slice(2, 4).map(e => e.blackMirrorIndex || 0);
       const recentAvg = recent.reduce((s, v) => s + v, 0) / recent.length;
       const olderAvg = older.reduce((s, v) => s + v, 0) / older.length;
       if (recentAvg < olderAvg * 0.85) blackMirrorTrend = 'improving';

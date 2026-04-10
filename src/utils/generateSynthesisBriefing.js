@@ -98,8 +98,8 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
   let signalDelta = 'stable';
   if ((blackMirrorEntries || []).length >= 4) {
     const bmSorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
-    const recent2 = bmSorted.slice(0, 2).map(e => e.phonePickups || e.screenTime || 0);
-    const older2 = bmSorted.slice(2, 4).map(e => e.phonePickups || e.screenTime || 0);
+    const recent2 = bmSorted.slice(0, 2).map(e => e.blackMirrorIndex || 0);
+    const older2 = bmSorted.slice(2, 4).map(e => e.blackMirrorIndex || 0);
     const recentAvg = recent2.reduce((s, v) => s + v, 0) / 2;
     const olderAvg = older2.reduce((s, v) => s + v, 0) / 2;
     if (recentRelapseCount === 0 && totalEscapes28d <= 1 && recentAvg < olderAvg * 0.9 && violatedRules.length === 0 && !hasNegativeMood) signalDelta = 'improving';
