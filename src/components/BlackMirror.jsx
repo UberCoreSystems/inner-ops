@@ -54,6 +54,10 @@ const BlackMirror = () => {
   const [triggerContext, setTriggerContext] = useState('');
   const [triggerContextError, setTriggerContextError] = useState('');
 
+  // BER-135: relapse entries for correlation report
+  const [relapseEntries, setRelapseEntries] = useState([]);
+  const [showCorrelationReport, setShowCorrelationReport] = useState(false);
+
   // Calculate Black Mirror Index - stable reference
   const calculateBlackMirrorIndex = useCallback((screenTimeValue, mentalFogValue, interactionValue, unconsciousCheckValue) => {
     const screenTime_num = parseFloat(screenTimeValue) || 0;
@@ -107,12 +111,46 @@ const BlackMirror = () => {
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  // BER-135: 12-week BMI + relapse correlation data
+  const correlationData = useMemo(() => {
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const weeks = [];
+    for (let w = 11; w >= 0; w--) {
+      const weekEnd = now - w * weekMs;
+      const weekStart = weekEnd - weekMs;
+      const bmEntries = entries.filter(e => {
+        const t = e.createdAt ? new Date(e.createdAt).getTime() : 0;
+        return t >= weekStart && t < weekEnd;
+      });
+      const avgBMI = bmEntries.length > 0
+        ? Math.round(bmEntries.reduce((s, e) => s + (e.blackMirrorIndex || 0), 0) / bmEntries.length)
+        : null;
+      const relapseCount = relapseEntries.filter(e => {
+        const t = e.createdAt?.toDate?.()?.getTime() ?? e.timestamp ?? 0;
+        return t >= weekStart && t < weekEnd;
+      }).length;
+      const weekLabel = new Date(weekStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      weeks.push({ weekLabel, avgBMI, relapseCount, aboveThreshold: (avgBMI || 0) >= 25 });
+    }
+    return weeks;
+  }, [entries, relapseEntries]);
+
+  const correlationMatchCount = useMemo(() =>
+    correlationData.filter(w => w.aboveThreshold && w.relapseCount > 0).length,
+    [correlationData]
+  );
+
   // Load entries on component mount
   const loadEntries = useCallback(async () => {
     setLoadError(false);
     try {
-      const savedEntries = await readUserData('blackMirrorEntries');
+      const [savedEntries, savedRelapseEntries] = await Promise.all([
+        readUserData('blackMirrorEntries'),
+        readUserData('relapseEntries').catch(() => []),
+      ]);
       setEntries(savedEntries || []);
+      setRelapseEntries(savedRelapseEntries || []);
     } catch (error) {
       logger.error('Error loading entries:', error);
       setLoadError(true);
@@ -212,6 +250,11 @@ const BlackMirror = () => {
         const pastEntries = entries.length > 0 ? entries.slice(0, 3).map(e => `Index: ${e.blackMirrorIndex}, Screen: ${e.screenTime}h`) : [];
         const fogLabel = mentalFog <= 3 ? 'sharp' : mentalFog <= 6 ? 'moderate' : 'heavy';
         const interactionLabel = interactionLevel === 1 ? 'solo consumption' : interactionLevel === 2 ? 'mixed' : 'intentional connection';
+        // BER-135: inject correlation context when signal is significant
+        const correlationContext = correlationMatchCount >= 5
+          ? ` CROSS-MODULE PATTERN: In ${correlationMatchCount} of the last 12 weeks, the user's BMI was above threshold in the same week they logged a relapse. Mention this correlation explicitly. Ask whether their digital behavior is a precursor to the relapse or a response to it — do not ask whether they want to reduce it.`
+          : '';
+
         const blackMirrorText = [
           `My screen time today was ${screenTime} hours, giving me a Black Mirror index of ${calculatedIndex}/100.`,
           `Mental fog: ${mentalFog}/10 (${fogLabel}). Screen use pattern: ${interactionLabel}.`,
@@ -219,6 +262,7 @@ const BlackMirror = () => {
           unconsciousCheck ? 'I caught myself reaching for my phone without any conscious intention — purely automatic.' : '',
           reflection ? `My reflection on this: ${reflection}` : '',
           consecutiveHighBMI ? 'User\'s BMI has been above threshold for 2 consecutive check-ins. Ask what specifically they will restrict — not whether they want to do better.' : '',
+          correlationContext,
         ].filter(Boolean).join(' ');
         const feedback = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
         finalEntry = { ...entryData, oracleFeedback: feedback };
@@ -252,7 +296,7 @@ const BlackMirror = () => {
     } finally {
       setLoading(false);
     }
-  }, [screenTime, mentalFog, interactionLevel, unconsciousCheck, triggerContext, reflection, calculateBlackMirrorIndex, philosophicalInsight, entries, loadAnalytics]);
+  }, [screenTime, mentalFog, interactionLevel, unconsciousCheck, triggerContext, reflection, calculateBlackMirrorIndex, philosophicalInsight, entries, loadAnalytics, correlationMatchCount]);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -692,6 +736,65 @@ const BlackMirror = () => {
           </div>
         )}
       </div>
+
+      {/* BER-135: BMI + Relapse Correlation Report */}
+      {(entries.length >= 2 || relapseEntries.length >= 2) && (
+        <div className="oura-card p-6 mt-8 animate-fade-in-up animation-delay-300">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-light text-white tracking-tight">BMI × Relapse Correlation</h2>
+            <button
+              onClick={() => setShowCorrelationReport(p => !p)}
+              className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+            >
+              {showCorrelationReport ? 'Hide' : 'Show'} report
+            </button>
+          </div>
+
+          {showCorrelationReport && (
+            <div>
+              {/* Dual-series weekly chart */}
+              <div className="mb-4">
+                <div className="flex items-end gap-1 h-16">
+                  {correlationData.map((week, i) => {
+                    const maxBMI = Math.max(...correlationData.map(w => w.avgBMI || 0), 20);
+                    const maxRelapse = Math.max(...correlationData.map(w => w.relapseCount), 1);
+                    const bmiPct = week.avgBMI != null ? Math.max((week.avgBMI / maxBMI) * 100, 4) : 0;
+                    const relapsePct = week.relapseCount > 0 ? Math.max((week.relapseCount / maxRelapse) * 100, 4) : 0;
+                    return (
+                      <div key={i} className="flex-1 flex items-end gap-0.5 h-full" title={`${week.weekLabel}: BMI avg ${week.avgBMI ?? '—'}, relapses ${week.relapseCount}`}>
+                        <div
+                          className="flex-1 rounded-t transition-all duration-300"
+                          style={{ height: `${bmiPct}%`, backgroundColor: week.aboveThreshold ? '#ef4444' : '#3a3a3a', opacity: 0.7 }}
+                        />
+                        <div
+                          className="flex-1 rounded-t transition-all duration-300"
+                          style={{ height: `${relapsePct}%`, backgroundColor: '#f59e0b', opacity: 0.7 }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between mt-1 text-[9px] text-[#2a2a2a]">
+                  <span>{correlationData[0]?.weekLabel}</span>
+                  <span>now</span>
+                </div>
+                <div className="flex gap-4 mt-2 text-[10px] text-[#5a5a5a]">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#ef4444] opacity-70 inline-block" /> BMI</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#f59e0b] opacity-70 inline-block" /> Relapses</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#3a3a3a] opacity-70 inline-block" /> BMI below threshold</span>
+                </div>
+              </div>
+
+              {/* Correlation statement — factual, no interpretation */}
+              <div className="pt-4 border-t border-oura-border">
+                <p className="text-gray-400 text-sm">
+                  In <span className="text-white">{correlationMatchCount}</span> of the last 12 weeks, your BMI was above threshold in the same week you logged a relapse.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Oracle Modal */}
       <OracleModal
