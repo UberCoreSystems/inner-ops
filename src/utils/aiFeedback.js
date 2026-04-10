@@ -339,6 +339,11 @@ const buildCrossModuleInstruction = (behavioralContext) => {
   if (behavioralContext.journalMoodPattern) {
     parts.push(`Dominant journal mood (last 7d): ${behavioralContext.journalMoodPattern}.`);
   }
+  // BER-137: identity direction contradiction detection
+  if (behavioralContext.identityDirection) {
+    parts.push(`User's stated identity direction: "${behavioralContext.identityDirection}". If the user's current behavior contradicts this stated direction, name the contradiction explicitly. Do not soften it.`);
+  }
+
   if (parts.length === 0) return '';
   return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join('\n')}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
 };

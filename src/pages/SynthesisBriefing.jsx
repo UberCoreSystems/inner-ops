@@ -194,6 +194,9 @@ export default function SynthesisBriefing() {
               <div className={`text-2xl font-light ${SIGNAL_DELTA_COLORS[displayBriefing.signalDelta] || 'text-[#8a8a8a]'}`}>
                 {SIGNAL_DELTA_LABELS[displayBriefing.signalDelta] || displayBriefing.signalDelta}
               </div>
+              {displayBriefing.signalDeltaNote && (
+                <p className="text-[#8a8a8a] text-sm mt-3 leading-relaxed">{displayBriefing.signalDeltaNote}</p>
+              )}
             </div>
 
             {/* Section 4: Confrontation Question */}

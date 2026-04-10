@@ -29,13 +29,17 @@ export async function getBehavioralContext(userId) {
   if (cached && now() - cached.at < CACHE_TTL) return cached.value;
 
   try {
-    const [killTargets, relapseEntries, hardLessons, blackMirrorEntries, journalEntries] = await Promise.all([
+    const [killTargets, relapseEntries, hardLessons, blackMirrorEntries, journalEntries, userSettings] = await Promise.all([
       readUserData('killTargets').catch(() => []),
       readUserData('relapseEntries').catch(() => []),
       readUserData('hardLessons').catch(() => []),
       readUserData('blackMirrorEntries').catch(() => []),
       readUserData('journalEntries').catch(() => []),
+      readUserData('userSettings').catch(() => []),
     ]);
+
+    // BER-137: identity direction from user settings
+    const identityDirection = (userSettings || [])[0]?.identityDirection || null;
 
     const windowMs14 = 14 * 24 * 60 * 60 * 1000;
     const windowMs7 = 7 * 24 * 60 * 60 * 1000;
@@ -110,6 +114,7 @@ export async function getBehavioralContext(userId) {
       blackMirrorTrend,
       violatedHardLessons,
       journalMoodPattern,
+      identityDirection, // BER-137
     };
 
     contextCache.set(cacheKey, { at: now(), value });
@@ -127,6 +132,7 @@ function buildEmpty() {
     blackMirrorTrend: null,
     violatedHardLessons: [],
     journalMoodPattern: null,
+    identityDirection: null,
   };
 }
 

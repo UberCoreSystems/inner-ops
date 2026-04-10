@@ -39,14 +39,18 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     }
   }
 
-  // --- Pull data from all 5 modules ---
-  const [relapseEntries, killTargets, hardLessons, blackMirrorEntries, journalEntries] = await Promise.all([
+  // --- Pull data from all 5 modules + user settings ---
+  const [relapseEntries, killTargets, hardLessons, blackMirrorEntries, journalEntries, userSettings] = await Promise.all([
     readUserData('relapseEntries').catch(() => []),
     readUserData('killTargets').catch(() => []),
     readUserData('hardLessons').catch(() => []),
     readUserData('blackMirrorEntries').catch(() => []),
     readUserData('journalEntries').catch(() => []),
+    readUserData('userSettings').catch(() => []),
   ]);
+
+  // BER-137: identity direction
+  const identityDirection = (userSettings || [])[0]?.identityDirection || null;
 
   const now = Date.now();
   const windowMs28 = 28 * 24 * 60 * 60 * 1000;
@@ -108,10 +112,18 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     dominantArchetype, highEscapeTargets, violatedRules, dominantMood, recentRelapseCount, signalDelta
   });
 
+  // BER-137: signal delta note on identity direction alignment
+  const signalDeltaNote = identityDirection && signalDelta === 'deteriorating'
+    ? `Behavioral patterns are moving against the stated identity direction: "${identityDirection}".`
+    : identityDirection && signalDelta === 'improving'
+      ? `Behavioral patterns are consistent with the stated identity direction: "${identityDirection}".`
+      : null;
+
   // --- Confrontation Question (LLM, strict prompt) ---
   const confrontationQuestion = await generateConfrontationQuestion({
     convergencePoint, violatedRules, dominantArchetype, signalDelta, dominantMood,
     recentRelapseCount, activeTargetCount: activeTargets.length, highEscapeTargets,
+    identityDirection,
   });
 
   const briefing = {
@@ -121,6 +133,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     convergencePoint,
     violatedRules,
     signalDelta,
+    signalDeltaNote,
     confrontationQuestion,
     _meta: {
       recentRelapseCount,
@@ -129,6 +142,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
       activeTargetCount: activeTargets.length,
       highEscapeTargetCount: highEscapeTargets.length,
       finalizedRuleCount: finalizedRules.length,
+      identityDirection,
     },
   };
 
@@ -170,6 +184,7 @@ async function generateConfrontationQuestion(data) {
     data.signalDelta && `Signal trend: ${data.signalDelta}`,
     data.dominantMood && `Journal mood: ${data.dominantMood}`,
     data.highEscapeTargets.length > 0 && `Kill List repeated failures: ${data.highEscapeTargets.map(t => t.title).join(', ')}`,
+    data.identityDirection && `User's stated identity direction: "${data.identityDirection}"`,
   ].filter(Boolean).join('\n');
 
   const systemPrompt = `You generate one confrontation question. Rules:\n- One question only. No preamble, no context, no explanation.\n- Derived directly from the data provided. No invented patterns.\n- Not answerable with yes/no. Requires honest reflection.\n- No advisory language, no suggestions, no affirmations, no motivational framing.\n- Uncomfortable, specific, unflinching.`;
