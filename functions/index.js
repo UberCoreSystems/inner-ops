@@ -50,7 +50,7 @@ exports.oracle = onCall(
       );
     }
 
-    const { entryText, moduleName, userContext, tone } = request.data;
+    const { entryText, moduleName, userContext, tone, behavioralContext } = request.data;
 
     if (!entryText || typeof entryText !== "string" || entryText.trim().length < 10) {
       throw new HttpsError("invalid-argument", "Entry text must be at least 10 characters.");
@@ -58,7 +58,7 @@ exports.oracle = onCall(
 
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
-    const systemPrompt = buildSystemPrompt(moduleName, tone);
+    const systemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext);
     const userPrompt = buildUserPrompt(entryText, userContext);
 
     try {
@@ -143,7 +143,39 @@ Continue the conversation. Match your posture to what they actually said.`,
 // Helpers
 // ─────────────────────────────────────────────
 
-function buildSystemPrompt(moduleName, tone) {
+function buildBehavioralContextBlock(behavioralContext) {
+  if (!behavioralContext || typeof behavioralContext !== "object") return "";
+  const parts = [];
+  if (behavioralContext.dominantRelapseArchetype) {
+    parts.push(`Dominant relapse archetype (last 14d): ${behavioralContext.dominantRelapseArchetype}.`);
+  }
+  if (behavioralContext.recentRelapseCount > 0) {
+    parts.push(`Relapse entries in last 14 days: ${behavioralContext.recentRelapseCount}.`);
+  }
+  if (Array.isArray(behavioralContext.activeKillTargets) && behavioralContext.activeKillTargets.length > 0) {
+    const targets = behavioralContext.activeKillTargets
+      .map((t) => `${t.title} (streak: ${t.streak}, escapes: ${t.escapeCount})`)
+      .join("; ");
+    parts.push(`Active Kill List targets: ${targets}.`);
+  }
+  if (Array.isArray(behavioralContext.violatedHardLessons) && behavioralContext.violatedHardLessons.length > 0) {
+    const rules = behavioralContext.violatedHardLessons.map((l) => `"${l.rule}"`).join(", ");
+    parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
+  }
+  if (behavioralContext.blackMirrorTrend) {
+    parts.push(`Black Mirror attention trend: ${behavioralContext.blackMirrorTrend}.`);
+  }
+  if (behavioralContext.journalMoodPattern) {
+    parts.push(`Dominant journal mood (last 7d): ${behavioralContext.journalMoodPattern}.`);
+  }
+  if (behavioralContext.identityDirection) {
+    parts.push(`User's stated identity direction: "${behavioralContext.identityDirection}". If the user's current behavior contradicts this stated direction, name the contradiction explicitly. Do not soften it.`);
+  }
+  if (parts.length === 0) return "";
+  return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join("\n")}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
+}
+
+function buildSystemPrompt(moduleName, tone, behavioralContext) {
   // Normalize: 'killList', 'Kill List', 'Kill_List' → 'killlist'
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
 
@@ -171,6 +203,7 @@ function buildSystemPrompt(moduleName, tone) {
   const toneNote = toneColors[tone] ? `\nTone color: ${toneColors[tone]}` : "";
   const isEmergency = normalizedModule === "emergency";
   const wordLimit = isEmergency ? "100–150 words." : "150–220 words.";
+  const behavioralContextBlock = buildBehavioralContextBlock(behavioralContext);
 
   // Lesson extraction — returns structured JSON, not prose
   if (normalizedModule === "lessonextraction") {
@@ -210,7 +243,7 @@ Hard rules:
 - No headers, bullets, or lists. Flowing prose only.
 - Never name any philosopher, tradition, or framework.
 - Never use: "healing journey", "be kind to yourself", "proud of you", "validate", "sit with."
-- 100–150 words.`;
+- 100–150 words.${behavioralContextBlock}`;
   }
 
   return `You are the Oracle — a direct, grounded advisor for a man doing serious inner work. You speak like someone who has seen these patterns before — not a therapist, not a coach, not a motivational speaker. A straight-talking advisor who respects this man enough to be honest, and smart enough to know that honest does not always mean hard.
@@ -268,7 +301,7 @@ Hard rules:
 - Never use: "you've got this", "healing journey", "be kind to yourself", "proud of you", "validate", "sit with", "amazing", "warrior."
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
-- ${wordLimit}`;
+- ${wordLimit}${behavioralContextBlock}`;
 }
 
 const DRIVER_LABELS = {
