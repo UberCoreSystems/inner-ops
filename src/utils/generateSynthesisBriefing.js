@@ -82,22 +82,6 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     .filter(l => l.isFinalized && l.ruleGoingForward)
     .map(l => l.ruleGoingForward);
 
-  // --- Black Mirror: trend over 4 weeks ---
-  let signalDelta = 'stable';
-  if ((blackMirrorEntries || []).length >= 4) {
-    const bmSorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
-    const recent2 = bmSorted.slice(0, 2).map(e => e.phonePickups || e.screenTime || 0);
-    const older2 = bmSorted.slice(2, 4).map(e => e.phonePickups || e.screenTime || 0);
-    const recentAvg = recent2.reduce((s, v) => s + v, 0) / 2;
-    const olderAvg = older2.reduce((s, v) => s + v, 0) / 2;
-    if (recentRelapseCount === 0 && totalEscapes28d <= 1 && recentAvg < olderAvg * 0.9) signalDelta = 'improving';
-    else if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || recentAvg > olderAvg * 1.2) signalDelta = 'deteriorating';
-  } else {
-    // Fallback without Black Mirror data
-    if (recentRelapseCount >= 3 || totalEscapes28d >= 5) signalDelta = 'deteriorating';
-    else if (recentRelapseCount === 0 && activeTargets.some(t => t.streak > 14)) signalDelta = 'improving';
-  }
-
   // --- Journal: dominant mood ---
   const recentJournals = (journalEntries || []).filter(e => now - getTimestamp(e) < windowMs28);
   const moodCounts = {};
@@ -106,6 +90,25 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     if (mood) moodCounts[mood] = (moodCounts[mood] || 0) + 1;
   });
   const dominantMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+  // --- Black Mirror: trend over 4 weeks (BER-149: incorporates violatedRules + journal mood) ---
+  const NEGATIVE_MOODS = ['anxious', 'low', 'frustrated', 'foggy', 'numb'];
+  const hasNegativeMood = dominantMood && NEGATIVE_MOODS.some(m => dominantMood.toLowerCase().includes(m));
+
+  let signalDelta = 'stable';
+  if ((blackMirrorEntries || []).length >= 4) {
+    const bmSorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
+    const recent2 = bmSorted.slice(0, 2).map(e => e.phonePickups || e.screenTime || 0);
+    const older2 = bmSorted.slice(2, 4).map(e => e.phonePickups || e.screenTime || 0);
+    const recentAvg = recent2.reduce((s, v) => s + v, 0) / 2;
+    const olderAvg = older2.reduce((s, v) => s + v, 0) / 2;
+    if (recentRelapseCount === 0 && totalEscapes28d <= 1 && recentAvg < olderAvg * 0.9 && violatedRules.length === 0 && !hasNegativeMood) signalDelta = 'improving';
+    else if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || recentAvg > olderAvg * 1.2 || violatedRules.length >= 2 || (violatedRules.length >= 1 && hasNegativeMood)) signalDelta = 'deteriorating';
+  } else {
+    // Fallback without Black Mirror data
+    if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || violatedRules.length >= 2 || (violatedRules.length >= 1 && hasNegativeMood)) signalDelta = 'deteriorating';
+    else if (recentRelapseCount === 0 && activeTargets.some(t => t.streak > 14) && violatedRules.length === 0 && !hasNegativeMood) signalDelta = 'improving';
+  }
 
   // --- Convergence Point (cross-module pattern, rules-based) ---
   const convergencePoint = deriveConvergencePoint({
