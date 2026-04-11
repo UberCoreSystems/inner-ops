@@ -11,6 +11,7 @@ import OracleModal from './OracleModal';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { useOracleModal } from '../hooks/useOracleModal';
+import { useOuraData } from '../hooks/useOuraData';
 
 const relapseSelves = [
   'The Addict',
@@ -83,6 +84,18 @@ const RelapseRadar = () => {
 
   // BER-136: capture entry text for Oracle regen
   const oracleEntryTextRef = useRef(null);
+
+  // BER-182: Oura Ring biometric precursor data
+  const {
+    connected: ouraConnected,
+    biometrics: ouraBiometrics,
+    hrvBaseline,
+    loading: ouraLoading,
+    isPhysiologicalAlert,
+    isHrvAlert,
+    isReadinessAlert,
+    connectOura,
+  } = useOuraData();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -317,6 +330,11 @@ const RelapseRadar = () => {
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
       const oracleFeedback = await generateAIFeedback('relapse', entryText, pastReflections);
 
+      // BER-182: auto-include physiological precursor if Oura signals are below threshold
+      const effectivePrecursors = isPhysiologicalAlert
+        ? [...new Set([...selectedPrecursors, 'Physiological'])]
+        : selectedPrecursors;
+
       // Save the entry before revealing reactions so currentEntryId is set
       const entry = {
         selectedSelf,
@@ -324,10 +342,21 @@ const RelapseRadar = () => {
         substanceUse,
         reflection,
         oracleFeedback,
-        precursorConditions: selectedPrecursors,
+        precursorConditions: effectivePrecursors,
         precursorContext: precursorContext.trim() || null,
         eventOccurredAt: occurredAt.toISOString(),
         entryProximityFlag,
+        ...(isPhysiologicalAlert && ouraBiometrics ? {
+          physiologicalSignal: {
+            hrv: ouraBiometrics.hrv,
+            readinessScore: ouraBiometrics.readinessScore,
+            sleepScore: ouraBiometrics.sleepScore,
+            restingHeartRate: ouraBiometrics.restingHeartRate,
+            hrvBaseline,
+            isHrvAlert,
+            isReadinessAlert,
+          },
+        } : {}),
       };
 
       const savedEntry = await writeData('relapseEntries', entry);
@@ -516,6 +545,67 @@ const RelapseRadar = () => {
               </button>
             ))}
           </div>
+          {/* BER-182: Physiological precursor — Oura Ring */}
+          {ouraConnected && ouraBiometrics && !ouraLoading && (
+            <div className={`p-4 rounded-2xl border ${isPhysiologicalAlert ? 'border-red-500 bg-red-500/10' : 'border-oura-border bg-oura-card'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-gray-500 uppercase tracking-widest">Physiological — Oura</span>
+                {isPhysiologicalAlert && (
+                  <span className="text-xs text-red-400 font-medium tracking-wide">PRECURSOR DETECTED</span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {ouraBiometrics.hrv != null && (
+                  <div className={`p-3 rounded-xl ${isHrvAlert ? 'bg-red-900/40' : 'bg-oura-darker'}`}>
+                    <div className={`text-xl font-light tabular-nums ${isHrvAlert ? 'text-red-400' : 'text-white'}`}>{Math.round(ouraBiometrics.hrv)}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">HRV (rmssd){isHrvAlert ? ' — below baseline' : ''}</div>
+                    {isHrvAlert && hrvBaseline != null && (
+                      <div className="text-xs text-red-400/70 mt-1">Baseline: {Math.round(hrvBaseline)}</div>
+                    )}
+                  </div>
+                )}
+                {ouraBiometrics.readinessScore != null && (
+                  <div className={`p-3 rounded-xl ${isReadinessAlert ? 'bg-red-900/40' : 'bg-oura-darker'}`}>
+                    <div className={`text-xl font-light tabular-nums ${isReadinessAlert ? 'text-red-400' : 'text-white'}`}>{ouraBiometrics.readinessScore}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">Readiness{isReadinessAlert ? ' — below 60' : ''}</div>
+                  </div>
+                )}
+                {ouraBiometrics.sleepScore != null && (
+                  <div className="p-3 rounded-xl bg-oura-darker">
+                    <div className="text-xl font-light tabular-nums text-white">{ouraBiometrics.sleepScore}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">Sleep score</div>
+                  </div>
+                )}
+                {ouraBiometrics.restingHeartRate != null && (
+                  <div className="p-3 rounded-xl bg-oura-darker">
+                    <div className="text-xl font-light tabular-nums text-white">{ouraBiometrics.restingHeartRate}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">Resting HR (bpm)</div>
+                  </div>
+                )}
+              </div>
+              {isPhysiologicalAlert && (
+                <div className="mt-3 text-xs text-red-400 border-t border-red-500/20 pt-3">
+                  Auto-flagged as physiological precursor. Will be recorded with this entry.
+                </div>
+              )}
+            </div>
+          )}
+          {!ouraConnected && !ouraLoading && (
+            <div className="p-4 rounded-2xl border border-oura-border bg-oura-card">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-600 uppercase tracking-widest">Physiological</span>
+                <button
+                  type="button"
+                  onClick={connectOura}
+                  className="text-xs text-gray-500 hover:text-oura-amber transition-colors"
+                >
+                  Connect Oura Ring
+                </button>
+              </div>
+              <p className="text-gray-600 text-xs mt-2">Connect Oura Ring to capture biometric precursors automatically.</p>
+            </div>
+          )}
+
           <div>
             <label className="text-gray-500 text-xs uppercase tracking-widest mb-2 block">One-sentence context <span className="text-gray-600">(optional)</span></label>
             <input

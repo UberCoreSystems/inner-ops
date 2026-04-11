@@ -24,6 +24,7 @@ const Profile = React.lazy(() => import('./pages/Profile'));
 const Onboarding = React.lazy(() => import('./pages/Onboarding'));
 const HardLessons = React.lazy(() => import('./pages/HardLessons'));
 const SynthesisBriefing = React.lazy(() => import('./pages/SynthesisBriefing'));
+const OuraCallback = React.lazy(() => import('./pages/OuraCallback'));
 
 // Fallback loader
 const PageLoader = () => (
@@ -262,6 +263,17 @@ function App() {
                     <SynthesisBriefing />
                   </Suspense>
                 ) : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            }
+          />
+
+          <Route
+            path="/oura/callback"
+            element={
+              <InlineErrorBoundary name="OuraCallback">
+                <Suspense fallback={<PageLoader />}>
+                  <OuraCallback />
+                </Suspense>
               </InlineErrorBoundary>
             }
           />
