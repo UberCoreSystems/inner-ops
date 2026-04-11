@@ -531,6 +531,10 @@ export const callLLM = async (promptBundle, generationContext) => {
       userContext,
       tone,
       ...(userPrompt.behavioralContext ? { behavioralContext: userPrompt.behavioralContext } : {}),
+      // BER-167: pass behavioral record density for Oracle trust calibration
+      entryCount: typeof userPrompt.behavioralContext?.totalEntryCount === 'number'
+        ? userPrompt.behavioralContext.totalEntryCount
+        : 0,
     });
 
     const { feedback } = result.data;

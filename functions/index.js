@@ -8,6 +8,11 @@ const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 // Rate limiting: max Oracle calls per user per day
 const DAILY_LIMIT = 20;
 
+// BER-167: Oracle trust calibration — behavioral record density threshold
+// Below this count the Oracle uses a discrepancy-pointing frame instead of
+// archetype/pattern confrontation. Trigger is entry count, not calendar time.
+const TRUST_THRESHOLD = 21;
+
 // In-memory rate limit store (resets on cold start — acceptable for this use case)
 // For production at scale, replace with Firestore-backed rate limiting
 const rateLimitStore = new Map();
@@ -50,7 +55,7 @@ exports.oracle = onCall(
       );
     }
 
-    const { entryText, moduleName, userContext, tone, behavioralContext } = request.data;
+    const { entryText, moduleName, userContext, tone, behavioralContext, entryCount } = request.data;
 
     if (!entryText || typeof entryText !== "string" || entryText.trim().length < 10) {
       throw new HttpsError("invalid-argument", "Entry text must be at least 10 characters.");
@@ -58,7 +63,7 @@ exports.oracle = onCall(
 
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
-    const systemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext);
+    const systemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount);
     const userPrompt = buildUserPrompt(entryText, userContext);
 
     try {
@@ -175,7 +180,7 @@ function buildBehavioralContextBlock(behavioralContext) {
   return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join("\n")}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
 }
 
-function buildSystemPrompt(moduleName, tone, behavioralContext) {
+function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount) {
   // Normalize: 'killList', 'Kill List', 'Kill_List' → 'killlist'
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
 
@@ -204,6 +209,12 @@ function buildSystemPrompt(moduleName, tone, behavioralContext) {
   const isEmergency = normalizedModule === "emergency";
   const wordLimit = isEmergency ? "100–150 words." : "150–220 words.";
   const behavioralContextBlock = buildBehavioralContextBlock(behavioralContext);
+
+  // BER-167: trust calibration block — injected only when below threshold
+  const count = typeof entryCount === "number" ? entryCount : 0;
+  const trustCalibrationBlock = count < TRUST_THRESHOLD
+    ? `\n\nTRUST CALIBRATION: This user has ${count} total behavioral entries logged — not enough data to support credible archetype or pattern claims. Adjust your confrontation frame accordingly:\n- Do NOT make claims about behavioral archetypes, dominant patterns, or systemic tendencies. You do not have enough signal.\n- DO identify the specific gap between what he committed to and what he actually did. Name it directly.\n- Frame: "You said X. You did Y. What happened?" — specific inconsistency confrontation, not pattern judgment.\n- Same directness. Same weight. Different attack vector.`
+    : "";
 
   // Lesson extraction — returns structured JSON, not prose
   if (normalizedModule === "lessonextraction") {
@@ -243,7 +254,7 @@ Hard rules:
 - No headers, bullets, or lists. Flowing prose only.
 - Never name any philosopher, tradition, or framework.
 - Never use: "healing journey", "be kind to yourself", "proud of you", "validate", "sit with."
-- 100–150 words.${behavioralContextBlock}`;
+- 100–150 words.${behavioralContextBlock}${trustCalibrationBlock}`;
   }
 
   return `You are the Oracle — a direct, grounded advisor for a man doing serious inner work. You speak like someone who has seen these patterns before — not a therapist, not a coach, not a motivational speaker. A straight-talking advisor who respects this man enough to be honest, and smart enough to know that honest does not always mean hard.
@@ -301,7 +312,7 @@ Hard rules:
 - Never use: "you've got this", "healing journey", "be kind to yourself", "proud of you", "validate", "sit with", "amazing", "warrior."
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
-- ${wordLimit}${behavioralContextBlock}`;
+- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}`;
 }
 
 const DRIVER_LABELS = {

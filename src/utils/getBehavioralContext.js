@@ -107,6 +107,13 @@ export async function getBehavioralContext(userId) {
     });
     const journalMoodPattern = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
+    // BER-167: behavioral record density for Oracle trust calibration
+    const totalEntryCount =
+      (journalEntries || []).length +
+      (killTargets || []).length +
+      (relapseEntries || []).length +
+      (hardLessons || []).length;
+
     const value = {
       activeKillTargets,
       dominantRelapseArchetype,
@@ -115,6 +122,7 @@ export async function getBehavioralContext(userId) {
       violatedHardLessons,
       journalMoodPattern,
       identityDirection, // BER-137
+      totalEntryCount,   // BER-167
     };
 
     contextCache.set(cacheKey, { at: now(), value });
@@ -133,6 +141,7 @@ function buildEmpty() {
     violatedHardLessons: [],
     journalMoodPattern: null,
     identityDirection: null,
+    totalEntryCount: 0, // BER-167
   };
 }
 
