@@ -377,7 +377,7 @@ const KillList = () => {
 
       if (isKill) {
         // Kill celebration
-        ouraToast.achievement(`Target eliminated: ${target.title} — ${newStreak} day streak`);
+        ouraToast.success(`Target eliminated: ${target.title} — ${newStreak} day streak`);
         setCelebration({ show: true, targetName: target.title });
         setTimeout(() => setCelebration({ show: false, targetName: '' }), 3000);
 
@@ -385,7 +385,7 @@ const KillList = () => {
         try {
           const killedCount = targetsRef.current.filter(t => t.status === 'killed').length + 1;
           const categoryLabel = categories.find(c => c.value === target.category)?.label || target.category;
-          const completionText = `I killed it. "${target.title}" — a ${categoryLabel} (${tier.label} difficulty). ${newStreak} consecutive days holding the line. That's ${killedCount} confirmed kills. This one took real consistency.`;
+          const completionText = `I killed it. "${target.title}" — a ${categoryLabel} (${tier.label} difficulty). ${newStreak} consecutive days holding the line. That's ${killedCount} confirmed kills.`;
           const feedback = await generateAIFeedback('killList', completionText, []);
           setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
         } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. The Oracle acknowledges your consistency.', isLoading: false, entryCount: null }); }
