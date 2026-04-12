@@ -55,7 +55,7 @@ exports.oracle = onCall(
       );
     }
 
-    const { entryText, moduleName, userContext, tone, behavioralContext, entryCount } = request.data;
+    const { entryText, moduleName, userContext, tone, behavioralContext, entryCount, customSystemPrompt } = request.data;
 
     if (!entryText || typeof entryText !== "string" || entryText.trim().length < 10) {
       throw new HttpsError("invalid-argument", "Entry text must be at least 10 characters.");
@@ -63,7 +63,8 @@ exports.oracle = onCall(
 
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
-    const systemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount);
+    const baseSystemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount);
+    const systemPrompt = customSystemPrompt ? `${baseSystemPrompt}\n\n${customSystemPrompt}` : baseSystemPrompt;
     const userPrompt = buildUserPrompt(entryText, userContext);
 
     try {
