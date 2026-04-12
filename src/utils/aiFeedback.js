@@ -2,6 +2,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth as getFirebaseAuth } from 'firebase/auth';
 import { getUserProfile } from './userProfile';
 import { getBehavioralContext } from './getBehavioralContext';
+import { resolveTriggeredCriterion } from './confrontationCriteria';
 import { track } from './analytics';
 import { detectEvasionMarkers } from './detectEvasionMarkers';
 
@@ -535,6 +536,12 @@ export const callLLM = async (promptBundle, generationContext) => {
       ...(profile?.focusStatement && { focusStatement: profile.focusStatement }),
     };
 
+    // BER-200: Oracle Reactance Architecture — inject user's own pre-committed question
+    const triggeredCriterion = generationContext?.triggeredCriterion ?? null;
+    const reactanceInstruction = triggeredCriterion
+      ? `\n\nCONFRONTATION TRIGGER ACTIVE: The user pre-committed to this confrontation when the following condition was met: ${triggeredCriterion.dataSummary}. Their own question for this moment: "${triggeredCriterion.criterion.question}". Your response MUST: (1) state the data pattern plainly ("You have logged [dataSummary]"), (2) put their own question to them verbatim — do not paraphrase it, (3) continue with your confrontational analysis. The question comes from the user in a clear-headed state. Do not soften it.`
+      : '';
+
     const result = await oracleFn({
       entryText: userPrompt.entryText,
       moduleName: userPrompt.moduleName,
@@ -545,6 +552,8 @@ export const callLLM = async (promptBundle, generationContext) => {
       entryCount: typeof userPrompt.behavioralContext?.totalEntryCount === 'number'
         ? userPrompt.behavioralContext.totalEntryCount
         : 0,
+      // BER-200: reactance instruction appended when criterion is triggered
+      ...(reactanceInstruction ? { customSystemPrompt: reactanceInstruction } : {}),
     });
 
     const { feedback } = result.data;
@@ -719,7 +728,8 @@ export const generateFeedback = async ({
   priorFeedbackSummary = '',
   userGoals = [],
   userPreferences = {},
-  behavioralContext = null
+  behavioralContext = null,
+  triggeredCriterion = null,
 }) => {
   const cleanEntry = normalizeWhitespace(entryText);
   const safeModuleName = normalizeWhitespace(moduleName || 'journal') || 'journal';
@@ -769,7 +779,9 @@ export const generateFeedback = async ({
       themes,
       lenses,
       antiRepetitionData,
-      strictRetry: true
+      strictRetry: true,
+      // BER-200: pass resolved criterion so callLLM can augment system prompt
+      triggeredCriterion,
     });
 
     // Real Claude prose — skip validation/formatting entirely
@@ -816,21 +828,32 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
 
     // Auto-fetch behavioral context when not explicitly provided
     let resolvedContext = behavioralContext;
-    if (!resolvedContext) {
+    let uid = null;
+    try {
+      const auth = getFirebaseAuth();
+      uid = auth.currentUser?.uid || null;
+    } catch { /* no-op */ }
+
+    if (!resolvedContext && uid) {
       try {
-        const auth = getFirebaseAuth();
-        const uid = auth.currentUser?.uid;
-        if (uid) resolvedContext = await getBehavioralContext(uid);
+        resolvedContext = await getBehavioralContext(uid);
       } catch {
         resolvedContext = null;
       }
     }
 
+    // BER-200: check user-defined confrontation criteria before generating Oracle output
+    let triggeredCriterion = null;
+    try {
+      triggeredCriterion = await resolveTriggeredCriterion(uid);
+    } catch { /* silently fail — do not block Oracle generation */ }
+
     const feedback = await generateFeedback({
       moduleName,
       entryText,
       priorFeedbackSummary,
-      behavioralContext: resolvedContext
+      behavioralContext: resolvedContext,
+      triggeredCriterion,
     });
 
     // Real Claude response — return prose directly, no template formatting

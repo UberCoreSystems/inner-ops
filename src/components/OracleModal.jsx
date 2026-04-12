@@ -1,7 +1,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getAuth } from 'firebase/auth';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { resolveTriggeredCriterion } from '../utils/confrontationCriteria';
 import logger from '../utils/logger';
 import { ouraToast } from '../utils/toast';
 import { InlineErrorBoundary } from './ErrorBoundary';
@@ -53,6 +55,8 @@ const OracleModal = ({
   // BER-194: data-depth calibration — null = unknown (no constraint applied)
   entryCount = null,
 }) => {
+  // BER-200: resolved asynchronously on open — display the triggered criterion
+  const [resolvedCriterion, setResolvedCriterion] = useState(null);
   const [oracleFeedback, setOracleFeedback] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedReaction, setSelectedReaction] = useState(null);
@@ -82,6 +86,16 @@ const OracleModal = ({
       setFollowUpResponse('');
       setFollowUpUsed(false);
       setDisplayFeedback('');
+      // BER-200: resolve confrontation criterion for this user
+      setResolvedCriterion(null);
+      try {
+        const uid = getAuth().currentUser?.uid;
+        if (uid) {
+          resolveTriggeredCriterion(uid)
+            .then((result) => setResolvedCriterion(result))
+            .catch(() => {});
+        }
+      } catch { /* no-op */ }
     }
   }, [isOpen, target, moduleName, feedback, content]);
 
@@ -223,6 +237,18 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
           ) : (
             /* ── Feedback state ── */
             <div className="space-y-6">
+              {/* BER-200: Confrontation trigger — user's own pre-committed question */}
+              {resolvedCriterion && (
+                <div className="border border-[#2a2a2a] rounded-xl p-4 space-y-3">
+                  <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">Confrontation Trigger</div>
+                  <div className="text-[#8a8a8a] text-xs">{resolvedCriterion.dataSummary}</div>
+                  <div className="border-l-2 border-[#3a3a3a] pl-3">
+                    <div className="text-[#5a5a5a] text-[10px] uppercase tracking-widest mb-1">Your pre-committed question</div>
+                    <div className="text-[#d1d1d1] text-sm leading-relaxed">{resolvedCriterion.criterion.question}</div>
+                  </div>
+                </div>
+              )}
+
               {/* Oracle label */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

@@ -5,6 +5,7 @@ import { writeData } from '../utils/firebaseUtils';
 import { track } from '../utils/analytics';
 import logger from '../utils/logger';
 import ouraToast from '../utils/toast';
+import { RELAPSE_ARCHETYPES, saveConfrontationCriteria } from '../utils/confrontationCriteria';
 
 const DRIVERS = [
   { value: 'addiction', label: 'Breaking an addiction or compulsive pattern' },
@@ -30,13 +31,19 @@ export default function Onboarding() {
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
 
-  const TOTAL_STEPS = 5; // 0=welcome, 1=driver, 2=style, 3=focus, 4=kill target
+  // BER-200: confrontation criteria setup (step 5)
+  const [criterionArchetype, setCriterionArchetype] = useState('');
+  const [criterionThreshold, setCriterionThreshold] = useState(2);
+  const [criterionQuestion, setCriterionQuestion] = useState('');
+
+  const TOTAL_STEPS = 6; // 0=welcome, 1=driver, 2=style, 3=focus, 4=kill target, 5=confrontation criteria
 
   const canAdvance = () => {
     if (step === 1) return !!driver;
     if (step === 2) return !!feedbackStyle;
     if (step === 3) return focusStatement.trim().length >= 8;
     if (step === 4) return true; // kill target is optional
+    if (step === 5) return true; // confrontation criteria is optional
     return true;
   };
 
@@ -71,7 +78,18 @@ export default function Onboarding() {
         });
       }
 
-      track('onboarding_completed', { primaryDriver: driver, feedbackStyle, hasKillTarget: !!killTarget.trim() });
+      // BER-200: save confrontation criterion if user defined one
+      if (criterionArchetype && criterionQuestion.trim()) {
+        await saveConfrontationCriteria([{
+          id: `criterion_${Date.now()}`,
+          archetypeName: criterionArchetype,
+          threshold: Math.max(1, Math.min(10, criterionThreshold || 2)),
+          periodDays: 30,
+          question: criterionQuestion.trim(),
+        }]);
+      }
+
+      track('onboarding_completed', { primaryDriver: driver, feedbackStyle, hasKillTarget: !!killTarget.trim(), hasConfrontationCriterion: !!(criterionArchetype && criterionQuestion.trim()) });
       navigate('/dashboard');
     } catch (err) {
       logger.error('Failed to save profile:', err);
@@ -205,6 +223,62 @@ export default function Onboarding() {
               placeholder="e.g. Doomscrolling at night, avoiding hard conversations, porn..."
               className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none placeholder-[#3a3a3a] transition-colors"
             />
+          </div>
+        )}
+
+        {/* Step 5: Confrontation criteria — BER-200 */}
+        {step === 5 && (
+          <div className="animate-fade-in-up">
+            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Optional</p>
+            <h2 className="text-2xl font-light text-white mb-3">Set a confrontation trigger.</h2>
+            <p className="text-[#5a5a5a] text-sm mb-8">
+              When a specific pattern repeats, the Oracle puts your own question back to you — not a system-generated one. You can skip this and set it later.
+            </p>
+
+            {/* Archetype */}
+            <div className="mb-5">
+              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">When I relapse as</label>
+              <select
+                value={criterionArchetype}
+                onChange={(e) => setCriterionArchetype(e.target.value)}
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none transition-colors appearance-none"
+              >
+                <option value="">Select an archetype...</option>
+                {RELAPSE_ARCHETYPES.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Threshold */}
+            <div className="mb-5">
+              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">
+                {criterionThreshold} time{criterionThreshold !== 1 ? 's' : ''} in 30 days
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={criterionThreshold}
+                onChange={(e) => setCriterionThreshold(Number(e.target.value))}
+                className="w-full accent-white"
+              />
+              <div className="flex justify-between text-[#3a3a3a] text-xs mt-1">
+                <span>1</span><span>10</span>
+              </div>
+            </div>
+
+            {/* Question */}
+            <div className="mb-2">
+              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">I want to be asked</label>
+              <textarea
+                value={criterionQuestion}
+                onChange={(e) => setCriterionQuestion(e.target.value)}
+                rows={3}
+                placeholder="e.g. What exactly are you running from right now?"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#3a3a3a] transition-colors"
+              />
+            </div>
           </div>
         )}
 
