@@ -50,6 +50,8 @@ const OracleModal = ({
   entryText = '',
   entryModuleName = '',
   onFollowUpStored = null,
+  // BER-194: data-depth calibration — null = unknown (no constraint applied)
+  entryCount = null,
 }) => {
   const [oracleFeedback, setOracleFeedback] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -119,7 +121,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     if (regenCount >= MAX_REGEN || regenLoading || !entryText) return;
     setRegenLoading(true);
     try {
-      const systemPrompt = `The user has already seen one perspective on this data. Approach the same data from a different confrontational angle. Do not repeat the same observation. Do not soften your assessment. Identify a different pattern, contradiction, or uncomfortable truth than the one already surfaced.`;
+      // BER-194: low data — suppress pattern-referencing in regen prompt
+      const dataDepthNote = (entryCount !== null && entryCount < 21)
+        ? ' This user has limited behavioral history. Do not reference established patterns, archetypes, or frequency counts — point to discrepancies within this single entry only.'
+        : '';
+      const systemPrompt = `The user has already seen one perspective on this data. Approach the same data from a different confrontational angle. Do not repeat the same observation. Do not soften your assessment. Identify a different pattern, contradiction, or uncomfortable truth than the one already surfaced.${dataDepthNote}`;
       const result = await callOracleRaw(entryText, systemPrompt);
       if (result) {
         setDisplayFeedback(result);

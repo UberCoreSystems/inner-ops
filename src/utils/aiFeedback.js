@@ -318,7 +318,9 @@ const buildAntiRepetitionData = ({ userId, moduleName, entryText, themes, lenses
 const buildCrossModuleInstruction = (behavioralContext) => {
   if (!behavioralContext) return '';
   const parts = [];
-  if (behavioralContext.dominantRelapseArchetype) {
+  // BER-194: pattern-referencing data requires >= 21 entries to be meaningful
+  const isHighData = (behavioralContext.totalEntryCount || 0) >= 21;
+  if (behavioralContext.dominantRelapseArchetype && isHighData) {
     parts.push(`Dominant relapse archetype (last 14d): ${behavioralContext.dominantRelapseArchetype}.`);
   }
   if (behavioralContext.recentRelapseCount > 0) {
@@ -410,7 +412,9 @@ const ensureSentenceCount = (text, min, max) => {
   return sentences.slice(0, max).join(' ');
 };
 
-const composeFeedback = ({ moduleName, entryText, themes, lenses, antiRepetitionData, strictMode = false }) => {
+const composeFeedback = ({ moduleName, entryText, themes, lenses, antiRepetitionData, strictMode = false, entryCount = null }) => {
+  // BER-194: data-depth calibration — null means unknown (treated as high data)
+  const isHighData = entryCount === null || entryCount >= 21;
   const frame = FRAME_TEMPLATES[antiRepetitionData.frame] || FRAME_TEMPLATES.stoic_drill_down;
   const touchpoints = getTouchpoints(entryText);
   const words = tokenize(entryText).length;
@@ -431,7 +435,10 @@ const composeFeedback = ({ moduleName, entryText, themes, lenses, antiRepetition
 
   const summary_mirror = ensureSentenceCount(summaryBase.join(' '), 3, 6);
 
-  const core_pattern = `Main loop: trigger pressure -> fast rationalization -> short-term relief -> identity tax. Theme focus: ${themes.slice(0, 3).join(', ')}.`;
+  // BER-194: low data — discrepancy-pointing, not pattern assertion
+  const core_pattern = isHighData
+    ? `Main loop: trigger pressure -> fast rationalization -> short-term relief -> identity tax. Theme focus: ${themes.slice(0, 3).join(', ')}.`
+    : `Discrepancy flagged: ${themes.slice(0, 3).join(', ')}. Insufficient data to confirm repeating loop — single-instance observation only.`;
 
   const analysisParts = [
     `${frame.analysisLead} In ${moduleName}, your current approach rewards urgency and punishes clarity.`,
@@ -469,7 +476,10 @@ const composeFeedback = ({ moduleName, entryText, themes, lenses, antiRepetition
     `What is the smallest rule that would have changed yesterday's outcome?`
   ];
 
-  const closing_charge = `You already exposed the pattern. Now close the gap between analysis and execution today. What rule are you enforcing before midnight?`;
+  // BER-194: low data — no pattern claims in closing
+  const closing_charge = isHighData
+    ? `You already exposed the pattern. Now close the gap between analysis and execution today. What rule are you enforcing before midnight?`
+    : `You named something real. What does the data say versus what you told yourself? One decision rule before midnight.`;
 
   return {
     summary_mirror,
@@ -555,6 +565,10 @@ export const callLLM = async (promptBundle, generationContext) => {
       lenses: userPrompt.selectedLenses,
       antiRepetitionData: userPrompt.antiRepetition,
       strictMode: generationContext?.strictRetry || false,
+      // BER-194: pass entry count for data-depth calibration in fallback path
+      entryCount: typeof userPrompt.behavioralContext?.totalEntryCount === 'number'
+        ? userPrompt.behavioralContext.totalEntryCount
+        : null,
     });
 
     return parseLLMJsonSafely(draft);
