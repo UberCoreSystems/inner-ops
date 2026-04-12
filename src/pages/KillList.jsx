@@ -388,7 +388,7 @@ const KillList = () => {
           const completionText = `I killed it. "${target.title}" — a ${categoryLabel} (${tier.label} difficulty). ${newStreak} consecutive days holding the line. That's ${killedCount} confirmed kills.`;
           const feedback = await generateAIFeedback('killList', completionText, []);
           setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
-        } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. The Oracle acknowledges your consistency.', isLoading: false, entryCount: null }); }
+        } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. Record updated.', isLoading: false, entryCount: null }); }
       } else if (hitMilestone) {
         // Milestone Oracle feedback
         ouraToast.success(`${newStreak}-day milestone on "${target.title}"`);
