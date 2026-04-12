@@ -35,10 +35,10 @@ const groundingTechniques = [
 // Quick mantras
 const mantras = [
   "This feeling is temporary. I am not my urges.",
-  "I've survived 100% of my worst moments.",
-  "Choosing differently starts now.",
+  "Urge ≠ action. 90 seconds and it passes.",
+  "This is a craving, not a command. Wait it out.",
   "The craving will pass whether I act on it or not.",
-  "Every moment is a new chance to choose."
+  "Act against the urge once. Make it a pattern."
 ];
 
 const EmergencyButton = () => {
