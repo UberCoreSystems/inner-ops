@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { writeData, updateData, deleteData, subscribeToUserData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
 import VirtualizedList from '../components/VirtualizedList';
@@ -130,7 +131,7 @@ const KillList = () => {
   const [loadError, setLoadError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [showSkeleton, setShowSkeleton] = useState(false);
-  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false });
+  const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false, entryCount: null });
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const targetsRef = useRef([]);
@@ -299,20 +300,21 @@ const KillList = () => {
       setNewIntention({ trigger: '', response: '' });
 
       // Generate Oracle feedback
-      setOracleModal({ isOpen: true, content: '', isLoading: true });
+      setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
 
       try {
         const categoryLabel = categories.find(c => c.value === targetData.category)?.label || targetData.category;
         const entryText = `I've just named a new target to eliminate: "${targetData.title}" — a ${categoryLabel}. I'm making a contract with myself to kill this pattern. I've been tolerating this long enough and I'm declaring it as something I will eliminate. This is kill contract number ${targetsRef.current.length + 1}.`;
         const feedback = await generateAIFeedback('killList', entryText, targetsRef.current.slice(-3).map(t => t.title));
 
-        setOracleModal({ isOpen: true, content: feedback, isLoading: false });
+        setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
       } catch (error) {
         logger.error('Oracle feedback error:', error);
-        setOracleModal({ 
-          isOpen: true, 
-          content: "Oracle unavailable. Target added.", 
-          isLoading: false 
+        setOracleModal({
+          isOpen: true,
+          content: "Oracle unavailable. Target added.",
+          isLoading: false,
+          entryCount: null,
         });
       }
     } catch (error) {
@@ -379,23 +381,23 @@ const KillList = () => {
         setCelebration({ show: true, targetName: target.title });
         setTimeout(() => setCelebration({ show: false, targetName: '' }), 3000);
 
-        setOracleModal({ isOpen: true, content: '', isLoading: true });
+        setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
         try {
           const killedCount = targetsRef.current.filter(t => t.status === 'killed').length + 1;
           const categoryLabel = categories.find(c => c.value === target.category)?.label || target.category;
           const completionText = `I killed it. "${target.title}" — a ${categoryLabel} (${tier.label} difficulty). ${newStreak} consecutive days holding the line. That's ${killedCount} confirmed kills. This one took real consistency.`;
           const feedback = await generateAIFeedback('killList', completionText, []);
-          setOracleModal({ isOpen: true, content: feedback, isLoading: false });
-        } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. The Oracle acknowledges your consistency.', isLoading: false }); }
+          setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
+        } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. The Oracle acknowledges your consistency.', isLoading: false, entryCount: null }); }
       } else if (hitMilestone) {
         // Milestone Oracle feedback
         ouraToast.success(`${newStreak}-day milestone on "${target.title}"`);
-        setOracleModal({ isOpen: true, content: '', isLoading: true });
+        setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
         try {
           const milestoneText = `I've held the line against "${target.title}" for ${newStreak} consecutive days. This is a ${tier.label.toLowerCase()} pattern (${tier.streakToKill} days to kill). ${newStreak === 3 ? 'Just getting started.' : newStreak < 14 ? 'Building momentum.' : newStreak < 30 ? 'Deep into the fight now.' : 'This is becoming part of who I am.'} ${target.escapeData?.length ? `I've escaped ${target.escapeData.length} time${target.escapeData.length > 1 ? 's' : ''} before.` : ''}`;
           const feedback = await generateAIFeedback('killList', milestoneText, []);
-          setOracleModal({ isOpen: true, content: feedback, isLoading: false });
-        } catch { setOracleModal({ isOpen: true, content: 'Milestone reached. The Oracle marks your progress. Hold the line.', isLoading: false }); }
+          setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
+        } catch { setOracleModal({ isOpen: true, content: 'Milestone reached. The Oracle marks your progress. Hold the line.', isLoading: false, entryCount: null }); }
       } else if (held) {
         ouraToast.success(`Day ${newStreak} — streak continues`);
       } else {
@@ -475,12 +477,12 @@ const KillList = () => {
       setAvePrompt(true);
       setTimeout(async () => {
         setAvePrompt(false);
-        setOracleModal({ isOpen: true, content: '', isLoading: true });
+        setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
         try {
           const feedback = await oracleFetchPromise;
-          setOracleModal({ isOpen: true, content: feedback || 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false });
+          setOracleModal({ isOpen: true, content: feedback || 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false, entryCount: getCachedTotalEntryCount() });
         } catch {
-          setOracleModal({ isOpen: true, content: 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false });
+          setOracleModal({ isOpen: true, content: 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false, entryCount: null });
         }
       }, 3000);
 
@@ -1574,11 +1576,12 @@ const KillList = () => {
         {/* Oracle Modal */}
         <OracleModal
           isOpen={oracleModal.isOpen}
-          onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false })}
+          onClose={() => setOracleModal({ isOpen: false, content: '', isLoading: false, entryCount: null })}
           content={oracleModal.content}
           isLoading={oracleModal.isLoading}
           entryText={oracleEntryTextRef.current}
           entryModuleName="Kill List"
+          entryCount={oracleModal.entryCount}
         />
         
         <KillConfirmation

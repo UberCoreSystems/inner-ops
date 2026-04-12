@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ouraToast from '../utils/toast';
@@ -526,7 +527,7 @@ export default function Journal() {
       setEntries(prev => [newEntry, ...prev]);
       setCurrentEntryId(newEntry.id);
 
-      openOracleWithContent(feedback);
+      openOracleWithContent(feedback, getCachedTotalEntryCount());
 
       ouraToast.success('Journal entry saved');
       setEntry('');
@@ -1309,6 +1310,7 @@ export default function Journal() {
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
+        entryCount={oracleModal.entryCount}
       />
     </div>
   );

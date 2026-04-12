@@ -1,19 +1,31 @@
-# inner-ops
-Mental Fitness Operating System for High-Performing Men
+# Inner Ops
 
-Inner Ops is a dark, focused journaling and relapse radar app designed for men pursuing mental clarity, discipline, and identity realignment. Built in React with Firebase backend, this system blends self-assessment, relapse tracking, and journaling into a single, distraction-free mental ops center.
+**A system for turning self-awareness into self-command.**
 
-Core Modules:
-🔒 Relapse Radar – monitor emotional regressions and identity slips
+Inner Ops is not a habit tracker, wellness app, or motivational tool. It is a personal self-governance system — a dark, focused command center for men who want to govern their own minds rather than be managed by them.
 
-📓 Journal – guided + freeform logging
+## v1 Modules
 
-💀 Kill List – eliminate patterns, behaviors, substances
+- **Journal** — structured logging for pattern detection, not catharsis
+- **Kill List** — behavioral elimination contracts with implementation intentions
+- **Hard Lessons** — forensic extraction of irreversible signal from irreversible pain
 
-🕳️ Black Mirror – Tracks compulsive, mindless phone use while simultaneously acting as a reflection chamber—forcing users to confront avoidance patterns, fractured focus, and their unconscious digital behaviors.
+Dashboard aggregates all three into a Clarity Score — a measure of behavioral self-command, not wellness.
 
-🧭 Archetype System – track evolution of personal identity
+## Stack
 
-⚙️ Built with: React 18, TailwindCSS, Firebase, Framer Motion
+React 18 · Vite · Firebase (Auth + Firestore) · Tailwind · Framer Motion · Sentry · PostHog
 
-This project is part of a larger mission to help men reclaim inner sovereignty and reject the comfort cult of modern self-help.
+AI feedback routes through a Firebase Cloud Function proxy to the Claude API — keys are never exposed client-side.
+
+## Scripts
+
+```bash
+npm run dev      # Vite dev server
+npm run build    # production build
+npm test         # node:test on aiFeedback and clarityScore
+```
+
+## Status
+
+Pre-deploy. v1 scope is locked to the three modules above. Relapse Radar and Black Mirror exist in the codebase but are post-launch.

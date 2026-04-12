@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom';
 import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
@@ -443,7 +444,7 @@ Please help extract the core lesson and rule from this experience.
 
       const oracleWisdom = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
       setPendingOracleWisdom(oracleWisdom);
-      openOracleWithContent(oracleWisdom);
+      openOracleWithContent(oracleWisdom, getCachedTotalEntryCount());
 
     } catch (error) {
       logger.error('Error seeking Oracle extraction:', error);
@@ -1414,6 +1415,7 @@ Please help extract the core lesson and rule from this experience.
         isLoading={oracleModal.isLoading}
         title="Oracle's Extraction Wisdom"
         onReaction={handleOracleReaction}
+        entryCount={oracleModal.entryCount}
       />
       </div>
     </div>

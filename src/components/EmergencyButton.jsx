@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from './OracleModal';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
@@ -88,7 +89,7 @@ const EmergencyButton = () => {
       const context = `Emergency struggle moment. Intensity: ${intensity}/10. Trigger: ${trigger || 'unspecified'}. Reflection: ${reflection || 'none provided'}`;
       const oracleFeedback = await generateAIFeedback('emergency', context, []);
 
-      openOracleWithContent(oracleFeedback);
+      openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());
       setStep('complete');
     } catch (error) {
       logger.error('Error logging emergency:', error);
@@ -348,6 +349,7 @@ const EmergencyButton = () => {
         onClose={closeOracle}
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
+        entryCount={oracleModal.entryCount}
       />
     </>
   );

@@ -11,6 +11,7 @@
  * @param {string} userId
  * @returns {Promise<BehavioralContext>}
  */
+import { getAuth } from 'firebase/auth';
 import { readUserData } from './firebaseUtils';
 
 const contextCache = new Map();
@@ -148,4 +149,21 @@ function buildEmpty() {
 /** Invalidate cache for a user (call after data mutations if needed) */
 export function clearBehavioralContextCache(userId) {
   if (userId) contextCache.delete(`behavioral_ctx_${userId}`);
+}
+
+/**
+ * BER-197: Read totalEntryCount from cache without triggering a fetch.
+ * Returns null when cache is cold. Call after generateAIFeedback() — it warms
+ * the cache, so this is always a synchronous O(1) hit in that context.
+ */
+export function getCachedTotalEntryCount() {
+  try {
+    const uid = getAuth().currentUser?.uid;
+    if (!uid) return null;
+    const cached = contextCache.get(`behavioral_ctx_${uid}`);
+    if (!cached || now() - cached.at >= CACHE_TTL) return null;
+    return typeof cached.value.totalEntryCount === 'number' ? cached.value.totalEntryCount : null;
+  } catch {
+    return null;
+  }
 }

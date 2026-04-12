@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import VirtualizedList from './VirtualizedList';
@@ -46,6 +47,7 @@ const BlackMirror = () => {
   const [aiFeedback, setAiFeedback] = useState('');
   const [loadingFeedback, setLoadingFeedback] = useState(false);
   const [showOracleModal, setShowOracleModal] = useState(false);
+  const [oracleEntryCount, setOracleEntryCount] = useState(null);
   const [currentEntryId, setCurrentEntryId] = useState(null);
   const [analyticsReport, setAnalyticsReport] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -271,6 +273,7 @@ const BlackMirror = () => {
         const feedback = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
         finalEntry = { ...entryData, oracleFeedback: feedback };
         setAiFeedback(feedback);
+        setOracleEntryCount(getCachedTotalEntryCount());
       } catch (feedbackError) {
         logger.error('Error generating feedback:', feedbackError);
         setAiFeedback('Oracle unavailable. Entry saved.');
@@ -809,6 +812,7 @@ const BlackMirror = () => {
         onReaction={handleOracleReaction}
         entryText={oracleEntryTextRef.current}
         entryModuleName="Black Mirror"
+        entryCount={oracleEntryCount}
       />
     </div>
     </div>

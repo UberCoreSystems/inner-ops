@@ -485,3 +485,132 @@ No philosophy drift observed in any of the above implementations.
 *Report by Product Researcher — ÜberCore Systems*
 *Issue: [BER-176](/BER/issues/BER-176)*
 *HIGH items escalated: Predictive Governance Layer, Oracle Reactance Architecture, Oracle Tenure-Based Voice Calibration*
+
+## Week of 2026-04-12
+
+**Cycle:** 4 — Post-Oracle Calibration Sprint
+**Vectors covered:** Competitor & Market, Behavioral Science, User Psychology, Codebase Gaps
+**Prior cycle HIGH items status:**
+- Oracle Tenure-Based Voice Calibration → SHIPPED (BER-167 + BER-194)
+- Oura Ring Physiological Precursor Integration → SHIPPED (BER-182)
+- Predictive Governance Layer → CANCELLED (BER-179) — competitive pressure reviewed this cycle
+- Oracle Reactance Architecture → BLOCKED (BER-180) — still awaiting implementation
+- Black Mirror Active Restriction Layer → OPEN — research scoped (BER-183), implementation not shipped
+- Synthesis Briefing Push Architecture → OPEN — 3rd consecutive cycle unactioned
+
+---
+
+### Implemented Since Last Review
+
+**Oracle Trust Calibration Layer (BER-167) + Data-Depth Calibration full pipeline (BER-194)** — Shipped April 11–12. TRUST_THRESHOLD=21 entries gates discrepancy-pointing vs. pattern-assertion Oracle voice. Extended from buildSystemPrompt() to buildCrossModuleInstruction(), composeFeedback(), and OracleModal.jsx regen path. Landed as specified. No philosophy drift observed — the calibration is data-depth based, not time-based, which is the correct mechanism.
+
+**Oura Ring biometric integration for Relapse Radar (BER-182)** — Shipped April 11. ouraService.js implements PKCE OAuth2 with Oura API v2. HRV below 85% of 7-day baseline or readiness below 60 auto-appends 'Physiological' precursor type to saved Relapse Radar entry. The biometric data path is now live. Threshold-based detection is correct for this stage; see Opportunity 6 for the long-term model pathway.
+
+**EmergencyButton mantra language (BER-190)** — Shipped April 12. Three motivational/soft mantras replaced with urge-mechanics and behavioral framing. Philosophy drift corrected. Minor: VoiceInputButton emoji (microphone, record indicators) remain unaddressed from prior cycle observation.
+
+**Not shipped — all prior MEDIUM carries remain open:** Kill List Environmental Cue Field, Kill List First-Week Critical Window, Kill List Non-Performance Streak Mechanism, Clarity Score Rank Language, Autopsy Text in Oracle Context, Journal Gibbs Prompt Architecture, Streak-Gated Drift Detection, Violation Pattern Grid Visualization, Life Transition Detection, Black Mirror Cue Restructuring Flow.
+
+---
+
+### New Opportunities
+
+---
+
+**1. Predictive Governance Layer — Competitive Pressure Materializing**
+- **Module(s):** Relapse Radar, Kill List
+- **Source vector:** V1
+- **Impact:** HIGH
+- **Rationale:** V1 research confirms that Habitify has added "predictive AI that flags at-risk habits using calendar data" — the first competitor to enter the behavioral risk prediction space. BER-179 (Predictive Governance Layer) was cancelled this cycle. The cancellation was likely premature: Habitify's approach uses calendar inference (scheduled events as risk signals), which is structurally weaker than Inner Ops' actual behavioral record (archetype recurrence intervals, BMI thresholds correlated with prior relapse timing, Kill List escape histories). The competitive window between Inner Ops' behavioral-intelligence-based prediction and Habitify's calendar-based prediction is open — but it will not remain open as competitor AI feature investment accelerates.
+- **Philosophy check:** Prediction from actual behavioral data is measurement as truth. The system surfaces what the user's own record demonstrates, not speculation. This is not softening — it is extending the confrontation timeline forward.
+
+---
+
+**2. Kill List Tier Icons — Emoji Violation**
+- **Module(s):** Kill List
+- **Source vector:** V4
+- **Impact:** MEDIUM
+- **Rationale:** KillList.jsx lines 63–65 define Surface, Deep, and Core tier icons as plant, lightning bolt, and fire emoji respectively. These render on the tier selection modal — a philosophically high-stakes choice moment where the user is naming the depth of the behavioral pattern they intend to eliminate. The emoji violate the no-emoji convention established in BER-107 and confirmed as drift in BER-190. The tier system itself is correct; the icons are not. Geometric symbols consistent with the clarity score icon system would maintain visual hierarchy without wellness or motivational iconography.
+- **Philosophy check:** The tier selection is a classification act, not a motivational moment. Icons should reflect categorical weight, not energy or growth symbolism.
+
+---
+
+**3. Kill List Completion Message — Motivational Framing Drift**
+- **Module(s):** Kill List
+- **Source vector:** V4
+- **Impact:** MEDIUM
+- **Rationale:** KillList.jsx line 386: completion text includes "This one took real consistency." This is affirmation, not measurement. The phrase compliments the user for completing a streak rather than recording a behavioral elimination as a factual event. The rest of the completion message is borderline acceptable ("I killed it. [target title] — a [category] ([tier]). [N] consecutive days holding the line."), but the evaluative sentence converts a data record into a compliment. Philosophy drift, minor severity. Correction: remove the evaluative sentence entirely. Also note: ouraToast.achievement() is called on kill completion — the word "achievement" in the toast type warrants review for whether it triggers any achievement-coded visual state vs. being a neutral high-priority notice.
+- **Philosophy check:** The app records eliminations. It does not praise the user for them. The measurement is the statement. Adding an evaluative observation converts the record into a reward.
+
+---
+
+**4. Black Mirror Index — AI Use Blind Spot**
+- **Module(s):** Black Mirror
+- **Source vector:** V1, V2
+- **Impact:** MEDIUM
+- **Rationale:** A 2026 PMC study (PMC12893840, "Screen Time to AI Time") identifies intentional AI tool use as a categorically distinct form of screen time from passive consumption and mindless scrolling — with different cognitive, behavioral, and developmental outcomes. Black Mirror's BMI aggregates all screen time into a single hours input. As AI-assisted work (Claude, Copilot, Perplexity, GPT) becomes normalized in 2026, users doing genuinely productive AI work will see their BMI inflated by hours that do not represent attention loss or digital compulsion. The module's confrontational frame is mindless phone use, doom scrolling, and compulsive digital behavior — not time spent using Claude to write code. An intentional-use exemption or separate tracking field for AI-tool use would prevent false-positive BMI inflation and preserve signal accuracy.
+- **Philosophy check:** Serves the product. Measurement accuracy is non-negotiable. An inflated BMI due to intentional AI work produces a false confrontation, which erodes Oracle authority. The fix improves signal fidelity, not user comfort.
+
+---
+
+**5. Metacognitive Depth Signal in Journal Oracle Output**
+- **Module(s):** Journaling
+- **Source vector:** V3
+- **Impact:** MEDIUM
+- **Rationale:** 2026 metacognition research (Frontiers in Psychology quantitative study; Frontiers in Cognition integrative review) confirms that metacognitive monitoring and regulation — not planning alone — drive behavioral improvement. Journal entries vary dramatically in metacognitive depth: "I was tired and irritable today" is description; "I was irritable because I skipped sleep to avoid a difficult task, which is the same pattern as last month" is analysis (monitoring + regulation present). The Inner Ops Oracle currently generates feedback on journal entries but does not distinguish between description-level and analysis-level entries. A secondary classification output from Oracle journal feedback — "descriptive" / "analytical" / "regulatory" — would give the user a signal about the quality of their reflection, not just its content. This is a measurement output, not a reward. It extends the clarity score's function into qualitative entry depth without adding gamification.
+- **Philosophy check:** Serves the product. Reflection quality is measurable. An entry that describes events without analyzing them is not serving the module's definition (structured reflection for signal extraction). Surfacing the depth classification adds a measurement axis without softening the Oracle's confrontational voice.
+
+---
+
+**6. Foundation Model Pathway for Biometric Prediction**
+- **Module(s):** Relapse Radar
+- **Source vector:** V2
+- **Impact:** LOW
+- **Rationale:** A 2026 OpenReview preprint ("Beyond Sensor Data: Foundation Models of Behavioral Data from Wearables") demonstrates that foundation models trained on behavioral wearable time-series significantly outperform threshold-based and traditional ML approaches. Current Inner Ops Oura integration uses a static HRV threshold (below 85% of 7-day rolling baseline) and readiness floor (below 60) — binary flags, not pattern recognition. As the user's biometric history accumulates over months, the threshold approach will generate more false positives and miss pattern-based precursor signatures that only emerge across multi-week records. The long-term architecture should be noted now: accumulate biometric time-series in Firestore and plan for a pattern-model layer. The data schema established in BER-182 (users/{uid}/biometrics/oura_{date}) is correctly structured for this evolution.
+- **Philosophy check:** Serves the product. Better prediction from better models is measurement accuracy improving over time. This is a technical direction note, not a current implementation request.
+
+---
+
+### Emerging Signals
+
+**1. Habitify predictive AI — competitive acceleration**
+Habitify's addition of AI-driven at-risk habit flags represents the first market entry into Inner Ops' prospective territory: behavioral risk prediction. The mechanism (calendar-based inference) is weak compared to behavioral-record-based prediction. But the category has been entered. The 18-month competitive window estimate from prior cycles is now shorter. V1 monitoring should watch for Habitify or Disciplinely adding behavioral-data-based prediction (not calendar inference). If either does, the gap narrows rapidly.
+
+**2. Decision fatigue in high-friction check-in flows**
+2026 Frontiers in Cognition integrative review confirms that decision fatigue narrows deliberation and increases reliance on defaults. Inner Ops modules require intentional, multi-step input. For users already in high-cognitive-load states — exactly the states that precede relapse — module friction may suppress check-in completion. This is not an argument for simplifying the modules; it is an argument for auditing which friction is structural to the module's purpose vs. which friction is incidental UI overhead. Required reflection is load-bearing; form-field navigation friction is not.
+
+**3. "AI time" entering behavioral research as a distinct category**
+PMC 2026 study treats AI tool use as categorically distinct from passive screen consumption and calls for updated intervention frameworks. This signals that behavioral research communities are beginning to model AI-assisted work differently from recreational/compulsive digital behavior. Black Mirror's frame (reclaiming stolen attention) is accurate for social media and doom-scrolling; it may misclassify intentional AI-assisted work. The research community is formalizing this distinction; Inner Ops should get ahead of it.
+
+---
+
+### Philosophy Watch
+
+**Habitify (updated):** Entered predictive behavioral risk space via calendar-based AI. Philosophically misaligned (soft framing, habit encouragement model), but now technically overlapping with Inner Ops' prospective Predictive Governance Layer. Represents the only material competitive update since prior cycle. Watch for deepening of their behavioral data integration.
+
+**Disciplinely (continued):** No AI layer detected in 2026 update cycle. Closest philosophical competitor remains intelligence-shallow. Competitive distance maintained. If Disciplinely adds AI, escalate immediately — their rule/violation architecture would become Inner Ops-competitive within one feature cycle.
+
+**Opal (continued):** User complaints increasing around "patronizing" motivational prompts and aggressive paywall ($99.99/year). Battery drain (4–6% daily) becoming a recurring complaint. The users abandoning Opal over wellness framing are pre-qualified Inner Ops candidates. Acquisition positioning opportunity: position against Opal's patronizing layer explicitly.
+
+**White space (unchanged):** No competitor is doing cross-module behavioral intelligence synthesis with confrontational AI. Inner Ops' moat is the Oracle + cross-module synthesis layer. This remains the only meaningful differentiator from both Disciplinely (no intelligence) and Habitify (no confrontation). The moat holds until a well-resourced competitor builds both simultaneously.
+
+---
+
+### Sources (Cycle 4)
+
+- [PMC12893840 — Screen Time to AI Time: AI Use and Cognitive, Emotional, and Behavioral Outcomes (2026)](https://pmc.ncbi.nlm.nih.gov/articles/PMC12893840/)
+- [Frontiers in Cognition — Decision Fatigue Integrative Review (2025)](https://www.frontiersin.org/journals/cognition/articles/10.3389/fcogn.2025.1719312/full)
+- [Beyond Sensor Data: Foundation Models of Behavioral Data from Wearables (OpenReview)](https://openreview.net/forum?id=DtVVltU1ak)
+- [Habitify Predictive AI — Best Habit Tracking Apps 2026 (Buildin.ai)](https://buildin.ai/blog/best-apps-for-habit-tracking)
+- [Frontiers in Psychology 2026 — Metacognitive Regulation and Academic Performance](https://www.frontiersin.org/articles/10.3389/fpsyg.2026.1726956)
+- [Self-Reflection as the Metacognitive Rubber Band (Taylor and Francis, 2025)](https://www.tandfonline.com/doi/full/10.1080/00049530.2025.2568762)
+- [Habit Degradation Determinants (Psychology and Health, 2026)](https://www.tandfonline.com/doi/full/10.1080/08870446.2026.2626493)
+- [Passive Sensing for Mental Health — Scoping Review (JMIR 2025)](https://www.jmir.org/2025/1/e77066)
+- [Disciplinely App](https://disciplinely.app/)
+- [Opal — GetApp Reviews 2026](https://www.getapp.com/project-management-planning-software/a/opal/reviews/)
+
+*Report by Product Researcher — UberCore Systems*
+*Issue: [BER-196](/BER/issues/BER-196)*
+*HIGH items escalated: Predictive Governance Layer — Competitive Pressure (new)*
+*Carried HIGH items unactioned: Synthesis Briefing Push Architecture (3rd cycle), Black Mirror Active Restriction Layer (carried), Oracle Reactance Architecture (blocked BER-180)*
+
+---

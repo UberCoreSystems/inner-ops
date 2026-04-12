@@ -10,6 +10,7 @@ import OracleModal from './OracleModal';
 import { AppIcon } from './AppIcons';
 import { SkeletonList, SkeletonKillTarget } from './SkeletonLoader';
 import logger from '../utils/logger';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 
 const KillListDashboard = React.memo(function KillListDashboard() {
   // Use all active targets (not just today's)
@@ -31,10 +32,11 @@ const KillListDashboard = React.memo(function KillListDashboard() {
   const [reflectionNotes, setReflectionNotes] = useState({});
   const [showReflection, setShowReflection] = useState({});
   const [initialLoad, setInitialLoad] = useState(true); // Track if this is the first load
-  const [oracleModal, setOracleModal] = useState({ 
-    isOpen: false, 
-    target: null, 
-    feedback: '' 
+  const [oracleModal, setOracleModal] = useState({
+    isOpen: false,
+    target: null,
+    feedback: '',
+    entryCount: null,
   });
   const [oracleFeedbacks, setOracleFeedbacks] = useState({}); // Store Oracle feedbacks
 
@@ -160,8 +162,9 @@ const KillListDashboard = React.memo(function KillListDashboard() {
   const openOracleModal = (target) => {
     setOracleModal({
       isOpen: true,
-      target: target,
-      feedback: ''
+      target,
+      feedback: '',
+      entryCount: getCachedTotalEntryCount(),
     });
   };
 
@@ -530,7 +533,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       {/* Oracle Modal */}
       <OracleModal
         isOpen={oracleModal.isOpen}
-        onClose={() => setOracleModal({ isOpen: false, target: null, feedback: '' })}
+        onClose={() => setOracleModal({ isOpen: false, target: null, feedback: '', entryCount: null })}
         target={oracleModal.target}
         moduleName="Kill List"
         onFeedbackGenerated={(feedback) => {
@@ -539,6 +542,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           }
         }}
         onReaction={handleOracleReaction}
+        entryCount={oracleModal.entryCount}
       />
     </div>
   );

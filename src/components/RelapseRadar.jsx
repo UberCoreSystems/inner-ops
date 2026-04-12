@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { detectDriftSignals } from '../utils/detectDriftSignals';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
@@ -365,7 +366,7 @@ const RelapseRadar = () => {
       setRelapseEntries(prev => [{ ...savedEntry, createdAt: now, timestamp: now }, ...prev]);
 
       // Show Oracle feedback in modal
-      openOracleWithContent(oracleFeedback);
+      openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());
 
       ouraToast.success('Relapse check-in logged');
 
@@ -909,6 +910,7 @@ const RelapseRadar = () => {
         onReaction={handleOracleReaction}
         entryText={oracleEntryTextRef.current || ''}
         entryModuleName="Relapse Radar"
+        entryCount={oracleModal.entryCount}
       />
     </div>
   );
