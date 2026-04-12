@@ -499,7 +499,7 @@ Please help extract the core lesson and rule from this experience.
       resetForm();
 
       if (finalize) {
-        ouraToast.achievement('Hard Lesson finalized and locked');
+        ouraToast.success('Hard Lesson finalized and locked');
       } else {
         ouraToast.success('Hard Lesson saved');
       }
