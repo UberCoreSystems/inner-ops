@@ -61,9 +61,9 @@ const CATEGORY_ICONS = {
 };
 
 const DIFFICULTY_TIERS = [
-  { value: 'surface', label: 'Surface', description: 'Quick fix — 7 day streak to kill', streakToKill: 7, points: 10, color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '🌱' },
-  { value: 'deep', label: 'Deep', description: 'Ingrained pattern — 21 day streak', streakToKill: 21, points: 25, color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '⚡' },
-  { value: 'core', label: 'Core', description: 'Identity-level — 60 day streak', streakToKill: 60, points: 50, color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '🔥' },
+  { value: 'surface', label: 'Surface', description: 'Quick fix — 7 day streak to kill', streakToKill: 7, points: 10, color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '○' },
+  { value: 'deep', label: 'Deep', description: 'Ingrained pattern — 21 day streak', streakToKill: 21, points: 25, color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '●' },
+  { value: 'core', label: 'Core', description: 'Identity-level — 60 day streak', streakToKill: 60, points: 50, color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '◆' },
 ];
 
 // BER-134: Autopsy pattern aggregation for targets with 3+ escapes

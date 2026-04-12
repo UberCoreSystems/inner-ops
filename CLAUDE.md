@@ -3,12 +3,12 @@
 ## Project State
 
 - **Status:** Pre-deploy. Nothing is live. No migrations, no hotfix urgency. Aggressive changes are safe.
-- **Build:** Clean, ~390 modules. BER-1 through BER-13 closed.
-- **v1 Scope (locked):** Journaling + Kill List + Hard Lessons
+- **Build:** Clean. BER-1 through BER-13 closed. QA and CI agents operational.
+- **v1 Scope (locked):** Journaling + Kill List + Hard Lessons + Relapse Radar + Synthesis
 - **Deferred (do not build unless explicitly unblocked by Bo):**
-  - Relapse Radar — pending cross-module dependency check
   - Black Mirror — complex 3-layer analytics architecture (Signal Capture, Pattern Recognition, Identity Reflection in `src/utils/blackMirrorAnalytics.js`), confirmed post-launch
-- **Open items (post-launch):** Oracle UI redesign, engagement notifications, MCP/skills integration
+- **Open items (post-launch):** Oracle UI redesign, engagement notifications, AI interaction layer (Command Brief — extends Synthesis cross-module reading to session-level prompts), MCP/skills integration
+- **Black Mirror nav visibility:** Route and nav link exist in the codebase. Remove or feature-flag before beta deploy — module is not in v1 scope.
 
 ## Product Language — Non-Negotiable
 
@@ -30,11 +30,38 @@ It is **not** a habit tracker, wellness app, or motivational tool. Enforce this 
 - Sentry (error tracking), PostHog (analytics)
 - Claude API via Firebase Cloud Function proxy — **never expose API keys client-side**
 
-## Modules
+## Modules (v1)
 
-Journal · Kill List · Hard Lessons · Relapse Radar · Black Mirror · Dashboard (Clarity Score)
+| Module | Page | Key Utils |
+|--------|------|-----------|
+| **Journaling** | `src/pages/Journal.jsx` | `aiFeedback.js` |
+| **Kill List** | `src/pages/KillList.jsx` | `useKillTargets.js` (hook removed — logic in component) |
+| **Hard Lessons** | `src/pages/HardLessons.jsx` | Lesson extraction via Oracle cloud function |
+| **Relapse Radar** | `src/pages/Relapse.jsx` → `RelapseRadar.jsx` | `detectDriftSignals.js`, `detectEvasionMarkers.js` |
+| **Synthesis** | `src/pages/SynthesisBriefing.jsx` | `generateSynthesisBriefing.js`, `getBehavioralContext.js` |
+| **Dashboard** | `src/pages/Dashboard.jsx` | `clarityScore.js`, `KillListDashboard.jsx`, `DailyPrompt.jsx` |
 
-Source layout: `src/components/`, `src/pages/`, `src/hooks/`, `src/utils/`, `src/firebase.js`
+### Deferred (not v1)
+
+| Module | Status |
+|--------|--------|
+| **Black Mirror** | Component and route exist. Nav link present. Do not QA, do not surface to beta testers. Gate or remove before deploy. |
+
+## Cross-Module Architecture
+
+Synthesis and Oracle both read across all modules via `readUserData`. Key data flows:
+
+- **`generateSynthesisBriefing.js`** — Pulls journalEntries, killTargets, hardLessons, relapseEntries, blackMirrorEntries, userSettings. Computes convergence point, violated rules, signal delta. Cadence-enforced (weekly/biweekly). Confrontation question via Oracle with local fallback.
+- **`getBehavioralContext.js`** — 5-minute cached cross-module snapshot injected into Oracle calls. Gives Oracle awareness of active kill targets, relapse archetypes, drift signals, rule violations, and identity direction.
+- **`detectDriftSignals.js`** — Rules-based early warning. Archetype frequency (3+ in 7d), precursor pattern recurrence, correlated Kill List escape + relapse within 48h.
+- **`detectEvasionMarkers.js`** — Behavioral evasion detection layer.
+
+## Cloud Functions
+
+| Function | Purpose |
+|----------|---------|
+| `oracle` | Secure Claude API proxy. Auth-gated, rate-limited (20/day). Module-aware system prompts with posture matching (challenge/build/ground/clarify/receive). Receives behavioral context. |
+| `oracleFollowUp` | Second-layer conversational response. Reads user's reply to initial Oracle feedback and adapts posture. |
 
 ## Commands
 
@@ -44,13 +71,14 @@ Source layout: `src/components/`, `src/pages/`, `src/hooks/`, `src/utils/`, `src
 
 ## Agent Pipeline (Paperclip)
 
-Three-agent system, all Claude Max:
+Four-agent system, all Claude Max:
 
-|Role|Scope|Escalation|
-|----|-----|----------|
-|**QA Engineer**|Finds issues, creates BER tickets assigned to SSE|Systemic patterns → CEO|
-|**Senior Software Engineer (SSE)**|Executes BER tickets|Ambiguous scope or architectural questions → CEO|
-|**CEO**|Operational hub. Triages, routes, escalates to Bo|Anything requiring product/scope decisions → Bo|
+| Role | Scope | Escalation |
+|------|-------|------------|
+| **QA Engineer** | Finds issues, creates BER tickets assigned to SSE | Systemic patterns → CEO |
+| **Senior Software Engineer (SSE)** | Executes BER tickets | Ambiguous scope or architectural questions → CEO |
+| **CI Agent** | Continuous integration checks | Build failures → SSE |
+| **CEO** | Operational hub. Triages, routes, escalates to Bo | Anything requiring product/scope decisions → Bo |
 
 - Agent "personnel" issues are prompt/configuration problems — fix AGENTS.md, don't "rehire."
 - CLAUDE.md and AGENTS.md are the high-leverage configuration points.
@@ -69,6 +97,17 @@ UI · UX · AI quality · feature completeness — **equal weight.**
 - **Mobile nav must work.** `src/components/Navbar.jsx` historically used `hidden md:flex` with no mobile fallback — verify any nav change renders on mobile.
 - **Visualize what you track.** If a module stores data, it must be surfaced somewhere (trends, history, rates). Flag gaps when you see them.
 - **No speculative generality.** Don't add features, abstractions, or infrastructure beyond the task.
+
+## Pre-Deploy Checklist
+
+- [ ] Remove or feature-flag Black Mirror from Navbar and App.jsx routes
+- [ ] Add Firebase Hosting config to `firebase.json` (currently only `firestore` and `functions` configured)
+- [ ] Verify `.env` / environment variables are set for production Firebase project
+- [ ] Run `npm run build` and confirm clean production build
+- [ ] Deploy Firestore rules (`firestore.rules`)
+- [ ] Deploy Cloud Functions (oracle, oracleFollowUp)
+- [ ] Set `ANTHROPIC_API_KEY` secret in Firebase Functions config
+- [ ] Smoke test: auth flow, journal CRUD, Kill List operations, Hard Lessons extraction, Relapse Radar entry, Synthesis briefing generation
 
 ## How Bo Works
 
