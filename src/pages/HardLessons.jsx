@@ -121,7 +121,8 @@ export default function HardLessons() {
     setLoadError(false);
     try {
       const savedLessons = await readUserData('hardLessons');
-      setLessons(savedLessons || []);
+      const deduped = Array.from(new Map((savedLessons || []).map(l => [l.id, l])).values());
+      setLessons(deduped);
     } catch (error) {
       logger.error('❌ Error loading hard lessons:', error);
       setLoadError(true);

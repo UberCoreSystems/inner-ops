@@ -136,6 +136,7 @@ const KillList = () => {
   const targetsRef = useRef([]);
   const pendingTargetDeletes = useRef(new Map());
   const skipNextSnapshot = useRef(false);
+  const addingTargetRef = useRef(false);
   const newTargetInputRef = useRef(null);
   
   // Celebration state
@@ -247,11 +248,13 @@ const KillList = () => {
 
   const addTarget = async () => {
     if (!newTarget.trim() || loading) return;
+    if (addingTargetRef.current) return;
     if (newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20) {
       ouraToast.warning('Implementation intention required — both fields need at least 20 characters');
       return;
     }
 
+    addingTargetRef.current = true;
     setLoading(true);
     logger.log("🎯 Adding new kill target:", newTarget.trim());
     
@@ -317,6 +320,7 @@ const KillList = () => {
       ouraToast.error('Failed to save kill target');
     } finally {
       setLoading(false);
+      addingTargetRef.current = false;
     }
   };
 
@@ -779,7 +783,7 @@ const KillList = () => {
     return '#ef4444';
   };
 
-  const renderTargetItem = useCallback(({ item: target, index }) => {
+  const renderTargetItem = useCallback((target, index) => {
     const category = categories.find(c => c.value === target.category) || categories[0];
     const tier = getTier(target);
     const streak = target.streak || 0;
