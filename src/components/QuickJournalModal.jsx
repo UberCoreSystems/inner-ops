@@ -183,20 +183,32 @@ const IntensityRing = ({ level, selected, onClick }) => {
 const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClose, onSuccess }) {
   const [entry, setEntry] = useState('');
   const [mood, setMood] = useState('focused');
-  const [selectedCategory, setSelectedCategory] = useState('Grounded');
-  const [intensity, setIntensity] = useState(3);
+  const [selectedCategory, setSelectedCategory] = useState(() =>
+    localStorage.getItem('quickJournal_category') || 'Grounded'
+  );
+  const [intensity, setIntensity] = useState(() => {
+    const stored = localStorage.getItem('quickJournal_intensity');
+    return stored ? parseInt(stored, 10) : 3;
+  });
   const [saving, setSaving] = useState(false);
   const [showOracle, setShowOracle] = useState(false);
   const [oracleResponse, setOracleResponse] = useState('');
   const [oracleLoading, setOracleLoading] = useState(false);
 
-  // Set initial mood and category on open
+  // Persist metacognitive depth selections across sessions
+  useEffect(() => {
+    localStorage.setItem('quickJournal_category', selectedCategory);
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    localStorage.setItem('quickJournal_intensity', String(intensity));
+  }, [intensity]);
+
+  // Reset transient state on open; category and intensity persist via localStorage
   useEffect(() => {
     if (isOpen) {
       setEntry('');
       setMood('focused');
-      setSelectedCategory('Grounded');
-      setIntensity(3);
       setShowOracle(false);
       setOracleResponse('');
     }
