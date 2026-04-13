@@ -205,6 +205,32 @@ const KillList = () => {
     return new Date().toISOString().split('T')[0];
   };
 
+  // Read journal cross-module extraction pre-fill on mount (set by Journal.jsx on confirm)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('kl_extraction_prefill');
+      if (!raw) return;
+      sessionStorage.removeItem('kl_extraction_prefill');
+      const data = JSON.parse(raw);
+      if (data.targetTitle) setNewTarget(data.targetTitle);
+      if (data.suggestedCategory) {
+        const EXTRACTION_CATEGORY_MAP = {
+          addiction: 'addiction',
+          compulsion: 'addiction',
+          avoidance: 'fear',
+          time_sink: 'procrastination',
+          relationship_pattern: 'toxic-behavior',
+          digital: 'bad-habit',
+          emotional_pattern: 'negative-thought',
+          other: 'other',
+        };
+        const mapped = EXTRACTION_CATEGORY_MAP[data.suggestedCategory];
+        if (mapped) setNewTargetCategory(mapped);
+      }
+      setTimeout(() => newTargetInputRef.current?.focus(), 150);
+    } catch { /* ignore */ }
+  }, []);
+
   const loadTargets = () => setRetryKey(k => k + 1);
 
   // Set up real-time Firestore listener when user changes
@@ -1007,15 +1033,40 @@ const KillList = () => {
               </div>
             )}
 
-            {/* Killed status */}
+            {/* Killed status — show closure entry + Oracle response if captured */}
             {target.status === 'killed' && (
-              <div className="text-center p-3 bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-xl">
-                <span className="text-[#22c55e] text-sm font-medium">TARGET ELIMINATED</span>
-                <span className="text-[#5a5a5a] text-xs ml-2">{streak}-day streak</span>
+              <div className="p-3 bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#22c55e] text-sm font-medium">TARGET ELIMINATED</span>
+                  <span className="text-[#5a5a5a] text-xs">{streak}-day streak</span>
+                </div>
+                {target.closureNote && (
+                  <div className="pt-2 border-t border-[#22c55e]/10 space-y-2">
+                    <div>
+                      <div className="text-[#5a5a5a] text-[10px] uppercase tracking-widest mb-1">What ended this</div>
+                      <p className="text-[#d1d1d1] text-xs leading-relaxed">{target.closureNote}</p>
+                    </div>
+                    {Array.isArray(target.closureTags) && target.closureTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {target.closureTags.map(t => (
+                          <span key={t} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#8a8a8a] rounded-lg border border-[#2a2a2a]">
+                            {t.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {target.closureOracleResponse && (
+                      <div className="mt-2 pt-2 border-t border-[#a855f7]/20">
+                        <div className="text-[#a855f7] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
+                        <p className="text-[#8a8a8a] text-xs italic leading-relaxed">{target.closureOracleResponse}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Escaped — show latest autopsy if exists */}
+            {/* Escaped — show latest autopsy or lightweight breach entry */}
             {target.status === 'escaped' && (
               <div className="p-3 bg-[#ef4444]/5 border border-[#ef4444]/20 rounded-xl space-y-2">
                 <span className="text-[#ef4444] text-xs font-medium uppercase tracking-widest">Escaped</span>
@@ -1024,6 +1075,29 @@ const KillList = () => {
                     <p><span className="text-[#8a8a8a]">What happened:</span> {latestEscape.context}</p>
                     <p><span className="text-[#8a8a8a]">Told myself:</span> {latestEscape.rationalization}</p>
                     {latestEscape.prevention && <p><span className="text-[#8a8a8a]">Would have stopped it:</span> {latestEscape.prevention}</p>}
+                  </div>
+                )}
+                {target.escapeClosureNote && (
+                  <div className="pt-2 border-t border-[#ef4444]/10 space-y-2">
+                    <div>
+                      <div className="text-[#5a5a5a] text-[10px] uppercase tracking-widest mb-1">What caught you</div>
+                      <p className="text-[#d1d1d1] text-xs leading-relaxed">{target.escapeClosureNote}</p>
+                    </div>
+                    {Array.isArray(target.escapeClosureTags) && target.escapeClosureTags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {target.escapeClosureTags.map(t => (
+                          <span key={t} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#8a8a8a] rounded-lg border border-[#2a2a2a]">
+                            {t.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {target.escapeOracleResponse && (
+                      <div className="mt-2 pt-2 border-t border-[#a855f7]/20">
+                        <div className="text-[#a855f7] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
+                        <p className="text-[#8a8a8a] text-xs italic leading-relaxed">{target.escapeOracleResponse}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

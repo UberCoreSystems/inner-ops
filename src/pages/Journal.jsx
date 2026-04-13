@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
-import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
+import { getBehavioralContext, getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
+import CrossModuleExtractionPrompts from '../components/CrossModuleExtractionPrompts';
 import logger from '../utils/logger';
 
 // Custom SVG mood icons - Oura-style geometric designs
@@ -531,11 +532,19 @@ export default function Journal() {
       openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth, inputText, 'journal');
 
       ouraToast.success('Journal entry saved');
+
+      // Capture entry text before resetting form — extraction runs in background after save
+      const savedEntryText = entry;
+      setCrossModuleExtractions({ killList: null, relapseRadar: null });
+
       setEntry('');
       setMood(moodOptions[0].value);
       setIntensity(3);
       setEventOccurredAt(new Date().toISOString().slice(0, 16));
       setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
+
+      // Fire cross-module signal extraction — non-blocking
+      runCrossModuleExtractions(savedEntryText);
 
     } catch (error) {
       logger.error("Error saving journal entry:", error);
@@ -631,6 +640,86 @@ export default function Journal() {
     } catch (error) {
       logger.error('Error saving oracle reaction:', error);
     }
+  };
+
+  // Cross-module extraction state — Kill List contract + Relapse Radar signal detection
+  const [crossModuleExtractions, setCrossModuleExtractions] = useState({ killList: null, relapseRadar: null });
+
+  // Run Kill List contract + Relapse Radar signal extraction after a journal entry is saved.
+  // Fires in the background — non-blocking. Updates crossModuleExtractions when results arrive.
+  const runCrossModuleExtractions = async (entryText) => {
+    try {
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+
+      // Fetch behavioral context (cache is warm — generateAIFeedback already called it)
+      const { getAuth } = await import('firebase/auth');
+      const uid = getAuth().currentUser?.uid;
+      const behavioralCtx = await getBehavioralContext(uid).catch(() => null);
+
+      const [killResult, relapseResult] = await Promise.all([
+        oracleFn({
+          entryText,
+          moduleName: 'killListExtraction',
+          userContext: {},
+          tone: 'stoic',
+          behavioralContext: behavioralCtx,
+        }).catch(() => null),
+        oracleFn({
+          entryText,
+          moduleName: 'relapseDetection',
+          userContext: {},
+          tone: 'stoic',
+          behavioralContext: behavioralCtx,
+        }).catch(() => null),
+      ]);
+
+      const parseExtraction = (result) => {
+        if (!result?.data?.feedback) return null;
+        try {
+          const raw = result.data.feedback.trim();
+          if (raw === 'null' || raw === '') return null;
+          const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+          return JSON.parse(cleaned);
+        } catch {
+          return null;
+        }
+      };
+
+      const killExtraction = parseExtraction(killResult);
+      const relapseExtraction = parseExtraction(relapseResult);
+
+      if (killExtraction || relapseExtraction) {
+        setCrossModuleExtractions({ killList: killExtraction, relapseRadar: relapseExtraction });
+      }
+    } catch {
+      // Extraction is best-effort — silent failure does not affect journal save
+    }
+  };
+
+  const handleDismissKillListExtraction = () => {
+    setCrossModuleExtractions(prev => ({ ...prev, killList: null }));
+  };
+
+  const handleDismissRelapseExtraction = () => {
+    setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
+  };
+
+  const handleConfirmKillListExtraction = (extraction) => {
+    try {
+      sessionStorage.setItem('kl_extraction_prefill', JSON.stringify(extraction));
+    } catch { /* ignore storage errors */ }
+    setCrossModuleExtractions(prev => ({ ...prev, killList: null }));
+    navigate('/killlist');
+  };
+
+  const handleConfirmRelapseExtraction = (extraction) => {
+    try {
+      sessionStorage.setItem('relapse_extraction_prefill', JSON.stringify(extraction));
+    } catch { /* ignore storage errors */ }
+    setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
+    navigate('/relapse');
   };
 
   // Extract hard lesson from journal entry — Oracle analyzes, then navigates with pre-filled data
@@ -1068,6 +1157,15 @@ export default function Journal() {
             </form>
           </div>
         </section>
+
+        {/* Cross-module extraction prompts — Kill List / Relapse Radar signals from most recent entry */}
+        <CrossModuleExtractionPrompts
+          extractions={crossModuleExtractions}
+          onDismissKillList={handleDismissKillListExtraction}
+          onDismissRelapseRadar={handleDismissRelapseExtraction}
+          onConfirmKillList={handleConfirmKillListExtraction}
+          onConfirmRelapseRadar={handleConfirmRelapseExtraction}
+        />
 
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>

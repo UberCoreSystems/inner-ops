@@ -131,6 +131,31 @@ const RelapseRadar = () => {
     };
   }, []);
 
+  // Read journal cross-module extraction pre-fill on mount (set by Journal.jsx on confirm)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('relapse_extraction_prefill');
+      if (!raw) return;
+      sessionStorage.removeItem('relapse_extraction_prefill');
+      const data = JSON.parse(raw);
+      // Map extraction precursor conditions to PRECURSOR_CONDITIONS options
+      if (Array.isArray(data.precursorConditions) && data.precursorConditions.length > 0) {
+        const PRECURSOR_MAP = {
+          isolation: 'Isolated',
+          stress_without_coping: 'High stress',
+          emotional_flooding: 'High stress',
+          routine_disruption: 'Sleep deprived',
+        };
+        const mapped = [...new Set(
+          data.precursorConditions.map(c => PRECURSOR_MAP[c]).filter(Boolean)
+        )];
+        if (mapped.length > 0) setSelectedPrecursors(mapped);
+      }
+      // Pre-fill precursor context with signal summary
+      if (data.signalSummary) setPrecursorContext(data.signalSummary);
+    } catch { /* ignore */ }
+  }, []);
+
   const loadRelapseEntries = async () => {
     if (mountedRef.current) setLoadError(false);
     try {

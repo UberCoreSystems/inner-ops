@@ -47,8 +47,10 @@ exports.oracle = onCall(
 
     const uid = request.auth.uid;
 
-    // Rate limit check
-    if (!checkRateLimit(uid)) {
+    // Rate limit check — skip for background extraction calls (killlistextraction, relapsedetection)
+    const normalizedModuleForLimit = ((request.data?.moduleName) || '').toLowerCase().replace(/[^a-z]/g, '');
+    const isExtractionCall = normalizedModuleForLimit === 'killlistextraction' || normalizedModuleForLimit === 'relapsedetection';
+    if (!isExtractionCall && !checkRateLimit(uid)) {
       throw new HttpsError(
         "resource-exhausted",
         `You've reached the daily Oracle limit (${DAILY_LIMIT} calls). Come back tomorrow.`
@@ -216,6 +218,76 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount) {
   const trustCalibrationBlock = count < TRUST_THRESHOLD
     ? `\n\nTRUST CALIBRATION: This user has ${count} total behavioral entries logged — not enough data to support credible archetype or pattern claims. Adjust your confrontation frame accordingly:\n- Do NOT make claims about behavioral archetypes, dominant patterns, or systemic tendencies. You do not have enough signal.\n- DO identify the specific gap between what he committed to and what he actually did. Name it directly.\n- Frame: "You said X. You did Y. What happened?" — specific inconsistency confrontation, not pattern judgment.\n- Same directness. Same weight. Different attack vector.`
     : "";
+
+  // Kill List contract extraction — returns structured JSON or null
+  if (normalizedModule === "killlistextraction") {
+    const activeTargetsBlock =
+      Array.isArray(behavioralContext?.activeKillTargets) && behavioralContext.activeKillTargets.length > 0
+        ? `\n\nActive Kill List targets already being tracked (do NOT suggest these — they are already in the system):\n${behavioralContext.activeKillTargets.map((t) => `- "${t.title}"`).join("\n")}`
+        : "";
+    return `You are an analytical advisor. A man wrote a journal entry. Your job is to identify whether the entry contains a behavioral pattern that should be on his Kill List — a specific habit, compulsion, avoidance pattern, or destructive behavior he wants to eliminate.
+
+Detection signals:
+- Statements of being "done with" or "over" a behavior
+- Repeated references to the same destructive pattern
+- Language indicating a habit or compulsion he recognizes but hasn't formally targeted
+- Self-identified bad habits, time sinks, or behavioral loops
+- Expressions of frustration with a recurring behavior${activeTargetsBlock}
+
+If you detect a kill-worthy pattern, return ONLY a valid JSON object:
+
+{
+  "targetTitle": "Short name for the kill target — specific and behavioral, not vague",
+  "targetDescription": "What the behavior is and why it needs to be eliminated — derived from what they wrote",
+  "evidenceFromEntry": "The specific language from their journal entry that surfaced this",
+  "suggestedCategory": "One of: addiction, compulsion, avoidance, time_sink, relationship_pattern, digital, emotional_pattern, other"
+}
+
+If no kill-worthy pattern is detected, return exactly: null
+
+Rules:
+- Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
+- Be specific to what he wrote. Do not generalize or invent patterns not present in the text.
+- Do not suggest a pattern that matches an active Kill List target listed above.
+- If the signal is weak or ambiguous, return null. False positives are worse than false negatives.
+- Never use motivational, wellness, or therapeutic language in any output field.`;
+  }
+
+  // Relapse precursor detection — returns structured JSON or null
+  if (normalizedModule === "relapsedetection") {
+    const activeTargetsBlock =
+      Array.isArray(behavioralContext?.activeKillTargets) && behavioralContext.activeKillTargets.length > 0
+        ? `\n\nActive Kill List targets (use these to populate relatedKillTarget if relevant):\n${behavioralContext.activeKillTargets.map((t) => `- "${t.title}"`).join("\n")}`
+        : "";
+    return `You are an analytical advisor. A man wrote a journal entry. Your job is to identify whether the entry contains behavioral precursors — patterns that historically precede relapse. These are NOT relapses themselves. They are early warning signals the user may not recognize in the moment.
+
+Detection signals:
+- Rationalization language ("just this once", "I deserve", "it's not that bad")
+- Environmental exposure descriptions (being in triggering contexts)
+- Emotional states known to precede relapse (isolation, boredom, emotional flooding, numbness)
+- Minimization of past commitments or rules
+- References to cravings, urges, or pull toward eliminated behaviors
+- Descriptions of breaking routine, sleep disruption, or increased stress without coping${activeTargetsBlock}
+
+If you detect relapse precursor signals, return ONLY a valid JSON object:
+
+{
+  "signalSummary": "One-sentence description of the detected precursor pattern",
+  "precursorConditions": ["Array of specific conditions detected from: rationalization, isolation, environmental_exposure, emotional_flooding, routine_disruption, craving, minimization, stress_without_coping, boredom, numbness"],
+  "evidenceFromEntry": "The specific language from their journal entry that surfaced this",
+  "relatedKillTarget": "Title of any active Kill List target this may connect to, or null",
+  "urgency": "low | medium | high — based on signal density and language intensity"
+}
+
+If no relapse precursor signals are detected, return exactly: null
+
+Rules:
+- Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
+- These are precursors, not relapses — do not conflate them.
+- Be specific to what he wrote. Do not invent signals not present in the text.
+- If the signal is weak or ambiguous, return null. False positives are worse than false negatives.
+- Never use motivational, wellness, or therapeutic language in any output field.`;
+  }
 
   // Lesson extraction — returns structured JSON, not prose
   if (normalizedModule === "lessonextraction") {
