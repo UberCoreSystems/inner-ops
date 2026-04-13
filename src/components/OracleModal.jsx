@@ -18,21 +18,25 @@ const REACTIONS = [
 const MAX_REGEN = 3;
 
 // BER-136: call oracle CF directly with custom system prompt for regen/follow-up
-async function callOracleRaw(entryText, customSystemPrompt) {
+// BER-229: accept entryModuleName so journal regen gets DEPTH instruction from CF
+async function callOracleRaw(entryText, customSystemPrompt, entryModuleName) {
   try {
     const functions = getFunctions();
     const oracleFn = httpsCallable(functions, 'oracle', { timeout: 20000 });
     const result = await oracleFn({
       entryText,
-      moduleName: 'oracle',
+      moduleName: entryModuleName === 'journal' ? 'journal' : 'oracle',
       userContext: {},
       tone: 'stoic',
       customSystemPrompt,
     });
-    return result.data?.feedback?.trim() || null;
+    return {
+      feedback: result.data?.feedback?.trim() || null,
+      metacognitiveDepth: result.data?.metacognitiveDepth || null,
+    };
   } catch (err) {
     logger.warn('Oracle raw call failed:', err?.message);
-    return null;
+    return { feedback: null, metacognitiveDepth: null };
   }
 }
 
@@ -65,6 +69,8 @@ const OracleModal = ({
 
   // BER-136: regeneration + follow-up state
   const [displayFeedback, setDisplayFeedback] = useState('');
+  // BER-229: local depth state so regen can update it (prop only reflects initial load)
+  const [displayDepth, setDisplayDepth] = useState(metacognitiveDepth);
   const [regenCount, setRegenCount] = useState(0);
   const [regenLoading, setRegenLoading] = useState(false);
   const [followUpText, setFollowUpText] = useState('');
@@ -88,6 +94,8 @@ const OracleModal = ({
       setFollowUpResponse('');
       setFollowUpUsed(false);
       setDisplayFeedback('');
+      // BER-229: reset depth to prop value on each open
+      setDisplayDepth(metacognitiveDepth);
       // BER-200: resolve confrontation criterion for this user
       setResolvedCriterion(null);
       try {
@@ -142,9 +150,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         ? ' This user has limited behavioral history. Do not reference established patterns, archetypes, or frequency counts — point to discrepancies within this single entry only.'
         : '';
       const systemPrompt = `The user has already seen one perspective on this data. Approach the same data from a different confrontational angle. Do not repeat the same observation. Do not soften your assessment. Identify a different pattern, contradiction, or uncomfortable truth than the one already surfaced.${dataDepthNote}`;
-      const result = await callOracleRaw(entryText, systemPrompt);
-      if (result) {
-        setDisplayFeedback(result);
+      // BER-229: pass entryModuleName so journal regen gets DEPTH from CF
+      const { feedback: regenFeedback, metacognitiveDepth: regenDepth } = await callOracleRaw(entryText, systemPrompt, entryModuleName);
+      if (regenFeedback) {
+        setDisplayFeedback(regenFeedback);
+        setDisplayDepth(regenDepth);
         setRegenCount(prev => prev + 1);
         setFollowUpResponse('');
         setShowFollowUp(false);
@@ -163,8 +173,8 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     setFollowUpLoading(true);
     try {
       const systemPrompt = `The user is challenging your assessment with the following pushback: "${followUpText.trim()}". Do not back down from your position. Do not affirm their pushback. Do not reframe it encouragingly. Address their specific challenge directly and unflinchingly. Stay confrontational.`;
-      const result = await callOracleRaw(`Original context: ${entryText}\n\nUser's challenge: ${followUpText.trim()}`, systemPrompt);
-      const response = result || 'Oracle unavailable. Challenge recorded.';
+      const { feedback: followUpFeedback } = await callOracleRaw(`Original context: ${entryText}\n\nUser's challenge: ${followUpText.trim()}`, systemPrompt);
+      const response = followUpFeedback || 'Oracle unavailable. Challenge recorded.';
       setFollowUpResponse(response);
       setFollowUpUsed(true);
       if (onFollowUpStored) {
@@ -267,10 +277,10 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 </button>
               </div>
 
-              {/* BER-225: Metacognitive depth classification (journal entries only) */}
-              {metacognitiveDepth && (
+              {/* BER-225/BER-229: Metacognitive depth — use local state so regen updates it */}
+              {displayDepth && (
                 <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">
-                  Depth: {metacognitiveDepth}
+                  Depth: {displayDepth}
                 </div>
               )}
 
