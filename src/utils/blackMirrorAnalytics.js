@@ -18,6 +18,28 @@ import logger from './logger';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
+/**
+ * Default allowlist of app/domain names treated as intentional cognitive work tools.
+ * Time logged against these apps is NOT distraction — it is intentional AI-assisted work.
+ * Exported so the UI can seed user-configurable overrides when that surface ships.
+ */
+export const INTENTIONAL_TOOLS = [
+  'claude.ai',
+  'claude.com',
+  'cursor.sh',
+  'github.com/copilot',
+  'copilot.github.com',
+  'chat.openai.com',
+  'chatgpt.com',
+  'gemini.google.com',
+  'aistudio.google.com',
+  'perplexity.ai',
+  'phind.com',
+  'codeium.com',
+  'tabnine.com',
+  'replit.com',
+];
+
 const THRESHOLDS = {
   MIN_BM_ENTRIES: 3,
   MIN_JOURNAL_ENTRIES: 3,
@@ -48,13 +70,16 @@ const ENERGIZED_MOODS = new Set(['electric', 'light', 'radiant', 'triumphant']);
  */
 const normalizeBMEntry = (entry) => ({
   id: entry.id || null,
-  screenTime:       typeof entry.screenTime === 'number'       ? entry.screenTime       : parseFloat(entry.screenTime) || 0,
-  blackMirrorIndex: typeof entry.blackMirrorIndex === 'number' ? entry.blackMirrorIndex : parseInt(entry.blackMirrorIndex, 10) || 0,
-  mentalFog:        typeof entry.mentalFog === 'number'        ? entry.mentalFog        : parseInt(entry.mentalFog, 10) || 5,
-  interactionLevel: typeof entry.interactionLevel === 'number' ? entry.interactionLevel : parseInt(entry.interactionLevel, 10) || 5,
-  unconsciousCheck: Boolean(entry.unconsciousCheck),
-  reflection:       typeof entry.reflection === 'string' ? entry.reflection : '',
-  createdAt:        entry.createdAt || entry.timestamp?.toDate?.().toISOString() || null,
+  screenTime:          typeof entry.screenTime === 'number'          ? entry.screenTime          : parseFloat(entry.screenTime) || 0,
+  blackMirrorIndex:    typeof entry.blackMirrorIndex === 'number'    ? entry.blackMirrorIndex    : parseInt(entry.blackMirrorIndex, 10) || 0,
+  mentalFog:           typeof entry.mentalFog === 'number'           ? entry.mentalFog           : parseInt(entry.mentalFog, 10) || 5,
+  interactionLevel:    typeof entry.interactionLevel === 'number'    ? entry.interactionLevel    : parseInt(entry.interactionLevel, 10) || 5,
+  unconsciousCheck:    Boolean(entry.unconsciousCheck),
+  reflection:          typeof entry.reflection === 'string' ? entry.reflection : '',
+  createdAt:           entry.createdAt || entry.timestamp?.toDate?.().toISOString() || null,
+  // Hours spent in intentional work tools (INTENTIONAL_TOOLS list). Defaults to 0 for
+  // legacy entries that predate per-tool time capture. Not counted as distraction time.
+  intentionalToolTime: typeof entry.intentionalToolTime === 'number' ? entry.intentionalToolTime : parseFloat(entry.intentionalToolTime) || 0,
 });
 
 /**
@@ -515,13 +540,26 @@ export const aggregateCrossModuleData = async () => {
   const journal     = (journalResult.status === 'fulfilled' ? journalResult.value || [] : []).map(normalizeJournalEntry).filter(withinLookback);
   const relapse     = (relapseResult.status === 'fulfilled' ? relapseResult.value || [] : []).map(normalizeRelapseEntry).filter(withinLookback);
 
+  // Intentional work time: hours spent in INTENTIONAL_TOOLS apps, separately bucketed
+  // from distraction-classified screen time. Legacy entries without intentionalToolTime
+  // contribute 0. Rounded to one decimal for display parity with screenTime.
+  const intentionalWorkTime = Math.round(
+    blackMirror.reduce((sum, e) => sum + e.intentionalToolTime, 0) * 10
+  ) / 10;
+
   return {
     blackMirror,
     journal,
     relapse,
+    intentionalWorkTime,
     meta: {
       fetchedAt: new Date().toISOString(),
-      counts: { blackMirror: blackMirror.length, journal: journal.length, relapse: relapse.length },
+      counts: {
+        blackMirror: blackMirror.length,
+        journal: journal.length,
+        relapse: relapse.length,
+        intentionalWorkTime,
+      },
     },
   };
 };
