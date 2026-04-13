@@ -1261,7 +1261,7 @@ export default function Journal() {
                   <p className="text-[#5a5a5a] text-sm mb-6">
                     {searchQuery.trim()
                       ? 'Try a different keyword or clear the search.'
-                      : 'Start with one clear thought. Momentum comes from the first line.'}
+                      : 'Honesty here is what gives the Oracle signal. Vagueness produces nothing useful.'}
                   </p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                     {searchQuery.trim() ? (

@@ -1423,7 +1423,7 @@ const KillList = () => {
                 <p className="text-[#5a5a5a] text-sm mb-6">
                   {searchQuery.trim()
                     ? 'Try a different keyword or clear the search.'
-                    : (filterStatus === 'all' ? 'Add your first contract to begin eliminating negative patterns' :
+                    : (filterStatus === 'all' ? 'Name what needs to die. No app can do this for you.' :
                       filterStatus === 'active' ? 'All your contracts have been completed!' :
                       'Complete some contracts to see them here')}
                 </p>

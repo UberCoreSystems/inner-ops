@@ -137,6 +137,7 @@ export default function Onboarding() {
             <p className="text-[#5a5a5a] text-sm leading-relaxed mb-2">
               <span className="text-[#8a8a8a] font-medium">Where to start:</span> Kill List first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. Relapse Radar when you slip. Black Mirror when attention drifts.
             </p>
+            <p className="text-[#5a5a5a] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
             <p className="text-[#5a5a5a] text-sm mt-6">Three questions before you start. Takes 90 seconds.</p>
           </div>
         )}
