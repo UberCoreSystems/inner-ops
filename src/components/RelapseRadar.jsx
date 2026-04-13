@@ -52,6 +52,12 @@ const PRECURSOR_CONDITIONS = [
   'Major decision pending',
   'Social pressure',
   'Avoided something important',
+  'Rationalizing',
+  'Environmental exposure',
+  'Craving',
+  'Minimizing risk',
+  'Bored / restless',
+  'Emotionally numb',
   'None of the above',
 ];
 
@@ -145,6 +151,12 @@ const RelapseRadar = () => {
           stress_without_coping: 'High stress',
           emotional_flooding: 'High stress',
           routine_disruption: 'Sleep deprived',
+          rationalization: 'Rationalizing',
+          environmental_exposure: 'Environmental exposure',
+          craving: 'Craving',
+          minimization: 'Minimizing risk',
+          boredom: 'Bored / restless',
+          numbness: 'Emotionally numb',
         };
         const mapped = [...new Set(
           data.precursorConditions.map(c => PRECURSOR_MAP[c]).filter(Boolean)
