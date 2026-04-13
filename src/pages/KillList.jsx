@@ -7,7 +7,6 @@ import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
 import { debounce } from '../utils/debounce';
 import VirtualizedList from '../components/VirtualizedList';
-import { KillConfirmation } from '../components/Confetti';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
@@ -130,6 +129,8 @@ const KillList = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [confirmedKills, setConfirmedKills] = useState([]);
+  const [requestingOracleForKillId, setRequestingOracleForKillId] = useState(null);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false, entryCount: null });
   const [filterStatus, setFilterStatus] = useState('all');
@@ -140,8 +141,6 @@ const KillList = () => {
   const addingTargetRef = useRef(false);
   const newTargetInputRef = useRef(null);
   
-  // Celebration state
-  const [celebration, setCelebration] = useState({ show: false, targetName: '' });
 
   // AVE circuit breaker prompt — shown after autopsy, before Oracle
   const [avePrompt, setAvePrompt] = useState(false);
@@ -246,6 +245,34 @@ const KillList = () => {
       if (unsubscribe) unsubscribe();
     };
   }, [user, retryKey]);
+
+  // Subscribe to confirmed kills archive
+  useEffect(() => {
+    if (!user) return;
+
+    let unsubscribe = null;
+    let mounted = true;
+
+    subscribeToUserData('confirmedKills', (data) => {
+      if (!mounted) return;
+      const sorted = [...data].sort((a, b) => {
+        const aTime = a.killedAt?.toDate ? a.killedAt.toDate().getTime() : new Date(a.killedAt || 0).getTime();
+        const bTime = b.killedAt?.toDate ? b.killedAt.toDate().getTime() : new Date(b.killedAt || 0).getTime();
+        return bTime - aTime;
+      });
+      setConfirmedKills(sorted);
+    }).then((unsub) => {
+      if (mounted) unsubscribe = unsub;
+      else unsub();
+    }).catch((error) => {
+      logger.error('❌ KillList: Confirmed kills subscription error:', error);
+    });
+
+    return () => {
+      mounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [user]);
 
   const addTarget = async () => {
     if (!newTarget.trim() || loading) return;
@@ -364,32 +391,25 @@ const KillList = () => {
       };
 
       if (isKill) {
-        targetUpdate.status = 'killed';
-        targetUpdate.completedAt = new Date();
-      }
+        // Archive to confirmedKills — silent, immediate, no celebration, no auto-Oracle
+        const killedAt = new Date();
+        const createdAtMs = target.createdAt?.toDate
+          ? target.createdAt.toDate().getTime()
+          : new Date(target.createdAt || 0).getTime();
+        const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / (1000 * 60 * 60 * 24));
+        const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
 
-      await updateData('killTargets', targetId, targetUpdate);
+        const { id: _removeId, ...targetFields } = target;
+        await writeData('confirmedKills', { ...targetFields, ...targetUpdate, killedAt, activeDuration });
+        await deleteData('killTargets', targetId);
 
-      // Update local state
-      setTargets(prev => prev.map(t =>
-        t.id === targetId ? { ...t, ...targetUpdate } : t
-      ));
+        setTargets(prev => prev.filter(t => t.id !== targetId));
+        ouraToast.success(`Target eliminated: ${target.title}`);
+      } else {
+        await updateData('killTargets', targetId, targetUpdate);
+        setTargets(prev => prev.map(t => t.id === targetId ? { ...t, ...targetUpdate } : t));
 
-      if (isKill) {
-        // Kill celebration
-        ouraToast.success(`Target eliminated: ${target.title} — ${newStreak} day streak`);
-        setCelebration({ show: true, targetName: target.title });
-        setTimeout(() => setCelebration({ show: false, targetName: '' }), 3000);
-
-        setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
-        try {
-          const killedCount = targetsRef.current.filter(t => t.status === 'killed').length + 1;
-          const categoryLabel = categories.find(c => c.value === target.category)?.label || target.category;
-          const completionText = `I killed it. "${target.title}" — a ${categoryLabel} (${tier.label} difficulty). ${newStreak} consecutive days holding the line. That's ${killedCount} confirmed kills.`;
-          const { text: feedback } = await generateAIFeedback('killList', completionText, []);
-          setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
-        } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. Record updated.', isLoading: false, entryCount: null }); }
-      } else if (hitMilestone) {
+        if (hitMilestone) {
         // Milestone Oracle feedback
         ouraToast.success(`${newStreak}-day milestone on "${target.title}"`);
         setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
@@ -404,6 +424,7 @@ const KillList = () => {
         // Streak broken — open autopsy
         setAutopsyTarget(target);
         ouraToast.warning(`Streak reset on "${target.title}"`);
+      }
       }
 
     } catch (error) {
@@ -688,6 +709,27 @@ const KillList = () => {
     setReflectionNotes(notes);
   }, [targets]);
 
+  const requestKillOracleStatement = useCallback(async (kill) => {
+    setRequestingOracleForKillId(kill.id);
+    setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
+
+    const categoryLabel = categories.find(c => c.value === kill.category)?.label || kill.category || '';
+    const notes = kill.reflectionNotes ? ` Notes: ${kill.reflectionNotes}` : '';
+    const entryText = `Killed behavior: "${kill.title}"${categoryLabel ? ` — a ${categoryLabel}` : ''}.${notes} Active for ${kill.activeDuration || 0} days before elimination.`;
+    oracleEntryTextRef.current = entryText;
+
+    try {
+      const { text: feedback } = await generateAIFeedback('killList', entryText, []);
+      setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
+      await updateData('confirmedKills', kill.id, { oracleStatement: feedback, oracleRequestedAt: new Date() });
+      setConfirmedKills(prev => prev.map(k => k.id === kill.id ? { ...k, oracleStatement: feedback } : k));
+    } catch {
+      setOracleModal({ isOpen: true, content: 'Oracle unavailable.', isLoading: false, entryCount: null });
+    } finally {
+      setRequestingOracleForKillId(null);
+    }
+  }, [categories]);
+
   const saveRevisedIntention = useCallback(async () => {
     if (!reviseTarget) return;
     if (reviseIntention.trigger.trim().length < 20 || reviseIntention.response.trim().length < 20) {
@@ -745,21 +787,21 @@ const KillList = () => {
   }, [targets, filterStatus, searchQuery, categories]);
 
   const stats = useMemo(() => {
-    const total = targets.length;
-    const completed = targets.filter(t => t.status === 'killed').length;
+    const completed = confirmedKills.length;
     const active = targets.filter(t => t.status === 'active').length;
     const escaped = targets.filter(t => t.status === 'escaped').length;
+    const total = completed + active + escaped;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    // Average streak at kill
-    const killedTargets = targets.filter(t => t.status === 'killed' && t.streak);
-    const avgStreakToKill = killedTargets.length > 0
-      ? Math.round(killedTargets.reduce((sum, t) => sum + t.streak, 0) / killedTargets.length)
+    // Average streak at kill — sourced from confirmedKills archive
+    const killedWithStreak = confirmedKills.filter(k => k.streak);
+    const avgStreakToKill = killedWithStreak.length > 0
+      ? Math.round(killedWithStreak.reduce((sum, k) => sum + k.streak, 0) / killedWithStreak.length)
       : null;
 
-    // Category distribution
+    // Category distribution — include both active/escaped targets and confirmed kills
     const catCounts = {};
-    targets.forEach(t => {
+    [...targets, ...confirmedKills].forEach(t => {
       if (t.category) catCounts[t.category] = (catCounts[t.category] || 0) + 1;
     });
     const categoryDist = Object.entries(catCounts)
@@ -768,13 +810,13 @@ const KillList = () => {
 
     // Difficulty distribution
     const diffCounts = { surface: 0, deep: 0, core: 0 };
-    targets.forEach(t => {
+    [...targets, ...confirmedKills].forEach(t => {
       const d = getDifficulty(t);
       diffCounts[d] = (diffCounts[d] || 0) + 1;
     });
 
     return { total, completed, active, escaped, completionRate, avgStreakToKill, categoryDist, diffCounts };
-  }, [targets]);
+  }, [targets, confirmedKills]);
 
   const getStreakColor = (streak, target) => {
     const threshold = getStreakToKill(target);
@@ -1131,7 +1173,7 @@ const KillList = () => {
                       {stats.avgStreakToKill}
                     </span>
                     <span className="text-[#5a5a5a] text-sm ml-2">days</span>
-                    <div className="text-[#5a5a5a] text-xs mt-1">across {targets.filter(t => t.status === 'killed').length} confirmed kills</div>
+                    <div className="text-[#5a5a5a] text-xs mt-1">across {confirmedKills.length} confirmed kills</div>
                   </div>
                 ) : (
                   <div className="text-[#3a3a3a] text-sm">No kills recorded yet</div>
@@ -1141,16 +1183,22 @@ const KillList = () => {
           )}
 
           {/* Kill Patterns — strategic intelligence (3+ killed targets required) */}
-          {targets.filter(t => t.status === 'killed').length >= 3 && (() => {
-            const killed = targets.filter(t => t.status === 'killed');
+          {confirmedKills.length >= 3 && (() => {
+            const killed = confirmedKills;
             const allEscapes = targets.flatMap(t => (t.escapeData || []));
 
             // Category win rate
             const catStats = {};
+            confirmedKills.forEach(k => {
+              if (!k.category) return;
+              if (!catStats[k.category]) catStats[k.category] = { kills: 0, escapes: 0 };
+              catStats[k.category].kills++;
+              const escCount = (k.escapeData || []).length;
+              catStats[k.category].escapes += escCount;
+            });
             targets.forEach(t => {
               if (!t.category) return;
               if (!catStats[t.category]) catStats[t.category] = { kills: 0, escapes: 0 };
-              if (t.status === 'killed') catStats[t.category].kills++;
               const escCount = (t.escapeData || []).length;
               catStats[t.category].escapes += escCount;
             });
@@ -1372,7 +1420,6 @@ const KillList = () => {
             {[
               { key: 'all', label: 'All Contracts', count: stats.total },
               { key: 'active', label: 'Active', count: stats.active },
-              { key: 'completed', label: 'Killed', count: stats.completed },
               { key: 'escaped', label: 'Escaped', count: stats.escaped }
             ].map(({ key, label, count }) => (
               <button
@@ -1453,6 +1500,55 @@ const KillList = () => {
             )}
           </div>
         </div>
+
+        {/* Confirmed Kills Archive */}
+        {confirmedKills.length > 0 && (
+          <section className="mt-12 animate-fade-in-up">
+            <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Confirmed Kills</h3>
+            <div className="space-y-3">
+              {confirmedKills.map(kill => {
+                const killedAtDate = kill.killedAt?.toDate ? kill.killedAt.toDate() : new Date(kill.killedAt || 0);
+                const killDateStr = killedAtDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const tier = getTier(kill);
+                const category = CATEGORIES.find(c => c.value === kill.category);
+                return (
+                  <div key={kill.id} className="oura-card p-5 border-[#1a1a1a]">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-[#8a8a8a] font-medium line-through truncate">{kill.title}</h4>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {tier && (
+                            <span className={`text-xs px-2 py-0.5 rounded-lg ${tier.color} ${tier.bgColor}`}>
+                              {tier.icon} {tier.label}
+                            </span>
+                          )}
+                          {category && (
+                            <span className={`text-xs px-2 py-0.5 rounded-lg ${category.color} ${category.bgColor}`}>
+                              {category.label}
+                            </span>
+                          )}
+                          <span className="text-[#3a3a3a] text-xs">Killed {killDateStr}</span>
+                          <span className="text-[#3a3a3a] text-xs">Tracked {kill.activeDuration ?? 0} days</span>
+                        </div>
+                      </div>
+                    </div>
+                    {kill.oracleStatement ? (
+                      <p className="text-[#5a5a5a] text-sm mt-3 leading-relaxed border-l-2 border-[#1a1a1a] pl-3">{kill.oracleStatement}</p>
+                    ) : (
+                      <button
+                        onClick={() => requestKillOracleStatement(kill)}
+                        disabled={requestingOracleForKillId === kill.id}
+                        className="mt-3 text-xs text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors disabled:opacity-40"
+                      >
+                        {requestingOracleForKillId === kill.id ? 'Requesting...' : 'Request Oracle statement'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* AVE Circuit Breaker — static prompt between autopsy and Oracle */}
         {avePrompt && (
@@ -1584,11 +1680,6 @@ const KillList = () => {
           entryCount={oracleModal.entryCount}
         />
         
-        <KillConfirmation
-          show={celebration.show}
-          targetName={celebration.targetName}
-          onComplete={() => setCelebration({ show: false, targetName: '' })}
-        />
       </div>
     </div>
   );
