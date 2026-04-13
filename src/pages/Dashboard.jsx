@@ -643,6 +643,24 @@ export default function Dashboard() {
               </h1>
             </header>
 
+        {/* Synthesis Briefing — Forced State (non-dismissible, must open before clearing) */}
+        {latestSynthesisIsNew && (
+          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.04s' }}>
+            <div className="oura-card p-6 border border-white/25 bg-[#0d0d0d]">
+              <p className="text-xs font-medium uppercase tracking-widest text-white mb-2">Synthesis Briefing</p>
+              <p className="text-[#8a8a8a] text-sm mb-5 leading-relaxed">
+                A new cross-module intelligence briefing has been generated. Open it to proceed.
+              </p>
+              <button
+                onClick={() => navigate('/synthesis')}
+                className="px-6 py-2.5 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] transition-colors"
+              >
+                Open Briefing
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Daily Prompt Section */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <DailyPrompt onJournalClick={() => setQuickJournalOpen(true)} />
@@ -714,16 +732,6 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-          </section>
-        )}
-
-        {/* Synthesis Briefing ready */}
-        {latestSynthesisIsNew && (
-          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.09s' }}>
-            <Link to="/synthesis" className="block oura-card p-5 border-l-4 border-[#8a8a8a] hover:border-[#d1d1d1] transition-colors">
-              <p className="text-xs font-medium uppercase tracking-widest text-[#8a8a8a] mb-1">Synthesis Briefing</p>
-              <p className="text-[#d1d1d1] text-sm">Synthesis Briefing ready</p>
-            </Link>
           </section>
         )}
 
