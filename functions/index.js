@@ -313,7 +313,16 @@ Hard rules:
 - Never use: "you've got this", "healing journey", "be kind to yourself", "proud of you", "validate", "sit with", "amazing", "warrior."
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
-- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}`;
+- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${normalizedModule === 'journal' ? `
+
+METACOGNITIVE DEPTH CLASSIFICATION (journal entries only):
+Before your response, output exactly one classification line as the very first line:
+DEPTH:Surface — the entry describes events or observations ("what happened")
+DEPTH:Pattern — the entry identifies recurring dynamics ("this keeps happening because...")
+DEPTH:Identity — the entry addresses structural self-understanding ("this is how I operate")
+
+Output only one of: DEPTH:Surface, DEPTH:Pattern, or DEPTH:Identity.
+Then a blank line. Then your prose response. Do not mention the depth in your prose.` : ''}`;
 }
 
 const DRIVER_LABELS = {
@@ -359,5 +368,15 @@ function buildUserPrompt(entryText, userContext) {
 }
 
 function parseOracleResponse(rawText) {
-  return { feedback: rawText.trim() };
+  const trimmed = rawText.trim();
+  // Extract DEPTH classification prefix injected for journal entries.
+  // Format: "DEPTH:Surface\n\n<prose>" or "DEPTH:Pattern\n<prose>" etc.
+  const match = trimmed.match(/^DEPTH:(Surface|Pattern|Identity)\n\n?/i);
+  if (match) {
+    return {
+      feedback: trimmed.slice(match[0].length).trim(),
+      metacognitiveDepth: match[1],
+    };
+  }
+  return { feedback: trimmed, metacognitiveDepth: null };
 }

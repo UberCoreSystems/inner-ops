@@ -556,12 +556,12 @@ export const callLLM = async (promptBundle, generationContext) => {
       ...(reactanceInstruction ? { customSystemPrompt: reactanceInstruction } : {}),
     });
 
-    const { feedback } = result.data;
+    const { feedback, metacognitiveDepth = null } = result.data;
 
     track('oracle_called', { module: userPrompt.moduleName, tone });
 
     // Claude returned real prose — skip the template formatter entirely
-    return { _rawClaudeResponse: true, rawText: feedback || '' };
+    return { _rawClaudeResponse: true, rawText: feedback || '', metacognitiveDepth };
   } catch (error) {
     // Cloud Function unavailable (not yet deployed, network issue, rate limit) —
     // fall back to the local template system so the app stays functional.
@@ -856,14 +856,14 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
       triggeredCriterion,
     });
 
-    // Real Claude response — return prose directly, no template formatting
-    if (feedback._rawClaudeResponse) return feedback.rawText;
+    // Real Claude response — return structured object with prose and optional depth
+    if (feedback._rawClaudeResponse) return { text: feedback.rawText, metacognitiveDepth: feedback.metacognitiveDepth || null };
 
-    return formatFeedbackAsText(feedback);
+    return { text: formatFeedbackAsText(feedback), metacognitiveDepth: null };
   } catch (error) {
     logger.error('Error generating AI feedback:', error);
     const fallback = buildFallbackFeedback(moduleName, normalizeEntryText(userInput));
-    return formatFeedbackAsText(fallback);
+    return { text: formatFeedbackAsText(fallback), metacognitiveDepth: null };
   }
 };
 

@@ -514,7 +514,7 @@ export default function Journal() {
 
       openOracleLoading();
 
-      const feedback = await generateAIFeedback('journal', inputText, pastEntries);
+      const { text: feedbackText, metacognitiveDepth } = await generateAIFeedback('journal', inputText, pastEntries);
 
       const newEntry = await writeData('journalEntries', {
         content: entry,
@@ -522,12 +522,13 @@ export default function Journal() {
         intensity,
         eventOccurredAt: occurredAt.toISOString(),
         entryProximityFlag,
-        oracleJudgment: feedback,
+        oracleJudgment: feedbackText,
+        ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
       });
       setEntries(prev => [newEntry, ...prev]);
       setCurrentEntryId(newEntry.id);
 
-      openOracleWithContent(feedback, getCachedTotalEntryCount());
+      openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth);
 
       ouraToast.success('Journal entry saved');
       setEntry('');
@@ -1311,6 +1312,7 @@ export default function Journal() {
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
         entryCount={oracleModal.entryCount}
+        metacognitiveDepth={oracleModal.metacognitiveDepth}
       />
     </div>
   );

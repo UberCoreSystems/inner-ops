@@ -270,9 +270,9 @@ const BlackMirror = () => {
           correlationContext,
         ].filter(Boolean).join(' ');
         oracleEntryTextRef.current = blackMirrorText;
-        const feedback = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
-        finalEntry = { ...entryData, oracleFeedback: feedback };
-        setAiFeedback(feedback);
+        const { text: feedbackText } = await generateAIFeedback('Black Mirror', blackMirrorText, pastEntries);
+        finalEntry = { ...entryData, oracleFeedback: feedbackText };
+        setAiFeedback(feedbackText);
         setOracleEntryCount(getCachedTotalEntryCount());
       } catch (feedbackError) {
         logger.error('Error generating feedback:', feedbackError);

@@ -237,7 +237,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
         setShowOracle(true);
         try {
           const inputText = `Mood: ${mood || 'focused'} (${intensity}/5)\n${entry.trim()}`;
-          const feedback = await generateAIFeedback('journal', inputText, []);
+          const { text: feedback } = await generateAIFeedback('journal', inputText, []);
           setOracleResponse(feedback);
         } catch (error) {
           logger.error('Oracle feedback error:', error);

@@ -54,6 +54,8 @@ const OracleModal = ({
   onFollowUpStored = null,
   // BER-194: data-depth calibration — null = unknown (no constraint applied)
   entryCount = null,
+  // BER-225: metacognitive depth classification (journal entries only)
+  metacognitiveDepth = null,
 }) => {
   // BER-200: resolved asynchronously on open — display the triggered criterion
   const [resolvedCriterion, setResolvedCriterion] = useState(null);
@@ -116,7 +118,7 @@ Status: ${target.status}
 Priority: ${target.priority}
 Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
-      const generatedFeedback = await generateAIFeedback(moduleName, feedbackContext, []);
+      const { text: generatedFeedback } = await generateAIFeedback(moduleName, feedbackContext, []);
       setOracleFeedback(generatedFeedback);
 
       if (onFeedbackGenerated) {
@@ -264,6 +266,13 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   </svg>
                 </button>
               </div>
+
+              {/* BER-225: Metacognitive depth classification (journal entries only) */}
+              {metacognitiveDepth && (
+                <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">
+                  Depth: {metacognitiveDepth}
+                </div>
+              )}
 
               {/* Feedback text */}
               <div className="text-[#e0e0e0] text-[15px] leading-[1.75] font-light">

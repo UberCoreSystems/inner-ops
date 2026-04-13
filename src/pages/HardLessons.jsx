@@ -366,7 +366,7 @@ export default function HardLessons() {
         })
         .join('\n');
       const prompt = `The following are the user's finalized behavioral rules, grouped by cost type they emerged from:\n\n${grouped}\n\nIdentify the dominant cost pattern in 2-3 sentences. Pattern identification only — no advice, no affirmation, no suggestions.`;
-      const result = await generateAIFeedback('hardLessons', prompt, []);
+      const { text: result } = await generateAIFeedback('hardLessons', prompt, []);
       setCostPatternNarrative(result || '');
     } catch {
       setCostPatternNarrative('Pattern generation unavailable.');
@@ -442,7 +442,7 @@ Category: ${eventCategories.find(cat => cat.value === newLesson.eventCategory)?.
 Please help extract the core lesson and rule from this experience.
 `;
 
-      const oracleWisdom = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
+      const { text: oracleWisdom } = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
       setPendingOracleWisdom(oracleWisdom);
       openOracleWithContent(oracleWisdom, getCachedTotalEntryCount());
 

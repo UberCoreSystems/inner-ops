@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-const INITIAL_STATE = { isOpen: false, content: '', isLoading: false, entryCount: null };
+const INITIAL_STATE = { isOpen: false, content: '', isLoading: false, entryCount: null, metacognitiveDepth: null };
 
 export const useOracleModal = () => {
   const [oracleModal, setOracleModal] = useState(INITIAL_STATE);
@@ -10,8 +10,9 @@ export const useOracleModal = () => {
   }, []);
 
   // BER-197: entryCount threads the low-data calibration constraint to OracleModal regen
-  const openWithContent = useCallback((content, entryCount = null) => {
-    setOracleModal({ isOpen: true, content, isLoading: false, entryCount });
+  // BER-225: metacognitiveDepth passes journal depth classification through to OracleModal
+  const openWithContent = useCallback((content, entryCount = null, metacognitiveDepth = null) => {
+    setOracleModal({ isOpen: true, content, isLoading: false, entryCount, metacognitiveDepth });
   }, []);
 
   const close = useCallback(() => {

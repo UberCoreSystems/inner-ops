@@ -305,7 +305,7 @@ const KillList = () => {
       try {
         const categoryLabel = categories.find(c => c.value === targetData.category)?.label || targetData.category;
         const entryText = `I've just named a new target to eliminate: "${targetData.title}" — a ${categoryLabel}. I'm making a contract with myself to kill this pattern. I've been tolerating this long enough and I'm declaring it as something I will eliminate. This is kill contract number ${targetsRef.current.length + 1}.`;
-        const feedback = await generateAIFeedback('killList', entryText, targetsRef.current.slice(-3).map(t => t.title));
+        const { text: feedback } = await generateAIFeedback('killList', entryText, targetsRef.current.slice(-3).map(t => t.title));
 
         setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
       } catch (error) {
@@ -386,7 +386,7 @@ const KillList = () => {
           const killedCount = targetsRef.current.filter(t => t.status === 'killed').length + 1;
           const categoryLabel = categories.find(c => c.value === target.category)?.label || target.category;
           const completionText = `I killed it. "${target.title}" — a ${categoryLabel} (${tier.label} difficulty). ${newStreak} consecutive days holding the line. That's ${killedCount} confirmed kills.`;
-          const feedback = await generateAIFeedback('killList', completionText, []);
+          const { text: feedback } = await generateAIFeedback('killList', completionText, []);
           setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
         } catch { setOracleModal({ isOpen: true, content: 'Target eliminated. Record updated.', isLoading: false, entryCount: null }); }
       } else if (hitMilestone) {
@@ -395,7 +395,7 @@ const KillList = () => {
         setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
         try {
           const milestoneText = `I've held the line against "${target.title}" for ${newStreak} consecutive days. This is a ${tier.label.toLowerCase()} pattern (${tier.streakToKill} days to kill). ${newStreak === 3 ? 'Just getting started.' : newStreak < 14 ? 'Building momentum.' : newStreak < 30 ? 'Deep into the fight now.' : 'This is becoming part of who I am.'} ${target.escapeData?.length ? `I've escaped ${target.escapeData.length} time${target.escapeData.length > 1 ? 's' : ''} before.` : ''}`;
-          const feedback = await generateAIFeedback('killList', milestoneText, []);
+          const { text: feedback } = await generateAIFeedback('killList', milestoneText, []);
           setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
         } catch { setOracleModal({ isOpen: true, content: 'Milestone reached. The Oracle marks your progress. Hold the line.', isLoading: false, entryCount: null }); }
       } else if (held) {
@@ -471,7 +471,7 @@ const KillList = () => {
       // Start Oracle fetch in parallel with AVE prompt display
       const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''}${intentionContext}${autopsyPatternContext} This is escape number ${escapeData.length}.`;
       oracleEntryTextRef.current = escapeText;
-      const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).catch(() => null);
+      const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).then(r => r.text).catch(() => null);
 
       // Show AVE circuit breaker — 3-second minimum lock before Oracle
       setAvePrompt(true);

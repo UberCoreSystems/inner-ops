@@ -87,7 +87,7 @@ const EmergencyButton = () => {
       openOracleLoading();
 
       const context = `Emergency struggle moment. Intensity: ${intensity}/10. Trigger: ${trigger || 'unspecified'}. Reflection: ${reflection || 'none provided'}`;
-      const oracleFeedback = await generateAIFeedback('emergency', context, []);
+      const { text: oracleFeedback } = await generateAIFeedback('emergency', context, []);
 
       openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());
       setStep('complete');
