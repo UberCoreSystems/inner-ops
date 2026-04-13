@@ -444,7 +444,7 @@ Please help extract the core lesson and rule from this experience.
 
       const { text: oracleWisdom } = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
       setPendingOracleWisdom(oracleWisdom);
-      openOracleWithContent(oracleWisdom, getCachedTotalEntryCount());
+      openOracleWithContent(oracleWisdom, getCachedTotalEntryCount(), null, newLesson.eventDescription, 'hard_lessons');
 
     } catch (error) {
       logger.error('Error seeking Oracle extraction:', error);
@@ -1416,6 +1416,8 @@ Please help extract the core lesson and rule from this experience.
         title="Oracle's Extraction Wisdom"
         onReaction={handleOracleReaction}
         entryCount={oracleModal.entryCount}
+        entryText={oracleModal.entryText}
+        entryModuleName={oracleModal.entryModuleName}
       />
       </div>
     </div>

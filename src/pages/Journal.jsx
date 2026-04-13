@@ -528,7 +528,7 @@ export default function Journal() {
       setEntries(prev => [newEntry, ...prev]);
       setCurrentEntryId(newEntry.id);
 
-      openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth);
+      openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth, inputText, 'journal');
 
       ouraToast.success('Journal entry saved');
       setEntry('');
@@ -1313,6 +1313,8 @@ export default function Journal() {
         onReaction={handleOracleReaction}
         entryCount={oracleModal.entryCount}
         metacognitiveDepth={oracleModal.metacognitiveDepth}
+        entryText={oracleModal.entryText}
+        entryModuleName={oracleModal.entryModuleName}
       />
     </div>
   );
