@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
-import { readUserData } from '../utils/firebaseUtils';
+import { readUserData, updateData } from '../utils/firebaseUtils';
 import { generateSynthesisBriefing } from '../utils/generateSynthesisBriefing';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
@@ -64,6 +64,17 @@ export default function SynthesisBriefing() {
     }
   };
 
+  // Mark latest briefing as read when the page is opened
+  useEffect(() => {
+    if (briefings.length === 0) return;
+    const latest = briefings[0];
+    if (latest?.isNew === true && latest?.id) {
+      updateData('syntheses', latest.id, { isNew: false, readAt: new Date().toISOString() }).catch(err => {
+        logger.warn('Failed to mark synthesis as read:', err?.message);
+      });
+    }
+  }, [briefings]);
+
   const handleGenerate = async () => {
     if (!userId || generating) return;
     setGenerating(true);
@@ -89,6 +100,14 @@ export default function SynthesisBriefing() {
   const archiveBriefings = briefings.slice(1);
   const displayBriefing = selectedArchive || latestBriefing;
 
+  // Determine if a current-period briefing exists (matches user's selected cadence)
+  const cadenceDaysMap = { weekly: 7, biweekly: 14 };
+  const hasCurrentPeriodBriefing = (() => {
+    if (!latestBriefing?.generatedAt) return false;
+    const days = (Date.now() - new Date(latestBriefing.generatedAt).getTime()) / (1000 * 60 * 60 * 24);
+    return days < (cadenceDaysMap[cadence] ?? 7);
+  })();
+
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -108,38 +127,40 @@ export default function SynthesisBriefing() {
           </p>
         </div>
 
-        {/* Generate controls */}
-        <div className="oura-card p-6 mb-8">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex gap-2">
-              {CADENCE_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setCadence(opt.value)}
-                  className={`px-4 py-2 rounded-xl text-sm transition-colors ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+        {/* Generate controls — hidden when current-period briefing exists */}
+        {!hasCurrentPeriodBriefing && (
+          <div className="oura-card p-6 mb-8">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex gap-2">
+                {CADENCE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setCadence(opt.value)}
+                    className={`px-4 py-2 rounded-xl text-sm transition-colors ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleGenerate}
+                disabled={generating || !!cadenceLockDate}
+                className="px-6 py-2.5 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-xl font-medium transition-colors text-sm"
+              >
+                {generating ? 'Generating...' : 'Generate Briefing'}
+              </button>
             </div>
-            <button
-              onClick={handleGenerate}
-              disabled={generating || !!cadenceLockDate}
-              className="px-6 py-2.5 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-xl font-medium transition-colors text-sm"
-            >
-              {generating ? 'Generating...' : 'Generate Briefing'}
-            </button>
-          </div>
 
-          {cadenceLockDate && (
-            <p className="mt-4 text-[#5a5a5a] text-sm">
-              Next briefing available:{' '}
-              <span className="text-[#8a8a8a]">
-                {cadenceLockDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-              </span>
-            </p>
-          )}
-        </div>
+            {cadenceLockDate && (
+              <p className="mt-4 text-[#5a5a5a] text-sm">
+                Next briefing available:{' '}
+                <span className="text-[#8a8a8a]">
+                  {cadenceLockDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
 
         {/* No briefings yet */}
         {briefings.length === 0 && (

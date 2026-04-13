@@ -6,6 +6,7 @@ import { toasterConfig } from './utils/toast';
 import logger from './utils/logger';
 import { checkFirebaseConnection } from './firebase';
 import { identify } from './utils/analytics';
+import { useSynthesisAutoGenerate } from './hooks/useSynthesisAutoGenerate';
 import './App.css';
 
 // Core components (loaded immediately)
@@ -52,6 +53,8 @@ const lazyInitializeFirebase = async () => {
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useSynthesisAutoGenerate(user?.uid || null);
 
   useEffect(() => {
     // Log API key to confirm Vite environment variables are loading

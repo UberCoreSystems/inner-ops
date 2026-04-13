@@ -50,6 +50,9 @@ export default function Dashboard() {
   // Drift signals from detectDriftSignals
   const [driftSignals, setDriftSignals] = useState([]);
 
+  // Synthesis Briefing ready indicator
+  const [latestSynthesisIsNew, setLatestSynthesisIsNew] = useState(false);
+
   // Sunday Autopsy
   const [autopsyText, setAutopsyText] = useState('');
   const [autopsySaving, setAutopsySaving] = useState(false);
@@ -133,6 +136,10 @@ export default function Dashboard() {
     
     if (currentUser) {
       loadDashboardData(currentUser);
+      readUserData('syntheses').then(data => {
+        const sorted = (data || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
+        if (sorted[0]?.isNew === true) setLatestSynthesisIsNew(true);
+      }).catch(() => {});
     } else {
       setLoading(false); // Stop loading if no user
     }
@@ -707,6 +714,16 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
+          </section>
+        )}
+
+        {/* Synthesis Briefing ready */}
+        {latestSynthesisIsNew && (
+          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.09s' }}>
+            <Link to="/synthesis" className="block oura-card p-5 border-l-4 border-[#8a8a8a] hover:border-[#d1d1d1] transition-colors">
+              <p className="text-xs font-medium uppercase tracking-widest text-[#8a8a8a] mb-1">Synthesis Briefing</p>
+              <p className="text-[#d1d1d1] text-sm">Synthesis Briefing ready</p>
+            </Link>
           </section>
         )}
 

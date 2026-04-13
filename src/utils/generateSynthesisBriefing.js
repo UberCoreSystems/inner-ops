@@ -133,6 +133,8 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     userId,
     generatedAt: new Date().toISOString(),
     cadencePeriod: cadence,
+    isNew: true,
+    readAt: null,
     convergencePoint,
     violatedRules,
     signalDelta,
