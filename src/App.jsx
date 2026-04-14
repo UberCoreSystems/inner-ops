@@ -7,6 +7,8 @@ import logger from './utils/logger';
 import { checkFirebaseConnection } from './firebase';
 import { identify } from './utils/analytics';
 import { useSynthesisAutoGenerate } from './hooks/useSynthesisAutoGenerate';
+import { useSynthesisNewFlag } from './hooks/useSynthesisNewFlag';
+import SynthesisGuard from './components/SynthesisGuard';
 import './App.css';
 
 // Core components (loaded immediately)
@@ -55,6 +57,7 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useSynthesisAutoGenerate(user?.uid || null);
+  const latestSynthesisIsNew = useSynthesisNewFlag(user?.uid || null);
 
   useEffect(() => {
     // Log API key to confirm Vite environment variables are loading
@@ -148,9 +151,10 @@ function App() {
         <InlineErrorBoundary name="EmergencyButton">
           {user && <EmergencyButton />}
         </InlineErrorBoundary>
+        <SynthesisGuard latestSynthesisIsNew={latestSynthesisIsNew}>
         <Routes>
-          <Route 
-            path="/auth" 
+          <Route
+            path="/auth"
             element={
               <InlineErrorBoundary name="Auth">
                 {user ? 
@@ -285,6 +289,7 @@ function App() {
           <Route path="/login" element={<Navigate to="/auth" />} />
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/auth" />} />
         </Routes>
+        </SynthesisGuard>
       </div>
     </Router>
   );
