@@ -196,6 +196,7 @@ export default function Journal() {
   const [mood, setMood] = useState('focused');
   const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [intensity, setIntensity] = useState(3);
+  const [actionPlan, setActionPlan] = useState('');
   const [entries, setEntries] = useState([]);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -235,15 +236,17 @@ export default function Journal() {
     }
   }, [entries]);
 
+  // Prompts ordered by Gibbs reflective sequence: emotional processing stages first, action plan last.
+  // Action plan must remain the final stage — do not reorder.
   const basePrompts = [
-    "What did I avoid today, and what did I tell myself to justify it?",
-    "What challenged me and how did I handle it?",
-    "What patterns am I noticing in my behavior?",
     "What triggered strong emotions today?",
-    "What would I do differently if I could replay today?",
-    "What action produced the most leverage today?",
     "What fear held me back today?",
-    "What am I learning about myself?"
+    "What challenged me and how did I handle it?",
+    "What did I avoid today, and what did I tell myself to justify it?",
+    "What action produced the most leverage today?",
+    "What patterns am I noticing in my behavior?",
+    "What am I learning about myself?",
+    "What would I do differently if I could replay today?",
   ];
 
   // Oracle questions surface first, then the standard prompts
@@ -461,6 +464,7 @@ export default function Journal() {
     setEntry('');
     setMood(moodOptions[0].value);
     setIntensity(3);
+    setActionPlan('');
     setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
   };
 
@@ -479,6 +483,7 @@ export default function Journal() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!entry.trim()) return;
+    if (!editingEntryId && !actionPlan.trim()) return;
 
     setLoading(true);
 
@@ -519,6 +524,7 @@ export default function Journal() {
 
       const newEntry = await writeData('journalEntries', {
         content: entry,
+        actionPlan: actionPlan.trim(),
         mood,
         intensity,
         eventOccurredAt: occurredAt.toISOString(),
@@ -538,6 +544,7 @@ export default function Journal() {
       setCrossModuleExtractions({ killList: null, relapseRadar: null });
 
       setEntry('');
+      setActionPlan('');
       setMood(moodOptions[0].value);
       setIntensity(3);
       setEventOccurredAt(new Date().toISOString().slice(0, 16));
@@ -1125,6 +1132,23 @@ export default function Journal() {
 
               {!editingEntryId && (
                 <div>
+                  <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-2">
+                    Action Plan <span className="text-[#ef4444] ml-1">*</span>
+                  </label>
+                  <p className="text-[#5a5a5a] text-xs mb-3">What specific action will you take next time this situation arises?</p>
+                  <textarea
+                    value={actionPlan}
+                    onChange={(e) => setActionPlan(e.target.value)}
+                    rows={3}
+                    className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none transition-colors"
+                    placeholder="Name the exact action — not an intention, a commitment."
+                    required
+                  />
+                </div>
+              )}
+
+              {!editingEntryId && (
+                <div>
                   <label className="block text-gray-500 text-xs uppercase tracking-widest mb-2 font-medium">When did this happen?</label>
                   <input
                     type="datetime-local"
@@ -1139,7 +1163,7 @@ export default function Journal() {
               <div className="flex gap-3">
                 <button
                   type="submit"
-                  disabled={loading || !entry.trim()}
+                  disabled={loading || !entry.trim() || (!editingEntryId && !actionPlan.trim())}
                   className="flex-1 bg-[#00d4aa] hover:bg-[#00e6b8] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-black font-medium py-3 rounded-2xl transition-all duration-300"
                 >
                   {loading ? 'Saving...' : editingEntryId ? 'Update Entry' : 'Save Entry'}
