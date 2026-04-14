@@ -1464,23 +1464,30 @@ const KillList = () => {
               </div>
 
               {/* Submit Button */}
-              <div className="flex flex-col items-end gap-2">
-                {/* TEMP DIAGNOSTIC — remove once root cause confirmed */}
-                <div className="text-[10px] font-mono text-[#5a5a5a] bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg px-3 py-1.5 space-y-0.5">
-                  <div>submitting: <span className={submitting ? 'text-[#ef4444]' : 'text-[#22c55e]'}>{String(submitting)}</span></div>
-                  <div>newTarget: <span className={newTarget.trim() ? 'text-[#22c55e]' : 'text-[#ef4444]'}>"{newTarget}" (len {newTarget.trim().length})</span></div>
-                  <div>trigger len: <span className={newIntention.trigger.trim().length >= 20 ? 'text-[#22c55e]' : 'text-[#ef4444]'}>{newIntention.trigger.trim().length}</span></div>
-                  <div>response len: <span className={newIntention.response.trim().length >= 20 ? 'text-[#22c55e]' : 'text-[#ef4444]'}>{newIntention.response.trim().length}</span></div>
-                  <div>disabled: <span className={(submitting || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20) ? 'text-[#ef4444]' : 'text-[#22c55e]'}>{String(submitting || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20)}</span></div>
-                </div>
-                <button
-                  onClick={addTarget}
-                  disabled={submitting || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20}
-                  className="px-8 py-3 bg-[#ef4444] text-white rounded-2xl hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-all duration-300 font-medium"
-                >
-                  {submitting ? 'Adding Contract...' : 'Add Kill Contract'}
-                </button>
-              </div>
+              {(() => {
+                const missing = [];
+                if (!newTarget.trim()) missing.push('Target Name');
+                if (newIntention.trigger.trim().length < 20) missing.push('When (20+ chars)');
+                if (newIntention.response.trim().length < 20) missing.push('I Will (20+ chars)');
+                const isDisabled = submitting || missing.length > 0;
+                return (
+                  <div className="flex flex-col items-end gap-2">
+                    {missing.length > 0 && (
+                      <div className="text-xs text-[#8a8a8a]">
+                        <span className="text-[#5a5a5a]">Missing: </span>
+                        <span className="text-[#ef4444]">{missing.join(' · ')}</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={addTarget}
+                      disabled={isDisabled}
+                      className="px-8 py-3 bg-[#ef4444] text-white rounded-2xl hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-all duration-300 font-medium"
+                    >
+                      {submitting ? 'Adding Contract...' : 'Add Kill Contract'}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </section>
