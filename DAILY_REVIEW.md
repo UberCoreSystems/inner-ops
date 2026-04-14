@@ -1,3 +1,197 @@
+## [2026-04-13] — DAILY_REVIEW
+
+**Commits reviewed:** 18994d8 (BER-232), ab91e90 (BER-229)
+**Deploy status:** NOT READY — [BER-237](/BER/issues/BER-237) filed (Journal/HardLessons regen silently disabled)
+
+---
+
+### Stability
+
+- **[PASS] Journaling** — Core journal submit, AI feedback, and save flows intact. Oracle fallback copy clean.
+
+- **[FAIL] Journaling / OracleModal — regen and follow-up silently disabled (BER-235 filed)**
+  BER-229 fixed `callOracleRaw` and `OracleModal` internals to support depth-aware regen. However, `Journal.jsx` does not pass `entryText` or `entryModuleName` to `<OracleModal>`. OracleModal line 202 gates `canRegen = !!entryText` — with the default empty string, the Regenerate and Follow-Up buttons are never rendered. The BER-229 depth fix is fully inoperative for the journal module.
+  - File: `src/pages/Journal.jsx:1305–1316` — `entryText` and `entryModuleName` props absent
+  - File: `src/pages/HardLessons.jsx:1411–1419` — same issue; regen/follow-up silently disabled
+  - `entryText` default: `''` (OracleModal line 56); `canRegen` guard: line 202; regen early return: line 145
+  - Filed: [BER-237](/BER/issues/BER-237) → SSE (high)
+
+- **[PASS] Journaling — BER-229 OracleModal internals (ab91e90)**
+  `callOracleRaw` now returns `{feedback, metacognitiveDepth}`. `displayDepth` local state initialized from prop on open and updated on regen. `handleFollowUp` correctly destructures `followUpFeedback`. Cloud Function returns depth correctly for journal module. Fix is architecturally sound — caller wiring is the gap.
+
+- **[PASS] Kill List** — Oracle regen wired correctly. `entryText` ref and `entryModuleName='Kill List'` passed. `useOracleModal` hook in use. Implementation Intentions flow intact.
+
+- **[PASS] Hard Lessons** — Rules Library filter/search logic intact. Oracle call fires. Regen disabled (entryText gap, same as above — covered by BER-235).
+
+- **[PASS] Relapse Radar** — `detectDriftSignals` imported and called. `entryText` and `entryModuleName` wired to OracleModal. Oura Ring integration error-handled.
+
+- **[PASS] Black Mirror** — Analytics layer not dead code. `getAnalyticsReport()` called from UI. `intentionalTools` / `intentionalWorkTime` fields from BER-224 present.
+
+- **[PASS] BER-232 — Forced Synthesis Briefing state (18994d8)**
+  Non-dismissible block renders at top of Dashboard content when `latestSynthesisIsNew` is true. Old dismissible link card (`border-l-4` style) fully removed. `SynthesisBriefing.jsx` sets `isNew: false` in Firestore on visit. Field name `isNew` consistent across Dashboard reads and SynthesisBriefing writes.
+
+- **[PASS] Emergency Button** — Oracle fallback clean. Breathing reset intact. `entryText` absent (OracleModal line 56 default `''`), regen disabled — acceptable for emergency context.
+
+- **[WARNING] KillListDashboard.jsx** — Uses `target` / `moduleName` prop pattern instead of `entryText` / `entryModuleName`. Pre-dates BER-229. Regen/follow-up silently disabled. Not a regression — carry-forward optimization.
+
+- **[PASS] Synthesis Briefing** — `isNew` cleared on visit. Firestore path consistent with Dashboard. Archive read-only access intact.
+
+- **[PASS] Firebase auth guards** — `ensureAuthenticated()` pattern consistent across modules. No open auth edge cases.
+
+- **[PASS] Repo state** — Only `DAILY_REVIEW.md` and `research/WEEKLY_INTELLIGENCE.md` modified (expected). No source files touched by this review.
+
+---
+
+### Optimization
+
+- **[OPTIMIZE] useOracleModal hook does not carry `entryText` or `entryModuleName`**
+  Callers using the hook pattern (Journal, Hard Lessons) must pass these props directly to `<OracleModal>`. The hook's `openWithContent` signature only carries `content`, `entryCount`, `metacognitiveDepth`. SSE should decide: extend hook signature, or wire all callers with explicit props. Recommend extending hook — less error-prone than 7 call sites tracking separate state.
+
+- **[OPTIMIZE] KillListDashboard uses local OracleModal state instead of `useOracleModal` hook**
+  Pre-existing inconsistency. No breakage. Cleanup candidate.
+
+- *(4 carry-forward OPTIMIZE items from prior reviews: blackMirrorAnalytics.js boilerplate, BlackMirror loadAnalytics useCallback, getBehavioralContext 5-min cache TTL, RelapseRadar sequential data loads)*
+
+---
+
+### Enhancement
+
+- *(All prior IMPROVEMENT items carry forward. No new enhancement findings this run.)*
+
+---
+
+### Summary
+
+| Category | Count |
+|---|---|
+| FAIL | 1 (new) |
+| WARNING | 1 (carry-forward) |
+| OPTIMIZE | 2 (new) + 4 carry-forward |
+| IMPROVEMENT | 9 carry-forward |
+
+**Deploy Readiness: NOT READY**
+
+[BER-237](/BER/issues/BER-237) filed (HIGH). Journal regen and follow-up are silently non-functional — the Regenerate and Follow-Up buttons are never rendered because `entryText` is not passed from Journal.jsx. This directly nullifies BER-229's stated fix for journal depth regen. Must be resolved before deploy.
+
+---
+
+## [2026-04-12 Run 3] — DAILY_REVIEW
+
+**Commits reviewed:** fae941e, 4056ccc, 1ea8daf, 7c503e1, b1d22e6, e744fbd, b7d4ec4, 246ca71
+**Deploy status:** NOT READY — [BER-229](/BER/issues/BER-229) must be resolved
+
+### Section 1 — Quality Findings
+
+**Kill List — PASS**
+- BER-207: Kill completion motivational framing removed. BER-222: AI error fallback "Record updated." — factual only.
+
+**Hard Lessons — PASS**
+- BER-221: Achievement toast → success toast on finalization. Correct alignment with module intent.
+
+**Relapse Radar — PASS**
+- BER-218: Biometric date "as of YYYY-MM-DD" display. Null-safe inside `ouraBiometrics` guard.
+
+**Black Mirror — PASS**
+- BER-224: `intentionalWorkTime` added to cross-module data. Legacy-safe default 0. Separately bucketed from distraction signal. BMI unchanged.
+
+**Synthesis Briefing — PASS**
+- BER-223: `useSynthesisAutoGenerate` hook mounts correctly in App.jsx. Null-guards userId, firedRef prevents re-fire. Dashboard ready card functional. SynthesisBriefing clears `isNew` on mount with id null-check. `hasCurrentPeriodBriefing` guard hides Generate button correctly.
+
+**Oracle CF — PASS**
+- BER-216: `customSystemPrompt` now destructured and appended in CF. Oracle Reactance reaches Claude. Closes gap from BER-151/BER-180.
+
+**Journal — FAIL**
+- BER-225: Metacognitive depth classification — stale label after regen.
+  - All paths return `{ text, metacognitiveDepth }` ✓, Firestore persist ✓, OracleModal display ✓
+  - **FAIL:** `callOracleRaw` sends `moduleName: 'oracle'` — CF never injects DEPTH instruction on regen. OracleModal receives depth as prop (set at open time), never updated on regen. After regen: new prose shown, stale depth label displayed.
+  - Filed **[BER-229](/BER/issues/BER-229)** (medium, SSE)
+
+### Section 2 — UX Improvement Opportunities
+
+- **IMPROVEMENT** — BER-223: Dashboard `latestSynthesisIsNew` state not refreshed after user visits SynthesisBriefing within same session. Card persists until reload (Firestore IS updated correctly — UI state gap only).
+- **IMPROVEMENT** — BER-225: QuickJournalModal discards `metacognitiveDepth` — depth not persisted for quick journal entries. CF generates it, client throws it away.
+
+### Issues Filed
+
+| ID | Module | Severity | Assigned | Description |
+|----|--------|----------|----------|-------------|
+| [BER-229](/BER/issues/BER-229) | Journal / Oracle | Medium | SSE | Depth label stale after OracleModal regen (BER-225 regression) |
+
+---
+
+## [2026-04-12] — DAILY_REVIEW
+
+> **Run:** DAILY_REVIEW routine execution
+> **QA Agent:** 64512fb6 (QA Engineer)
+> **Prior state:** All 5 modules PASS as of 2026-04-11 (BER-172). BER-216/217 (Oracle Reactance) resolved today. BER-218 (biometric timestamp) resolved today. BER-213 (Kill List tier icons) resolved today.
+
+---
+
+### Commits Reviewed Since Last Review
+
+| Hash | Title |
+|---|---|
+| `e744fbd` | BER-218: Display biometric reading date in Relapse Radar precursor card |
+| `b7d4ec4` | BER-216: Apply customSystemPrompt in Cloud Function (Oracle Reactance fix) |
+| `246ca71` | BER-207: Remove motivational framing from kill completion message |
+| `6618a81` | BER-206: Replace tier icon emoji with geometric symbols in Kill List |
+
+---
+
+### Stability
+
+- [PASS] Journaling — no regressions; prior verifications hold
+- [PASS] Kill List — BER-207 verified: kill completion toast changed from `achievement()` to `success()`, "This one took real consistency." removed. Language is now factual only: streak count + kill count. No regressions on AVE, autopsy, implementation intentions.
+- [PASS] Hard Lessons — no regressions; 8-field validation, finalization lock, scar inventory all intact. **See alignment flag below.**
+- [PASS] Relapse Radar — BER-218 verified: `as of YYYY-MM-DD` timestamp renders in Oura biometric precursor card in both alert and non-alert states; sourced from `ouraService.js:201`. No regressions on drift signal dual-surfacing.
+- [PASS] Black Mirror — no regressions; `getAnalyticsReport()` connected and rendering, all 3 analytics layers operational
+- [PASS] Oracle — BER-216 fix verified: `functions/index.js:58` destructures `customSystemPrompt` from request.data; `systemPrompt` construction at line 61 appends it when present. Full BER-200 Oracle Reactance Architecture operational end-to-end. (Verified in BER-217 earlier today.)
+- [PASS] Firebase/Auth — all collections user-scoped; no auth edge cases introduced by recent commits
+
+---
+
+### Optimization
+
+- [OPTIMIZE] Shared — `clearBehavioralContextCache()` exported but never called after write operations; Oracle context can be stale up to 5 min post-write *(carry-forward from BER-162)*
+- [OPTIMIZE] SynthesisBriefing — separate reduce/sort passes for dominant archetype and dominant mood over identical dataset *(carry-forward from BER-162)*
+- [DEAD CODE] `toast.js:113` — `ouraToast.streak()` defined with hardcoded motivational copy (`"${days} day streak! Keep going! 🔥"`) but **never called anywhere in the codebase**. Dead code with alignment risk if resurrected. No live failure.
+
+---
+
+### Enhancement / Alignment
+
+- **[ALIGNMENT FAIL] Hard Lessons** — `HardLessons.jsx:502` fires `ouraToast.achievement('Hard Lesson finalized and locked')` on lesson finalization. The `achievement` toast uses a 🏆 trophy icon, green gradient background, 4-second duration — celebratory framing. Hard Lessons is defined as "pain-forged wisdom archive" that "should feel like a serious personal record." A trophy celebration on finalization undermines that. BER-207 removed the equivalent `achievement` call in Kill List; Hard Lessons was not updated. **Filing as alignment issue to SSE.**
+- [IMPROVEMENT] Hard Lessons — Cost category buttons render neutral on form open despite being required; first-time users miss it *(carry-forward)*
+- [IMPROVEMENT] OracleModal — No UI-side timeout on Cloud Function call (CF timeout is 30s; user stays in loading state if it times out) *(carry-forward — note: CF timeout is 30s, not 20s as previously logged)*
+- [IMPROVEMENT] Dashboard — Drift signal detection runs once on load; no re-run trigger on mid-session data changes *(carry-forward)*
+- [IMPROVEMENT] Journal — Prompt carousel has no position indicator *(carry-forward)*
+- [IMPROVEMENT] Kill List — Killed targets vanish rather than persisting as historical record *(carry-forward)*
+- [IMPROVEMENT] Black Mirror — "Digital Consciousness Check" form title; no intermediate analytics loading states *(carry-forward)*
+- [IMPROVEMENT] EmergencyButton — Breathing circle oversized on 375px mobile *(carry-forward)*
+- [IMPROVEMENT] Relapse Radar — Escape autopsy form silently disables submit when intentionActivated missing; no toast *(carry-forward)*
+- [IMPROVEMENT] OracleModal — resolves confrontation criterion twice per open (OracleModal.jsx:94 for UI + aiFeedback.js:848 internally) — two Firestore reads *(carry-forward from BER-217)*
+
+---
+
+### Summary
+
+| Category | Count |
+|---|---|
+| FAIL (blockers) | 0 |
+| ALIGNMENT FAIL | 1 (Hard Lessons — achievement toast) |
+| OPTIMIZE | 2 (carry-forward) |
+| DEAD CODE | 1 (ouraToast.streak — never called) |
+| IMPROVEMENT | 10 (carry-forward + 1 new correction) |
+| New findings | 2 (alignment fail + dead code) |
+
+**Deploy readiness: READY (with alignment issue flagged)**
+
+No stability blockers. No crashes. All prior fixes hold. One product alignment failure identified in Hard Lessons finalization toast — does not block deploy but misrepresents module philosophy. Filing to SSE with `alignment` tag.
+
+**Git status: read-only review. No source files modified.**
+
+---
+
 ## [2026-04-11] — BER-172 DAILY_REVIEW
 
 > **Run:** BER-172 — DAILY_REVIEW routine execution
@@ -634,3 +828,71 @@ No new FAILs. Prior deploy gate blockers remain closed. Oracle trust calibration
 BER-194 regen-path calibration is broken. Low-data users will receive uncalibrated Oracle copy on regeneration — the exact behavior BER-194 was designed to prevent. This is a regression against BER-194's stated intent and must be fixed before the next deploy.
 
 **Git status:** WEEKLY_HEALTH.md untracked. DAILY_REVIEW.md modified (this output). No source files touched by this review.
+
+---
+
+## [2026-04-14]
+
+### Commits Since Last Review (2026-04-13)
+- `9830436` fix(RelapseRadar): expand PRECURSOR_MAP and PRECURSOR_CONDITIONS (BER-249)
+- `02a147f` feat(BER-247): cross-module journal extraction for Kill List and Relapse Radar
+- `0326688` feat(journaling): persist QuickJournalModal category and intensity via localStorage
+- `4861819` feat(kill-list): add Confirmed Kills historical archive (BER-243)
+- `fd0793a` BER-241: Add enforcement-philosophy copy to onboarding and empty states
+
+**Note: Orphaned uncommitted changes present** — `KillListDashboard.jsx`, `useKillTargets.js`, `KillClosureModal.jsx` (untracked). These are the same files flagged in the 2026-04-13 review. Now identified as a Kill Contract Closure Modal feature. See FAIL below.
+
+---
+
+### Stability
+
+- [FAIL] Kill List — Orphaned KillClosureModal changes use an incompatible kill storage model with BER-243.
+  BER-243 kill flow (KillList.jsx): writes to `confirmedKills` Firestore collection + deletes from `killTargets`. Orphaned KillListDashboard.jsx kill flow: calls `markAsKilled(target.id, {note, tags})` → `toggleTargetStatus` → `updateDoc('killTargets', {status:'killed'})` — target remains in `killTargets`, never written to `confirmedKills`. If committed as-is, kills from the Dashboard bypass the Confirmed Kills archive entirely. Kills from two entry points would produce divergent data models. HIGH severity. Files: `src/components/KillListDashboard.jsx`, `src/hooks/useKillTargets.js`, `src/components/KillClosureModal.jsx`.
+
+- [WARNING] Kill List — Orphaned files have no issue attribution. `KillClosureModal.jsx` (untracked), `KillListDashboard.jsx` (+132/-20), `useKillTargets.js` (+28/-0) have been in the working tree since at least 2026-04-13. No commit reference. No known parent ticket. CEO must identify owning issue before these files can be committed.
+
+- [PASS] RelapseRadar — BER-249 fix confirmed. PRECURSOR_MAP now covers all 10 Oracle-returned precursor conditions (was: 4/10). Silent failure on extraction prefill resolved. All conditions map to selectable UI options.
+
+- [PASS] Journal — BER-247 cross-module extraction wired correctly. `runCrossModuleExtractions` fires post-save only (not on edit). sessionStorage prefill keys consistent between Journal writer (`kl_extraction_prefill`, `relapse_extraction_prefill`) and KillList/RelapseRadar readers. Clear-on-mount confirmed in both consumers.
+
+- [PASS] Journal — QuickJournalModal category and intensity persist via localStorage. Commit 0326688 initializes from stored values on first use.
+
+- [PASS] Black Mirror — `getAnalyticsReport()` called from `BlackMirror.jsx:172`. Analytics layer fully connected to UI. All 4 public API functions present: `aggregateCrossModuleData`, `runPatternDetection`, `generateInsights`, `getAnalyticsReport`.
+
+- [PASS] Hard Lessons — No changes since last review. No regressions detected.
+
+- [PASS] Synthesis Briefing — Forced block flow (BER-232) intact. No changes since verified 2026-04-13.
+
+---
+
+### Optimization
+
+- [PASS] Journal — No redundant logic introduced in BER-247. Cross-module extraction calls fire with `Promise.all` in parallel. Non-blocking relative to entry save.
+
+- [PASS] Kill List — KillList.jsx orphaned diff separates `submitting` from `loading` state, detaches Oracle call from the `try/finally` block so a hung Claude proxy cannot freeze the Add Contract button. Correct pattern.
+
+---
+
+### Enhancement
+
+- [IMPROVEMENT] Kill List — KillClosureModal is architecturally sound and product-aligned. Language ("Closing Contract" / "Contract Breach") is correctly weighted. Required closure note before kill/escape action is a meaningful UX improvement — the previous instant-kill button captured no signal from the kill event. Oracle dismiss-to-toast fallback prevents modal from blocking the user if the Oracle call hangs. Feature should proceed once the storage model is corrected to use `confirmedKills` + delete (BER-243 pattern) instead of `toggleTargetStatus`.
+
+- [IMPROVEMENT] Cross-module extraction (BER-247) — CrossModuleExtractionPrompts language is product-aligned. "Kill List Signal" / "Relapse Radar" labels are direct. Evidence quote from the journal entry provides the user's own language as the trigger. No motivational copy. "Add to Kill List" / "Log Radar Entry" buttons are appropriately minimal.
+
+---
+
+### Summary
+
+| Category | Count |
+|----------|-------|
+| FAIL | 1 |
+| WARNING | 1 |
+| OPTIMIZE | 0 |
+| IMPROVEMENT | 2 |
+| PASS | 8 |
+
+**Deploy Readiness: READY**
+
+The FAIL finding is a pre-commit issue — the orphaned closure modal changes are NOT committed or deployed. The deployed codebase contains no regressions from today's committed changes. The storage model conflict must be fixed before the orphaned files are committed.
+
+**Git status:** `DAILY_REVIEW.md` modified (this output). `research/WEEKLY_INTELLIGENCE.md` modified (Product Researcher writes here — not QA-owned). Orphaned Kill List files remain unchanged by this review.

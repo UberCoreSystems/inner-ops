@@ -1,16 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   updateDoc, 
   doc,
   serverTimestamp 
 } from 'firebase/firestore';
 import { getDb } from '../firebase';
+import { writeData, deleteData } from '../utils/firebaseUtils';
 import { useActiveKillTargets } from '../hooks/useKillTargets';
 import OracleModal from './OracleModal';
+import KillClosureModal from './KillClosureModal';
 import { AppIcon } from './AppIcons';
 import { SkeletonList, SkeletonKillTarget } from './SkeletonLoader';
 import logger from '../utils/logger';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
+import { generateAIFeedback } from '../utils/aiFeedback';
+import ouraToast from '../utils/toast';
 
 const KillListDashboard = React.memo(function KillListDashboard() {
   // Use all active targets (not just today's)
@@ -39,6 +43,16 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     entryCount: null,
   });
   const [oracleFeedbacks, setOracleFeedbacks] = useState({}); // Store Oracle feedbacks
+  const [closureModal, setClosureModal] = useState({
+    isOpen: false,
+    mode: 'kill',    // 'kill' | 'escape'
+    target: null,
+    oraclePhase: 'idle', // 'idle' | 'loading' | 'done'
+    oracleResponse: '',
+  });
+  // Tracks whether the modal was dismissed mid-Oracle so we can persist
+  // the response and surface it via toast when it eventually arrives.
+  const closureDismissedRef = useRef(false);
 
   // Mark initial load as complete once data is loaded
   useEffect(() => {
@@ -75,27 +89,122 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     }
   };
 
-  // Quick toggle functions using the hook
-  const handleQuickKill = async (targetId) => {
-    setUpdating(prev => ({ ...prev, [targetId]: true }));
+  // Kill / escape flows both require a closing entry — open the modal in
+  // the appropriate mode. Mode drives the prompt, tags, and Oracle framing.
+  const openClosureModal = (target, mode) => {
+    closureDismissedRef.current = false;
+    setClosureModal({
+      isOpen: true,
+      mode,
+      target,
+      oraclePhase: 'idle',
+      oracleResponse: '',
+    });
+  };
+
+  const handleQuickKill = (target) => openClosureModal(target, 'kill');
+  const handleQuickEscape = (target) => openClosureModal(target, 'escape');
+
+  const handleClosureSubmit = async ({ note, tags }) => {
+    const { target, mode } = closureModal;
+    if (!target) return;
+    setUpdating(prev => ({ ...prev, [target.id]: true }));
     try {
-      await markAsKilled(targetId);
+      // 1. Persist the closure — BER-243 storage model.
+      //    Kill: archive to confirmedKills, delete from killTargets.
+      //    Escape: update killTargets with escape data (no move).
+      let confirmedKillId = null;
+      if (mode === 'kill') {
+        const killedAt = new Date();
+        const createdAtMs = target.createdAt instanceof Date
+          ? target.createdAt.getTime()
+          : new Date(target.createdAt || 0).getTime();
+        const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / (1000 * 60 * 60 * 24));
+        const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
+        const { id: _removeId, ...targetFields } = target;
+        const confirmedKillDoc = await writeData('confirmedKills', {
+          ...targetFields,
+          closureNote: note,
+          closureTags: Array.isArray(tags) ? tags : [],
+          killedAt,
+          activeDuration,
+        });
+        confirmedKillId = confirmedKillDoc.id;
+        await deleteData('killTargets', target.id);
+      } else {
+        await markAsEscaped(target.id, { note, tags });
+      }
+
+      // 2. Transition to Oracle loading. User can dismiss from here.
+      setClosureModal(prev => ({ ...prev, oraclePhase: 'loading' }));
+
+      // 3. Oracle one-line response — runs regardless of whether modal
+      //    stays open. If dismissed mid-call, we surface via toast instead.
+      const killVerb = mode === 'kill' ? 'closed' : 'lost to';
+      const entryText = mode === 'kill'
+        ? `I just closed a kill contract: "${target.title}". What ended it: ${note}`
+        : `A kill contract just broke on me: "${target.title}". What caught me: ${note}`;
+      const pastTitles = todaysTargets.slice(0, 3).map(t => t.title);
+
+      let oracleResponse = '';
+      try {
+        const feedback = await generateAIFeedback('killList', entryText, pastTitles);
+        oracleResponse = feedback || (mode === 'kill'
+          ? 'Contract closed. Logged to archive.'
+          : 'Breach logged. Regroup.');
+      } catch (err) {
+        logger.error('Oracle closure response error:', err);
+        oracleResponse = mode === 'kill'
+          ? 'Contract closed. Logged to archive.'
+          : 'Breach logged. Regroup.';
+      }
+
+      // Persist the Oracle line. Kill records live in confirmedKills;
+      // escape records remain in killTargets.
+      try {
+        const db = getDb();
+        if (mode === 'kill' && confirmedKillId) {
+          const killRef = doc(db, 'confirmedKills', confirmedKillId);
+          await updateDoc(killRef, { closureOracleResponse: oracleResponse, lastUpdated: serverTimestamp() });
+        } else if (mode === 'escape') {
+          const targetRef = doc(db, 'killTargets', target.id);
+          await updateDoc(targetRef, { escapeOracleResponse: oracleResponse, lastUpdated: serverTimestamp() });
+        }
+      } catch (err) {
+        logger.error('Error persisting Oracle closure response:', err);
+      }
+
+      if (closureDismissedRef.current) {
+        ouraToast.info(`Oracle: ${oracleResponse}`);
+      } else {
+        setClosureModal(prev => ({
+          ...prev,
+          oraclePhase: 'done',
+          oracleResponse,
+        }));
+      }
+
+      ouraToast.success(
+        mode === 'kill'
+          ? `"${target.title}" eliminated`
+          : `"${target.title}" breach logged`
+      );
     } catch (error) {
-      logger.error("Error marking as killed:", error);
+      logger.error('Error during closure flow:', error);
+      ouraToast.error('Failed to save');
+      setClosureModal({ isOpen: false, mode: 'kill', target: null, oraclePhase: 'idle', oracleResponse: '' });
     } finally {
-      setUpdating(prev => ({ ...prev, [targetId]: false }));
+      setUpdating(prev => ({ ...prev, [target.id]: false }));
     }
   };
 
-  const handleQuickEscape = async (targetId) => {
-    setUpdating(prev => ({ ...prev, [targetId]: true }));
-    try {
-      await markAsEscaped(targetId);
-    } catch (error) {
-      logger.error("Error marking as escaped:", error);
-    } finally {
-      setUpdating(prev => ({ ...prev, [targetId]: false }));
+  const handleClosureClose = () => {
+    // If the Oracle call is still in flight, mark dismissed so the result
+    // becomes a toast instead of a modal update.
+    if (closureModal.oraclePhase === 'loading') {
+      closureDismissedRef.current = true;
     }
+    setClosureModal({ isOpen: false, mode: 'kill', target: null, oraclePhase: 'idle', oracleResponse: '' });
   };
 
   const handleQuickReset = async (targetId) => {
@@ -359,7 +468,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             {/* Status Toggle Buttons */}
             <div className="flex gap-2 mb-4">
               <button
-                onClick={() => handleQuickKill(target.id)}
+                onClick={() => handleQuickKill(target)}
                 disabled={updating[target.id] || target.status === 'killed'}
                 className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
                   target.status === 'killed'
@@ -373,7 +482,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                 </span>
               </button>
               <button
-                onClick={() => handleQuickEscape(target.id)}
+                onClick={() => handleQuickEscape(target)}
                 disabled={updating[target.id] || target.status === 'escaped'}
                 className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
                   target.status === 'escaped'
@@ -529,6 +638,17 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           </div>
         )}
       </div>
+
+      {/* Kill Closure Modal — forensic closing entry (kill or escape) */}
+      <KillClosureModal
+        isOpen={closureModal.isOpen}
+        mode={closureModal.mode}
+        target={closureModal.target}
+        oraclePhase={closureModal.oraclePhase}
+        oracleResponse={closureModal.oracleResponse}
+        onSubmit={handleClosureSubmit}
+        onClose={handleClosureClose}
+      />
 
       {/* Oracle Modal */}
       <OracleModal

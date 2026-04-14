@@ -394,7 +394,7 @@ export const useActiveKillTargets = (realtime = true) => {
   };
 
   // Toggle target status between different states
-  const toggleTargetStatus = async (targetId, newStatus) => {
+  const toggleTargetStatus = async (targetId, newStatus, extraFields = {}) => {
     try {
       const auth = await getAuth();
       const db = await getDb();
@@ -404,6 +404,7 @@ export const useActiveKillTargets = (realtime = true) => {
         status: newStatus,
         lastUpdated: serverTimestamp(),
         completedAt: newStatus === 'killed' ? serverTimestamp() : null,
+        ...extraFields,
       };
       await updateDoc(targetRef, updateData);
       return true;
@@ -413,8 +414,29 @@ export const useActiveKillTargets = (realtime = true) => {
     }
   };
 
-  const markAsKilled = (targetId) => toggleTargetStatus(targetId, 'killed');
-  const markAsEscaped = (targetId) => toggleTargetStatus(targetId, 'escaped');
+  // Accepts optional closure data: { note, tags }
+  // A closed kill without a note is a hollow closure — the dashboard modal
+  // enforces the note client-side, but the hook passes through whatever is given.
+  const markAsKilled = (targetId, closure = null) => {
+    if (closure && closure.note) {
+      return toggleTargetStatus(targetId, 'killed', {
+        closureNote: closure.note,
+        closureTags: Array.isArray(closure.tags) ? closure.tags : [],
+        closedAt: serverTimestamp(),
+      });
+    }
+    return toggleTargetStatus(targetId, 'killed');
+  };
+  const markAsEscaped = (targetId, closure = null) => {
+    if (closure && closure.note) {
+      return toggleTargetStatus(targetId, 'escaped', {
+        escapeClosureNote: closure.note,
+        escapeClosureTags: Array.isArray(closure.tags) ? closure.tags : [],
+        escapedAt: serverTimestamp(),
+      });
+    }
+    return toggleTargetStatus(targetId, 'escaped');
+  };
   const markAsActive = (targetId) => toggleTargetStatus(targetId, 'active');
 
   const updateReflectionNote = async (targetId, reflectionNote) => {

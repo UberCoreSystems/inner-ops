@@ -127,6 +127,7 @@ const KillList = () => {
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [confirmedKills, setConfirmedKills] = useState([]);
@@ -301,7 +302,7 @@ const KillList = () => {
   }, [user]);
 
   const addTarget = async () => {
-    if (!newTarget.trim() || loading) return;
+    if (!newTarget.trim() || submitting) return;
     if (addingTargetRef.current) return;
     if (newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20) {
       ouraToast.warning('Implementation intention required — both fields need at least 20 characters');
@@ -309,12 +310,15 @@ const KillList = () => {
     }
 
     addingTargetRef.current = true;
-    setLoading(true);
+    setSubmitting(true);
     logger.log("🎯 Adding new kill target:", newTarget.trim());
-    
+
+    let savedTarget = null;
+    let targetData = null;
+
     try {
       const tier = DIFFICULTY_TIERS.find(t => t.value === newTargetDifficulty) || DIFFICULTY_TIERS[1];
-      const targetData = {
+      targetData = {
         title: newTarget.trim(),
         description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label || 'target'}`,
         category: newTargetCategory,
@@ -336,30 +340,39 @@ const KillList = () => {
 
       logger.log("📝 Target data to save:", targetData);
 
-      // Use writeData from firebaseUtils for consistent saving
-      const savedTarget = await writeData('killTargets', targetData);
+      // Write to Firestore
+      savedTarget = await writeData('killTargets', targetData);
       logger.log('✅ Kill target saved successfully:', savedTarget.id);
-      
+
       // Update local state immediately for better UX; suppress the concurrent
       // real-time snapshot to prevent it from overwriting the optimistic state.
       skipNextSnapshot.current = true;
       setTargets(prev => [savedTarget, ...prev]);
-      
+
       ouraToast.success('Target added to Kill List');
-      
+
       setNewTarget('');
       setNewTargetCategory('bad-habit');
       setNewTargetDifficulty('deep');
       setNewIntention({ trigger: '', response: '' });
+    } catch (error) {
+      logger.error('❌ Error adding target:', error);
+      ouraToast.error('Failed to save kill target');
+    } finally {
+      // IMPORTANT: release the submit guard as soon as the write settles —
+      // Oracle generation runs after this and must not gate the button.
+      setSubmitting(false);
+      addingTargetRef.current = false;
+    }
 
-      // Generate Oracle feedback
+    // Oracle feedback is post-write UX. Run it detached from the submit
+    // guard so a hung Claude proxy can never freeze the Add Contract button.
+    if (savedTarget && targetData) {
       setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
-
       try {
         const categoryLabel = categories.find(c => c.value === targetData.category)?.label || targetData.category;
         const entryText = `I've just named a new target to eliminate: "${targetData.title}" — a ${categoryLabel}. I'm making a contract with myself to kill this pattern. I've been tolerating this long enough and I'm declaring it as something I will eliminate. This is kill contract number ${targetsRef.current.length + 1}.`;
         const { text: feedback } = await generateAIFeedback('killList', entryText, targetsRef.current.slice(-3).map(t => t.title));
-
         setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
       } catch (error) {
         logger.error('Oracle feedback error:', error);
@@ -370,12 +383,6 @@ const KillList = () => {
           entryCount: null,
         });
       }
-    } catch (error) {
-      logger.error('❌ Error adding target:', error);
-      ouraToast.error('Failed to save kill target');
-    } finally {
-      setLoading(false);
-      addingTargetRef.current = false;
     }
   };
 
@@ -1457,13 +1464,21 @@ const KillList = () => {
               </div>
 
               {/* Submit Button */}
-              <div className="flex justify-end">
+              <div className="flex flex-col items-end gap-2">
+                {/* TEMP DIAGNOSTIC — remove once root cause confirmed */}
+                <div className="text-[10px] font-mono text-[#5a5a5a] bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg px-3 py-1.5 space-y-0.5">
+                  <div>submitting: <span className={submitting ? 'text-[#ef4444]' : 'text-[#22c55e]'}>{String(submitting)}</span></div>
+                  <div>newTarget: <span className={newTarget.trim() ? 'text-[#22c55e]' : 'text-[#ef4444]'}>"{newTarget}" (len {newTarget.trim().length})</span></div>
+                  <div>trigger len: <span className={newIntention.trigger.trim().length >= 20 ? 'text-[#22c55e]' : 'text-[#ef4444]'}>{newIntention.trigger.trim().length}</span></div>
+                  <div>response len: <span className={newIntention.response.trim().length >= 20 ? 'text-[#22c55e]' : 'text-[#ef4444]'}>{newIntention.response.trim().length}</span></div>
+                  <div>disabled: <span className={(submitting || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20) ? 'text-[#ef4444]' : 'text-[#22c55e]'}>{String(submitting || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20)}</span></div>
+                </div>
                 <button
                   onClick={addTarget}
-                  disabled={loading || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20}
+                  disabled={submitting || !newTarget.trim() || newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20}
                   className="px-8 py-3 bg-[#ef4444] text-white rounded-2xl hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] transition-all duration-300 font-medium"
                 >
-                  {loading ? 'Adding Contract...' : 'Add Kill Contract'}
+                  {submitting ? 'Adding Contract...' : 'Add Kill Contract'}
                 </button>
               </div>
             </div>
