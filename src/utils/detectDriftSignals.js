@@ -121,5 +121,26 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
     });
   });
 
+  // Trigger 4 — Life Transition: routine disruption state on N+ consecutive days
+  // Fires when user reports a context shift (non-empty precursorContext) on consecutive
+  // calendar days. Keys on routine disruption STATE, not biographical event category.
+  // Any context shift reported across N consecutive days indicates sustained disruption.
+  const contextShiftDays = new Set();
+  relapseEntries.forEach(e => {
+    const t = getTime(e);
+    if (!t || !e.precursorContext) return;
+    contextShiftDays.add(dayKey(t));
+  });
+  const contextShiftStreak = longestConsecutiveStreak([...contextShiftDays]);
+  if (contextShiftStreak >= streakThreshold) {
+    signals.push({
+      type: 'life_transition',
+      description: 'Routine disruption state detected',
+      detail: `Context shift reported across ${contextShiftStreak} consecutive days`,
+      severity: 'warning',
+      streak: contextShiftStreak,
+    });
+  }
+
   return signals;
 }
