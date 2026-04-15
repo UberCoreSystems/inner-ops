@@ -7,8 +7,10 @@ import OracleModal from './OracleModal';
 import VirtualizedList from './VirtualizedList';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
-import { getAnalyticsReport } from '../utils/blackMirrorAnalytics';
+import { getAnalyticsReport, PATTERN_LABELS } from '../utils/blackMirrorAnalytics';
 import { SkeletonBox } from './SkeletonLoader';
+import CueRestructuringFlow from './CueRestructuringFlow';
+import useCueRestructuring from '../hooks/useCueRestructuring';
 
 const philosophicalQuotes = [
   "He who is not satisfied with a little, is satisfied with nothing. - Epicurus",
@@ -59,6 +61,10 @@ const BlackMirror = () => {
   // BER-135: relapse entries for correlation report
   const [relapseEntries, setRelapseEntries] = useState([]);
   const [showCorrelationReport, setShowCorrelationReport] = useState(false);
+
+  // BER-264: cue restructuring
+  const { restructurings, refetch: refetchRestructurings } = useCueRestructuring();
+  const [activeRestructuringRule, setActiveRestructuringRule] = useState(null);
 
   // BER-136: capture entry text for Oracle regen
   const oracleEntryTextRef = useRef('');
@@ -720,10 +726,65 @@ const BlackMirror = () => {
               </span>
             </div>
 
+            {/* Detected patterns with Restructure buttons */}
+            {analyticsReport.patterns.filter(p => p.detected).length > 0 && (
+              <div>
+                <h3 className="text-xs uppercase tracking-widest text-[#5a5a5a] mb-3">Detected Patterns</h3>
+                <div className="space-y-4">
+                  {analyticsReport.patterns.filter(p => p.detected).map(pattern => {
+                    const patternRestructurings = restructurings.filter(r => r.patternRule === pattern.rule);
+                    return (
+                      <div key={pattern.rule}>
+                        <div className="flex items-center justify-between bg-oura-darker p-3 rounded-xl">
+                          <span className="text-gray-300 text-sm">
+                            {PATTERN_LABELS[pattern.rule] || pattern.rule}
+                          </span>
+                          {activeRestructuringRule !== pattern.rule && (
+                            <button
+                              onClick={() => setActiveRestructuringRule(pattern.rule)}
+                              className="text-xs text-gray-600 hover:text-gray-300 border border-oura-border hover:border-gray-500 px-3 py-1.5 rounded-lg transition-all duration-200"
+                            >
+                              Restructure
+                            </button>
+                          )}
+                        </div>
+
+                        {activeRestructuringRule === pattern.rule && (
+                          <CueRestructuringFlow
+                            pattern={pattern}
+                            onSave={(saved) => {
+                              setActiveRestructuringRule(null);
+                              refetchRestructurings();
+                              loadAnalytics();
+                            }}
+                            onCancel={() => setActiveRestructuringRule(null)}
+                          />
+                        )}
+
+                        {patternRestructurings.length > 0 && (
+                          <div className="mt-2 pl-3 border-l border-oura-border space-y-1">
+                            {patternRestructurings.map((r, i) => (
+                              <div key={r.id || i} className="text-xs text-gray-600">
+                                <span className="text-gray-700 mr-2">
+                                  {r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                </span>
+                                When {r.substitutionTrigger}: I will {r.substitutionAction}.
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {[
               { key: 'behavioral_patterns', label: 'Behavioral Patterns', data: analyticsReport.insights.behavioral_patterns },
               { key: 'avoidance_patterns', label: 'Avoidance Patterns', data: analyticsReport.insights.avoidance_patterns },
               { key: 'identity_vs_behavior_gaps', label: 'Identity vs Behavior Gaps', data: analyticsReport.insights.identity_vs_behavior_gaps },
+              { key: 'restructuring_alignment', label: 'Restructuring Alignment', data: analyticsReport.insights.restructuring_alignment },
             ].map(({ key, label, data }) => (
               <div key={key}>
                 <h3 className="text-xs uppercase tracking-widest text-[#5a5a5a] mb-3">{label}</h3>

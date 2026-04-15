@@ -365,6 +365,15 @@ export const runPatternDetection = (data) => {
   ];
 };
 
+// ─── PATTERN LABELS (shared by analytics and UI) ─────────────────────────────
+
+export const PATTERN_LABELS = {
+  REPEATED_DISTRACTION_CYCLE:        'Repeated Distraction Cycle',
+  TIME_BASED_BEHAVIOR_CLUSTER:       'Time-Based Behavior Cluster',
+  JOURNAL_DROPOFF_DISTRACTION_SPIKE: 'Journal Dropoff + Distraction Spike',
+  AVOIDANCE_PATTERN_TRIGGER_LINK:    'Avoidance Pattern — Trigger Link',
+};
+
 // ─── LAYER 3: INSIGHT GENERATORS ──────────────────────────────────────────────
 
 const buildBehavioralPatterns = (patterns) => {
@@ -480,11 +489,51 @@ const buildIdentityBehaviorGaps = (patterns, data) => {
   return insights;
 };
 
+const buildRestructuringAlignment = (patterns, restructurings, data) => {
+  const insights = [];
+  const activeRestructurings = restructurings.filter(r => r.status === 'active');
+
+  for (const r of activeRestructurings) {
+    const matchedPattern = patterns.find(p => p.rule === r.patternRule && p.detected);
+    if (!matchedPattern) continue;
+
+    const restructuringDate = parseDate(r.createdAt);
+    if (!restructuringDate) continue;
+
+    const subsequentEntries = data.blackMirror.filter(e => {
+      const d = parseDate(e.createdAt);
+      return d && d > restructuringDate;
+    });
+
+    if (subsequentEntries.length === 0) continue;
+
+    const avgAfter = subsequentEntries.reduce((sum, e) => sum + e.blackMirrorIndex, 0) / subsequentEntries.length;
+    const priorEntries = data.blackMirror.filter(e => {
+      const d = parseDate(e.createdAt);
+      return d && d <= restructuringDate;
+    });
+    const avgBefore = priorEntries.length > 0
+      ? priorEntries.reduce((sum, e) => sum + e.blackMirrorIndex, 0) / priorEntries.length
+      : null;
+
+    const hasReduction = avgBefore !== null && avgAfter < avgBefore;
+    if (!hasReduction) {
+      const label = PATTERN_LABELS[r.patternRule] || r.patternRule;
+      const n = subsequentEntries.length;
+      insights.push(
+        `Cue restructuring logged for ${label}. No reduction in Black Mirror Index observed across ${n} subsequent ${n === 1 ? 'entry' : 'entries'}.`
+      );
+    }
+  }
+
+  return insights;
+};
+
 // ─── LAYER 3: MAIN RUNNER ─────────────────────────────────────────────────────
 
 /**
  * Generates structured insights from pattern results and raw data.
- * Outputs exactly three categories. Each category falls back to
+ * Outputs four categories. Each category falls back to
  * "Insufficient data to generate insight" if no insights can be derived.
  *
  * Rules:
@@ -497,14 +546,16 @@ const buildIdentityBehaviorGaps = (patterns, data) => {
  * @returns {InsightReport}
  */
 export const generateInsights = (patterns, data) => {
-  const behavioral = buildBehavioralPatterns(patterns);
-  const avoidance  = buildAvoidancePatterns(patterns, data);
-  const gaps       = buildIdentityBehaviorGaps(patterns, data);
+  const behavioral            = buildBehavioralPatterns(patterns);
+  const avoidance             = buildAvoidancePatterns(patterns, data);
+  const gaps                  = buildIdentityBehaviorGaps(patterns, data);
+  const restructuringAlignment = buildRestructuringAlignment(patterns, data.restructurings || [], data);
 
   return {
-    behavioral_patterns:       behavioral.length > 0 ? behavioral : ['Insufficient data to generate insight'],
-    avoidance_patterns:        avoidance.length  > 0 ? avoidance  : ['Insufficient data to generate insight'],
-    identity_vs_behavior_gaps: gaps.length       > 0 ? gaps       : ['Insufficient data to generate insight'],
+    behavioral_patterns:       behavioral.length             > 0 ? behavioral             : ['Insufficient data to generate insight'],
+    avoidance_patterns:        avoidance.length              > 0 ? avoidance              : ['Insufficient data to generate insight'],
+    identity_vs_behavior_gaps: gaps.length                   > 0 ? gaps                   : ['Insufficient data to generate insight'],
+    restructuring_alignment:   restructuringAlignment.length > 0 ? restructuringAlignment : ['Insufficient data to generate insight'],
     patterns_detected: patterns.filter(p => p.detected).length,
     patterns_skipped:  patterns.filter(p => p.skipped).length,
     generated_at: new Date().toISOString(),
@@ -520,15 +571,17 @@ export const generateInsights = (patterns, data) => {
  * @returns {Promise<CrossModuleData>}
  */
 export const aggregateCrossModuleData = async () => {
-  const [bmResult, journalResult, relapseResult] = await Promise.allSettled([
+  const [bmResult, journalResult, relapseResult, restructuringResult] = await Promise.allSettled([
     readUserData('blackMirrorEntries'),
     readUserData('journalEntries'),
     readUserData('relapseEntries'),
+    readUserData('cueRestructurings'),
   ]);
 
-  if (bmResult.status      === 'rejected') logger.warn('blackMirrorAnalytics: blackMirrorEntries fetch failed', bmResult.reason);
-  if (journalResult.status === 'rejected') logger.warn('blackMirrorAnalytics: journalEntries fetch failed', journalResult.reason);
-  if (relapseResult.status === 'rejected') logger.warn('blackMirrorAnalytics: relapseEntries fetch failed', relapseResult.reason);
+  if (bmResult.status            === 'rejected') logger.warn('blackMirrorAnalytics: blackMirrorEntries fetch failed', bmResult.reason);
+  if (journalResult.status       === 'rejected') logger.warn('blackMirrorAnalytics: journalEntries fetch failed', journalResult.reason);
+  if (relapseResult.status       === 'rejected') logger.warn('blackMirrorAnalytics: relapseEntries fetch failed', relapseResult.reason);
+  if (restructuringResult.status === 'rejected') logger.warn('blackMirrorAnalytics: cueRestructurings fetch failed', restructuringResult.reason);
 
   const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
   const withinLookback = (entry) => {
@@ -536,9 +589,10 @@ export const aggregateCrossModuleData = async () => {
     return d && d >= cutoff;
   };
 
-  const blackMirror = (bmResult.status      === 'fulfilled' ? bmResult.value      || [] : []).map(normalizeBMEntry).filter(withinLookback);
-  const journal     = (journalResult.status === 'fulfilled' ? journalResult.value || [] : []).map(normalizeJournalEntry).filter(withinLookback);
-  const relapse     = (relapseResult.status === 'fulfilled' ? relapseResult.value || [] : []).map(normalizeRelapseEntry).filter(withinLookback);
+  const blackMirror    = (bmResult.status            === 'fulfilled' ? bmResult.value            || [] : []).map(normalizeBMEntry).filter(withinLookback);
+  const journal        = (journalResult.status       === 'fulfilled' ? journalResult.value       || [] : []).map(normalizeJournalEntry).filter(withinLookback);
+  const relapse        = (relapseResult.status       === 'fulfilled' ? relapseResult.value       || [] : []).map(normalizeRelapseEntry).filter(withinLookback);
+  const restructurings = (restructuringResult.status === 'fulfilled' ? restructuringResult.value || [] : []);
 
   // Intentional work time: hours spent in INTENTIONAL_TOOLS apps, separately bucketed
   // from distraction-classified screen time. Legacy entries without intentionalToolTime
@@ -551,6 +605,7 @@ export const aggregateCrossModuleData = async () => {
     blackMirror,
     journal,
     relapse,
+    restructurings,
     intentionalWorkTime,
     meta: {
       fetchedAt: new Date().toISOString(),
