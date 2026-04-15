@@ -1,7 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { authService } from '../utils/authService';
 
+// Finding 5: Black Mirror is gated post-v1. Flag mirrors App.jsx.
+const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
+
+// Finding 20 remediation: Icons hoisted to module scope so the object is
+// constructed once per module load rather than once per render.
 // Oura-style minimalist icons
 const Icons = {
   dashboard: (
@@ -63,18 +68,35 @@ const Icons = {
   )
 };
 
+// Finding 20 remediation: nav config hoisted to module scope.
+// Finding 5: Black Mirror entry omitted unless feature flag is enabled.
+const NAV_ITEMS = [
+  { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard },
+  { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal },
+  { path: '/killlist', label: 'Kill List', mobileLabel: 'Kill', icon: Icons.killList },
+  { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
+  ...(BLACK_MIRROR_ENABLED
+    ? [{ path: '/blackmirror', label: 'Black Mirror', mobileLabel: 'Mirror', icon: Icons.blackMirror }]
+    : []),
+  { path: '/relapse', label: 'Relapse', mobileLabel: 'Relapse', icon: Icons.relapse },
+  { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis },
+];
+
 export default function Navbar({ onLogout, user }) {
   const location = useLocation();
 
-  const navItems = [
-    { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard },
-    { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal },
-    { path: '/killlist', label: 'Kill List', mobileLabel: 'Kill', icon: Icons.killList },
-    { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
-    { path: '/blackmirror', label: 'Black Mirror', mobileLabel: 'Mirror', icon: Icons.blackMirror },
-    { path: '/relapse', label: 'Relapse', mobileLabel: 'Relapse', icon: Icons.relapse },
-    { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis },
-  ];
+  const navItems = NAV_ITEMS;
+  // Mobile grid column count reflects actual item count (7 with Black Mirror,
+  // 6 without). useMemo avoids re-building the class string on every render.
+  const mobileGridClass = useMemo(
+    () => `grid h-16 ${
+      navItems.length === 7 ? 'grid-cols-7' :
+      navItems.length === 6 ? 'grid-cols-6' :
+      navItems.length === 5 ? 'grid-cols-5' :
+      'grid-cols-7'
+    }`,
+    [navItems.length]
+  );
 
   return (
     <>
@@ -147,7 +169,7 @@ export default function Navbar({ onLogout, user }) {
 
       {/* Mobile bottom nav bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-oura-border">
-        <div className="grid grid-cols-7 h-16">
+        <div className={mobileGridClass}>
           {navItems.map(item => {
             const isActive = location.pathname === item.path;
             return (

@@ -1,9 +1,25 @@
 
 import logger from './logger';
 
-// Memoization cache for expensive calculations
+// Memoization cache for expensive calculations.
+// Finding 7 remediation: TTL tightened to 60s. The cache key now also includes
+// a hash of each entry's updatedAt/lastUpdated so edits invalidate correctly.
 const calculationCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 60 * 1000; // 60 seconds
+
+// Produce a small digest over updatedAt (or createdAt) timestamps so edits
+// that don't change array length still bust the cache. Intentionally cheap —
+// ordering is not required, only the XOR-of-timestamps is used as a fingerprint.
+const fingerprintCollection = (arr) => {
+  if (!arr || arr.length === 0) return '0';
+  let acc = 0;
+  for (const item of arr) {
+    const u = item?.updatedAt ?? item?.lastUpdated ?? item?.createdAt;
+    const t = u?.toDate ? u.toDate().getTime() : new Date(u || 0).getTime();
+    acc = (acc ^ (Number.isFinite(t) ? t : 0)) >>> 0;
+  }
+  return acc.toString(36);
+};
 
 // Temporal decay: recent activity counts more than old activity
 const getTemporalWeight = (createdAt) => {
@@ -37,18 +53,19 @@ export const clarityScoreUtils = {
 
   // Calculate total clarity score from user data
   calculateClarityScore: async (userData) => {
-    // Create cache key from user data hash
+    // Finding 7 remediation: cache key now includes per-collection fingerprints
+    // of updatedAt/createdAt timestamps, so in-place edits invalidate the cache.
     const cacheKey = JSON.stringify({
       journalCount: userData.journalEntries?.length || 0,
       killCount: userData.killTargets?.length || 0,
       relapseCount: userData.relapseEntries?.length || 0,
       blackMirrorCount: userData.blackMirrorEntries?.length || 0,
-      lastUpdate: Math.max(
-        0,
-        ...[userData.journalEntries, userData.killTargets, userData.relapseEntries, userData.blackMirrorEntries]
-          .filter(arr => arr && arr.length > 0)
-          .map(arr => new Date(arr[0].createdAt).getTime())
-      )
+      hardLessonsCount: userData.hardLessons?.length || 0,
+      j_fp: fingerprintCollection(userData.journalEntries),
+      k_fp: fingerprintCollection(userData.killTargets),
+      r_fp: fingerprintCollection(userData.relapseEntries),
+      bm_fp: fingerprintCollection(userData.blackMirrorEntries),
+      hl_fp: fingerprintCollection(userData.hardLessons),
     });
 
     // Check cache first

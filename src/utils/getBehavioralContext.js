@@ -13,6 +13,16 @@
  */
 import { getAuth } from 'firebase/auth';
 import { readUserData } from './firebaseUtils';
+import logger from './logger';
+import {
+  COLLECTIONS,
+  RELAPSE_FIELDS,
+  KILL_TARGET_FIELDS,
+  HARD_LESSON_FIELDS,
+  JOURNAL_FIELDS,
+  BLACK_MIRROR_FIELDS,
+  USER_SETTINGS_FIELDS,
+} from './schema';
 
 const contextCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -30,17 +40,28 @@ export async function getBehavioralContext(userId) {
   if (cached && now() - cached.at < CACHE_TTL) return cached.value;
 
   try {
+    // Finding 6 remediation: per-collection errors are logged (not silently
+    // swallowed) and tracked in `missingCollections` so downstream consumers
+    // can detect partial context and warn the user or retry.
+    const missingCollections = [];
+    const loadCollection = (name) =>
+      readUserData(name).catch((err) => {
+        logger.warn('behavioral context fetch failed', { collection: name, err: err?.message });
+        missingCollections.push(name);
+        return [];
+      });
+
     const [killTargets, relapseEntries, hardLessons, blackMirrorEntries, journalEntries, userSettings] = await Promise.all([
-      readUserData('killTargets').catch(() => []),
-      readUserData('relapseEntries').catch(() => []),
-      readUserData('hardLessons').catch(() => []),
-      readUserData('blackMirrorEntries').catch(() => []),
-      readUserData('journalEntries').catch(() => []),
-      readUserData('userSettings').catch(() => []),
+      loadCollection(COLLECTIONS.KILL_TARGETS),
+      loadCollection(COLLECTIONS.RELAPSE_ENTRIES),
+      loadCollection(COLLECTIONS.HARD_LESSONS),
+      loadCollection(COLLECTIONS.BLACK_MIRROR_ENTRIES),
+      loadCollection(COLLECTIONS.JOURNAL_ENTRIES),
+      loadCollection(COLLECTIONS.USER_SETTINGS),
     ]);
 
     // BER-137: identity direction from user settings
-    const identityDirection = (userSettings || [])[0]?.identityDirection || null;
+    const identityDirection = (userSettings || [])[0]?.[USER_SETTINGS_FIELDS.IDENTITY_DIRECTION] || null;
 
     const windowMs14 = 14 * 24 * 60 * 60 * 1000;
     const windowMs7 = 7 * 24 * 60 * 60 * 1000;
@@ -48,15 +69,15 @@ export async function getBehavioralContext(userId) {
 
     // --- Kill List ---
     const activeKillTargets = (killTargets || [])
-      .filter(t => t.status === 'active')
+      .filter(t => t[KILL_TARGET_FIELDS.STATUS] === 'active')
       .map(t => {
-        const escapes = t.escapeData || [];
+        const escapes = t[KILL_TARGET_FIELDS.ESCAPES] || [];
         const lastAutopsy = escapes.length
           ? escapes[escapes.length - 1].date || null
           : null;
         return {
-          title: t.title || '',
-          streak: t.streak || 0,
+          title: t[KILL_TARGET_FIELDS.TITLE] || '',
+          streak: t[KILL_TARGET_FIELDS.STREAK] || 0,
           escapeCount: escapes.length,
           lastAutopsy,
         };
@@ -70,15 +91,16 @@ export async function getBehavioralContext(userId) {
 
     const archetypeCounts = {};
     recentRelapses.forEach(e => {
-      if (e.selectedSelf) archetypeCounts[e.selectedSelf] = (archetypeCounts[e.selectedSelf] || 0) + 1;
+      const archetype = e[RELAPSE_FIELDS.ARCHETYPE];
+      if (archetype) archetypeCounts[archetype] = (archetypeCounts[archetype] || 0) + 1;
     });
     const dominantRelapseArchetype = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
     // --- Hard Lessons: violated rules ---
     const violatedHardLessons = (hardLessons || [])
-      .filter(l => l.isRuleViolation && l.ruleGoingForward)
+      .filter(l => l[HARD_LESSON_FIELDS.IS_VIOLATION] && l[HARD_LESSON_FIELDS.RULE])
       .map(l => ({
-        rule: l.ruleGoingForward,
+        rule: l[HARD_LESSON_FIELDS.RULE],
         violatedApprox: l.createdAt?.toDate?.()?.toISOString?.() ?? l.timestamp
           ? new Date(l.timestamp).toISOString()
           : null,
@@ -88,8 +110,8 @@ export async function getBehavioralContext(userId) {
     let blackMirrorTrend = null;
     if ((blackMirrorEntries || []).length >= 4) {
       const sorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
-      const recent = sorted.slice(0, 2).map(e => e.blackMirrorIndex || 0);
-      const older = sorted.slice(2, 4).map(e => e.blackMirrorIndex || 0);
+      const recent = sorted.slice(0, 2).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
+      const older = sorted.slice(2, 4).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
       const recentAvg = recent.reduce((s, v) => s + v, 0) / recent.length;
       const olderAvg = older.reduce((s, v) => s + v, 0) / older.length;
       if (recentAvg < olderAvg * 0.85) blackMirrorTrend = 'improving';
@@ -103,7 +125,7 @@ export async function getBehavioralContext(userId) {
     );
     const moodCounts = {};
     recentJournals.forEach(e => {
-      const mood = e.mood || e.selectedMood;
+      const mood = e[JOURNAL_FIELDS.MOOD] || e[JOURNAL_FIELDS.MOOD_ALT];
       if (mood) moodCounts[mood] = (moodCounts[mood] || 0) + 1;
     });
     const journalMoodPattern = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -124,11 +146,13 @@ export async function getBehavioralContext(userId) {
       journalMoodPattern,
       identityDirection, // BER-137
       totalEntryCount,   // BER-167
+      missingCollections, // Finding 6: surface partial-load state to consumers
     };
 
     contextCache.set(cacheKey, { at: now(), value });
     return value;
-  } catch {
+  } catch (err) {
+    logger.warn('behavioral context build failed', err?.message);
     return buildEmpty();
   }
 }
@@ -143,6 +167,7 @@ function buildEmpty() {
     journalMoodPattern: null,
     identityDirection: null,
     totalEntryCount: 0, // BER-167
+    missingCollections: [], // Finding 6
   };
 }
 

@@ -7,14 +7,27 @@
  *
  * Cadence-enforced: user cannot generate more than once per cadence period.
  *
+ * Finding 13 remediation: returns a discriminated union —
+ *   { status: 'ok', briefing } on success
+ *   { status: 'locked', nextEligibleAt, remainingDays } when cadence blocks
+ * Throws only for genuinely exceptional failures (missing userId, write error).
+ *
  * @param {string} userId
  * @param {string} cadence - 'weekly' | 'biweekly'
- * @returns {Promise<SynthesisBriefing>}
- * @throws {string} 'CADENCE_LOCK:<ISO date>' if within cadence period
+ * @returns {Promise<{status:'ok',briefing:object}|{status:'locked',nextEligibleAt:string,remainingDays:number}>}
  */
 import { readUserData, writeData } from './firebaseUtils';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import logger from './logger';
+import {
+  COLLECTIONS,
+  RELAPSE_FIELDS,
+  KILL_TARGET_FIELDS,
+  HARD_LESSON_FIELDS,
+  JOURNAL_FIELDS,
+  BLACK_MIRROR_FIELDS,
+  USER_SETTINGS_FIELDS,
+} from './schema';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
 
@@ -27,30 +40,36 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
   const cadenceDays = CADENCE_DAYS[cadence] ?? 7;
 
   // --- Cadence check ---
-  const syntheses = await readUserData('syntheses').catch(() => []);
+  const syntheses = await readUserData(COLLECTIONS.SYNTHESES).catch(() => []);
   const sorted = (syntheses || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
   const lastBriefing = sorted[0];
 
   if (lastBriefing?.generatedAt) {
     const daysSinceLast = (Date.now() - new Date(lastBriefing.generatedAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceLast < cadenceDays) {
-      const nextAt = new Date(new Date(lastBriefing.generatedAt).getTime() + cadenceDays * 24 * 60 * 60 * 1000);
-      throw new Error(`CADENCE_LOCK:${nextAt.toISOString()}`);
+      const nextEligibleAt = new Date(
+        new Date(lastBriefing.generatedAt).getTime() + cadenceDays * 24 * 60 * 60 * 1000
+      );
+      return {
+        status: 'locked',
+        nextEligibleAt: nextEligibleAt.toISOString(),
+        remainingDays: Math.max(0, Math.ceil(cadenceDays - daysSinceLast)),
+      };
     }
   }
 
   // --- Pull data from all 5 modules + user settings ---
   const [relapseEntries, killTargets, hardLessons, blackMirrorEntries, journalEntries, userSettings] = await Promise.all([
-    readUserData('relapseEntries').catch(() => []),
-    readUserData('killTargets').catch(() => []),
-    readUserData('hardLessons').catch(() => []),
-    readUserData('blackMirrorEntries').catch(() => []),
-    readUserData('journalEntries').catch(() => []),
-    readUserData('userSettings').catch(() => []),
+    readUserData(COLLECTIONS.RELAPSE_ENTRIES).catch(() => []),
+    readUserData(COLLECTIONS.KILL_TARGETS).catch(() => []),
+    readUserData(COLLECTIONS.HARD_LESSONS).catch(() => []),
+    readUserData(COLLECTIONS.BLACK_MIRROR_ENTRIES).catch(() => []),
+    readUserData(COLLECTIONS.JOURNAL_ENTRIES).catch(() => []),
+    readUserData(COLLECTIONS.USER_SETTINGS).catch(() => []),
   ]);
 
   // BER-137: identity direction
-  const identityDirection = (userSettings || [])[0]?.identityDirection || null;
+  const identityDirection = (userSettings || [])[0]?.[USER_SETTINGS_FIELDS.IDENTITY_DIRECTION] || null;
 
   const now = Date.now();
   const windowMs28 = 28 * 24 * 60 * 60 * 1000;
@@ -60,33 +79,34 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
   const recentRelapses = (relapseEntries || []).filter(e => now - getTimestamp(e) < windowMs28);
   const archetypeCounts = {};
   recentRelapses.forEach(e => {
-    if (e.selectedSelf) archetypeCounts[e.selectedSelf] = (archetypeCounts[e.selectedSelf] || 0) + 1;
+    const archetype = e[RELAPSE_FIELDS.ARCHETYPE];
+    if (archetype) archetypeCounts[archetype] = (archetypeCounts[archetype] || 0) + 1;
   });
   const dominantArchetype = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
   const recentRelapseCount = recentRelapses.length;
 
   // --- Kill List: active targets, escape patterns ---
-  const activeTargets = (killTargets || []).filter(t => t.status === 'active');
-  const highEscapeTargets = activeTargets.filter(t => (t.escapeData || []).length >= 3);
+  const activeTargets = (killTargets || []).filter(t => t[KILL_TARGET_FIELDS.STATUS] === 'active');
+  const highEscapeTargets = activeTargets.filter(t => (t[KILL_TARGET_FIELDS.ESCAPES] || []).length >= 3);
   const totalEscapes28d = (killTargets || []).reduce((sum, t) => {
-    const recent = (t.escapeData || []).filter(e => e.date && now - new Date(e.date).getTime() < windowMs28);
+    const recent = (t[KILL_TARGET_FIELDS.ESCAPES] || []).filter(e => e.date && now - new Date(e.date).getTime() < windowMs28);
     return sum + recent.length;
   }, 0);
 
   // --- Hard Lessons: violated finalized rules ---
   const violatedRules = (hardLessons || [])
-    .filter(l => l.isRuleViolation && l.ruleGoingForward)
-    .map(l => ({ rule: l.ruleGoingForward, source: 'Hard Lessons' }));
+    .filter(l => l[HARD_LESSON_FIELDS.IS_VIOLATION] && l[HARD_LESSON_FIELDS.RULE])
+    .map(l => ({ rule: l[HARD_LESSON_FIELDS.RULE], source: 'Hard Lessons' }));
 
   const finalizedRules = (hardLessons || [])
-    .filter(l => l.isFinalized && l.ruleGoingForward)
-    .map(l => l.ruleGoingForward);
+    .filter(l => l[HARD_LESSON_FIELDS.IS_FINALIZED] && l[HARD_LESSON_FIELDS.RULE])
+    .map(l => l[HARD_LESSON_FIELDS.RULE]);
 
   // --- Journal: dominant mood ---
   const recentJournals = (journalEntries || []).filter(e => now - getTimestamp(e) < windowMs28);
   const moodCounts = {};
   recentJournals.forEach(e => {
-    const mood = e.mood || e.selectedMood;
+    const mood = e[JOURNAL_FIELDS.MOOD] || e[JOURNAL_FIELDS.MOOD_ALT];
     if (mood) moodCounts[mood] = (moodCounts[mood] || 0) + 1;
   });
   const dominantMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -98,8 +118,8 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
   let signalDelta = 'stable';
   if ((blackMirrorEntries || []).length >= 4) {
     const bmSorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
-    const recent2 = bmSorted.slice(0, 2).map(e => e.blackMirrorIndex || 0);
-    const older2 = bmSorted.slice(2, 4).map(e => e.blackMirrorIndex || 0);
+    const recent2 = bmSorted.slice(0, 2).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
+    const older2 = bmSorted.slice(2, 4).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
     const recentAvg = recent2.reduce((s, v) => s + v, 0) / 2;
     const olderAvg = older2.reduce((s, v) => s + v, 0) / 2;
     if (recentRelapseCount === 0 && totalEscapes28d <= 1 && recentAvg < olderAvg * 0.9 && violatedRules.length === 0 && !hasNegativeMood) signalDelta = 'improving';
@@ -151,8 +171,8 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     },
   };
 
-  await writeData('syntheses', briefing);
-  return briefing;
+  await writeData(COLLECTIONS.SYNTHESES, briefing);
+  return { status: 'ok', briefing };
 }
 
 function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, dominantMood, recentRelapseCount, signalDelta }) {
@@ -195,8 +215,6 @@ async function generateConfrontationQuestion(data) {
     data.identityDirection && `User's stated identity direction: "${data.identityDirection}"`,
   ].filter(Boolean).join('\n');
 
-  const systemPrompt = `You generate one confrontation question. Rules:\n- One question only. No preamble, no context, no explanation.\n- Derived directly from the data provided. No invented patterns.\n- Not answerable with yes/no. Requires honest reflection.\n- No advisory language, no suggestions, no affirmations, no motivational framing.\n- Uncomfortable, specific, unflinching.`;
-
   try {
     const functions = getFunctions();
     const oracleFn = httpsCallable(functions, 'oracle', { timeout: 20000 });
@@ -205,7 +223,8 @@ async function generateConfrontationQuestion(data) {
       moduleName: 'synthesis',
       userContext: {},
       tone: 'stoic',
-      customSystemPrompt: systemPrompt,
+      // Finding 3 remediation: server-side prompt template lookup.
+      promptContextKey: 'synthesis_confrontation',
     });
     const q = result.data?.feedback?.trim();
     if (q) return q.endsWith('?') ? q : q + '?';

@@ -17,8 +17,15 @@ import AuthForm from './components/AuthForm';
 import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
 
+// Finding 5 remediation: Black Mirror is deferred (post-v1). The route is
+// gated behind an env flag so it can be re-enabled without a code change.
+// Default: off. Beta deploys must not ship with VITE_ENABLE_BLACK_MIRROR=true.
+const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
+
 // Lazy-loaded pages (code splitting)
-const BlackMirror = React.lazy(() => import('./components/BlackMirror'));
+const BlackMirror = BLACK_MIRROR_ENABLED
+  ? React.lazy(() => import('./components/BlackMirror'))
+  : null;
 const KillList = React.lazy(() => import('./pages/KillList'));
 const Journal = React.lazy(() => import('./pages/Journal'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -60,10 +67,9 @@ function App() {
   const latestSynthesisIsNew = useSynthesisNewFlag(user?.uid || null);
 
   useEffect(() => {
-    // Log API key to confirm Vite environment variables are loading
-    logger.log("🔥 VITE_FIREBASE_API_KEY:", import.meta.env.VITE_FIREBASE_API_KEY ? "✅ Present" : "❌ Missing");
-    
-    // Check Firebase connection status
+    // Finding 9: boot-time env diagnostic removed. firebase.js fails fast on
+    // missing config, so this log was duplicative and also trained the team
+    // to log sensitive fields the same way.
     const firebaseStatus = checkFirebaseConnection();
     logger.log("🔍 Firebase Status on App Load:", firebaseStatus);
 
@@ -248,19 +254,21 @@ function App() {
               </InlineErrorBoundary>
             } 
           />
-          <Route 
-            path="/blackmirror" 
-            element={
-              <InlineErrorBoundary name="BlackMirror">
-                {user ? (
-                  <Suspense fallback={<PageLoader />}>
-                    <BlackMirror />
-                  </Suspense>
-                ) : <Navigate to="/auth" />}
-              </InlineErrorBoundary>
-            } 
-          />
-          
+          {BLACK_MIRROR_ENABLED && (
+            <Route
+              path="/blackmirror"
+              element={
+                <InlineErrorBoundary name="BlackMirror">
+                  {user ? (
+                    <Suspense fallback={<PageLoader />}>
+                      <BlackMirror />
+                    </Suspense>
+                  ) : <Navigate to="/auth" />}
+                </InlineErrorBoundary>
+              }
+            />
+          )}
+
           <Route
             path="/synthesis"
             element={

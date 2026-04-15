@@ -339,3 +339,35 @@ All `onSnapshot()` and `getDocs()` calls verified connected and properly unsubsc
 ---
 
 *Scan completed by QA Engineer agent (BER-116) on 2026-04-09. No files were modified. Repo state verified unchanged: 3 untracked files (DAILY_REVIEW.md, DEAD_CODE_REPORT.md, SCORING.md) before and after scan.*
+
+---
+
+## 2026-04-14 (QA Remediation Sprint — Finding 25 reconciliation)
+
+> Reconciliation pass against the current working tree, performed during the remediation sprint. This is not a full delta scan — it only resolves inaccuracies carried forward in prior entries.
+
+### Corrections
+
+- **`subscribeToUserData` (firebaseUtils.js)** — prior scans (BER-83, BER-116) flagged this export as unused. **FALSE POSITIVE as of 2026-04-14.** The function is actively imported and called by `src/pages/KillList.jsx` (`KillList`'s real-time listener) and `src/hooks/useSynthesisNewFlag.js`. Grep confirms two live consumers. Marking RESOLVED (not via deletion — via verification that it is in use).
+
+- **`clarityScore.js` `console.warn`** — BER-116 flagged a bare `console.warn`. Current file uses `logger.warn`. **RESOLVED** (inspection confirms no stray `console.warn` remains in the file).
+
+### New items (from remediation sprint)
+
+- No new dead code introduced this sprint. Additions are all active: `src/utils/schema.js` (consumed by `getBehavioralContext.js`, `generateSynthesisBriefing.js`, `detectDriftSignals.js`), server-side `PROMPT_CONTEXT_REGISTRY` in `functions/index.js` (consumed by clients of `oracle`).
+
+### Residual outstanding
+
+- `src/utils/localStorage.js` — entire file still appears orphaned per BER-116. Not touched this sprint (out of scope). Carried forward.
+
+### Cumulative unresolved
+
+| Item | Status |
+|------|--------|
+| `localStorage.js` (orphan file) | Open — carried from BER-116 |
+| `subscribeToUserData` | **Resolved** — in use |
+| `clarityScore.js` console.warn | **Resolved** — already logger.warn |
+
+---
+
+*Reconciliation completed by SSE remediation agent on 2026-04-14. Full weekly sweep to resume on next BER-scheduled run.*

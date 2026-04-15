@@ -9,11 +9,22 @@
  *
  * @param {Array} relapseEntries - user's relapse log entries
  * @param {Array} killTargets - user's kill list targets (with escapeData)
- * @param {number} streakThreshold - consecutive periods required to trigger signal (default: 3)
- * @returns {Array<DriftSignal>}
+ * @param {number} streakThreshold - consecutive periods required to trigger signal (default: DRIFT_STREAK_THRESHOLD)
+ * @returns {{ signals: Array<DriftSignal>, skippedCount: number }}
  */
-export function detectDriftSignals(relapseEntries = [], killTargets = [], streakThreshold = 3) {
+import logger from './logger';
+import { RELAPSE_FIELDS, KILL_TARGET_FIELDS } from './schema';
+
+// Finding 22 remediation: magic threshold promoted to a named constant.
+// Three consecutive calendar days of the same archetype / precursor state is
+// the persistence threshold below which we treat occurrences as noise.
+export const DRIFT_STREAK_THRESHOLD = 3;
+
+export function detectDriftSignals(relapseEntries = [], killTargets = [], streakThreshold = DRIFT_STREAK_THRESHOLD) {
   const signals = [];
+  // Finding 14: entries skipped due to missing required fields. Surfaced in
+  // the return value so consumers can warn when the detector is blind to data.
+  let skippedCount = 0;
 
   // Extract timestamp in ms from a relapse entry
   function getTime(entry) {
@@ -48,10 +59,17 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
   const archetypeDays = {};
   relapseEntries.forEach(e => {
     const t = getTime(e);
-    if (!t || !e.selectedSelf) return;
+    const archetype = e[RELAPSE_FIELDS.ARCHETYPE];
+    // Finding 14: guard missing archetype and surface the skip.
+    if (!archetype) {
+      logger.debug?.('drift: skipped entry without selectedSelf', { id: e.id });
+      skippedCount += 1;
+      return;
+    }
+    if (!t) return;
     const day = dayKey(t);
-    if (!archetypeDays[e.selectedSelf]) archetypeDays[e.selectedSelf] = [];
-    archetypeDays[e.selectedSelf].push(day);
+    if (!archetypeDays[archetype]) archetypeDays[archetype] = [];
+    archetypeDays[archetype].push(day);
   });
   Object.entries(archetypeDays).forEach(([archetype, days]) => {
     const streak = longestConsecutiveStreak(days);
@@ -73,7 +91,7 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
     const t = getTime(e);
     if (!t) return;
     const day = dayKey(t);
-    (e.precursorConditions || []).forEach(p => {
+    (e[RELAPSE_FIELDS.PRECURSORS] || []).forEach(p => {
       if (!precursorDays[p]) precursorDays[p] = [];
       precursorDays[p].push(day);
     });
@@ -96,12 +114,13 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
   const seen48 = new Set();
 
   killTargets.forEach(target => {
-    (target.escapeData || []).forEach(escape => {
+    (target[KILL_TARGET_FIELDS.ESCAPES] || []).forEach(escape => {
       if (!escape.date) return;
       const escapeTime = new Date(escape.date).getTime();
 
       relapseEntries.forEach(entry => {
         const entryTime = getTime(entry);
+        const entryArchetype = entry[RELAPSE_FIELDS.ARCHETYPE];
         if (Math.abs(entryTime - escapeTime) < windowMs48) {
           const key = `${target.id}-${escape.date}-${entry.id}`;
           if (!seen48.has(key)) {
@@ -109,11 +128,11 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
             signals.push({
               type: 'correlated_escape',
               description: `Kill List escape and relapse entry within 48h`,
-              detail: `Target: ${target.title}${entry.selectedSelf ? ` · Archetype: ${entry.selectedSelf}` : ''}`,
+              detail: `Target: ${target[KILL_TARGET_FIELDS.TITLE]}${entryArchetype ? ` · Archetype: ${entryArchetype}` : ''}`,
               severity: 'signal',
-              targetTitle: target.title,
+              targetTitle: target[KILL_TARGET_FIELDS.TITLE],
               targetId: target.id,
-              entryArchetype: entry.selectedSelf,
+              entryArchetype,
             });
           }
         }
@@ -128,7 +147,7 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
   const contextShiftDays = new Set();
   relapseEntries.forEach(e => {
     const t = getTime(e);
-    if (!t || !e.precursorContext) return;
+    if (!t || !e[RELAPSE_FIELDS.CONTEXT_SHIFT]) return;
     contextShiftDays.add(dayKey(t));
   });
   const contextShiftStreak = longestConsecutiveStreak([...contextShiftDays]);
@@ -142,5 +161,5 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
     });
   }
 
-  return signals;
+  return { signals, skippedCount };
 }

@@ -37,9 +37,10 @@ export function useSynthesisAutoGenerate(userId) {
           if (daysSince < cadenceDays) return;
         }
 
-        await generateSynthesisBriefing(userId, cadence);
+        // Finding 13: discriminated result instead of thrown CADENCE_LOCK string.
+        const result = await generateSynthesisBriefing(userId, cadence);
+        if (result?.status === 'locked') return;
       } catch (err) {
-        if (err.message?.startsWith('CADENCE_LOCK:')) return;
         logger.warn('useSynthesisAutoGenerate: silent generation failed:', err?.message);
       }
     };

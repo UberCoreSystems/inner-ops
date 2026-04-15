@@ -1,3 +1,75 @@
+## [2026-04-15] — DAILY_REVIEW
+
+**Reviewer:** QA Engineer (64512fb6)
+**Commits reviewed:** 5a01e5b, 7bd7044, f3a3ca7, eedb1fb, a5866eb, 81e1570, 43d24b0, 7e47eb3
+
+---
+
+### Section 1 — Quality Findings
+
+**Kill List — FAIL (medium)**
+
+BUG: `getDb()` called without `await` in KillListDashboard.jsx at lines 165 and 283. `getDb` is async (`firebase.js:162`). Both call sites assign the return to `db` without awaiting — `db` holds a Promise, not a Firestore instance. `doc(db, ...)` throws, caught silently.
+
+- Line 165 (`handleClosureSubmit`): `closureOracleResponse` / `escapeOracleResponse` not persisted after kill/escape closure.
+- Line 283 (`handleOracleReaction`): Oracle reaction not persisted to `killTargets`.
+
+Fix: `const db = await getDb();` at both locations.
+
+Severity: MEDIUM — data not persisted, no crash, no core kill/escape flow failure.
+
+**Journaling — PASS**
+
+BER-259 (Gibbs sequence + action plan) verified. Action plan required for new entries, not edits (intentional). Submit guard at both form level and logic level (line 486). `actionPlan` persisted to Firestore (line 527).
+
+**Kill List — PASS (closure flow)**
+
+BER-252 storage model conflict resolved. Kill: `writeData('confirmedKills')` + `deleteData('killTargets')` — BER-243 model used. Escape: `markAsEscaped` updates killTargets with closure data. Modal dismiss mid-Oracle surfaces response via toast. 43d24b0 submit guard fix: loading/submitting split prevents hung Oracle from freezing Add Contract.
+
+**Black Mirror — PASS**
+
+BER-264 (Cue Restructuring Layer 4) verified. `aggregateCrossModuleData` fetches `cueRestructurings`. `generateInsights` passes `data.restructurings` to `buildRestructuringAlignment`. Fourth insight category `restructuring_alignment` live. `getAnalyticsReport()` callable from BlackMirror.jsx:172. Language compliant.
+
+**Relapse Radar — PASS**
+
+BER-260 (persistence-based streak detection): `longestConsecutiveStreak` correct — deduplicates, sorts, 24h increments. `DRIFT_STREAK_THRESHOLD = 3` exported. Trigger 3 (48h window) unchanged. BER-261 (Trigger 4 life transition): `RELAPSE_FIELDS.CONTEXT_SHIFT = 'precursorContext'` — field correct.
+
+**Oracle Cloud Function — PASS**
+
+BER-262 (regret calibration): AUTOPSY RATIONALIZATION CALIBRATION block scoped to escape entries only. Correctly distinguishes nostalgia/minimization/relief framing as habit-weakening signal. No moralistic language.
+
+**Synthesis Briefing — PASS**
+
+BER-257 (route guard): `SynthesisGuard` wraps `<Routes>`. EmergencyButton outside guard — overlay unaffected. `useSynthesisNewFlag` uses `subscribeToUserData` (confirmed present). GUARD_EXEMPT covers all auth/onboarding paths.
+
+**Hard Lessons — PASS** — no changes.
+
+**Emergency Button — PASS**
+
+BER-190 (mantra language) resolved. All 5 mantras verified: no soft or motivational language.
+
+---
+
+### Section 2 — UX Improvement Opportunities
+
+IMPROVEMENT — SynthesisGuard `/profile` not in GUARD_EXEMPT. Navigating to profile while Synthesis is new redirects to dashboard. Unexpected friction. Low priority.
+
+IMPROVEMENT (carry-forward) — Dashboard synthesis-ready card not cleared in-session after visiting SynthesisBriefing.
+
+IMPROVEMENT (carry-forward) — QuickJournalModal discards metacognitiveDepth.
+
+IMPROVEMENT (carry-forward) — OracleModal no timeout on loading state.
+
+IMPROVEMENT (carry-forward) — Empty Pattern Data section (Relapse Radar) has no first-session onboarding prompt.
+
+---
+
+### Deploy Status: READY
+
+`getDb()` bug is a silent persistence failure, not a crash or core flow blocker. Kill/escape actions complete correctly. Oracle responses surface in modal. Only Firestore write-back of Oracle responses is broken. Fix before next sync.
+
+---
+
 ## [2026-04-13] — DAILY_REVIEW
 
 **Commits reviewed:** 18994d8 (BER-232), ab91e90 (BER-229)

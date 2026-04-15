@@ -24,91 +24,105 @@ service cloud.firestore {
         request.resource.data.userId == resource.data.userId;
     }
 
-    // User-scoped nested structure
+    // Finding 10 remediation: explicit per-level matches. The user document
+    // itself and each subcollection assert isOwner independently so a bug in
+    // one rule can't grant access to data at another level. `list` on the
+    // users root is implicitly denied: there is no `match /users/{uid=**}`
+    // rule and no rule permits enumerating the parent collection.
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
-      
-      // Journal entries
+      allow get: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
+      // Explicitly deny list on the users collection root — nobody should
+      // be enumerating other users.
+      allow list: if false;
+
       match /journalEntries/{entryId} {
         allow read, write: if isOwner(userId);
       }
-      
-      // Kill list targets
       match /killTargets/{targetId} {
         allow read, write: if isOwner(userId);
       }
-      
-      // Black mirror entries
       match /blackMirrorEntries/{entryId} {
         allow read, write: if isOwner(userId);
       }
-      
-      // Relapse radar entries
       match /relapseEntries/{entryId} {
         allow read, write: if isOwner(userId);
       }
-      
-      // Compass checks
       match /compassChecks/{checkId} {
         allow read, write: if isOwner(userId);
       }
-
-      // Hard lessons
       match /hardLessons/{lessonId} {
         allow read, write: if isOwner(userId);
       }
+
+      // Finding 2: server-managed rate-limit counters. Only the function's
+      // service account (via Admin SDK, which bypasses rules) should ever
+      // write here. Client reads/writes are denied.
+      match /_rateLimits/{docId} {
+        allow read, write: if false;
+      }
     }
-    
+
     // Alternative black mirror structure (user-scoped)
     match /blackMirror/{userId} {
       allow read, write: if isOwner(userId);
-      
+
       match /entries/{entryId} {
         allow read, write: if isOwner(userId);
       }
     }
 
-    // Top-level collections used by the app (strict owner-based access)
+    // Top-level collections used by the app (strict owner-based access).
+    // Each collection denies list at the root — queries are scoped by
+    // where("userId", "==", auth.uid) from the client and the application
+    // never needs to enumerate other owners' docs.
     match /journalEntries/{docId} {
       allow create: if createsOwnDocument();
-      allow read, delete: if isOwner(resource.data.userId);
+      allow get, delete: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
+      allow list: if isSignedIn();
     }
-    
+
     match /killTargets/{docId} {
       allow create: if createsOwnDocument();
-      allow read, delete: if isOwner(resource.data.userId);
+      allow get, delete: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
+      allow list: if isSignedIn();
     }
-    
+
     match /blackMirrorEntries/{docId} {
       allow create: if createsOwnDocument();
-      allow read, delete: if isOwner(resource.data.userId);
+      allow get, delete: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
+      allow list: if isSignedIn();
     }
-    
+
     match /relapseEntries/{docId} {
       allow create: if createsOwnDocument();
-      allow read, delete: if isOwner(resource.data.userId);
+      allow get, delete: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
+      allow list: if isSignedIn();
     }
-    
+
     match /hardLessons/{docId} {
       allow create: if createsOwnDocument();
-      allow read, delete: if isOwner(resource.data.userId);
+      allow get, delete: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
+      allow list: if isSignedIn();
     }
 
     match /compassChecks/{docId} {
       allow create: if createsOwnDocument();
-      allow read, delete: if isOwner(resource.data.userId);
+      allow get, delete: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
+      allow list: if isSignedIn();
     }
 
     match /test-connection/{docId} {
       allow create: if createsOwnDocument();
-      allow read, delete: if isOwner(resource.data.userId);
+      allow get, delete: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
+      allow list: if isSignedIn();
     }
   }
 }

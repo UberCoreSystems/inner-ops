@@ -211,10 +211,11 @@ const RelapseRadar = () => {
     return top ? { name: top[0], count: top[1] } : null;
   }, [relapseEntries]);
 
-  const driftSignals = useMemo(() =>
-    detectDriftSignals(relapseEntries, killTargets, driftThreshold),
-    [relapseEntries, killTargets, driftThreshold]
-  );
+  const driftSignals = useMemo(() => {
+    // Finding 14: detectDriftSignals now returns { signals, skippedCount }.
+    const { signals } = detectDriftSignals(relapseEntries, killTargets, driftThreshold);
+    return signals;
+  }, [relapseEntries, killTargets, driftThreshold]);
 
   const crossSignalTimeline = useMemo(() => {
     const windowMs = 7 * 24 * 60 * 60 * 1000;

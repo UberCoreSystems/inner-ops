@@ -735,3 +735,273 @@ The 2026 longitudinal data shows inhibition-only attempts have a measurable fail
 *Carried HIGH items unactioned: Black Mirror Active Restriction Layer, Oracle Reactance Architecture (blocked BER-180), Predictive Governance Layer*
 
 ---
+
+## Week of 2026-04-14
+
+**Cycle:** 6 — Post-Kill Archive Sprint
+**Vectors covered:** Competitor & Market, Behavioral Science, User Psychology, Codebase Gaps
+**Prior cycle HIGH items status:**
+- Synthesis Briefing Push Architecture → PARTIALLY RESOLVED (BER-223 auto-gen on cadence + BER-232 Dashboard forced state) — enforcement gap remains (see Opportunity 1)
+- Enforcement Architecture as Philosophical Foil → SHIPPED (BER-241, BER-231) — onboarding + empty state copy updated
+- Predictive Governance Layer → OPEN — competitive pressure continues
+- Black Mirror Active Restriction Layer → OPEN — research scoped, implementation not started
+- Oracle Reactance Architecture → PARTIALLY SHIPPED (BER-200, BER-216) — customSystemPrompt wired in cloud function
+
+---
+
+### Implemented Since Last Review
+
+**Confirmed Kills Historical Archive (BER-243):** confirmedKills Firestore collection. Targets that complete their full streak are silently archived (no celebration, no auto-Oracle). Archive visible in dedicated read-only section in KillList.jsx. Oracle statement available on-demand per archived kill. KillClosureModal.jsx added as separate component. Stats now correctly source kill counts from the archive rather than active target state.
+
+**PRECURSOR_MAP gap resolved (BER-249):** Six Oracle-returned precursor conditions (rationalization, environmental_exposure, craving, minimization, boredom, numbness) were silently unmapped — users navigating from Oracle to Relapse Radar found Step 1 unpopulated and could not proceed. All 10 conditions now resolve to selectable UI options.
+
+**Cross-Module Journal Extraction (BER-247):** CrossModuleExtractionPrompts.jsx added. After a journal entry, Oracle-detected Kill List contracts or Relapse Radar precursor signals are surfaced as dismissible extraction prompts. Journal entries can now feed forward into Kill List target creation and Relapse Radar logging.
+
+**QuickJournalModal metacognitive depth persistence (BER-246):** Category and intensity persist via localStorage between quick journal sessions.
+
+**Kill List submit guard decoupled from Oracle (43d24b0):** loading and submitting state split. Oracle hung state can no longer freeze the Add Contract button. Missing required fields now surface live as "Missing: ..." indicator rather than silent button disable.
+
+No philosophy drift observed in any of the above implementations.
+
+**Still open from prior HIGH items:**
+- Synthesis Briefing route-level enforcement (see Opportunity 1 below — residual gap from BER-232)
+- Black Mirror Active Restriction Layer — no implementation
+- Predictive Governance Layer — open
+- Kill List milestone text evaluative phrases (Cycle 5 MEDIUM) — unresolved
+- All other MEDIUM carries from prior cycles remain unactioned
+
+---
+
+### New Opportunities
+
+---
+
+**1. Synthesis Briefing — Route-Level Enforcement Gap**
+- **Module(s):** Synthesis Engine, Dashboard
+- **Source vector:** V4
+- **Impact:** HIGH (residual from BER-230 — partially resolved by BER-223/BER-232, not fully closed)
+- **Beta-ready:** YES
+- **Rationale:** BER-232 implemented a non-dismissible forced state on the Dashboard (latestSynthesisIsNew at line 647). The card reads "A new cross-module intelligence briefing has been generated. Open it to proceed." with a single "Open Briefing" button and no dismiss control. BER-223 confirmed auto-generation on cadence. However, the forced state is Dashboard-scoped only. latestSynthesisIsNew does not intercept routing: a user who navigates directly to /journal, /kill-list, /relapse, or any other module after auto-generation bypasses the forced state entirely. The confrontation architecture remains opt-outable by simply not visiting the Dashboard. True enforcement requires a global route guard: if latestSynthesisIsNew is true, redirect any route to Dashboard (or surface an interstitial) until the briefing is opened, which triggers isNew: false via the existing SynthesisBriefing.jsx clear path (lines 67-76). The mechanism is in place; the enforcement scope is wrong.
+- **Philosophy check:** Self-governance tools that permit avoidance of confrontation by route choice are structurally misaligned with the product's core promise. The Synthesis Briefing is the system's most direct confrontation mechanism. If it can be bypassed by navigating away from the Dashboard, it is optional in practice regardless of how it is framed in theory.
+
+---
+
+**2. Confirmed Kills Oracle — Missing Behavioral Arc**
+- **Module(s):** Kill List
+- **Source vector:** V4
+- **Impact:** MEDIUM
+- **Beta-ready:** YES
+- **Rationale:** requestKillOracleStatement (KillList.jsx lines 745-764) generates the Oracle statement for a confirmed kill using only: title, category label, reflection notes, and active duration (line 751). For a target killed after multiple escapes with documented autopsy patterns, the Oracle receives no context about: escape count, aggregated autopsy patterns (dominant context/rationalization themes, already available via aggregateAutopsyPatterns()), implementation intention record, or whether prevention plans were executed. The Oracle escape autopsy path already has contextual injection for mid-process Oracle calls (line 522). The confirmed kill Oracle — the final Oracle statement on the entire behavioral arc — is the least data-rich Oracle call in the module. A target killed on the first attempt receives the same Oracle architecture as one killed after 7 escapes across 180 days. The Oracle cannot produce a meaningful final statement about a behavioral war it has no record of.
+- **Philosophy check:** Measurement as truth. The Oracle's authority on a confirmed kill rests on its ability to reference the actual record. Without that record, the Oracle is generating generic commentary on the fact of elimination — which is not confrontation, it is decoration.
+
+---
+
+**3. Kill List Milestone Text — Remaining Evaluative Phrases (Carried from Cycle 5)**
+- **Module(s):** Kill List
+- **Source vector:** V4
+- **Impact:** MEDIUM
+- **Beta-ready:** YES
+- **Rationale:** KillList.jsx line 450 still contains three evaluative milestone phrases: "Building momentum." (days 3-14), "Deep into the fight now." (days 14-30), and "This is becoming part of who I am." (days 30+). "Building momentum" is progress encouragement. "This is becoming part of who I am" is identity incorporation language — applying an identity narrative to the act of behavioral restraint converts a factual streak record into a psychological reward. This was flagged in Cycle 5 and remains unresolved. The completion message (line 388) is now correct — factual and stripped of praise. The milestone text remains misaligned. The milestone text's function is to record behavioral progress factually, not to evaluate or validate it. Evaluation of behavioral progress is the Oracle's role, not a milestone record.
+- **Philosophy check:** Evaluative milestone text transforms a factual streak record into a motivational reward. This contradicts the no-encouragement standard enforced everywhere else in the module.
+
+---
+
+**4. Violation Pattern Grid — Market-Validated by Disciplinely**
+- **Module(s):** Kill List, Relapse Radar, Hard Lessons
+- **Source vector:** V1
+- **Impact:** MEDIUM
+- **Beta-ready:** YES
+- **Rationale:** Disciplinely's current analytics include: violation trends over time, which rules break most often, time-of-day patterns (when violations occur), and recovery rate tracking. This is a simpler, single-module, offline implementation of the Violation Pattern Grid opportunity first identified in Cycle 3 (still unimplemented in Inner Ops). The market has independently validated that temporal violation pattern visualization is a meaningful analytics feature. Inner Ops has richer data: cross-module violation records (Kill List escapes, Relapse Radar entries, Hard Lessons violations), archetype classification, and autopsy context. Disciplinely does this without AI; Inner Ops could do it with Oracle-level context composited across all modules. The competitive window in which Inner Ops has this opportunity without a comparable competitor already offering it is closing. Disciplinely's upcoming features page confirms 0 items in progress and 0 planned — they are not building further on this capability, but they have confirmed the user demand for it.
+- **Philosophy check:** Pattern visibility is measurement as truth. The visualization exposes behavioral timing topology that individual entries cannot surface. No gamification risk: this is measurement, not reward.
+
+---
+
+**5. Reverse Cross-Module Flow — Journal Extraction is One-Directional**
+- **Module(s):** Journaling, Kill List, Relapse Radar
+- **Source vector:** V4
+- **Impact:** MEDIUM
+- **Beta-ready:** YES
+- **Rationale:** BER-247 implements extraction FROM journal INTO Kill List and Relapse Radar. After a journal entry, the system detects and surfaces Kill List contracts and Relapse Radar precursor signals. This is journal → other modules. The reverse direction does not exist: Kill List escapes, Relapse Radar entries, and Hard Lessons violations do not prompt structured journal reflection. A Kill List escape autopsy captures context and rationalization, but the user is immediately routed to the Oracle — no journal prompt follows. A Relapse Radar entry captures precursor conditions, but the user is not prompted to reflect in the module designed for structured reflection. The AVE circuit breaker after a Kill List escape (3-second delay + Oracle) is a partial intervention, but it is Oracle-directed, not journal-directed. Prompting a structured journal entry after a significant behavioral event (escape, relapse, Hard Lesson violation) would produce a richer signal record and populate the journal with high-signal entries rather than only routine daily reflections. Cross-module extraction is currently a one-way street, and the most behaviorally significant moments flow out of the journal's reach entirely.
+- **Philosophy check:** Serves the product. Journal is defined as "structured reflection for signal extraction." The highest-signal moments in the user's behavioral record are currently generated outside the Journal module. A reverse extraction flow captures those moments in the most appropriate container for reflective processing.
+
+---
+
+**6. Enforcement Market Proliferation — Habi Anti-Charity Entry**
+- **Module(s):** All (positioning/competitive)
+- **Source vector:** V1, V3
+- **Impact:** HIGH (competitive intelligence and positioning opportunity — no feature work required)
+- **Beta-ready:** YES
+- **Rationale:** Habi (iOS, early 2026) launches a third enforcement model variation: anti-charity stakes (failed goal sends money to an organization the user opposes). This is distinct from Overlord (AI enforcement + calls/blocks) and Forfeit (direct financial penalty). The external consequence market now has three distinct variations — financial penalties, AI enforcement, and anti-charity stakes — all within months of each other. The Beeminder forum discussion on Overlord confirms the theoretical vulnerability of all three: critics note that "executive function doesn't respond well to top-down punishment" and that external enforcement models do not produce lasting change. No empirical reversion data is available yet for Overlord or Habi (too new). The proliferation of enforcement-first architectures is now consistent and accelerating. Inner Ops' positioning must explicitly name and distinguish itself from the entire external-enforcement tier — not just from gamification apps. Users who burn through one enforcement app and seek another are Inner Ops' highest-intent prospects. They need to be able to find Inner Ops at the moment of disillusionment. BER-241 addressed positioning against enforcement at onboarding; the distinction should also be present at acquisition-facing surfaces.
+- **Philosophy check:** Serves the product. The distinction is behavioral-science-grounded: external enforcement removes the internal agency that self-governance requires. Naming the competitor category explicitly is a philosophical statement, not marketing language.
+
+---
+
+**7. Clarity Score Novice — Emoji in Loading State**
+- **Module(s):** Dashboard, Clarity Score
+- **Source vector:** V4
+- **Impact:** LOW
+- **Beta-ready:** YES
+- **Rationale:** Dashboard.jsx line 38 initializes clarity score with icon: '🌱' (plant emoji) for Clarity Novice — this renders during page load before score data arrives. Once data loads (lines 457-458), clarityScoreUtils.getClarityRank() returns the correct geometric icon (dot symbol). The emoji is visible only during the initial render but violates the no-emoji convention and is inconsistent with the geometric system defined in clarityScore.js (line 244: icon: '·'). Fix: initialize line 38 with icon: '·' to match the loaded state.
+- **Philosophy check:** Minor consistency issue. The geometric icon system is correct; the loading state initialization is not.
+
+---
+
+### Emerging Signals
+
+**1. Enforcement reversion data window opening**
+Overlord, Habi, and the expanded Forfeit ecosystem will have enough user tenure in 6-9 months to produce observable reversion data. The first empirical evidence that enforcement-first architectures produce behavioral reversion after the constraint period ends will be a significant positioning moment for Inner Ops. Monitor r/Beeminder, the Beeminder forum, and App Store reviews of Overlord for the first user reports of "I stopped using it and everything came back." That data, when it emerges, is the acquisition signal: the users who report enforcement failure are ready for internal governance.
+
+**2. Disciplinely confirmed stagnant — no roadmap**
+Disciplinely's "upcoming features" page shows 0 items in progress, 0 planned. Their public roadmap is an empty user-voting form. No AI integration, no funding announcements, no 2026 feature updates beyond March 21. The philosophical competitor remains intelligence-shallow and resource-constrained. If Disciplinely is still at this development pace post-beta, Inner Ops' Oracle + synthesis moat is structurally secure against the closest philosophical competitor. The competitive threat remains: they have time-of-day violation pattern visualization; Inner Ops does not.
+
+**3. Cross-module journal extraction creates a forward signal pipeline that needs a reverse**
+BER-247's forward extraction (journal → Kill List, journal → Relapse Radar) produces better data quality for those modules. But the absence of reverse flow (escape/relapse → journal) means the highest-signal behavioral events are not systematically captured in the module designed for structured reflection. This will become visible as users accumulate records: Kill List and Relapse Radar entries will have more contextual depth than journals, because journals only capture routine reflection, not the critical event moments.
+
+**4. Accountability category vocabulary collapsing**
+"Accountability app" now describes everything from Rocky.ai (soft coaching) to Overlord (AI enforcement) to Inner Ops (self-governance). The category label has lost discriminating power. Inner Ops' own vocabulary — "self-governance," "internal command" — is correct but not yet established in the market. As the enforcement-first architecture hardens into the default category definition, the window to claim distinct vocabulary is narrowing.
+
+---
+
+### Philosophy Watch
+
+**Overlord (continued):** Confirmed "enforcement only — no strategy, no coaching." The Beeminder forum discussion captures the emerging critique: external enforcement is "purely enforcement" with "no genuine alternative provided." This is the exact positioning gap Inner Ops fills. Watch for App Store reviews starting to report enforcement fatigue or reversion — that data does not yet exist but the theoretical critique is building.
+
+**Habi (new):** Anti-charity model adds emotional loading to the financial consequence architecture. Not a philosophical competitor to Inner Ops — no intelligence, no confrontation, no self-governance framing. Represents continued proliferation of the enforcement market. The users who find Habi's anti-charity mechanics manipulative rather than motivating are pre-qualified Inner Ops candidates.
+
+**Disciplinely (confirmed stagnant):** Zero roadmap items. No AI development. Closest philosophical competitor remains intelligence-shallow. They have time-of-day violation pattern visualization; Inner Ops does not. This is the one feature area where Disciplinely has a current differentiation that Inner Ops has not yet implemented.
+
+**White space (maintained):** No competitor is doing cross-module behavioral intelligence synthesis with confrontational AI. The Oracle + cross-module synthesis remains Inner Ops' sole meaningful competitive moat. The moat holds until a well-resourced competitor builds both simultaneously. Disciplinely has the philosophy but not the intelligence. Overlord has AI but not confrontation or insight.
+
+---
+
+### Sources (Cycle 6)
+
+- [Disciplinely — Upcoming Features (0 items planned)](https://disciplinely.app/upcoming-features/)
+- [Disciplinely — Violation patterns, time-of-day analytics](https://disciplinely.app/)
+- [Overlord — AI Accountability Partner](https://overlord.app/)
+- [Overlord Documentation](https://www.overlord.app/docs/)
+- [Beeminder Forum — Self-Control is now an Engineering Problem (Overlord critique thread)](https://forum.beeminder.com/t/self-control-is-now-an-engineering-problem-we-will-have-personal-ai-overlords/12477)
+- [Habi — Best Accountability Apps 2026](https://habi.app/insights/accountability-apps/)
+- [Habi App — anti-charity, screen time blocking](https://habi.app/)
+- [GoalsWon — Best Accountability Apps 2026](https://www.goalswon.com/blog/23-apps-that-will-keep-you-accountable-and-motivated-to-achieve-all-your-personal-goals)
+- [Habitify — New Tiered Pricing April 2026](https://feedback.habitify.me/changelog/new-tiered-pricing)
+- [Buabang et al. — Leveraging Cognitive Neuroscience for Habits (Trends in Cognitive Sciences, 2025)](https://www.sciencedirect.com/science/article/pii/S1364661324002663)
+- [Applying Habit Formation Science to Psychological Treatments (PMC, 2026)](https://pmc.ncbi.nlm.nih.gov/articles/PMC12318445/)
+- [Reflective Journaling and Metacognitive Awareness in Higher Education (Reflective Practice, 2020)](https://www.tandfonline.com/doi/full/10.1080/14623943.2020.1716708)
+
+*Report by Product Researcher — UberCore Systems*
+*Issue: [BER-255](/BER/issues/BER-255)*
+*HIGH items: Synthesis Briefing Route-Level Enforcement Gap (residual new finding), Enforcement Market Proliferation (competitive intelligence)*
+*Escalation created for Synthesis Briefing route-level enforcement gap*
+
+### Supplementary Findings — Research Agent (Completed Post-Report)
+
+The following were surfaced after initial report submission. The Disciplinely finding contradicts a prior report assessment and requires correction.
+
+---
+
+**S1. Disciplinely AI Layer — ACTIVE BUILD (Contradicts Cycle 6 Main Report)**
+- **Source vector:** V1
+- **Impact:** HIGH (competitive threat upgrade — not stagnant)
+- **Finding:** Disciplinely's public roadmap lists "AI to analyze progress" as **in progress** — the top-voted feature with 7 community votes and one of 4 confirmed active builds. Additionally, a recent Reddit update thread (r/iosapps/1rrzy19) confirmed a feature update adding trigger logging: tracking what caused a habit/rule to break, with small intervention tips on violation. This is directionally toward AI-assisted pattern analysis, not yet shipped but actively in development.
+- **Correction to main report:** The Cycle 6 main report assessed Disciplinely as "confirmed stagnant — 0 roadmap items." This was based on a WebFetch of the upcoming features page that returned no items. The research agent's deeper scrape found the AI item as actively in progress. The stagnant assessment should be treated as incorrect. Disciplinely is actively building an AI analysis layer.
+- **Revised threat assessment:** If Disciplinely ships "AI to analyze progress" — even a basic pattern-analysis layer on violation data — their philosophical proximity to Inner Ops combined with their offline-first architecture and violation/rules vocabulary would create the first genuine philosophical competitor with intelligence. The current competitive distance depends on the Oracle remaining the sole AI behavioral intelligence layer in this market. That assumption has a shorter remaining window than previously estimated. Monitor Disciplinely's App Store update cadence for AI feature shipping.
+
+---
+
+**S2. Financial Enforcement Reversion — Empirically Confirmed (Two Peer-Reviewed Papers)**
+- **Source vector:** V2, V3
+- **Impact:** HIGH (positioning validation — no feature work required)
+- **Finding:** Two peer-reviewed sources confirm that financial enforcement mechanisms produce short-lived compliance and behavioral reversion after enforcement stops:
+  - **Glanz, Thirumurthy & D'Cruze — "Effectiveness of Financial Incentives for Health Behavior Change"** (Annual Review of Public Health, Vol. 47, April 2026; PMID: 41435287): Synthesizes 39 systematic reviews. Key finding: financial incentives produce "modest, often short-lived improvements." Identified mechanism gap: no validated path from financial incentive to sustained behavior change. DOI indexed at [pubmed.ncbi.nlm.nih.gov/41435287](https://pubmed.ncbi.nlm.nih.gov/41435287/)
+  - **Winkler-Schor & Brauer — "What Happens When Payments End? Fostering Long-Term Behavior Change With Financial Incentives"** (Perspectives on Psychological Science, 2024; PMID: 38767968): Direct finding: "financial incentives rarely lead to long-term behavior change because program participants tend to revert to their initial behaviors soon after payments stop." Mechanism identified: financial incentives undermine intrinsic motivation, producing reversion. [journals.sagepub.com/doi/10.1177/17456916241247152](https://journals.sagepub.com/doi/10.1177/17456916241247152)
+- **Relevance:** Overlord, Forfeit, Habi (anti-charity), Beeminder, stickK, and Accountable AI all use financial consequence as the primary or secondary behavioral mechanism. Both papers confirm these mechanisms produce reversion after the enforcement period ends. Inner Ops is the only product in the category whose architecture does not depend on financial enforcement — making it the only product whose behavioral change mechanism is not empirically refuted by peer-reviewed evidence. This distinction should be explicit in positioning language.
+- **Philosophy check:** Serves the product and requires no features. The research validates the architecture. The distinction is: Inner Ops produces behavioral change through internalized self-governance; enforcement apps produce compliance that reverts when external pressure stops. The literature now confirms this difference in explicit terms.
+
+---
+
+**S3. Overlord/Forfeit Merged Into Single Product**
+- **Source vector:** V1
+- **Impact:** LOW (structural clarification)
+- **Finding:** Overlord is no longer a standalone app — it has been integrated as an "Overlord mode" within the existing Forfeit app. Confirmed by GoalsWon February 2026 review. The HN launch of Overlord (item 46074729, ~December 2025) was met primarily with privacy skepticism: multiple commenters called it "spyware," noted the privacy policy 404'd at launch, and raised concerns about no self-hosted option. User adoption resistance appears to center on data trust rather than philosophical objection to enforcement.
+- **Implication:** The trust barrier for enforcement-heavy AI monitoring is real and documented. Users who find enforcement architecturally acceptable may still resist the data-access requirements of products like Overlord. Inner Ops' architecture — which does not require screen monitoring, Mac activity access, GPS, or credit card transaction data — is a structural advantage with this user population.
+
+---
+
+**S4. Accountable AI — New 2026 Enforcement App (iOS)**
+- **Source vector:** V1
+- **Impact:** LOW (new market entry — not a philosophical competitor)
+- **Finding:** Accountable AI (accountableai.xyz) launched in 2026 on iOS. Mechanism: set a goal, provide proof (photo, GPS, Strava, or AI verification), and entertainment apps stay blocked until proof is submitted. Explicitly non-motivational copy: "if you are reading an article about accountability apps, you probably need more than a habit tracker." iOS only. The product is enforcement-only with app blocking — no intelligence, no behavioral analysis, no confrontation. Philosophically: external enforcement without internal insight.
+- **Philosophy check:** Not a competitor. Serves the external-compliance user, not the self-governance user.
+
+---
+
+**Supplementary Sources:**
+- [Disciplinely — Upcoming Features (AI in progress)](https://disciplinely.app/upcoming-features/)
+- [Reddit — Disciplinely trigger logging update](https://www.reddit.com/r/iosapps/comments/1rrzy19/update_to_disciplinely_an_app_focused_on/)
+- [Glanz et al. — Financial Incentives Review (Annual Review of Public Health, 2026)](https://pubmed.ncbi.nlm.nih.gov/41435287/)
+- [Winkler-Schor & Brauer — What Happens When Payments End (Perspectives on Psychological Science, 2024)](https://journals.sagepub.com/doi/10.1177/17456916241247152)
+- [HN — Overlord launch thread](https://news.ycombinator.com/item?id=46074729)
+- [GoalsWon — Overlord mode in Forfeit (Feb 2026)](https://www.goalswon.com/blog/23-apps-that-will-keep-you-accountable-and-motivated-to-achieve-all-your-personal-goals)
+- [Accountable AI](https://www.accountableai.xyz/blog/best-accountability-app-2026)
+
+
+
+
+**S5. Staged Reflective Prompt Sequencing — CHI 2026 Direct Evidence (Validates Journal Gibbs Carry)**
+- **Source vector:** V2
+- **Impact:** HIGH (upgrades Cycle 3 Journal Gibbs Prompt Architecture carry from theoretical to empirically confirmed)
+- **Finding:** Kim et al. (MIT Media Lab, ACM CHI 2026; DOI: 10.1145/3772318.3791615) conducted a 15-day in-the-wild study (N=20) comparing free-form voice journaling against a Gross Emotion Regulation Process Model-guided condition with five explicit staged prompts. The staged group generated significantly more counterfactual alternatives, articulated more concrete if-then action plans, and implemented more plans for self-driven change. Zhao et al. (Information Processing & Management 2026; DOI: 10.1016/j.ipm.2025.104574) found that Borton's 3-stage model (What? / So what? / Now what?) implemented via LLM outperformed flat templates on reflection depth and intention to continue. Both studies confirm that prompt sequencing — a theoretically ordered set of reflection stages — outperforms unstructured or flat-template prompting on behavioral outcome measures.
+- **Direct implication for Inner Ops Journal:** The Cycle 3 Journal Gibbs Prompt Architecture opportunity (unimplemented, carried 3 cycles) is now supported by two 2025-2026 peer-reviewed CHI papers. The Inner Ops Journal uses guided prompts but does not enforce a stage sequence or make any stage non-skippable. The action plan stage (the stage that converts insight into behavioral change) is optional. These papers confirm that the action plan stage must be non-optional and must follow — not precede — emotional processing stages for the module to deliver on its stated purpose.
+- **Philosophy check:** A journal module that produces less behavioral output because its prompts are unsequenced is not serving the module definition "structured reflection for signal extraction." Sequencing is a measurement accuracy issue, not a UX comfort issue.
+
+---
+
+**S6. Streak-Based Drift Detection — 2026 Empirical Confirmation (Validates Cycle 3 Carry)**
+- **Source vector:** V2
+- **Impact:** MEDIUM (confirms Cycle 3 Streak-Gated Drift Detection carry with direct empirical grounding)
+- **Finding:** MDPI Electronics (2026; DOI: 10.3390/electronics15040885) — "From Patterns to Deviations: Detecting Behavioural Drift for Mental Health Monitoring" — introduces a "sustained streak mechanism": drift is only flagged when deviation persists across N consecutive time periods, explicitly to differentiate transient anomalies from meaningful behavioral change. Evaluated on the NetHealth longitudinal cohort (500+ students). Persistence-gating reduces spurious alerts from day-to-day noise.
+- **Current Inner Ops gap confirmed:** detectDriftSignals.js uses frequency-based detection (3+ occurrences in a 7-day window), not persistence-based detection (N consecutive days of deviation). A user who logs 3 relapse entries in one intense week is detected identically to one who logs exactly one per week for three consecutive weeks — the second pattern is a structurally stronger drift signal. The 2026 paper validates persistence-gating as the correct detection model. The Inner Ops implementation does not implement it.
+- **Philosophy check:** Signal over noise is core to the product philosophy. A drift detector that fires on frequency noise is not an early warning system — it is an anxiety generator. Persistence-gating is a precision requirement, not a feature reduction.
+
+---
+
+**S7. Digital Detox Reversion — RCT Confirms Self-Efficacy as the Only Durable Mechanism**
+- **Source vector:** V2
+- **Impact:** MEDIUM (strengthens Black Mirror Cue Restructuring Flow carry; adds empirical grounding for incomplete module promise)
+- **Finding:** Brockmeier et al. (Computers in Human Behavior 2025; DOI: 10.1016/j.chb.2025.108624) — preregistered RCT (N=787, 3-week follow-up, objectively measured usage) testing action planning + coping planning as smartphone reduction intervention. Result: smartphone usage time did not change significantly during the post-intervention period. Self-efficacy was the only significant mediating mechanism for durable reduction. Planning alone was insufficient. Separately, Schmitgen et al. (Computers in Human Behavior 2025; DOI: 10.1016/j.chb.2025.108610) found that 72h smartphone restriction produces neurobiological changes in reward-salience circuitry (nucleus accumbens, anterior cingulate cortex) — but these regions are known for rapid reinstatement, supporting cue-restructuring over restriction-only as a long-term strategy.
+- **Direct implication for Black Mirror:** Black Mirror currently measures attention loss (BMI) and builds pattern data, but has no mechanism for building self-efficacy — the only empirically validated driver of durable screen time reduction. The Cue Restructuring Flow opportunity (Cycle 3 MEDIUM, unimplemented) is the mechanism by which the module could build self-efficacy: walking the user through structured environmental modification so that future cue encounter produces a different response. Measurement without a self-efficacy construction pathway is surveillance. Surveillance alone does not produce durable change, per this RCT.
+- **Philosophy check:** Serves the product. The module's stated purpose is attention sovereignty and reclamation, not measurement of attention loss. Measurement is the diagnostic layer; the reclamation layer requires a structured action path. This completes the module's stated promise without adding wellness framing.
+
+---
+
+**S8. Life Transition as Window of Opportunity — Mechanism Updated (Validates Cycle 3 Life Transition Detection)**
+- **Source vector:** V2
+- **Impact:** MEDIUM (confirms Cycle 3 Life Transition Detection carry with mechanism precision)
+- **Finding:** Johansson Rehn et al. (Transportation Research Part A, 2026; DOI: 10.1016/j.tra.2025.104792) found that changed routines — not biographical events per se — activate the window of opportunity for behavioral change. The mechanism is routine disruption. Whitmarsh et al. (WIREs Climate Change 2025; DOI: 10.1002/wcc.70014) confirmed in systematic review: both biographical events and exogenous disruptions create windows by fragmenting habitual behavior. The window closes once new routines crystallize.
+- **Mechanism correction for Inner Ops implementation:** The Cycle 3 Life Transition Detection opportunity has been framed around biographical life event categories (job change, relocation, relationship change). The 2026 research clarifies that the trigger is routine disruption state, not event category. The implementation should detect and respond to any reported context shift that disrupts routine — not only canonical life events. The window language should reflect mechanism: "Your routines are in flux. This is when behavioral patterns are most plastic." Not "You've had a life event."
+- **Philosophy check:** Serves the product. Precision self-governance requires naming the correct mechanism. "Life transition" as a category is imprecise; "routine disruption" is the mechanism. The difference matters for the implementation.
+
+---
+
+**S9. Regret Toward Old Behavior as Habit Weakening Mechanism — Oracle Calibration Note**
+- **Source vector:** V2
+- **Impact:** LOW (Oracle calibration insight for existing Kill List autopsy data)
+- **Finding:** Di Maio et al. (Applied Psychology: Health and Well-Being 2025; DOI: 10.1111/aphw.12623) found that regret toward the old habit predicted habit automaticity decline independently of positive intent toward replacement behavior. Negative affect toward the behavior being eliminated — not merely motivation toward the alternative — drives the weakening of habit encoding.
+- **Implication:** The Kill List escape autopsy already captures "what I told myself" (rationalization) — which implicitly captures the user's affective relationship with the behavior at the moment of escape. An Oracle calibrated to distinguish "the user is rationalizing comfort" vs. "the user is expressing regret and seeking structural help" would be more precisely calibrated to the mechanism that actually weakens the habit. This is not a new autopsy field — it is an Oracle calibration note for the existing data.
+- **Philosophy check:** Measurement precision. The autopsy data already contains affective signal. The Oracle is not yet calibrated to read it as such.
+
+---
+
+**Supplementary Sources (Behavioral Science, S5-S9):**
+- [Kim et al. — Breaking Negative Cycles: Reflection-To-Action System (CHI 2026)](https://doi.org/10.1145/3772318.3791615)
+- [Zhao et al. — PaceMind: LLM-Mediated Journaling System (Information Processing & Management, 2026)](https://doi.org/10.1016/j.ipm.2025.104574)
+- [MDPI Electronics 2026 — Sustained Streak Mechanism for Behavioural Drift Detection](https://doi.org/10.3390/electronics15040885)
+- [Brockmeier et al. — Planning a Digital Detox RCT (Computers in Human Behavior, 2025)](https://doi.org/10.1016/j.chb.2025.108624)
+- [Schmitgen et al. — Smartphone Restriction and Cue Neural Activity (Computers in Human Behavior, 2025)](https://doi.org/10.1016/j.chb.2025.108610)
+- [Johansson Rehn et al. — Key Events as Window of Opportunity (Transportation Research Part A, 2026)](https://doi.org/10.1016/j.tra.2025.104792)
+- [Whitmarsh et al. — Moments of Change Systematic Review (WIREs Climate Change, 2025)](https://doi.org/10.1002/wcc.70014)
+- [Di Maio et al. — Habit Substitution and Regret Mechanism (Applied Psychology: Health and Well-Being, 2025)](https://doi.org/10.1111/aphw.12623)
+- [Rebar et al. — How Habitual is Everyday Life? EMA Study (Psychology & Health, 2025)](https://doi.org/10.1080/08870446.2025.2561149)
+
+---

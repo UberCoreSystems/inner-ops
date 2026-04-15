@@ -80,17 +80,19 @@ export default function SynthesisBriefing() {
     setGenerating(true);
     setCadenceLockDate(null);
     try {
-      const briefing = await generateSynthesisBriefing(userId, cadence);
-      setBriefings(prev => [briefing, ...prev]);
-      ouraToast.info('Briefing generated');
-    } catch (err) {
-      if (err.message?.startsWith('CADENCE_LOCK:')) {
-        const lockDate = new Date(err.message.split(':').slice(1).join(':'));
-        setCadenceLockDate(lockDate);
-      } else {
-        logger.error('Synthesis generation failed:', err);
-        ouraToast.error('Failed to generate briefing');
+      // Finding 13: discriminated return — no more string-coded errors.
+      const result = await generateSynthesisBriefing(userId, cadence);
+      if (result?.status === 'locked') {
+        setCadenceLockDate(new Date(result.nextEligibleAt));
+        return;
       }
+      if (result?.status === 'ok' && result.briefing) {
+        setBriefings(prev => [result.briefing, ...prev]);
+        ouraToast.info('Briefing generated');
+      }
+    } catch (err) {
+      logger.error('Synthesis generation failed:', err);
+      ouraToast.error('Failed to generate briefing');
     } finally {
       setGenerating(false);
     }

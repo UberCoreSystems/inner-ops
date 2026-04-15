@@ -527,8 +527,9 @@ export const callLLM = async (promptBundle, generationContext) => {
     };
     const tone = toneMap[userPrompt.selectedLenses?.[0]] || 'stoic';
 
-    // Load user profile for Oracle context (non-blocking — falls back gracefully)
-    const profile = await getUserProfile().catch(() => null);
+    // Finding 11 remediation: profile is injected by the caller. `null` when
+    // the caller omitted it or the profile fetch failed — we still proceed.
+    const profile = generationContext?.userProfile ?? null;
     const userContext = {
       ...(userPrompt.userContext || {}),
       ...(profile?.primaryDriver && { primaryDriver: profile.primaryDriver }),
@@ -536,11 +537,16 @@ export const callLLM = async (promptBundle, generationContext) => {
       ...(profile?.focusStatement && { focusStatement: profile.focusStatement }),
     };
 
-    // BER-200: Oracle Reactance Architecture — inject user's own pre-committed question
+    // BER-200: Oracle Reactance Architecture — request the server-side
+    // reactance template with the user's own pre-committed question.
+    // Finding 3 remediation: client no longer ships raw system prompt text.
     const triggeredCriterion = generationContext?.triggeredCriterion ?? null;
-    const reactanceInstruction = triggeredCriterion
-      ? `\n\nCONFRONTATION TRIGGER ACTIVE: The user pre-committed to this confrontation when the following condition was met: ${triggeredCriterion.dataSummary}. Their own question for this moment: "${triggeredCriterion.criterion.question}". Your response MUST: (1) state the data pattern plainly ("You have logged [dataSummary]"), (2) put their own question to them verbatim — do not paraphrase it, (3) continue with your confrontational analysis. The question comes from the user in a clear-headed state. Do not soften it.`
-      : '';
+    const reactanceParams = triggeredCriterion
+      ? {
+          dataSummary: triggeredCriterion.dataSummary,
+          question: triggeredCriterion.criterion?.question,
+        }
+      : null;
 
     const result = await oracleFn({
       entryText: userPrompt.entryText,
@@ -552,8 +558,10 @@ export const callLLM = async (promptBundle, generationContext) => {
       entryCount: typeof userPrompt.behavioralContext?.totalEntryCount === 'number'
         ? userPrompt.behavioralContext.totalEntryCount
         : 0,
-      // BER-200: reactance instruction appended when criterion is triggered
-      ...(reactanceInstruction ? { customSystemPrompt: reactanceInstruction } : {}),
+      // BER-200 via server-side template: promptContextKey + params
+      ...(reactanceParams
+        ? { promptContextKey: 'reactance', promptContextParams: reactanceParams }
+        : {}),
     });
 
     const { feedback, metacognitiveDepth = null } = result.data;
@@ -738,6 +746,10 @@ export const generateFeedback = async ({
     return buildFallbackFeedback(safeModuleName, 'No entry provided.');
   }
 
+  // Finding 11 remediation: profile fetch lifted out of callLLM so the data
+  // layer is the caller's responsibility. `null` on failure — callLLM tolerates.
+  const userProfile = await getUserProfile().catch(() => null);
+
   const userId = getUserKey(userContext);
   const themes = extractThemes(cleanEntry, safeModuleName);
   const lenses = selectLenses(themes, userPreferences).slice(0, MAX_LENSES);
@@ -782,6 +794,8 @@ export const generateFeedback = async ({
       strictRetry: true,
       // BER-200: pass resolved criterion so callLLM can augment system prompt
       triggeredCriterion,
+      // Finding 11: profile is supplied by the caller so callLLM stays pure
+      userProfile,
     });
 
     // Real Claude prose — skip validation/formatting entirely

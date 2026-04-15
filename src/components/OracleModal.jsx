@@ -17,9 +17,11 @@ const REACTIONS = [
 
 const MAX_REGEN = 3;
 
-// BER-136: call oracle CF directly with custom system prompt for regen/follow-up
-// BER-229: accept entryModuleName so journal regen gets DEPTH instruction from CF
-async function callOracleRaw(entryText, customSystemPrompt, entryModuleName) {
+// BER-136: call oracle CF directly for regen/follow-up.
+// BER-229: accept entryModuleName so journal regen gets DEPTH instruction from CF.
+// Finding 3 remediation: the system-prompt fragment is now requested by key,
+// not supplied as free text. The server-side registry owns the template.
+async function callOracleRaw(entryText, promptContext, entryModuleName) {
   try {
     const functions = getFunctions();
     const oracleFn = httpsCallable(functions, 'oracle', { timeout: 20000 });
@@ -28,7 +30,12 @@ async function callOracleRaw(entryText, customSystemPrompt, entryModuleName) {
       moduleName: entryModuleName === 'journal' ? 'journal' : 'oracle',
       userContext: {},
       tone: 'stoic',
-      customSystemPrompt,
+      ...(promptContext?.key
+        ? {
+            promptContextKey: promptContext.key,
+            promptContextParams: promptContext.params || {},
+          }
+        : {}),
     });
     return {
       feedback: result.data?.feedback?.trim() || null,
@@ -145,13 +152,14 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     if (regenCount >= MAX_REGEN || regenLoading || !entryText) return;
     setRegenLoading(true);
     try {
-      // BER-194: low data — suppress pattern-referencing in regen prompt
-      const dataDepthNote = (entryCount !== null && entryCount < 21)
-        ? ' This user has limited behavioral history. Do not reference established patterns, archetypes, or frequency counts — point to discrepancies within this single entry only.'
-        : '';
-      const systemPrompt = `The user has already seen one perspective on this data. Approach the same data from a different confrontational angle. Do not repeat the same observation. Do not soften your assessment. Identify a different pattern, contradiction, or uncomfortable truth than the one already surfaced.${dataDepthNote}`;
+      // Finding 3: template lives server-side. The server interprets
+      // entryCount (a number) to include or omit the data-depth caveat.
       // BER-229: pass entryModuleName so journal regen gets DEPTH from CF
-      const { feedback: regenFeedback, metacognitiveDepth: regenDepth } = await callOracleRaw(entryText, systemPrompt, entryModuleName);
+      const { feedback: regenFeedback, metacognitiveDepth: regenDepth } = await callOracleRaw(
+        entryText,
+        { key: 'oracle_regen', params: { entryCount } },
+        entryModuleName
+      );
       if (regenFeedback) {
         setDisplayFeedback(regenFeedback);
         setDisplayDepth(regenDepth);
@@ -172,8 +180,12 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     if (!followUpText.trim() || followUpUsed || followUpLoading || !entryText) return;
     setFollowUpLoading(true);
     try {
-      const systemPrompt = `The user is challenging your assessment with the following pushback: "${followUpText.trim()}". Do not back down from your position. Do not affirm their pushback. Do not reframe it encouragingly. Address their specific challenge directly and unflinchingly. Stay confrontational.`;
-      const { feedback: followUpFeedback } = await callOracleRaw(`Original context: ${entryText}\n\nUser's challenge: ${followUpText.trim()}`, systemPrompt);
+      // Finding 3: pushback text is now a parameter, not a system prompt.
+      // Server-side template wraps it into the challenge instruction.
+      const { feedback: followUpFeedback } = await callOracleRaw(
+        `Original context: ${entryText}\n\nUser's challenge: ${followUpText.trim()}`,
+        { key: 'oracle_challenge', params: { pushback: followUpText.trim() } }
+      );
       const response = followUpFeedback || 'Oracle unavailable. Challenge recorded.';
       setFollowUpResponse(response);
       setFollowUpUsed(true);

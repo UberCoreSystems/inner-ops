@@ -55,6 +55,10 @@ export default defineConfig({
     exclude: ['firebase', 'firebase/app', 'firebase/auth', 'firebase/firestore']
   },
   define: {
-    global: 'globalThis'
+    global: 'globalThis',
+    // Finding 26 remediation: expose an explicit compile-time flag so the
+    // logger can short-circuit its dev-only branches at build time. Terser's
+    // dead_code pass then removes the branch bodies entirely.
+    __INNER_OPS_IS_DEV__: JSON.stringify(process.env.NODE_ENV !== 'production')
   }
 })

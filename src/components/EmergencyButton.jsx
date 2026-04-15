@@ -79,8 +79,10 @@ const EmergencyButton = () => {
         timestamp: new Date().toISOString()
       };
 
-      await writeData('emergencyLogs', emergencyEntry);
-      
+      // Finding 8 remediation: crisis entries contain sensitive free-form
+      // text. Pass `sensitive: true` so writeData suppresses payload logging.
+      await writeData('emergencyLogs', emergencyEntry, { sensitive: true });
+
       ouraToast.success('Emergency moment logged');
 
       // Get Oracle guidance
@@ -92,7 +94,9 @@ const EmergencyButton = () => {
       openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());
       setStep('complete');
     } catch (error) {
-      logger.error('Error logging emergency:', error);
+      // Finding 8: never log the error object directly — it may contain the
+      // stringified payload. Surface only code + name for diagnostics.
+      logger.error('Error logging emergency:', { code: error.code, name: error.name });
       openOracleWithContent("Oracle unavailable. Entry recorded.");
       setStep('complete');
     } finally {
@@ -160,21 +164,36 @@ const EmergencyButton = () => {
                 <div className="space-y-6 animate-fade-in-up">
                   {/* Intensity Check */}
                   <div className="oura-card p-4 border-l-4 border-red-500">
-                    <label className="text-gray-400 text-sm block mb-3">How intense is this urge? (1-10)</label>
+                    {/* Finding 19 remediation: accessible slider with
+                        visible numeric readout and explicit ARIA metadata. */}
+                    <label htmlFor="urge-intensity" className="text-gray-400 text-sm block mb-3">
+                      How intense is this urge? (1-10) — current: {intensity}
+                    </label>
                     <div className="flex items-center gap-2">
                       <input
+                        id="urge-intensity"
                         type="range"
                         min="1"
                         max="10"
                         value={intensity}
                         onChange={(e) => setIntensity(parseInt(e.target.value))}
                         className="flex-1 accent-red-500"
+                        aria-label="Urge intensity"
+                        aria-valuemin={1}
+                        aria-valuemax={10}
+                        aria-valuenow={intensity}
+                        aria-valuetext={`${intensity} out of 10`}
                       />
-                      <span className={`text-2xl font-bold ${
-                        intensity >= 8 ? 'text-red-500' : 
-                        intensity >= 5 ? 'text-yellow-500' : 
-                        'text-green-500'
-                      }`}>{intensity}</span>
+                      <span
+                        aria-hidden="true"
+                        className={`text-2xl font-bold ${
+                          intensity >= 8 ? 'text-red-500' :
+                          intensity >= 5 ? 'text-yellow-500' :
+                          'text-green-500'
+                        }`}
+                      >
+                        {intensity}
+                      </span>
                     </div>
                   </div>
 

@@ -487,7 +487,8 @@ export default function Dashboard() {
           }
 
           // Compute behavioral drift signals (archetype frequency, precursor patterns, correlated escapes)
-          const detected = detectDriftSignals(rawUserData.relapseEntries || [], rawUserData.killTargets || []);
+          // Finding 14: detector now returns { signals, skippedCount }.
+          const { signals: detected } = detectDriftSignals(rawUserData.relapseEntries || [], rawUserData.killTargets || []);
           if (detected.length > 0) {
             setDriftSignals(detected);
           }

@@ -12,16 +12,13 @@ const requiredEnvVars = [
 ];
 const missingVars = requiredEnvVars.filter((varName) => !import.meta.env[varName]);
 
+// Finding 9 remediation: fail fast on missing config, never log API key status
+// at boot. In production the app refuses to initialize; in dev the thrown
+// error surfaces the exact missing variable to the developer.
 if (missingVars.length > 0) {
-  logger.error("❌ Missing Firebase environment variables:", missingVars);
-
-  if (!isDevEnvironment) {
-    throw new Error(
-      `Firebase configuration is missing required environment variables: ${missingVars.join(', ')}`
-    );
-  }
-
-  logger.warn("🚧 Firebase is misconfigured in development. Add required VITE_FIREBASE_* values to .env.");
+  throw new Error(
+    `Firebase configuration is missing required environment variables: ${missingVars.join(', ')}`
+  );
 }
 
 // Firebase configuration (no placeholder fallbacks)
@@ -32,22 +29,10 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Log Firebase configuration for debugging
-logger.log("🔥 Firebase Configuration Check:");
-logger.log("Project ID:", firebaseConfig.projectId);
-logger.log("API Key:", firebaseConfig.apiKey ? "✅ Present" : "❌ Missing");
-logger.log("Auth Domain:", firebaseConfig.authDomain);
-
-if (missingVars.length === 0) {
-  logger.log("✅ All Firebase environment variables are present");
-}
-
 // Initialize Firebase app
 let app;
 try {
   app = initializeApp(firebaseConfig);
-  logger.log("✅ Firebase app initialized successfully");
-  logger.log("🎯 Connected to project:", app.options.projectId);
 } catch (error) {
   logger.error("❌ Firebase initialization failed:", error);
   throw new Error("Failed to initialize Firebase app");

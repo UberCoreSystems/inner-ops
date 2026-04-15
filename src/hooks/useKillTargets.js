@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   collection, 
   query, 
@@ -29,7 +29,10 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
     ? targetDate.toISOString().split('T')[0]
     : new Date().toISOString().split('T')[0];
 
-  const fetchTargets = async () => {
+  // Finding 16 remediation: fetchTargets is wrapped in useCallback with an
+  // explicit dep (queryDateString). The fetch effect and the manual refetch
+  // path both now reference a stable, correctly-updating closure.
+  const fetchTargets = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -84,7 +87,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [queryDateString]);
 
   // Setup real-time listener or one-time fetch
   useEffect(() => {
@@ -157,7 +160,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
     });
 
     return () => cleanup?.();
-  }, [queryDateString, realtime]);
+  }, [queryDateString, realtime, fetchTargets]);
 
   // Manual refetch function
   const refetch = () => {

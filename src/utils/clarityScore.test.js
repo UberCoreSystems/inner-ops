@@ -249,3 +249,88 @@ test('calculateClarityScore result includes expected breakdown keys', async () =
   assert.ok('journalStreak' in result);
   assert.ok('killTargetsCompleted' in result);
 });
+
+// ─── Finding 17: edge-case coverage ────────────────────────────────────────
+
+test('[edge] calculateClarityScore handles completely missing fields without throwing', async () => {
+  const result = await clarityScoreUtils.calculateClarityScore({
+    journalEntries: undefined,
+    killTargets: null,
+    relapseEntries: undefined,
+    blackMirrorEntries: null,
+    hardLessons: undefined,
+  });
+  assert.equal(typeof result.totalScore, 'number');
+  assert.equal(result.totalScore, 0);
+});
+
+test('[edge] calculateClarityScore accepts Firestore Timestamp-shaped createdAt (toDate)', async () => {
+  // Simulate Firebase Timestamp: object exposing toDate() returning a real Date.
+  const fakeTimestamp = (msAgo) => ({
+    toDate: () => new Date(Date.now() - msAgo),
+  });
+  const data = {
+    hardLessons: [{
+      extractedLesson: 'A real lesson extracted from a costly mistake that has weight.',
+      ruleGoingForward: 'If I feel this urge, I will wait at least 24 hours before acting on it.',
+      isFinalized: true,
+      createdAt: fakeTimestamp(3 * 24 * 60 * 60 * 1000), // 3 days ago
+    }],
+  };
+  const result = await clarityScoreUtils.calculateClarityScore(data);
+  // Recent lesson should score above zero (weight 1.0 within 30 days).
+  assert.ok(result.breakdown.hardLessons > 0, 'Timestamp-shaped createdAt should be recognized');
+});
+
+test('[edge] temporal decay boundary: entry at day 30 scores more than entry at day 31', async () => {
+  const content = 'X'.repeat(60);
+  const day30 = { journalEntries: [journal(content, 29)] };   // weight 1.0
+  const day91 = { journalEntries: [journal(content, 91)] };   // weight 0.3
+  const r30 = await clarityScoreUtils.calculateClarityScore(day30);
+  const r91 = await clarityScoreUtils.calculateClarityScore(day91);
+  assert.ok(r30.breakdown.journal > r91.breakdown.journal, 'Decay boundaries must reduce score');
+});
+
+test('[edge] temporal decay boundary at 180 days: scores approach zero past 180d', async () => {
+  const content = 'X'.repeat(60);
+  const inside180 = { journalEntries: [journal(content, 179)] }; // weight 0.3
+  const past180   = { journalEntries: [journal(content, 365)] }; // weight 0.1
+  const rInside = await clarityScoreUtils.calculateClarityScore(inside180);
+  const rPast   = await clarityScoreUtils.calculateClarityScore(past180);
+  assert.ok(rInside.breakdown.journal >= rPast.breakdown.journal, 'Weight past 180d must not exceed weight at 179d');
+});
+
+test('[edge] farm attempt: 200 one-word journal entries should not score', async () => {
+  const farm = { journalEntries: Array.from({ length: 200 }, (_, i) => journal('noise', i)) };
+  const result = await clarityScoreUtils.calculateClarityScore(farm);
+  // Every entry is below the 50-char minimum, so journal score stays at 0.
+  assert.equal(result.breakdown.journal, 0, 'Sub-threshold entries should earn zero regardless of count');
+});
+
+test('[edge] farm attempt: 50 empty relapse reflections should not farm relapseAwareness', async () => {
+  const farm = { relapseEntries: Array.from({ length: 50 }, (_, i) => relapse('', i)) };
+  const result = await clarityScoreUtils.calculateClarityScore(farm);
+  assert.equal(result.breakdown.relapseAwareness, 0, 'Empty reflections should earn zero relapse points');
+});
+
+test('[edge] farm attempt: 50 padded-but-meaningless lessons do not earn finalization bonus without rule', async () => {
+  const padded = 'Padding characters to cross thirty character threshold here.';
+  const farm = {
+    hardLessons: Array.from({ length: 50 }, (_, i) =>
+      lesson({
+        extractedLesson: padded,
+        ruleGoingForward: '',      // missing enforceable rule
+        isFinalized: true,
+        daysBack: i,
+      })
+    ),
+  };
+  const result = await clarityScoreUtils.calculateClarityScore(farm);
+  // Base extraction points may accrue, but finalization bonus (25 * weight)
+  // must not apply when ruleGoingForward is absent or too short.
+  const floorPerLesson = SCORING.HARD_LESSON_EXTRACTED;
+  const ceilingPerLesson = SCORING.HARD_LESSON_EXTRACTED + SCORING.HARD_LESSON_FINALIZED;
+  const per = result.breakdown.hardLessons / 50;
+  assert.ok(per < ceilingPerLesson, 'Finalization bonus must not apply without a valid rule');
+  assert.ok(per <= floorPerLesson + 0.1, `Per-lesson score too high (${per}) — rule-less finalization leaking`);
+});

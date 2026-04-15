@@ -229,7 +229,9 @@ const KillList = () => {
         if (mapped) setNewTargetCategory(mapped);
       }
       setTimeout(() => newTargetInputRef.current?.focus(), 150);
-    } catch { /* ignore */ }
+    } catch (err) {
+      logger.warn('KillList: failed to parse kl_extraction_prefill from sessionStorage', err?.message);
+    }
   }, []);
 
   const loadTargets = () => setRetryKey(k => k + 1);

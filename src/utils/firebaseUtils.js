@@ -22,12 +22,8 @@ const LOCALSTORAGE_KEYS = {
   'relapseEntries': 'inner_ops_relapse_entries'
 };
 
-// Log environment variables for debugging
-logger.log("🔍 Environment Check:");
-logger.log("API Key:", import.meta.env.VITE_FIREBASE_API_KEY ? "✅ Present" : "❌ Missing");
-logger.log("Project ID:", import.meta.env.VITE_FIREBASE_PROJECT_ID);
-logger.log("Auth Domain:", import.meta.env.VITE_FIREBASE_AUTH_DOMAIN);
-logger.log("App ID:", import.meta.env.VITE_FIREBASE_APP_ID ? "✅ Present" : "❌ Missing");
+// Finding 9: boot-time env diagnostics removed — firebase.js throws on
+// missing config, which is a clearer failure mode than a log line.
 
 // Helper function to ensure user is authenticated (with fallbacks)
 const ensureAuthenticated = async () => {
@@ -86,11 +82,15 @@ const getLocalStorageFallback = (collectionName) => {
   }
 };
 
-export const writeData = async (collectionName, data) => {
+// Finding 8 remediation: callers that write sensitive data (emergency logs,
+// crisis reflections) can pass `{ sensitive: true }` as a third argument so
+// payload fields are never logged. The `sensitive` marker itself is not
+// persisted — it only controls local telemetry.
+export const writeData = async (collectionName, data, options = {}) => {
   try {
     const user = await ensureAuthenticated();
     const db = await getDb();
-    
+
     const payload = {
       ...data,
       userId: user.uid,
@@ -99,10 +99,18 @@ export const writeData = async (collectionName, data) => {
     };
 
     const docRef = await addDoc(collection(db, collectionName), payload);
-    logger.log("✅ Data written successfully to", collectionName, "with ID:", docRef.id);
+    if (options.sensitive) {
+      logger.log("✅ Data written to", collectionName, "with ID:", docRef.id, "(payload suppressed — sensitive)");
+    } else {
+      logger.log("✅ Data written successfully to", collectionName, "with ID:", docRef.id);
+    }
     return { id: docRef.id, ...payload };
   } catch (error) {
-    logger.error("❌ Firestore write error:", error);
+    // Finding 8: on error, scrub known sensitive free-form fields before logging.
+    const safeMeta = options.sensitive
+      ? { code: error.code, name: error.name }
+      : error;
+    logger.error("❌ Firestore write error:", safeMeta);
     if (error.code === 'permission-denied') {
       logger.error("💡 Hint: Check your Firestore security rules. You may need to allow reads/writes for testing.");
     }
@@ -230,7 +238,20 @@ export const subscribeToUserData = async (collectionName, callback) => {
     const colRef = collection(db, collectionName);
     const q = query(colRef, where("userId", "==", user.uid));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // Finding 15 remediation: the error callback MUST invoke the unsubscribe
+    // handle before returning — otherwise a permission-denied error leaves
+    // the listener alive and the reference leaks on remount (notable under
+    // React Strict Mode double-mount).
+    let unsubscribe = () => {};
+    let torndown = false;
+    const safeUnsubscribe = () => {
+      if (torndown) return;
+      torndown = true;
+      try { unsubscribe(); } catch (err) { logger.warn('listener teardown failed', err?.message); }
+    };
+
+    unsubscribe = onSnapshot(q, (snapshot) => {
+      if (torndown) return;
       const data = snapshot.docs.map(docSnap => {
         const docData = docSnap.data();
         const createdAt = normalizeDocTimestamp(docData);
@@ -245,9 +266,10 @@ export const subscribeToUserData = async (collectionName, callback) => {
       callback(data);
     }, (error) => {
       logger.error(`❌ Firestore subscription error for ${collectionName}:`, error);
+      safeUnsubscribe();
     });
 
-    return unsubscribe;
+    return safeUnsubscribe;
   } catch (error) {
     logger.error(`❌ Failed to set up subscription for ${collectionName}:`, error);
     callback([]);

@@ -1,5 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
+const { initializeApp, getApps } = require("firebase-admin/app");
+const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const AnthropicSDK = require("@anthropic-ai/sdk");
 const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
 
@@ -13,33 +15,149 @@ const DAILY_LIMIT = 20;
 // archetype/pattern confrontation. Trigger is entry count, not calendar time.
 const TRUST_THRESHOLD = 21;
 
-// In-memory rate limit store (resets on cold start — acceptable for this use case)
-// For production at scale, replace with Firestore-backed rate limiting
-const rateLimitStore = new Map();
+// Input hard caps — reject oversize payloads before touching the LLM.
+const MAX_ENTRY_TEXT_CHARS = 20000;
+const MAX_USER_RESPONSE_CHARS = 8000;
+const MAX_FEEDBACK_CHARS = 8000;
+const MAX_REACTANCE_SUMMARY_CHARS = 500;
+const MAX_REACTANCE_QUESTION_CHARS = 300;
 
-function getRateLimitKey(uid) {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return `${uid}:${today}`;
+// Lazy-initialize the admin app so the module is importable from tests
+// without side effects.
+let adminInitialized = false;
+function ensureAdmin() {
+  if (!adminInitialized && getApps().length === 0) {
+    initializeApp();
+  }
+  adminInitialized = true;
 }
 
-function checkRateLimit(uid) {
-  const key = getRateLimitKey(uid);
-  const count = rateLimitStore.get(key) || 0;
-  if (count >= DAILY_LIMIT) return false;
-  rateLimitStore.set(key, count + 1);
-  return true;
+function utcDayString(date = new Date()) {
+  return date.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+}
+
+/**
+ * Firestore-backed rate limiter.
+ *
+ * Counters live at users/{uid}/_rateLimits/oracle with fields:
+ *   - date: YYYY-MM-DD (UTC)
+ *   - count: daily call count
+ *   - updatedAt: server timestamp
+ *
+ * A transaction atomically rolls the counter over when the stored date
+ * differs from today and increments in place otherwise. Limit is evaluated
+ * before increment so the N+1th call is rejected.
+ *
+ * @throws HttpsError('resource-exhausted') when limit is reached.
+ */
+async function enforceOracleRateLimit(uid) {
+  ensureAdmin();
+  const db = getFirestore();
+  const ref = db.collection("users").doc(uid).collection("_rateLimits").doc("oracle");
+  const today = utcDayString();
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? snap.data() : null;
+    const sameDay = data && data.date === today;
+    const current = sameDay ? (data.count || 0) : 0;
+
+    if (current >= DAILY_LIMIT) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `You've reached the daily Oracle limit (${DAILY_LIMIT} calls). Come back tomorrow.`
+      );
+    }
+
+    tx.set(
+      ref,
+      {
+        date: today,
+        count: current + 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  });
+}
+
+/**
+ * Server-side prompt context registry.
+ *
+ * Finding 3 remediation: the client may NOT supply raw system-prompt text.
+ * It supplies a `promptContextKey` that maps to a pre-approved template here.
+ * Any user-provided parameters are length-clamped and interpolated as data,
+ * never as instructions.
+ */
+const PROMPT_CONTEXT_REGISTRY = {
+  // BER-200 reactance instruction. Takes user's pre-committed question + the
+  // data summary that triggered the criterion. Both fields are clamped.
+  reactance: (params) => {
+    const ds = typeof params?.dataSummary === "string"
+      ? params.dataSummary.slice(0, MAX_REACTANCE_SUMMARY_CHARS)
+      : "";
+    const q = typeof params?.question === "string"
+      ? params.question.slice(0, MAX_REACTANCE_QUESTION_CHARS)
+      : "";
+    if (!ds || !q) return "";
+    return `CONFRONTATION TRIGGER ACTIVE: The user pre-committed to this confrontation when the following condition was met: ${ds}. Their own question for this moment: "${q}". Your response MUST: (1) state the data pattern plainly ("You have logged [dataSummary]"), (2) put their own question to them verbatim — do not paraphrase it, (3) continue with your confrontational analysis. The question comes from the user in a clear-headed state. Do not soften it.`;
+  },
+
+  // Synthesis confrontation question — fixed server-side template.
+  synthesis_confrontation: () => `You generate one confrontation question. Rules:\n- One question only. No preamble, no context, no explanation.\n- Derived directly from the data provided. No invented patterns.\n- Not answerable with yes/no. Requires honest reflection.\n- No advisory language, no suggestions, no affirmations, no motivational framing.\n- Uncomfortable, specific, unflinching.`,
+
+  // BER-136 Oracle regen — same data, different angle. Data depth is a
+  // numeric parameter; no free-form text is accepted.
+  oracle_regen: (params) => {
+    const n = Number(params?.entryCount);
+    const dataDepthNote = Number.isFinite(n) && n > 0
+      ? ` The user has ${Math.floor(n)} total behavioral entries logged — calibrate confrontation depth accordingly.`
+      : '';
+    return `The user has already seen one perspective on this data. Approach the same data from a different confrontational angle. Do not repeat the same observation. Do not soften your assessment. Identify a different pattern, contradiction, or uncomfortable truth than the one already surfaced.${dataDepthNote}`;
+  },
+
+  // BER-136 Oracle challenge — user's own pushback, clamped to length.
+  oracle_challenge: (params) => {
+    const pushback = typeof params?.pushback === "string"
+      ? params.pushback.slice(0, MAX_USER_RESPONSE_CHARS)
+      : "";
+    if (!pushback) return "";
+    return `The user is challenging your assessment with the following pushback: "${pushback}". Do not back down from your position. Do not affirm their pushback. Do not reframe it encouragingly. Address their specific challenge directly and unflinchingly. Stay confrontational.`;
+  },
+};
+
+function resolvePromptContext(key, params) {
+  if (!key) return "";
+  const builder = PROMPT_CONTEXT_REGISTRY[key];
+  if (typeof builder !== "function") {
+    throw new HttpsError("invalid-argument", `Unknown promptContextKey: ${key}`);
+  }
+  return builder(params || {});
+}
+
+/**
+ * Structured logging helper — emits a single JSON-parseable log line so
+ * Cloud Logging metric filters can aggregate cost/latency without
+ * reconstructing ad-hoc fields.
+ */
+function logOracleCall(fields) {
+  // eslint-disable-next-line no-console
+  console.log("oracle.call", JSON.stringify(fields));
 }
 
 /**
  * Oracle — secure Claude API proxy.
  *
  * Called from the client via Firebase callable function.
- * Expects: { entryText, moduleName, userContext, tone }
+ * Expects: { entryText, moduleName, userContext, tone, behavioralContext,
+ *           entryCount, promptContextKey, promptContextParams }
  * Returns: { feedback, lensUsed, prescriptions }
  */
 exports.oracle = onCall(
   { secrets: [anthropicApiKey], region: "us-central1", timeoutSeconds: 30 },
   async (request) => {
+    const startedAt = Date.now();
+
     // Auth check — must be a signed-in user
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be signed in to use the Oracle.");
@@ -47,26 +165,47 @@ exports.oracle = onCall(
 
     const uid = request.auth.uid;
 
-    // Rate limit check — skip for background extraction calls (killlistextraction, relapsedetection)
-    const normalizedModuleForLimit = ((request.data?.moduleName) || '').toLowerCase().replace(/[^a-z]/g, '');
-    const isExtractionCall = normalizedModuleForLimit === 'killlistextraction' || normalizedModuleForLimit === 'relapsedetection';
-    if (!isExtractionCall && !checkRateLimit(uid)) {
+    // Reject any client-supplied raw system prompt. Upstream callers MUST use
+    // promptContextKey + promptContextParams for any per-call prompt variation.
+    if (request.data?.customSystemPrompt != null) {
       throw new HttpsError(
-        "resource-exhausted",
-        `You've reached the daily Oracle limit (${DAILY_LIMIT} calls). Come back tomorrow.`
+        "invalid-argument",
+        "customSystemPrompt is not accepted. Use promptContextKey."
       );
     }
 
-    const { entryText, moduleName, userContext, tone, behavioralContext, entryCount, customSystemPrompt } = request.data;
+    // Rate limit check — skip for background extraction calls (killlistextraction, relapsedetection)
+    const normalizedModuleForLimit = ((request.data?.moduleName) || '').toLowerCase().replace(/[^a-z]/g, '');
+    const isExtractionCall = normalizedModuleForLimit === 'killlistextraction' || normalizedModuleForLimit === 'relapsedetection';
+    if (!isExtractionCall) {
+      await enforceOracleRateLimit(uid);
+    }
+
+    const {
+      entryText,
+      moduleName,
+      userContext,
+      tone,
+      behavioralContext,
+      entryCount,
+      promptContextKey,
+      promptContextParams,
+    } = request.data;
 
     if (!entryText || typeof entryText !== "string" || entryText.trim().length < 10) {
       throw new HttpsError("invalid-argument", "Entry text must be at least 10 characters.");
+    }
+    if (entryText.length > MAX_ENTRY_TEXT_CHARS) {
+      throw new HttpsError("invalid-argument", "Entry text exceeds maximum length.");
     }
 
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
     const baseSystemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount);
-    const systemPrompt = customSystemPrompt ? `${baseSystemPrompt}\n\n${customSystemPrompt}` : baseSystemPrompt;
+    const promptContextFragment = resolvePromptContext(promptContextKey, promptContextParams);
+    const systemPrompt = promptContextFragment
+      ? `${baseSystemPrompt}\n\n${promptContextFragment}`
+      : baseSystemPrompt;
     const userPrompt = buildUserPrompt(entryText, userContext);
 
     try {
@@ -80,9 +219,30 @@ exports.oracle = onCall(
       const rawText = message.content[0]?.text || "";
       const parsed = parseOracleResponse(rawText);
 
+      logOracleCall({
+        fn: "oracle",
+        uid,
+        module: normalizedModuleForLimit || "unknown",
+        tone: tone || null,
+        promptContextKey: promptContextKey || null,
+        inputTokens: message.usage?.input_tokens ?? null,
+        outputTokens: message.usage?.output_tokens ?? null,
+        latencyMs: Date.now() - startedAt,
+        posture: parsed.metacognitiveDepth || null,
+      });
+
       return parsed;
     } catch (error) {
+      // Re-surface known HttpsError instances (e.g. from rate limiter).
+      if (error instanceof HttpsError) throw error;
       console.error("Claude API error:", error.message);
+      logOracleCall({
+        fn: "oracle",
+        uid,
+        module: normalizedModuleForLimit || "unknown",
+        error: error.message,
+        latencyMs: Date.now() - startedAt,
+      });
       throw new HttpsError("internal", "The Oracle is unavailable. Try again shortly.");
     }
   }
@@ -93,18 +253,38 @@ exports.oracle = onCall(
  *
  * Expects: { originalEntry, userResponse, initialFeedback }
  * Returns: { followUp }
+ *
+ * Shares the same per-day counter as `oracle` (one pool per user) and
+ * rejects oversized payloads. Feedback-doc ownership validation via a
+ * persisted feedbackId is tracked as a follow-up item — the current schema
+ * does not persist initial Oracle feedback server-side.
  */
 exports.oracleFollowUp = onCall(
   { secrets: [anthropicApiKey], region: "us-central1", timeoutSeconds: 30 },
   async (request) => {
+    const startedAt = Date.now();
+
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be signed in.");
     }
+
+    const uid = request.auth.uid;
+
+    await enforceOracleRateLimit(uid);
 
     const { originalEntry, userResponse, initialFeedback } = request.data;
 
     if (!userResponse || typeof userResponse !== "string" || userResponse.trim().length < 5) {
       throw new HttpsError("invalid-argument", "Your response must be at least 5 characters.");
+    }
+    if (userResponse.length > MAX_USER_RESPONSE_CHARS) {
+      throw new HttpsError("invalid-argument", "Your response exceeds maximum length.");
+    }
+    if (typeof originalEntry === "string" && originalEntry.length > MAX_ENTRY_TEXT_CHARS) {
+      throw new HttpsError("invalid-argument", "Original entry exceeds maximum length.");
+    }
+    if (typeof initialFeedback === "string" && initialFeedback.length > MAX_FEEDBACK_CHARS) {
+      throw new HttpsError("invalid-argument", "Initial feedback exceeds maximum length.");
     }
 
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
@@ -139,9 +319,24 @@ Continue the conversation. Match your posture to what they actually said.`,
         ],
       });
 
+      logOracleCall({
+        fn: "oracleFollowUp",
+        uid,
+        inputTokens: message.usage?.input_tokens ?? null,
+        outputTokens: message.usage?.output_tokens ?? null,
+        latencyMs: Date.now() - startedAt,
+      });
+
       return { followUp: message.content[0]?.text || "" };
     } catch (error) {
+      if (error instanceof HttpsError) throw error;
       console.error("Claude follow-up error:", error.message);
+      logOracleCall({
+        fn: "oracleFollowUp",
+        uid,
+        error: error.message,
+        latencyMs: Date.now() - startedAt,
+      });
       throw new HttpsError("internal", "Follow-up unavailable.");
     }
   }
