@@ -880,39 +880,3 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
     return { text: formatFeedbackAsText(fallback), metacognitiveDepth: null };
   }
 };
-
-export const generateOracleFollowUp = async (originalInput, oracleJudgment, userResponse) => {
-  try {
-    const functions = getFunctions();
-    const followUpFn = httpsCallable(functions, 'oracleFollowUp', { timeout: 30000 });
-
-    const result = await followUpFn({
-      originalEntry: normalizeWhitespace(originalInput || ''),
-      userResponse: normalizeWhitespace(userResponse || ''),
-      initialFeedback: normalizeWhitespace(oracleJudgment || ''),
-    });
-
-    return result.data.followUp || 'You gave signal, now execute. What one decision rule are you enforcing in the next 24 hours?';
-  } catch (error) {
-    logger.warn('Oracle follow-up Cloud Function unavailable, using local fallback:', error.message);
-
-    // Local fallback
-    try {
-      const combined = normalizeWhitespace(`${originalInput || ''} ${oracleJudgment || ''} ${userResponse || ''}`);
-      const feedback = await generateFeedback({
-        moduleName: 'oracle_follow_up',
-        entryText: combined,
-        priorFeedbackSummary: normalizeWhitespace(oracleJudgment)
-      });
-
-      return [
-        feedback.summary_mirror,
-        feedback.analysis,
-        `Next move: ${feedback.prescriptions[0]}`,
-        feedback.closing_charge
-      ].join('\n\n');
-    } catch {
-      return 'You gave signal, now execute. What one decision rule are you enforcing in the next 24 hours?';
-    }
-  }
-};

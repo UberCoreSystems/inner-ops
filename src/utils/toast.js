@@ -17,11 +17,6 @@ const baseStyle = {
   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
 };
 
-// Icon styles with glow effect
-const iconStyle = (color) => ({
-  filter: `drop-shadow(0 0 6px ${color})`,
-});
-
 // Custom toast configurations
 export const ouraToast = {
   // Success - Cyan glow
@@ -87,41 +82,6 @@ export const ouraToast = {
       },
       icon: '⚠️',
       duration: 4000,
-      ...options,
-    });
-  },
-
-  // Achievement/Celebration - Green glow
-  achievement: (message, options = {}) => {
-    return toast.success(message, {
-      style: {
-        ...baseStyle,
-        borderColor: '#22c55e30',
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #0a1a0a 100%)',
-      },
-      iconTheme: {
-        primary: '#22c55e',
-        secondary: '#0a0a0a',
-      },
-      icon: '🏆',
-      duration: 4000,
-      ...options,
-    });
-  },
-
-  // Streak milestone - Special celebration
-  streak: (days, options = {}) => {
-    return toast.success(`${days} day streak! Keep going! 🔥`, {
-      style: {
-        ...baseStyle,
-        borderColor: '#f59e0b30',
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a0a0a 100%)',
-      },
-      iconTheme: {
-        primary: '#f59e0b',
-        secondary: '#0a0a0a',
-      },
-      duration: 5000,
       ...options,
     });
   },
