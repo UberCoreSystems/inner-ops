@@ -21,11 +21,17 @@ export function useOuraData() {
   useEffect(() => {
     let cancelled = false;
     let authUnsub = null;
+    // Pass 2 Finding 8 remediation: generation counter so a rapid sign-out /
+    // sign-in cycle invalidates any in-flight fetch from a prior auth event.
+    // Without this, the older fetch could resolve AFTER the newer one and
+    // overwrite biometrics for the wrong user.
+    let currentGen = 0;
 
     const setup = async () => {
       const auth = await getAuth();
       authUnsub = onAuthStateChanged(auth, async (user) => {
         if (cancelled) return;
+        const myGen = ++currentGen;
 
         if (!user) {
           setConnected(false);
@@ -37,7 +43,7 @@ export function useOuraData() {
 
         try {
           const conn = await isOuraConnected(user.uid);
-          if (cancelled) return;
+          if (cancelled || myGen !== currentGen) return;
           setConnected(conn);
 
           if (conn) {
@@ -45,14 +51,14 @@ export function useOuraData() {
               getTodaysBiometrics(user.uid),
               getHrvBaseline(user.uid),
             ]);
-            if (cancelled) return;
+            if (cancelled || myGen !== currentGen) return;
             setBiometrics(bio);
             setHrvBaseline(baseline);
           }
         } catch (err) {
           logger.warn('useOuraData: failed to load biometrics:', err);
         } finally {
-          if (!cancelled) setLoading(false);
+          if (!cancelled && myGen === currentGen) setLoading(false);
         }
       });
     };

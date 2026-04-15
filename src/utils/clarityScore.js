@@ -8,15 +8,30 @@ const calculationCache = new Map();
 const CACHE_TTL = 60 * 1000; // 60 seconds
 
 // Produce a small digest over updatedAt (or createdAt) timestamps so edits
-// that don't change array length still bust the cache. Intentionally cheap —
-// ordering is not required, only the XOR-of-timestamps is used as a fingerprint.
+// that don't change array length still bust the cache.
+//
+// Pass 2 Finding 11 remediation: replaced XOR with an order-preserving FNV-1a
+// style accumulator. XOR is commutative and `t ^ t === 0`, so two arrays with
+// the same timestamps in different orders (or with duplicate timestamps that
+// cancel) collided to the same fingerprint. The new hash is sensitive to both
+// order and multiplicity.
 const fingerprintCollection = (arr) => {
   if (!arr || arr.length === 0) return '0';
-  let acc = 0;
+  let acc = 2166136261; // FNV offset basis
   for (const item of arr) {
     const u = item?.updatedAt ?? item?.lastUpdated ?? item?.createdAt;
     const t = u?.toDate ? u.toDate().getTime() : new Date(u || 0).getTime();
-    acc = (acc ^ (Number.isFinite(t) ? t : 0)) >>> 0;
+    const v = Number.isFinite(t) ? t : 0;
+    // Mix the timestamp byte-by-byte so position matters and duplicates
+    // don't cancel. Math.imul keeps the multiplication in 32-bit space.
+    acc = (acc ^ (v & 0xff)) >>> 0;
+    acc = Math.imul(acc, 16777619) >>> 0;
+    acc = (acc ^ ((v >>> 8) & 0xff)) >>> 0;
+    acc = Math.imul(acc, 16777619) >>> 0;
+    acc = (acc ^ ((v >>> 16) & 0xff)) >>> 0;
+    acc = Math.imul(acc, 16777619) >>> 0;
+    acc = (acc ^ ((v >>> 24) & 0xff)) >>> 0;
+    acc = Math.imul(acc, 16777619) >>> 0;
   }
   return acc.toString(36);
 };

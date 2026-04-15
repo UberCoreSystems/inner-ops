@@ -1,9 +1,11 @@
 import { doc, setDoc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { enableAnonymousAuth, enableDevMode, getCurrentUserOrMock, getAuth, getDb } from '../firebase.js';
+import { getAuth, getDb } from '../firebase.js';
 import logger from './logger';
 
-// Development mode flag - set to false to use real authentication and preserve user data
-const DEV_MODE = false; // Set to true only for testing without real user accounts
+// Pass 2 Finding 18 remediation: removed the hardcoded `DEV_MODE` boolean
+// and its unreachable branches. The anonymous-auth and mock-user paths in
+// `firebase.js` (`enableAnonymousAuth`, `enableDevMode`) remain available
+// for emulator work, but are no longer wired into production reads/writes.
 
 const normalizeDocTimestamp = (docData) => {
   if (docData.timestamp?.toDate) return docData.timestamp.toDate();
@@ -25,31 +27,15 @@ const LOCALSTORAGE_KEYS = {
 // Finding 9: boot-time env diagnostics removed — firebase.js throws on
 // missing config, which is a clearer failure mode than a log line.
 
-// Helper function to ensure user is authenticated (with fallbacks)
+// Helper function to ensure user is authenticated.
+// Pass 2 Finding 18 remediation: simplified — no DEV_MODE bypass branch.
 const ensureAuthenticated = async () => {
   const auth = await getAuth();
   if (auth.currentUser) {
     return auth.currentUser;
   }
-
-  if (DEV_MODE) {
-    logger.log("🚧 DEV MODE: Attempting anonymous authentication...");
-    try {
-      const user = await enableAnonymousAuth();
-      logger.log("✅ Anonymous authentication successful:", user.uid);
-      return user;
-    } catch (error) {
-      if (error.code === 'auth/admin-restricted-operation') {
-        logger.warn("⚠️ Anonymous auth disabled, using mock user for testing");
-        return enableDevMode();
-      }
-      throw error;
-    }
-  } else {
-    // In production mode, require proper authentication
-    logger.error("❌ User must be authenticated to access data");
-    throw new Error("Please sign in to continue using the app");
-  }
+  logger.error("❌ User must be authenticated to access data");
+  throw new Error("Please sign in to continue using the app");
 };
 
 // Get data from localStorage as fallback
@@ -106,11 +92,14 @@ export const writeData = async (collectionName, data, options = {}) => {
     }
     return { id: docRef.id, ...payload };
   } catch (error) {
-    // Finding 8: on error, scrub known sensitive free-form fields before logging.
-    const safeMeta = options.sensitive
-      ? { code: error.code, name: error.name }
-      : error;
-    logger.error("❌ Firestore write error:", safeMeta);
+    // Pass 2 Finding 12 remediation: even non-sensitive writes can carry user
+    // content in the echoed-back error message, which Sentry breadcrumbs
+    // capture. Always log the scrubbed shape; never the raw error object.
+    logger.error("❌ Firestore write error:", {
+      code: error.code,
+      name: error.name,
+      message: typeof error.message === 'string' ? error.message.slice(0, 200) : undefined,
+    });
     if (error.code === 'permission-denied') {
       logger.error("💡 Hint: Check your Firestore security rules. You may need to allow reads/writes for testing.");
     }

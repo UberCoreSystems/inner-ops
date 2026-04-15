@@ -237,14 +237,24 @@ async function generateConfrontationQuestion(data) {
 }
 
 function buildFallbackQuestion({ dominantArchetype, violatedRules, highEscapeTargets, signalDelta, recentRelapseCount }) {
-  if (violatedRules.length > 0) {
-    return `You wrote the rule "${violatedRules[0].rule}" — what made you believe this time would be different?`;
+  // Pass 2 Finding 10 remediation: extract first-element accesses into named
+  // locals with explicit defaults so a future branch addition can't trip on a
+  // null highEscapeTargets[0] / violatedRules[0] reference.
+  const safeViolatedRules = Array.isArray(violatedRules) ? violatedRules : [];
+  const safeHighEscapeTargets = Array.isArray(highEscapeTargets) ? highEscapeTargets : [];
+  const firstViolatedRule = safeViolatedRules[0]?.rule ?? null;
+  const firstHighEscape = safeHighEscapeTargets[0] ?? null;
+  const firstHighEscapeTitle = firstHighEscape?.title ?? null;
+  const firstHighEscapeCount = firstHighEscape?.escapeData?.length ?? 0;
+
+  if (firstViolatedRule) {
+    return `You wrote the rule "${firstViolatedRule}" — what made you believe this time would be different?`;
   }
   if (dominantArchetype && recentRelapseCount >= 2) {
     return `${dominantArchetype} has appeared ${recentRelapseCount} times this period — what environment, relationship, or internal state is sustaining it?`;
   }
-  if (highEscapeTargets.length > 0) {
-    return `"${highEscapeTargets[0].title}" has been escaped ${highEscapeTargets[0].escapeData?.length || 0} times — what specific condition would have to change for the outcome to be different?`;
+  if (firstHighEscapeTitle) {
+    return `"${firstHighEscapeTitle}" has been escaped ${firstHighEscapeCount} times — what specific condition would have to change for the outcome to be different?`;
   }
   if (signalDelta === 'deteriorating') {
     return 'The trend across modules is deteriorating — what specific decision in the last 14 days set this in motion?';

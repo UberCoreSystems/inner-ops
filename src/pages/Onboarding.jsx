@@ -47,18 +47,37 @@ export default function Onboarding() {
     return true;
   };
 
+  // Pass 3 New Finding 2 remediation: per-step progress markers stored in
+  // sessionStorage so a partial-write failure doesn't re-execute already-
+  // completed steps on retry. The marker is keyed by user identity proxy
+  // (primaryDriver + focusStatement) so it can't bleed across sessions.
   const handleComplete = async () => {
     setSaving(true);
+    const progressKey = `inner_ops_onboarding_progress:${driver}:${focusStatement.trim().slice(0, 32)}`;
+    const readProgress = () => {
+      try { return JSON.parse(sessionStorage.getItem(progressKey) || '{}'); } catch { return {}; }
+    };
+    const writeProgress = (patch) => {
+      try {
+        sessionStorage.setItem(progressKey, JSON.stringify({ ...readProgress(), ...patch }));
+      } catch { /* sessionStorage is best-effort */ }
+    };
+
     try {
-      await saveUserProfile({
-        primaryDriver: driver,
-        feedbackStyle,
-        focusStatement: focusStatement.trim(),
-        onboardingCompletedAt: new Date().toISOString(),
-      });
+      const progress = readProgress();
+
+      if (!progress.profileSaved) {
+        await saveUserProfile({
+          primaryDriver: driver,
+          feedbackStyle,
+          focusStatement: focusStatement.trim(),
+          onboardingCompletedAt: new Date().toISOString(),
+        });
+        writeProgress({ profileSaved: true });
+      }
 
       // Create kill target if provided
-      if (killTarget.trim()) {
+      if (killTarget.trim() && !progress.killTargetSaved) {
         await writeData('killTargets', {
           title: killTarget.trim(),
           description: 'First kill contract — set during onboarding',
@@ -76,10 +95,11 @@ export default function Onboarding() {
           lastUpdated: new Date().toISOString(),
           reflectionNotes: '',
         });
+        writeProgress({ killTargetSaved: true });
       }
 
       // BER-200: save confrontation criterion if user defined one
-      if (criterionArchetype && criterionQuestion.trim()) {
+      if (criterionArchetype && criterionQuestion.trim() && !progress.criterionSaved) {
         await saveConfrontationCriteria([{
           id: `criterion_${Date.now()}`,
           archetypeName: criterionArchetype,
@@ -87,9 +107,12 @@ export default function Onboarding() {
           periodDays: 30,
           question: criterionQuestion.trim(),
         }]);
+        writeProgress({ criterionSaved: true });
       }
 
       track('onboarding_completed', { primaryDriver: driver, feedbackStyle, hasKillTarget: !!killTarget.trim(), hasConfrontationCriterion: !!(criterionArchetype && criterionQuestion.trim()) });
+      // All three writes succeeded — clear the resume marker.
+      try { sessionStorage.removeItem(progressKey); } catch { /* noop */ }
       navigate('/dashboard');
     } catch (err) {
       logger.error('Failed to save profile:', err);

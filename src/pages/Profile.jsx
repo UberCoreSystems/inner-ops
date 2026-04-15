@@ -79,7 +79,14 @@ export default function Profile() {
   const saveIdentityDirection = async (newStatement, isReview = false) => {
     const trimmed = newStatement.trim();
     if (trimmed.length < 20 || trimmed.length > 200) {
-      ouraToast.error('Identity direction must be 20–200 characters.');
+      ouraToast.error('Identity direction must be 20–200 characters. Use "Clear" to remove.');
+      return;
+    }
+    // Pass 3 New Finding 1 remediation: re-check auth immediately before the
+    // write so a token expiry / sign-out in another tab doesn't produce a
+    // false-success toast with no underlying Firestore update.
+    if (!authService.getCurrentUser()) {
+      ouraToast.error('Please sign in to save.');
       return;
     }
     setSavingIdentity(true);
@@ -102,6 +109,8 @@ export default function Profile() {
         setSettingsId(saved.id);
       }
 
+      // Local state mutations moved AFTER the await so a failed write does
+      // not leave the UI in an "optimistically saved" state.
       setIdentityDirection(trimmed);
       setIdentityDirectionSetAt(now);
       setIdentityDirectionHistory(newHistory);
@@ -111,6 +120,48 @@ export default function Profile() {
     } catch (err) {
       logger.error('Failed to save identity direction:', err);
       ouraToast.error('Failed to save. Try again.');
+    } finally {
+      setSavingIdentity(false);
+    }
+  };
+
+  // Pass 2 Finding 15 remediation: explicit "clear" path for identity direction.
+  // The 20–200 char validation makes the field non-removable through the Save
+  // path, so users get stuck with a stale statement. This appends the cleared
+  // value to history (so the audit trail is preserved) and nulls out the
+  // current direction.
+  const clearIdentityDirection = async () => {
+    if (!identityDirection) return;
+    if (!window.confirm('Clear your current identity direction? Your previous statements remain in your history.')) {
+      return;
+    }
+    setSavingIdentity(true);
+    try {
+      const now = new Date().toISOString();
+      const newHistory = [
+        ...identityDirectionHistory,
+        { statement: identityDirection, setAt: identityDirectionSetAt, supersededAt: now },
+      ];
+      const data = {
+        identityDirection: null,
+        identityDirectionSetAt: null,
+        identityDirectionHistory: newHistory,
+      };
+      if (settingsId) {
+        await updateData('userSettings', settingsId, data);
+      } else {
+        const saved = await writeData('userSettings', data);
+        setSettingsId(saved.id);
+      }
+      setIdentityDirection(null);
+      setIdentityDirectionSetAt(null);
+      setIdentityDirectionHistory(newHistory);
+      setEditingIdentity(false);
+      setQuarterlyReviewDue(false);
+      ouraToast.success('Identity direction cleared.');
+    } catch (err) {
+      logger.error('Failed to clear identity direction:', err);
+      ouraToast.error('Failed to clear. Try again.');
     } finally {
       setSavingIdentity(false);
     }
@@ -240,12 +291,24 @@ export default function Profile() {
                 <span className="text-[#3a3a3a] text-xs">{identityDirectionDraft.trim().length}/200</span>
                 <div className="flex gap-2">
                   {identityDirection && (
-                    <button
-                      onClick={() => { setEditingIdentity(false); setIdentityDirectionDraft(identityDirection); }}
-                      className="px-4 py-2 text-xs text-[#5a5a5a] hover:text-white transition-colors"
-                    >
-                      Cancel
-                    </button>
+                    <>
+                      {/* Pass 2 Finding 15 remediation: explicit Clear button
+                          so users can remove the field instead of being
+                          forced into a 20-char minimum forever. */}
+                      <button
+                        onClick={clearIdentityDirection}
+                        disabled={savingIdentity}
+                        className="px-4 py-2 text-xs text-[#ef4444] hover:text-white transition-colors disabled:opacity-40"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={() => { setEditingIdentity(false); setIdentityDirectionDraft(identityDirection); }}
+                        className="px-4 py-2 text-xs text-[#5a5a5a] hover:text-white transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={() => saveIdentityDirection(identityDirectionDraft)}

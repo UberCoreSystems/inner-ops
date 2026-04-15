@@ -179,6 +179,17 @@ exports.oracle = onCall(
     const isExtractionCall = normalizedModuleForLimit === 'killlistextraction' || normalizedModuleForLimit === 'relapsedetection';
     if (!isExtractionCall) {
       await enforceOracleRateLimit(uid);
+    } else {
+      // Pass 2 Finding 13 remediation: log the exemption so cost auditing
+      // can distinguish exempt extraction traffic from rate-limited normal
+      // traffic, and so an alert can fire if extraction-call volume is
+      // anomalous for a single user.
+      logOracleCall({
+        fn: "oracle",
+        uid,
+        module: normalizedModuleForLimit,
+        rateLimitExempt: true,
+      });
     }
 
     const {

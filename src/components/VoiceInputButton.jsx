@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useVoiceInput } from '../utils/useVoiceInput';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 
 const VoiceInputButton = ({ onTranscript, disabled = false }) => {
   const { isListening, isSupported, startListening, stopListening } = useVoiceInput();

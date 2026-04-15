@@ -244,6 +244,23 @@ export default function AuthForm({ onAuthSuccess }) {
                     <div className="absolute inset-0 rounded-xl bg-[#00d4aa]/5 pointer-events-none" />
                   )}
                 </div>
+                {/* Pass 2 Finding 17 remediation: live password-match indicator
+                    so users see the mismatch before submitting. Only renders
+                    once the user has typed something in the confirm field. */}
+                {formData.confirmPassword.length > 0 && (
+                  <div
+                    className={`text-xs ${
+                      formData.password === formData.confirmPassword
+                        ? 'text-[#00d4aa]'
+                        : 'text-[#ef4444]'
+                    }`}
+                    aria-live="polite"
+                  >
+                    {formData.password === formData.confirmPassword
+                      ? '✓ Passwords match'
+                      : 'Passwords do not match yet'}
+                  </div>
+                )}
               </div>
             )}
 

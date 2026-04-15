@@ -119,6 +119,28 @@ async function getStoredToken(uid) {
   return snap.exists() ? snap.data() : null;
 }
 
+/**
+ * Token refresh status — discriminated so callers can distinguish:
+ *   - 'no_token': user has not connected Oura
+ *   - 'valid': stored access token is still good
+ *   - 'refreshed': refresh succeeded; new access token is available
+ *   - 'expired': refresh failed permanently (4xx) — stored token cleared
+ *   - 'transient': refresh failed temporarily (5xx / network) — token kept
+ */
+async function clearStoredToken(uid) {
+  try {
+    const db = await getDb();
+    const { doc, deleteDoc } = await import('firebase/firestore');
+    await deleteDoc(doc(db, 'users', uid, 'integrations', 'oura'));
+  } catch (err) {
+    logger.warn('Oura: failed to clear stale token', { code: err?.code, name: err?.name });
+  }
+}
+
+// Pass 2 Finding 6 remediation: refresh failures are now logged with HTTP
+// status (never the token), distinguish "permanently expired" from "transient
+// network failure", and clear the stored token on definitive 4xx so the user
+// is prompted to re-authorize instead of retrying a known-bad token.
 async function getValidToken(uid) {
   const token = await getStoredToken(uid);
   if (!token) return null;
@@ -129,8 +151,9 @@ async function getValidToken(uid) {
   }
 
   // Attempt refresh
+  let res;
   try {
-    const res = await fetch(OURA_TOKEN_URL, {
+    res = await fetch(OURA_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -139,20 +162,34 @@ async function getValidToken(uid) {
         client_id: CLIENT_ID,
       }),
     });
-    if (!res.ok) return null;
-    const newToken = await res.json();
-    await storeToken(uid, {
-      access_token: newToken.access_token,
-      refresh_token: newToken.refresh_token || token.refreshToken,
-      expires_in: newToken.expires_in,
-      token_type: newToken.token_type,
-      scope: newToken.scope || token.scope,
-    });
-    return newToken.access_token;
   } catch (err) {
-    logger.error('Oura token refresh failed:', err);
+    // Network-level failure — keep the stored token, caller can retry later.
+    logger.warn('Oura token refresh: network error', { name: err?.name, message: err?.message });
     return null;
   }
+
+  if (!res.ok) {
+    if (res.status >= 400 && res.status < 500) {
+      // Permanent failure (revoked, rotated refresh token, etc). Clear the
+      // stored credentials so the next attempt prompts re-authorization.
+      logger.warn('Oura token refresh rejected', { status: res.status });
+      await clearStoredToken(uid);
+    } else {
+      // Transient (5xx, timeouts surfaced as fetch errors handled above).
+      logger.warn('Oura token refresh: transient failure', { status: res.status });
+    }
+    return null;
+  }
+
+  const newToken = await res.json();
+  await storeToken(uid, {
+    access_token: newToken.access_token,
+    refresh_token: newToken.refresh_token || token.refreshToken,
+    expires_in: newToken.expires_in,
+    token_type: newToken.token_type,
+    scope: newToken.scope || token.scope,
+  });
+  return newToken.access_token;
 }
 
 // ─── Connection status ────────────────────────────────────────────────────────

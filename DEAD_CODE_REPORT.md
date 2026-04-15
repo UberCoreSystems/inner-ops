@@ -371,3 +371,52 @@ All `onSnapshot()` and `getDocs()` calls verified connected and properly unsubsc
 ---
 
 *Reconciliation completed by SSE remediation agent on 2026-04-14. Full weekly sweep to resume on next BER-scheduled run.*
+
+---
+
+## 2026-04-15 (BER-269 — Weekly Dead Code Sweep)
+
+> Full sweep across 64 source files. Commit: `4b0a0c9`. Files modified this sweep: 3.
+
+### Resolved This Sweep
+
+| Item | File | Action |
+|------|------|--------|
+| `KillConfirmation` component | `src/components/Confetti.jsx` | Deleted file — never imported anywhere |
+| `generateOracleFollowUp()` | `src/utils/aiFeedback.js` | Removed — superseded by `callOracleRaw` in OracleModal; no call sites |
+| `achievement()` | `src/utils/toast.js` | Removed — never called + gamification mechanics (🏆 trophy, celebration styling) violate product philosophy |
+| `streak()` | `src/utils/toast.js` | Removed — never called + "Keep going!" motivational framing + streak celebration violate product philosophy |
+| `iconStyle()` | `src/utils/toast.js` | Removed — defined but never referenced |
+
+**Lines removed: 103. Build: PASS (13.23s).**
+
+---
+
+### Residual Outstanding
+
+| Item | Status | Note |
+|------|--------|------|
+| `src/utils/localStorage.js` (orphan file) | Open — carried from BER-116 | Still no live consumers in src/ |
+
+---
+
+### Philosophy Violations Scan
+
+| Pattern | Status |
+|---------|--------|
+| Streak celebration mechanics | RESOLVED — streak() removed |
+| Achievement/gamification | RESOLVED — achievement() removed |
+| Motivational language | RESOLVED — "Keep going!" removed with streak() |
+| Orphaned celebration-named component | RESOLVED — Confetti.jsx deleted |
+| Reward mechanics in active code | NONE FOUND |
+| Soft framing language in active code | NONE FOUND |
+
+---
+
+### Flagged — CEO Review Required
+
+**`src/utils/blackMirrorAnalytics.js`** — Prior entry (2026-04-09) confirmed `runPatternDetection`, `generateInsights`, and `aggregateCrossModuleData` are internal pipeline steps called by `getAnalyticsReport()` — confirmed PASS, not dead. Per standing instruction, no changes made to this file.
+
+---
+
+*Scan and cleanup completed by SSE agent (BER-269) on 2026-04-15. All changes committed.*

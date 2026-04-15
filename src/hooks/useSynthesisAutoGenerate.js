@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { readUserData } from '../utils/firebaseUtils';
 import { generateSynthesisBriefing } from '../utils/generateSynthesisBriefing';
+import { COLLECTIONS } from '../utils/schema';
 import logger from '../utils/logger';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
@@ -20,11 +21,11 @@ export function useSynthesisAutoGenerate(userId) {
 
     const run = async () => {
       try {
-        const userSettings = await readUserData('userSettings').catch(() => []);
+        const userSettings = await readUserData(COLLECTIONS.USER_SETTINGS).catch(() => []);
         const cadence = userSettings?.[0]?.synthesisCadence || 'weekly';
         const cadenceDays = CADENCE_DAYS[cadence] ?? 7;
 
-        const syntheses = await readUserData('syntheses').catch(() => []);
+        const syntheses = await readUserData(COLLECTIONS.SYNTHESES).catch(() => []);
         const sorted = (syntheses || []).sort(
           (a, b) => new Date(b.generatedAt) - new Date(a.generatedAt)
         );

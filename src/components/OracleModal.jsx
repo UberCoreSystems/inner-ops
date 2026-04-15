@@ -313,13 +313,21 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {showFollowUp && !followUpUsed && (
                 <div className="space-y-3">
                   <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">Challenge the Oracle's assessment</div>
+                  {/* Pass 2 Finding 14 remediation: maxLength + visible
+                      counter so the user sees the cap before the server
+                      truncates. Matches MAX_USER_RESPONSE_CHARS in
+                      functions/index.js. */}
                   <textarea
                     value={followUpText}
                     onChange={e => setFollowUpText(e.target.value)}
                     rows={2}
+                    maxLength={8000}
                     className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#3a3a3a]"
                     placeholder="State your specific pushback..."
                   />
+                  <div className="text-[#3a3a3a] text-xs text-right" aria-live="polite">
+                    {followUpText.length} / 8000
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={handleFollowUp}

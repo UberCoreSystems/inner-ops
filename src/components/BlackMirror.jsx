@@ -63,8 +63,17 @@ const BlackMirror = () => {
   const [showCorrelationReport, setShowCorrelationReport] = useState(false);
 
   // BER-264: cue restructuring
-  const { restructurings, refetch: refetchRestructurings } = useCueRestructuring();
+  // Pass 3 New Finding 3 remediation: surface the hook's error state so
+  // load failures don't render as silent empty lists. Black Mirror is
+  // currently gated behind VITE_ENABLE_BLACK_MIRROR; when it ships, this
+  // gives the UI a hook to render an inline error/retry affordance.
+  const { restructurings, error: restructuringsError, refetch: refetchRestructurings } = useCueRestructuring();
   const [activeRestructuringRule, setActiveRestructuringRule] = useState(null);
+  useEffect(() => {
+    if (restructuringsError) {
+      logger.warn('BlackMirror: cue-restructuring load failed', restructuringsError?.message);
+    }
+  }, [restructuringsError]);
 
   // BER-136: capture entry text for Oracle regen
   const oracleEntryTextRef = useRef('');

@@ -284,24 +284,26 @@ export default function Journal() {
     });
   }, [entries, searchQuery, moodOptions]);
 
-  // Delay showing skeleton to prevent flicker
+  // Pass 2 Finding 16 remediation: consolidated skeleton lifecycle. One
+  // effect owns both the show-delay and the dwell timer, both timers are
+  // cleared on every change, and unmount cleans up regardless of which
+  // phase we're in. Avoids the prior split-effect ordering edge cases.
   useEffect(() => {
-    const skeletonTimer = setTimeout(() => {
-      if (loading) {
-        setShowSkeleton(true);
-      }
-    }, 250);
-
-    return () => clearTimeout(skeletonTimer);
-  }, [loading]);
-
-  // Keep skeleton visible briefly once shown to avoid blink on fast completion
-  useEffect(() => {
+    let showTimer;
     let dwellTimer;
-    if (!loading && showSkeleton) {
+
+    if (loading) {
+      // Wait 250ms before showing — fast loads never flash the skeleton.
+      showTimer = setTimeout(() => setShowSkeleton(true), 250);
+    } else if (showSkeleton) {
+      // Once shown, hold for 300ms so the transition doesn't blink.
       dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
     }
-    return () => clearTimeout(dwellTimer);
+
+    return () => {
+      if (showTimer) clearTimeout(showTimer);
+      if (dwellTimer) clearTimeout(dwellTimer);
+    };
   }, [loading, showSkeleton]);
 
   // Effect for rotating prompts — pauses while the user is typing
@@ -319,14 +321,24 @@ export default function Journal() {
     return () => clearInterval(interval);
   }, [journalPrompts, isTextareaFocused]);
 
+  // Pass 2 Finding 9 remediation: ref-based read of `aiInsights.lastUpdated`
+  // so the debounced effect doesn't capture stale state. Using a ref instead
+  // of adding `aiInsights` to the dep list avoids re-subscribing every time
+  // a generation completes (which would itself re-arm the timer).
+  const aiInsightsRef = useRef(aiInsights);
+  useEffect(() => {
+    aiInsightsRef.current = aiInsights;
+  }, [aiInsights]);
+
   // Dynamic AI insights generation
   useEffect(() => {
     let isMounted = true;
 
     const generateDynamicInsights = async () => {
       // Only generate if we have meaningful content and haven't generated recently
+      const lastUpdated = aiInsightsRef.current?.lastUpdated;
       if (entry.length < 50 ||
-          (aiInsights.lastUpdated && Date.now() - aiInsights.lastUpdated < 5000)) {
+          (lastUpdated && Date.now() - lastUpdated < 5000)) {
         return;
       }
 
@@ -914,7 +926,10 @@ export default function Journal() {
                       </div>
                     ) : (
                       aiInsights.reflections.map((insight, idx) => (
-                        <div key={insight} className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl transition-all duration-300 ease-in-out">
+                        // Pass 2 Finding 3 remediation: free-form AI strings can
+                        // collide; use index as the key — the list is append-only
+                        // and never reordered, so positional keys are safe here.
+                        <div key={idx} className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl transition-all duration-300 ease-in-out">
                           {insight}
                         </div>
                       ))

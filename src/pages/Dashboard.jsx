@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { readUserData, writeData, debugInspectAllFirebaseData, previewDataMigration, executeDataMigration, findDuplicateDocuments, removeDuplicateDocuments } from '../utils/firebaseUtils';
-import { migrateOldDataToFirestore, findOldData } from '../utils/dataMigration';
+import { readUserData, writeData } from '../utils/firebaseUtils';
+// Pass 2 Finding 7 remediation: privileged admin helpers (data migration,
+// duplicate cleanup, unfiltered inspection) are loaded dynamically inside
+// the dev-only debug effect below. In production they are not included in
+// the page's static import graph, so Vite/Terser can omit them entirely.
 import { authService } from '../utils/authService';
 import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
@@ -147,6 +150,25 @@ export default function Dashboard() {
     if (!isDevEnvironment) {
       return;
     }
+
+    // Pass 2 Finding 7 remediation: load admin helpers lazily so they never
+    // appear in the production bundle. Production builds skip this branch
+    // entirely (isDevEnvironment is false), so the dynamic imports are not
+    // even reached and the static import graph stays clean.
+    let cancelled = false;
+    Promise.all([
+      import('../utils/firebaseUtils'),
+      import('../utils/dataMigration'),
+    ]).then(([fbu, dm]) => {
+      if (cancelled) return;
+      const {
+        debugInspectAllFirebaseData,
+        previewDataMigration,
+        executeDataMigration,
+        findDuplicateDocuments,
+        removeDuplicateDocuments,
+      } = fbu;
+      const { migrateOldDataToFirestore, findOldData } = dm;
 
     // Add debugging function to window in development only
     window.debugDashboard = {
@@ -315,8 +337,10 @@ export default function Dashboard() {
         return result;
       }
     };
+    }); // end Promise.all then-block
 
     return () => {
+      cancelled = true;
       if (window.debugDashboard) {
         delete window.debugDashboard;
       }

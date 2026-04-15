@@ -67,11 +67,26 @@ const VirtualizedList = ({
       className="relative"
     >
       <div style={{ height: totalHeight, position: 'relative' }}>
-        {visibleItems.map(({ item, virtualIndex, style }) => (
-          <div key={item.id || virtualIndex} style={style}>
-            {renderItem({ item, index: virtualIndex })}
-          </div>
-        ))}
+        {visibleItems.map(({ item, virtualIndex, style }) => {
+          // Pass 2 Finding 4 remediation: stable IDs are required.
+          // virtualIndex changes on every scroll tick, so falling back to
+          // it would force a full unmount/remount of every visible row.
+          if (item?.id == null) {
+            if (import.meta.env.DEV) {
+              // eslint-disable-next-line no-console
+              console.warn(
+                'VirtualizedList: item missing stable `id`. Items must have a unique id field; positional fallback would defeat virtualization.',
+                item
+              );
+            }
+            return null;
+          }
+          return (
+            <div key={item.id} style={style}>
+              {renderItem({ item, index: virtualIndex })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
