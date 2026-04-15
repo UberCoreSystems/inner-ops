@@ -162,7 +162,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       // Persist the Oracle line. Kill records live in confirmedKills;
       // escape records remain in killTargets.
       try {
-        const db = getDb();
+        const db = await getDb();
         if (mode === 'kill' && confirmedKillId) {
           const killRef = doc(db, 'confirmedKills', confirmedKillId);
           await updateDoc(killRef, { closureOracleResponse: oracleResponse, lastUpdated: serverTimestamp() });
@@ -280,7 +280,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
   const handleOracleReaction = async (reactionId) => {
     if (!oracleModal.target) return;
     try {
-      const db = getDb();
+      const db = await getDb();
       const targetRef = doc(db, 'killTargets', oracleModal.target.id);
       await updateDoc(targetRef, { oracleReaction: reactionId });
     } catch (error) {
