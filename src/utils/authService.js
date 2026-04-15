@@ -75,20 +75,34 @@ export const authService = {
     return auth?.currentUser || null;
   },
 
-  // Listen to auth state changes - with async initialization
+  // Listen to auth state changes - with async initialization.
+  //
+  // Pass 3 New Finding 5 remediation: previously, an init failure invoked
+  // `callback(null)`, which the App interpreted as "user is signed out" and
+  // bounced the user to /auth. Now an init failure logs the error but does
+  // NOT call the callback — the loading screen stays up rather than
+  // false-logging the user out. A retry button or page reload will re-arm.
+  //
+  // The unsubscribe handle is wired through a ref so the caller's cleanup
+  // works whether or not init has completed.
   onAuthStateChanged(callback) {
     const auth = getCachedAuth();
-    if (!auth) {
-      // If not initialized yet, initialize first then listen
-      getAuth().then(authInstance => {
-        onAuthStateChanged(authInstance, callback);
-      }).catch(err => {
-        logger.error("Failed to initialize auth for listener:", err);
-        callback(null);
-      });
-      return () => {}; // Return empty unsubscribe
-    }
-    return onAuthStateChanged(auth, callback);
+    if (auth) return onAuthStateChanged(auth, callback);
+
+    let realUnsub = null;
+    let cancelled = false;
+    getAuth().then(authInstance => {
+      if (cancelled) return;
+      realUnsub = onAuthStateChanged(authInstance, callback);
+    }).catch(err => {
+      logger.error("Failed to initialize auth for listener:", err);
+      // Intentionally do NOT call callback(null) — that would masquerade as
+      // a sign-out. Caller stays in its loading state until init recovers.
+    });
+    return () => {
+      cancelled = true;
+      if (realUnsub) realUnsub();
+    };
   },
 
   // Check if user is authenticated

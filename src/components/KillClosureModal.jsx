@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppIcon } from './AppIcons';
 
 const MODE_CONFIG = {
@@ -59,6 +59,51 @@ export default function KillClosureModal({
     }
   }, [isOpen, target?.id, mode]);
 
+  // Pass 3 New Finding 12 remediation: simple focus trap for keyboard users.
+  // Captures the originating focus on open, traps Tab inside the modal, and
+  // restores focus to the originating element on close. Keeps the dependency
+  // footprint zero — no react-focus-lock import.
+  const dialogRef = useRef(null);
+  const previousFocusRef = useRef(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    previousFocusRef.current = document.activeElement;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && oraclePhase !== 'idle') {
+        onClose?.();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = dialog.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      // Restore focus to the originating element so keyboard users land back
+      // where they were before the modal opened.
+      const prior = previousFocusRef.current;
+      if (prior && typeof prior.focus === 'function') {
+        try { prior.focus(); } catch { /* element may have been removed */ }
+      }
+    };
+  }, [isOpen, oraclePhase, onClose]);
+
   if (!isOpen || !target) return null;
 
   const canSubmit = note.trim().length > 0 && !submitting;
@@ -88,6 +133,10 @@ export default function KillClosureModal({
       onClick={oraclePhase === 'done' ? onClose : undefined}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={config.headerEyebrow}
         className="w-full max-w-lg bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

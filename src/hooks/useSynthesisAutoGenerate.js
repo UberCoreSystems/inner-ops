@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { readUserData } from '../utils/firebaseUtils';
 import { generateSynthesisBriefing } from '../utils/generateSynthesisBriefing';
 import { COLLECTIONS } from '../utils/schema';
+import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
@@ -41,6 +42,12 @@ export function useSynthesisAutoGenerate(userId) {
         // Finding 13: discriminated result instead of thrown CADENCE_LOCK string.
         const result = await generateSynthesisBriefing(userId, cadence);
         if (result?.status === 'locked') return;
+        // Pass 3 New Finding 9 remediation: surface the auto-generated
+        // briefing so the user understands why SynthesisGuard may redirect
+        // them. Toast is grounded, not motivational, per CLAUDE.md.
+        if (result?.status === 'ok') {
+          ouraToast.info('New synthesis briefing ready.');
+        }
       } catch (err) {
         logger.warn('useSynthesisAutoGenerate: silent generation failed:', err?.message);
       }

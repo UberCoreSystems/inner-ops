@@ -7,7 +7,15 @@
 // configured. This prevents the package from affecting the app bundle or
 // causing load errors when analytics is not set up.
 
+import logger from './logger';
+
 let ph = null;
+
+// Pass 3 New Finding 8 remediation: PostHog failures are logged in dev so
+// engineers can see when events fail to track. Production stays quiet.
+const warnDev = (...args) => {
+  if (import.meta.env.DEV) logger.warn(...args);
+};
 
 const load = () => {
   if (ph) return Promise.resolve(ph);
@@ -24,7 +32,10 @@ const load = () => {
       ph = posthog;
       return ph;
     })
-    .catch(() => null);
+    .catch((err) => {
+      warnDev('analytics: posthog load failed:', err?.message);
+      return null;
+    });
 };
 
 // Call at app startup to eagerly load posthog when the key is set.
@@ -33,10 +44,16 @@ export const initAnalytics = () => { load(); };
 // Fire-and-forget — never throws, never blocks.
 export const track = (event, properties = {}) => {
   if (!import.meta.env.VITE_POSTHOG_KEY) return;
-  load().then((posthog) => { try { posthog?.capture(event, properties); } catch {} });
+  load().then((posthog) => {
+    try { posthog?.capture(event, properties); }
+    catch (err) { warnDev('analytics: track failed:', event, err?.message); }
+  });
 };
 
 export const identify = (userId, traits = {}) => {
   if (!import.meta.env.VITE_POSTHOG_KEY) return;
-  load().then((posthog) => { try { posthog?.identify(userId, traits); } catch {} });
+  load().then((posthog) => {
+    try { posthog?.identify(userId, traits); }
+    catch (err) { warnDev('analytics: identify failed:', err?.message); }
+  });
 };

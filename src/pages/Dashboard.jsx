@@ -139,10 +139,14 @@ export default function Dashboard() {
     
     if (currentUser) {
       loadDashboardData(currentUser);
+      // Pass 3 New Finding 7 remediation: log prefetch failures so engineers
+      // can distinguish "no new synthesis" from "synthesis read failed".
       readUserData('syntheses').then(data => {
         const sorted = (data || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
         if (sorted[0]?.isNew === true) setLatestSynthesisIsNew(true);
-      }).catch(() => {});
+      }).catch((err) => {
+        logger.warn('Dashboard: synthesis prefetch failed:', err?.message);
+      });
     } else {
       setLoading(false); // Stop loading if no user
     }
@@ -156,10 +160,14 @@ export default function Dashboard() {
     // entirely (isDevEnvironment is false), so the dynamic imports are not
     // even reached and the static import graph stays clean.
     let cancelled = false;
+    // Pass 3 New Finding 6 remediation: admin helpers now live in their own
+    // module (firebaseAdmin.js) so they never appear in the production
+    // bundle's static import graph. Production builds skip this branch
+    // entirely, so the dynamic imports below are unreachable in prod.
     Promise.all([
-      import('../utils/firebaseUtils'),
+      import('../utils/firebaseAdmin'),
       import('../utils/dataMigration'),
-    ]).then(([fbu, dm]) => {
+    ]).then(([fa, dm]) => {
       if (cancelled) return;
       const {
         debugInspectAllFirebaseData,
@@ -167,7 +175,7 @@ export default function Dashboard() {
         executeDataMigration,
         findDuplicateDocuments,
         removeDuplicateDocuments,
-      } = fbu;
+      } = fa;
       const { migrateOldDataToFirestore, findOldData } = dm;
 
     // Add debugging function to window in development only

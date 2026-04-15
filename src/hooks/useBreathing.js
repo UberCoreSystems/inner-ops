@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const PHASES = ['inhale', 'hold1', 'exhale', 'hold2'];
 const TOTAL_CYCLES = 3;
@@ -7,11 +7,23 @@ export const useBreathing = () => {
   const [breathPhase, setBreathPhase] = useState('ready');
   const [breathCount, setBreathCount] = useState(0);
 
+  // Pass 3 New Finding 10 remediation: the chained-setTimeout pattern is
+  // already safe under React's effect cleanup (clearTimeout prevents the
+  // callback from running after unmount), but a mountedRef gives us a hard
+  // guarantee that no state setter fires after unmount even if the timer
+  // chain is ever refactored to setInterval or to a longer-lived structure.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   useEffect(() => {
     if (breathPhase === 'ready' || breathPhase === 'complete') return;
 
     const currentIndex = PHASES.indexOf(breathPhase);
     const timer = setTimeout(() => {
+      if (!mountedRef.current) return;
       if (breathPhase === 'hold2') {
         if (breathCount >= TOTAL_CYCLES) {
           setBreathPhase('complete');

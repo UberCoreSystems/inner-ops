@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import ouraToast from '../utils/toast';
 
 const VoiceInputButton = ({ onTranscript, disabled = false }) => {
   const { isListening, isSupported, startListening, stopListening } = useVoiceInput();
@@ -9,9 +10,13 @@ const VoiceInputButton = ({ onTranscript, disabled = false }) => {
     if (isListening) {
       stopListening();
     } else {
-      startListening((transcript) => {
-        onTranscript(transcript);
-      });
+      // Pass 3 New Finding 4 remediation: surface mic permission failures
+      // to the user via a toast instead of failing silently.
+      startListening(
+        (transcript) => onTranscript(transcript),
+        undefined,
+        (err) => ouraToast.error(err?.message || 'Voice input unavailable.')
+      );
     }
   };
 

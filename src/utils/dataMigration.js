@@ -44,7 +44,14 @@ export const dataMigration = {
               oldData[collection].push(parsed);
             }
             
-            logger.log(`📦 Found ${collection} data in key: ${key}`, parsed);
+            // Pass 3 New Finding 11 remediation: log only summary metadata
+            // (no entry text, no kill-target titles), since this code path
+            // can be invoked in the dev migration flow and Sentry would
+            // ingest the payload otherwise.
+            const summary = Array.isArray(parsed)
+              ? { count: parsed.length, fieldNames: Object.keys(parsed[0] || {}).slice(0, 6) }
+              : { fieldNames: Object.keys(parsed || {}).slice(0, 6) };
+            logger.log(`📦 Found ${collection} data in key: ${key}`, summary);
           } catch (e) {
             logger.warn(`Could not parse ${key}:`, e.message);
           }

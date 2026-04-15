@@ -664,9 +664,29 @@ export default function Journal() {
   // Cross-module extraction state — Kill List contract + Relapse Radar signal detection
   const [crossModuleExtractions, setCrossModuleExtractions] = useState({ killList: null, relapseRadar: null });
 
+  // Pass 3 New Finding 14 remediation: per-session dedupe of extraction
+  // calls. Extraction calls are exempt from the daily Oracle rate limit
+  // (intentional, for background traffic), so a double-saved entry would
+  // otherwise burn two Anthropic calls for the same content with no
+  // ceiling. The session-scoped Set keys on a short content hash so two
+  // identical journal entries within the same session only extract once.
+  const extractionDedupeRef = useRef(new Set());
+  const hashEntryText = (text) => {
+    // Cheap deterministic hash — content fingerprint, not crypto.
+    let h = 5381;
+    for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  };
+
   // Run Kill List contract + Relapse Radar signal extraction after a journal entry is saved.
   // Fires in the background — non-blocking. Updates crossModuleExtractions when results arrive.
   const runCrossModuleExtractions = async (entryText) => {
+    const fp = hashEntryText(entryText || '');
+    if (extractionDedupeRef.current.has(fp)) {
+      logger.log('Cross-module extraction skipped (already attempted this session)');
+      return;
+    }
+    extractionDedupeRef.current.add(fp);
     try {
       const { getFunctions, httpsCallable } = await import('firebase/functions');
       const functions = getFunctions();
