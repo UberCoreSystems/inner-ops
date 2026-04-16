@@ -115,6 +115,56 @@ service cloud.firestore {
       allow list: if ownerListAllowed();
     }
 
+    // ─── Feature-sprint collections ────────────────────────────────────
+
+    // BER-243: Kill List confirmed-kills archive
+    match /confirmedKills/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    // BER-264: Black Mirror cue-restructuring saves
+    match /cueRestructurings/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    // EmergencyButton session logging
+    match /emergencyLogs/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    // BER-247: Synthesis briefings — CF creates via Admin SDK (bypasses rules).
+    // Client reads briefings and updates isNew/readAt on open (SynthesisBriefing.jsx:72).
+    match /syntheses/{docId} {
+      allow get: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    // Profile settings and synthesis cadence preference
+    match /userSettings/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    // ─── Subcollections ─────────────────────────────────────────────────
+
+    // Oura Ring biometrics cache — CF writes via Admin SDK; client reads only.
+    match /users/{userId}/biometrics/{docId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
     // Connection-test scratch space (used by smoke tests only).
     match /test-connection/{docId} {
       allow create: if createsOwnDocument();
