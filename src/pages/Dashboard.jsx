@@ -7,19 +7,16 @@ import { readUserData, writeData } from '../utils/firebaseUtils';
 // the dev-only debug effect below. In production they are not included in
 // the page's static import graph, so Vite/Terser can omit them entirely.
 import { authService } from '../utils/authService';
-import { aiUtils } from '../utils/aiUtils';
 import { clarityScoreUtils } from '../utils/clarityScore';
 import KillListDashboard from '../components/KillListDashboard';
 import QuickJournalModal from '../components/QuickJournalModal';
 import DailyPrompt from '../components/DailyPrompt';
-import { CircularProgressRing, TripleRing, ScoreCard, InsightCard, ActivityItem } from '../components/OuraRing';
+import { CircularProgressRing, TripleRing, ScoreCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { detectDriftSignals } from '../utils/detectDriftSignals';
-
-const isDevEnvironment = import.meta.env.DEV;
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -35,7 +32,6 @@ export default function Dashboard() {
   const [recentEntries, setRecentEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
-  const [aiActionSteps, setAiActionSteps] = useState([]);
   const [clarityScore, setClarityScore] = useState({
     totalScore: 0,
     rank: { rank: 'Clarity Novice', icon: '🌱', color: 'text-gray-500' },
@@ -71,7 +67,6 @@ export default function Dashboard() {
 
   // Collapsible section states
   const [killListExpanded, setKillListExpanded] = useState(true);
-  const [insightsExpanded, setInsightsExpanded] = useState(true);
 
   // Sunday Autopsy — show on Sundays
   const isSunday = new Date().getDay() === 0;
@@ -151,208 +146,10 @@ export default function Dashboard() {
       setLoading(false); // Stop loading if no user
     }
 
-    if (!isDevEnvironment) {
-      return;
-    }
-
-    // Pass 2 Finding 7 remediation: load admin helpers lazily so they never
-    // appear in the production bundle. Production builds skip this branch
-    // entirely (isDevEnvironment is false), so the dynamic imports are not
-    // even reached and the static import graph stays clean.
-    let cancelled = false;
-    // Pass 3 New Finding 6 remediation: admin helpers now live in their own
-    // module (firebaseAdmin.js) so they never appear in the production
-    // bundle's static import graph. Production builds skip this branch
-    // entirely, so the dynamic imports below are unreachable in prod.
-    Promise.all([
-      import('../utils/firebaseAdmin'),
-      import('../utils/dataMigration'),
-    ]).then(([fa, dm]) => {
-      if (cancelled) return;
-      const {
-        debugInspectAllFirebaseData,
-        previewDataMigration,
-        executeDataMigration,
-        findDuplicateDocuments,
-        removeDuplicateDocuments,
-      } = fa;
-      const { migrateOldDataToFirestore, findOldData } = dm;
-
-    // Add debugging function to window in development only
-    window.debugDashboard = {
-      reloadData: () => loadDashboardData(currentUser),
-      checkAuth: () => ({
-        currentUser: authService.getCurrentUser(),
-        hasUser: !!authService.getCurrentUser(),
-        userId: currentUser?.uid,
-        email: currentUser?.email,
-        isAnonymous: currentUser?.isAnonymous
-      }),
-      getStats: () => stats,
-      getRecentEntries: () => recentEntries,
-      getClarityScore: () => clarityScore,
-      checkLocalStorage: () => {
-        const lsData = {};
-        const allKeys = Object.keys(localStorage);
-        
-        // Check all keys, not just the known ones
-        allKeys.forEach(key => {
-          if (key.includes('inner_ops') || key.includes('journal') || key.includes('kill') || key.includes('lesson') || key.includes('mirror') || key.includes('relapse')) {
-            const data = localStorage.getItem(key);
-            try {
-              const parsed = JSON.parse(data);
-              lsData[key] = {
-                count: Array.isArray(parsed) ? parsed.length : typeof parsed,
-                size: JSON.stringify(parsed).length,
-                keys: Array.isArray(parsed) ? Object.keys(parsed[0] || {}) : Object.keys(parsed || {})
-              };
-            } catch (e) {
-              lsData[key] = { raw: data.substring(0, 100) + '...' };
-            }
-          }
-        });
-        
-        return {
-          totalKeys: allKeys.length,
-          relevantKeys: Object.keys(lsData),
-          data: lsData,
-          allKeys: allKeys
-        };
-      },
-      showUserInfo: () => {
-        const auth = currentUser;
-        console.log('=== USER INFO ===');
-        console.log('User ID:', auth?.uid);
-        console.log('Email:', auth?.email);
-        console.log('Display Name:', auth?.displayName);
-        console.log('Is Anonymous:', auth?.isAnonymous);
-        console.log('=== LOCALSTORAGE DATA ===');
-        console.log(window.debugDashboard.checkLocalStorage());
-        alert(`User ID: ${auth?.uid}\nEmail: ${auth?.email}\nOpen console for full details`);
-      },
-      inspectFirebase: async () => {
-        console.log('🔍 Inspecting Firestore (ALL documents, no filters)...');
-        const result = await debugInspectAllFirebaseData();
-        console.log('=== COMPLETE FIRESTORE STRUCTURE ===');
-        console.log('This shows ALL documents in each collection, grouped by userId');
-        console.log(result);
-        
-        // Summary
-        let totalDocs = 0;
-        Object.values(result).forEach(collection => {
-          if (collection.total) totalDocs += collection.total;
-        });
-        
-        console.log('\n=== SUMMARY ===');
-        console.log('Total documents across all collections:', totalDocs);
-        console.log('Current user ID:', window.debugDashboard.checkAuth()?.userId);
-        
-        return result;
-      },
-      findOldData: async () => {
-        console.log('🔍 Scanning for old localStorage data...');
-        const result = await findOldData();
-        console.log('=== OLD DATA FOUND ===');
-        console.log(result);
-        return result;
-      },
-      migrateData: async () => {
-        console.log('📤 Starting data migration...');
-        const result = await migrateOldDataToFirestore();
-        console.log('=== MIGRATION RESULT ===');
-        console.log(result);
-        alert(`Migration complete!\n${JSON.stringify(result.summary, null, 2)}`);
-        // Reload the page to refresh data
-        setTimeout(() => window.location.reload(), 2000);
-        return result;
-      },
-      previewMigration: async (sourceUserId) => {
-        if (!sourceUserId) {
-          console.error('❌ sourceUserId required. Usage: await window.debugDashboard.previewMigration("old-user-id")');
-          console.log('Available userIds from latest inspection:');
-          console.log('  consistent-test-user-2025 (28 journal, 12 kill targets)');
-          console.log('  T8iUaMTFmcPcIjCaYF26gJg4lXu2 (4 journal, 2 kill targets, 1 relapse)');
-          console.log('  0uJELSIt1uQdcLvR7Sh1tsbPMLE2 (3 journal)');
-          console.log('  708R0rNyePVE5nAMLXZXudgVoMA3 (2 journal, 1 black mirror)');
-          return;
-        }
-        const currentUserId = window.debugDashboard.checkAuth()?.userId;
-        console.log(`\n🔍 PREVIEW: Migrating from "${sourceUserId}" to "${currentUserId}"`);
-        const result = await previewDataMigration(sourceUserId, currentUserId);
-        console.log('=== MIGRATION PREVIEW ===');
-        console.log(result);
-        console.log('\n⚠️ Review above. To execute migration, run:');
-        console.log(`await window.debugDashboard.executeMigration("${sourceUserId}")`);
-        return result;
-      },
-      executeMigration: async (sourceUserId) => {
-        if (!sourceUserId) {
-          console.error('❌ sourceUserId required. Usage: await window.debugDashboard.executeMigration("old-user-id")');
-          return;
-        }
-        const currentUserId = window.debugDashboard.checkAuth()?.userId;
-        console.log(`\n⚡ EXECUTING: Migrating ${sourceUserId} → ${currentUserId}`);
-        const result = await executeDataMigration(sourceUserId, currentUserId);
-        console.log('=== MIGRATION RESULT ===');
-        console.log(result);
-        
-        if (result.totalErrors === 0) {
-          console.log(`✅ Successfully migrated ${result.totalMigrated} documents!`);
-          console.log('Reloading dashboard to show new data...');
-          setTimeout(() => window.location.reload(), 2000);
-        } else {
-          console.log(`⚠️ Migration completed with ${result.totalErrors} errors. Check console above.`);
-        }
-        return result;
-      },
-      findDuplicates: async () => {
-        console.log('🔍 Scanning for duplicate document IDs...');
-        const result = await findDuplicateDocuments();
-        console.log('=== DUPLICATE SCAN RESULT ===');
-        console.log(result);
-        
-        if (result.hasDuplicates) {
-          console.log('\n⚠️ DUPLICATES FOUND! To remove them safely (keeping oldest copies), run:');
-          console.log('await window.debugDashboard.removeDuplicates()');
-        } else {
-          console.log('\n✅ No duplicates found!');
-        }
-        return result;
-      },
-      removeDuplicates: async () => {
-        const hasConfirmed = confirm(
-          '⚠️ This will PERMANENTLY DELETE duplicate documents (keeping oldest copies only).\n\n' +
-          'This action cannot be undone. Are you sure?'
-        );
-        
-        if (!hasConfirmed) {
-          console.log('❌ Removal cancelled');
-          return;
-        }
-        
-        console.log('⚡ REMOVING duplicates (keeping oldest copies)...');
-        const result = await removeDuplicateDocuments();
-        console.log('=== REMOVAL RESULT ===');
-        console.log(result);
-        
-        if (result.totalRemoved > 0) {
-          console.log(`✅ Removed ${result.totalRemoved} duplicate documents!`);
-          console.log('Reloading dashboard...');
-          setTimeout(() => window.location.reload(), 2000);
-        } else {
-          console.log('ℹ️ No duplicates were removed');
-        }
-        return result;
-      }
-    };
-    }); // end Promise.all then-block
-
-    return () => {
-      cancelled = true;
-      if (window.debugDashboard) {
-        delete window.debugDashboard;
-      }
-    };
+    // Dev-mode debug surface (window.debugDashboard, admin helpers,
+    // legacy localStorage migration tools) removed. The
+    // src/utils/firebaseAdmin.js module remains in the repo for one-off
+    // recovery work but is no longer mounted on window.
   }, []); // Only run once on mount
 
   const loadDashboardData = useCallback(async (currentUser = user) => {
@@ -436,17 +233,6 @@ export default function Dashboard() {
 
       setRecentEntries(allEntries);
       
-      // Generate AI action steps based on user data (quick operation)
-      const userData = {
-        recentMood: journalEntries[0]?.mood || 'neutral',
-        killListProgress: killTargets.length > 0 ? (killTargets.filter(t => t.status === 'killed').length / killTargets.length * 100) : 0,
-        hardLessonsCount: hardLessons.length,
-        hardLessonsFinalized: hardLessons.filter(l => l.isFinalized).length
-      };
-      
-      const actionSteps = aiUtils.generateActionSteps(userData);
-      setAiActionSteps(actionSteps);
-
       // Store raw data for deferred clarity score calculation
       setRawUserData({ journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons });
 
@@ -1077,48 +863,6 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* AI Insights — collapsible */}
-          <section>
-            <button
-              onClick={() => setInsightsExpanded(prev => !prev)}
-              className="flex items-center justify-between w-full mb-4 group"
-            >
-              <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest group-hover:text-[#8a8a8a] transition-colors">AI Insights</h3>
-              <svg
-                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                className={`text-[#3a3a3a] group-hover:text-[#5a5a5a] transition-all duration-200 ${insightsExpanded ? 'rotate-180' : ''}`}
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-            {insightsExpanded && (
-              <div className="space-y-3">
-                {aiActionSteps.length > 0 ? (
-                  aiActionSteps.slice(0, 4).map((step, index) => (
-                    <InsightCard
-                      key={index}
-                      title="Recommendation"
-                      description={step}
-                      icon="💡"
-                      accentColor={['#00d4aa', '#4da6ff', '#a855f7', '#f59e0b'][index % 4]}
-                    />
-                  ))
-                ) : (
-                  <div className="oura-card p-8 text-center">
-                    <div className="text-4xl mb-3 opacity-30">🤖</div>
-                    <p className="text-[#5a5a5a]">Learning your patterns</p>
-                    <p className="text-[#3a3a3a] text-sm mt-1">Keep using the app for personalized insights</p>
-                    <button
-                      onClick={() => setQuickJournalOpen(true)}
-                      className="mt-4 px-5 py-2.5 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-xl transition-all duration-300 font-medium text-sm"
-                    >
-                      Add a Journal Entry
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
           </div>
         </div>
 
@@ -1144,57 +888,8 @@ export default function Dashboard() {
           }}
         />
 
-        {/* Debug Info Section (development only) */}
-        {isDevEnvironment && <div className="mt-12 pt-8 border-t border-[#1a1a1a] animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
-          <div className="bg-[#0a0a0a] rounded-xl p-6 border border-[#1a1a1a]">
-            <h4 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Debug Info & Data Recovery</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-4">
-              <div>
-                <p className="text-[#3a3a3a]">User ID</p>
-                <p className="text-white font-mono text-xs truncate">{user?.uid || 'Not authenticated'}</p>
-              </div>
-              <div>
-                <p className="text-[#3a3a3a]">Email</p>
-                <p className="text-white font-mono text-xs truncate">{user?.email || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-[#3a3a3a]">Auth Type</p>
-                <p className="text-white text-xs">{user?.isAnonymous ? 'Anonymous' : 'Email'}</p>
-              </div>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => window.debugDashboard?.showUserInfo?.()}
-                className="px-4 py-2 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#8a8a8a] hover:text-white rounded-lg text-sm transition-all"
-              >
-                Show User Info
-              </button>
-              <button
-                onClick={async () => {
-                  const oldData = await window.debugDashboard?.findOldData?.();
-                  if (oldData && Object.keys(oldData).length > 0) {
-                    alert(`Found old data!\n${JSON.stringify(Object.keys(oldData))}\n\nClick "Migrate Data" to import it`);
-                  } else {
-                    alert('No old data found');
-                  }
-                }}
-                className="px-4 py-2 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#8a8a8a] hover:text-white rounded-lg text-sm transition-all"
-              >
-                Scan Old Data
-              </button>
-              <button
-                onClick={async () => {
-                  if (confirm('Migrate old localStorage data to Firestore? This will import all your historical entries.')) {
-                    await window.debugDashboard?.migrateData?.();
-                  }
-                }}
-                className="px-4 py-2 bg-[#00d4aa]/20 hover:bg-[#00d4aa]/30 text-[#00d4aa] rounded-lg text-sm transition-all font-medium"
-              >
-                🚀 Migrate Data
-              </button>
-            </div>
-          </div>
-        </div>}
+        {/* Debug panel and window.debugDashboard surface removed.
+            firebaseAdmin.js remains in the repo for one-off recovery work. */}
       </div>
       </div>
     </div>
