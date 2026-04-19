@@ -1,7 +1,15 @@
 import { initializeApp } from "firebase/app";
-import logger from './utils/logger';
+import logger from './utils/logger.js';
 
-const isDevEnvironment = import.meta.env.DEV;
+// Vite injects `import.meta.env`; Node (test runner) does not. Guard here so
+// utility modules that transitively import firebase.js can be loaded under
+// `node --test` without Vite's compile-time constants. In a Node context we
+// treat env as empty and skip initialization — the firebase singleton is
+// never actually exercised in unit tests.
+const viteEnv = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+const isNodeTestContext = !viteEnv || Object.keys(viteEnv).length === 0;
+
+const isDevEnvironment = viteEnv.DEV;
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -10,12 +18,14 @@ const requiredEnvVars = [
   'VITE_FIREBASE_PROJECT_ID',
   'VITE_FIREBASE_APP_ID'
 ];
-const missingVars = requiredEnvVars.filter((varName) => !import.meta.env[varName]);
+const missingVars = requiredEnvVars.filter((varName) => !viteEnv[varName]);
 
 // Finding 9 remediation: fail fast on missing config, never log API key status
 // at boot. In production the app refuses to initialize; in dev the thrown
 // error surfaces the exact missing variable to the developer.
-if (missingVars.length > 0) {
+// In a Node test context (no Vite env) we skip the guard — tests must not
+// require production Firebase credentials to run pure utility checks.
+if (missingVars.length > 0 && !isNodeTestContext) {
   throw new Error(
     `Firebase configuration is missing required environment variables: ${missingVars.join(', ')}`
   );
@@ -23,19 +33,22 @@ if (missingVars.length > 0) {
 
 // Firebase configuration (no placeholder fallbacks)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: viteEnv.VITE_FIREBASE_API_KEY,
+  authDomain: viteEnv.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: viteEnv.VITE_FIREBASE_PROJECT_ID,
+  appId: viteEnv.VITE_FIREBASE_APP_ID
 };
 
-// Initialize Firebase app
+// Initialize Firebase app. Skipped in Node test context so transitive imports
+// don't attempt real Firebase initialization without credentials.
 let app;
-try {
-  app = initializeApp(firebaseConfig);
-} catch (error) {
-  logger.error("❌ Firebase initialization failed:", error);
-  throw new Error("Failed to initialize Firebase app");
+if (!isNodeTestContext) {
+  try {
+    app = initializeApp(firebaseConfig);
+  } catch (error) {
+    logger.error("❌ Firebase initialization failed:", error);
+    throw new Error("Failed to initialize Firebase app");
+  }
 }
 
 // Lazy-load Auth and Firestore only when needed

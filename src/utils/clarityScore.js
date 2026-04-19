@@ -1,278 +1,473 @@
+/**
+ * Signal Report — de-gamified replacement for the former Clarity Score.
+ *
+ * Inner Ops measures truth, not reward. This module no longer returns a numeric
+ * composite, a rank, a streak bonus, or any completion multiplier. It reads
+ * three behavioral signals from Firestore and composes them into a prose-ready
+ * structured report.
+ *
+ * Readers:
+ *   - getConfrontationRate      — did the user engage with Oracle feedback,
+ *                                 or dismiss it, over the recent window?
+ *   - getActiveDriftSignals     — thin wrapper around detectDriftSignals.
+ *   - getRuleIntegrityStatus    — how many finalized Hard Lessons rules are
+ *                                 being violated inside the window?
+ *
+ * Composer:
+ *   - composeSignalReport       — runs all three and returns a report object
+ *                                 keyed for the SignalReport component.
+ *
+ * Design notes:
+ *   - No numeric score. No rank. No color-coded output.
+ *   - No completion multiplier (formerly 1.2x/1.5x at 60%/80% kill-list
+ *     completion). Removed by product directive — rewarding completion is
+ *     gameable and contradicts "measurement as truth, not reward."
+ *   - Firestore and drift-detector dependencies are injected (default to the
+ *     real implementations) so tests can drive readers with in-memory fixtures
+ *     without ESM module-mock flags.
+ *   - Each reader optionally computes a prior-window comparison (trajectory
+ *     delta). Opt in via `compareToPrior: true`. This is intrinsic feedback —
+ *     a factual comparison to the immediately preceding window, not a score.
+ */
 
-import logger from './logger';
+import logger from './logger.js';
 
-// Memoization cache for expensive calculations.
-// Finding 7 remediation: TTL tightened to 60s. The cache key now also includes
-// a hash of each entry's updatedAt/lastUpdated so edits invalidate correctly.
-const calculationCache = new Map();
-const CACHE_TTL = 60 * 1000; // 60 seconds
-
-// Produce a small digest over updatedAt (or createdAt) timestamps so edits
-// that don't change array length still bust the cache.
-//
-// Pass 2 Finding 11 remediation: replaced XOR with an order-preserving FNV-1a
-// style accumulator. XOR is commutative and `t ^ t === 0`, so two arrays with
-// the same timestamps in different orders (or with duplicate timestamps that
-// cancel) collided to the same fingerprint. The new hash is sensitive to both
-// order and multiplicity.
-const fingerprintCollection = (arr) => {
-  if (!arr || arr.length === 0) return '0';
-  let acc = 2166136261; // FNV offset basis
-  for (const item of arr) {
-    const u = item?.updatedAt ?? item?.lastUpdated ?? item?.createdAt;
-    const t = u?.toDate ? u.toDate().getTime() : new Date(u || 0).getTime();
-    const v = Number.isFinite(t) ? t : 0;
-    // Mix the timestamp byte-by-byte so position matters and duplicates
-    // don't cancel. Math.imul keeps the multiplication in 32-bit space.
-    acc = (acc ^ (v & 0xff)) >>> 0;
-    acc = Math.imul(acc, 16777619) >>> 0;
-    acc = (acc ^ ((v >>> 8) & 0xff)) >>> 0;
-    acc = Math.imul(acc, 16777619) >>> 0;
-    acc = (acc ^ ((v >>> 16) & 0xff)) >>> 0;
-    acc = Math.imul(acc, 16777619) >>> 0;
-    acc = (acc ^ ((v >>> 24) & 0xff)) >>> 0;
-    acc = Math.imul(acc, 16777619) >>> 0;
-  }
-  return acc.toString(36);
+// Firestore/detector imports are resolved lazily so tests that inject a fake
+// `readUserData`/`detectDriftSignals` never pull the Firebase SDK (or any
+// transitive module with unresolvable bare imports) into the module graph.
+// Callers in the app pay a one-time dynamic-import cost on first use.
+const loadDefaults = async () => {
+  const [firebaseUtils, driftMod] = await Promise.all([
+    import('./firebaseUtils.js'),
+    import('./detectDriftSignals.js'),
+  ]);
+  return {
+    defaultReadUserData: firebaseUtils.readUserData,
+    defaultDetectDriftSignals: driftMod.detectDriftSignals,
+  };
 };
 
-// Temporal decay: recent activity counts more than old activity
-const getTemporalWeight = (createdAt) => {
-  if (!createdAt) return 0.5;
-  const d = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
-  if (isNaN(d.getTime())) return 0.5;
-  const daysAgo = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
-  if (daysAgo <= 30) return 1.0;
-  if (daysAgo <= 90) return 0.6;
-  if (daysAgo <= 180) return 0.3;
-  return 0.1;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Normalize createdAt / updatedAt / ISO string / Firestore Timestamp to ms.
+const toMs = (value) => {
+  if (!value) return 0;
+  if (value?.toDate) return value.toDate().getTime();
+  const d = new Date(value);
+  const t = d.getTime();
+  return Number.isFinite(t) ? t : 0;
 };
 
-export const clarityScoreUtils = {
-  // Base scoring system - Much more conservative and progress-focused
-  SCORING: {
-    JOURNAL_ENTRY: 2,
-    KILL_TARGET_ADDED: 2, // Adding a target = real commitment
-    KILL_TARGET_COMPLETED_SURFACE: 20, // Surface difficulty (7-day streak)
-    KILL_TARGET_COMPLETED_DEEP: 50, // Deep difficulty (21-day streak)
-    KILL_TARGET_COMPLETED_CORE: 100, // Core difficulty (60-day streak)
-    KILL_TARGET_STREAK_BONUS: 5, // per 7-day streak milestone on active targets
-    RELAPSE_AWARENESS: 10, // bonus for self-awareness and honesty
-    RELAPSE_REFLECTION: 8, // additional bonus for detailed reflection
-    RELAPSE_SCORING_CAP: 20, // max entries that earn points
-    BLACK_MIRROR_CHECK: 8, // weekly bonus
-    BLACK_MIRROR_LOW_INDEX: 5, // bonus for low index (<10)
-    HARD_LESSON_EXTRACTED: 15, // Base score for extracting a lesson from pain
-    HARD_LESSON_FINALIZED: 25, // Additional bonus for finalizing with a rule going forward
-  },
+const withinWindow = (value, windowDays) => {
+  const ms = toMs(value);
+  if (!ms) return false;
+  return Date.now() - ms <= windowDays * MS_PER_DAY;
+};
 
-  // Calculate total clarity score from user data
-  calculateClarityScore: async (userData) => {
-    // Finding 7 remediation: cache key now includes per-collection fingerprints
-    // of updatedAt/createdAt timestamps, so in-place edits invalidate the cache.
-    const cacheKey = JSON.stringify({
-      journalCount: userData.journalEntries?.length || 0,
-      killCount: userData.killTargets?.length || 0,
-      relapseCount: userData.relapseEntries?.length || 0,
-      blackMirrorCount: userData.blackMirrorEntries?.length || 0,
-      hardLessonsCount: userData.hardLessons?.length || 0,
-      j_fp: fingerprintCollection(userData.journalEntries),
-      k_fp: fingerprintCollection(userData.killTargets),
-      r_fp: fingerprintCollection(userData.relapseEntries),
-      bm_fp: fingerprintCollection(userData.blackMirrorEntries),
-      hl_fp: fingerprintCollection(userData.hardLessons),
-    });
+// Returns true when `value` falls inside the window [now - (offsetDays+windowDays), now - offsetDays].
+// offsetDays = 0 → same as withinWindow. offsetDays = windowDays → the window
+// immediately preceding the current one.
+const withinOffsetWindow = (value, windowDays, offsetDays) => {
+  const ms = toMs(value);
+  if (!ms) return false;
+  const now = Date.now();
+  const start = now - (offsetDays + windowDays) * MS_PER_DAY;
+  const end = now - offsetDays * MS_PER_DAY;
+  return ms > start && ms <= end;
+};
 
-    // Check cache first
-    const cached = calculationCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-      return cached.result;
-    }
+// ─── Confrontation Rate ───────────────────────────────────────────────────────
 
-    const { journalEntries = [], killTargets = [], relapseEntries = [], blackMirrorEntries = [], hardLessons = [] } = userData;
-    
-    let totalScore = 0;
+/**
+ * Measure the user's engagement with Oracle feedback over the recent window.
+ *
+ * An "engaged" entry is one that has an `oracleFeedback` (or `oracleEngaged`)
+ * field present and was created within the window. A "dismissed" entry is one
+ * from the same period where Oracle feedback was generated but the user took
+ * no follow-up action on it (`oracleDismissed === true`).
+ *
+ * NOTE (instrumentation gap): writes from Journal, Kill List, Hard Lessons,
+ * Relapse Radar, and Black Mirror currently persist `oracleFeedback` text on
+ * the entry when Oracle is called, but there is no explicit `oracleEngaged`
+ * or `oracleDismissed` boolean attached on follow-up/continue. Until those
+ * flags are added to the entry writes, this reader returns a placeholder with
+ * `percentage: null` so the UI can render a "not yet instrumented" line
+ * rather than a misleading number. TODO: add `oracleEngaged: boolean` on
+ * follow-up writes across all five modules, then tighten this reader.
+ *
+ * @param {string} userId — kept for signature parity; reads are already
+ *   user-scoped through readUserData.
+ * @param {number} windowDays — default 14.
+ * @param {{ readUserData?: Function, compareToPrior?: boolean }} deps — for tests.
+ * @returns {Promise<{
+ *   engagedCount: number,
+ *   dismissedCount: number,
+ *   percentage: number|null,
+ *   prior?: { engagedCount: number, dismissedCount: number, percentage: number|null }
+ * }>}
+ */
+export async function getConfrontationRate(userId, windowDays = 14, deps = {}) {
+  const readUserData = deps.readUserData || (await loadDefaults()).defaultReadUserData;
+  const compareToPrior = deps.compareToPrior === true;
+  try {
+    const [journal, killTargets, hardLessons, relapse, blackMirror] = await Promise.all([
+      readUserData('journalEntries'),
+      readUserData('killTargets'),
+      readUserData('hardLessons'),
+      readUserData('relapseEntries'),
+      readUserData('blackMirrorEntries'),
+    ]);
 
-    // Journal scoring — temporal decay applied, minimum 50 chars to count
-    const journalScore = journalEntries.reduce((sum, entry) => {
-      const content = entry.content || entry.text || '';
-      if (content.length < 50) return sum; // too short to score
-      return sum + clarityScoreUtils.SCORING.JOURNAL_ENTRY * getTemporalWeight(entry.createdAt);
-    }, 0);
-    totalScore += journalScore;
-    
-    // Streak bonus for journaling (consecutive days) - more conservative
-    const journalStreak = clarityScoreUtils.calculateJournalStreak(journalEntries);
-    if (journalStreak >= 7) totalScore += 15; // Weekly streak bonus
-    if (journalStreak >= 30) totalScore += 40; // Monthly streak bonus
-    if (journalStreak >= 90) totalScore += 75; // Quarterly streak bonus
+    const all = [
+      ...(journal || []),
+      ...(killTargets || []),
+      ...(hardLessons || []),
+      ...(relapse || []),
+      ...(blackMirror || []),
+    ];
 
-    // Kill List scoring with completion rate multiplier and difficulty tiers
-    let killListScore = 0;
-    let completedTargets = 0;
-    const DIFF_MAP = { high: 'core', medium: 'deep', low: 'surface' };
-
-    // Note: Kill target completions intentionally have NO temporal decay.
-    // Conquering a behavioral pattern is a permanent victory — unlike Hard Lessons
-    // (whose urgency fades), a killed target remains killed. Decay would misrepresent
-    // the permanence of behavioral elimination. This is by design.
-    killTargets.forEach(target => {
-      killListScore += clarityScoreUtils.SCORING.KILL_TARGET_ADDED;
-
-      // Streak bonus: points per 7-day milestone reached on active targets
-      const streak = target.streak || 0;
-      killListScore += Math.floor(streak / 7) * clarityScoreUtils.SCORING.KILL_TARGET_STREAK_BONUS;
-
-      const isKilled = target.status === 'killed' || target.progress === 100;
-      if (isKilled) {
-        const mappedDiff = DIFF_MAP[target.priority];
-        if (!target.difficulty && !mappedDiff) {
-          logger.warn(`[clarityScore] Kill target "${target.name || target.id}" has no difficulty or recognized priority — defaulting to 'deep'`);
-        }
-        const difficulty = target.difficulty || mappedDiff || 'deep';
-        if (difficulty === 'core') killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_CORE;
-        else if (difficulty === 'surface') killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_SURFACE;
-        else killListScore += clarityScoreUtils.SCORING.KILL_TARGET_COMPLETED_DEEP;
-        completedTargets++;
+    // Reduce a set of entries to { engagedCount, dismissedCount, percentage }.
+    // Shared across current and prior windows so both use identical logic.
+    const tally = (entries) => {
+      const withOracle = entries.filter(
+        e => e.oracleFeedback || e.oracleEngaged === true || e.oracleDismissed === true
+      );
+      if (withOracle.length === 0) {
+        return { engagedCount: 0, dismissedCount: 0, percentage: null };
       }
-    });
-    
-    // Completion rate multiplier: bonus-only — adding targets should never be penalized
-    const completionRate = killTargets.length > 0 ? completedTargets / killTargets.length : 0;
-    let completionMultiplier = 1.0; // baseline — no penalty for having incomplete targets
-
-    if (completionRate >= 0.8) completionMultiplier = 1.5; // 80%+ completion rate bonus
-    else if (completionRate >= 0.6) completionMultiplier = 1.2; // 60%+ completion rate bonus
-    // below 60%: stays at 1.0 — no penalty, no incentive to hide targets
-    
-    killListScore = Math.floor(killListScore * completionMultiplier);
-    totalScore += killListScore;
-
-    // Hard Lessons scoring — require real content (min 30 chars in extractedLesson)
-    let hardLessonsScore = 0;
-    hardLessons.forEach(lesson => {
-      const hasContent = (lesson.extractedLesson || '').trim().length >= 30
-        || (lesson.eventDescription || '').trim().length >= 30;
-      if (!hasContent) return; // no points for empty/trivial lessons
-      hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_EXTRACTED * getTemporalWeight(lesson.createdAt);
-      if (lesson.isFinalized && lesson.ruleGoingForward?.trim().length >= 20) {
-        hardLessonsScore += clarityScoreUtils.SCORING.HARD_LESSON_FINALIZED * getTemporalWeight(lesson.createdAt);
-      }
-    });
-    totalScore += hardLessonsScore;
-
-    // Black Mirror scoring (weekly bonus system)
-    const weeklyBlackMirrorBonuses = clarityScoreUtils.calculateWeeklyBlackMirrorBonuses(blackMirrorEntries);
-    totalScore += weeklyBlackMirrorBonuses;
-
-    // Relapse Radar scoring — capped at 10 entries to prevent gaming,
-    // and only entries with meaningful reflection (>50 chars) count
-    let relapseAwarenessBonus = 0;
-    const scorableRelapse = relapseEntries
-      .filter(e => (e.reflection || '').trim().length >= 20)
-      .slice(0, clarityScoreUtils.SCORING.RELAPSE_SCORING_CAP); // hard cap — entries beyond cap earn nothing
-    scorableRelapse.forEach(entry => {
-      relapseAwarenessBonus += clarityScoreUtils.SCORING.RELAPSE_AWARENESS;
-      if (entry.reflection && entry.reflection.length > 100) {
-        relapseAwarenessBonus += clarityScoreUtils.SCORING.RELAPSE_REFLECTION;
-      }
-    });
-    totalScore += relapseAwarenessBonus;
-
-    const result = {
-      totalScore: Math.floor(totalScore),
-      journalStreak,
-      killTargetsCompleted: killTargets.filter(t => t.status === 'killed' || t.progress === 100).length,
-      weeklyBlackMirrorChecks: Math.floor(blackMirrorEntries.length / 7),
-      relapseAwarenessEntries: relapseEntries.length,
-      breakdown: {
-        journal: Math.floor(journalScore),
-        killList: killListScore,
-        hardLessons: hardLessonsScore,
-        blackMirror: weeklyBlackMirrorBonuses,
-        relapseAwareness: relapseAwarenessBonus,
-        bonuses: journalStreak >= 7 ? (journalStreak >= 90 ? 130 : (journalStreak >= 30 ? 55 : 15)) : 0,
-        completionRate: completionRate,
-        completionMultiplier: completionMultiplier
-      }
+      const engagedCount = withOracle.filter(
+        e => e.oracleEngaged === true || (e.oracleFeedback && e.oracleDismissed !== true)
+      ).length;
+      const dismissedCount = withOracle.filter(e => e.oracleDismissed === true).length;
+      const total = engagedCount + dismissedCount;
+      const percentage = total > 0 ? Math.round((engagedCount / total) * 100) : null;
+      return { engagedCount, dismissedCount, percentage };
     };
 
-    // Cache the result
-    calculationCache.set(cacheKey, {
-      result,
-      timestamp: Date.now()
-    });
+    const current = tally(all.filter(e => withinWindow(e.createdAt, windowDays)));
 
-    // Clean old cache entries
-    if (calculationCache.size > 100) {
-      const cutoff = Date.now() - CACHE_TTL;
-      for (const [key, value] of calculationCache.entries()) {
-        if (value.timestamp < cutoff) {
-          calculationCache.delete(key);
-        }
-      }
-    }
+    if (!compareToPrior) return current;
 
-    return result;
-  },
-
-  // Calculate journal streak
-  calculateJournalStreak: (journalEntries) => {
-    if (journalEntries.length === 0) return 0;
-    
-    const sortedEntries = journalEntries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const today = new Date();
-    let streak = 0;
-    
-    for (let i = 0; i < sortedEntries.length; i++) {
-      const entryDate = new Date(sortedEntries[i].createdAt);
-      const daysDiff = Math.floor((today - entryDate) / (1000 * 60 * 60 * 24));
-      
-      if (daysDiff === streak) {
-        streak++;
-      } else {
-        break;
-      }
-    }
-    
-    return streak;
-  },
-
-  // Calculate black mirror check weekly bonuses
-  calculateWeeklyBlackMirrorBonuses: (blackMirrorEntries) => {
-    let totalBonus = 0;
-    const weeksWithChecks = new Set();
-    
-    blackMirrorEntries.forEach(entry => {
-      const checkDate = entry.createdAt?.toDate ? entry.createdAt.toDate() : new Date(entry.createdAt);
-      // Use UTC values to prevent week-boundary misbucketing across timezones
-      const utcMs = Date.UTC(checkDate.getUTCFullYear(), checkDate.getUTCMonth(), checkDate.getUTCDate());
-      const weekKey = `${checkDate.getUTCFullYear()}-${Math.floor(utcMs / (7 * 24 * 60 * 60 * 1000))}`;
-      
-      if (!weeksWithChecks.has(weekKey)) {
-        weeksWithChecks.add(weekKey);
-        totalBonus += clarityScoreUtils.SCORING.BLACK_MIRROR_CHECK;
-        
-        // Bonus for low Black Mirror Index (good digital wellness)
-        if (entry.blackMirrorIndex < 10) {
-          totalBonus += clarityScoreUtils.SCORING.BLACK_MIRROR_LOW_INDEX;
-        }
-      }
-    });
-    
-    return totalBonus;
-  },
-
-  // Get clarity rank based on score - Much more realistic progression
-  // Icons updated for Oura-style minimalist aesthetic
-  getClarityRank: (score) => {
-    if (score >= 1100) return { rank: 'Clarity Master', icon: '◆', color: 'text-yellow-400' }; // Diamond - mastery
-    if (score >= 750) return { rank: 'Clarity Expert', icon: '◈', color: 'text-purple-400' }; // Diamond outline - expertise
-    if (score >= 500) return { rank: 'Clarity Seeker', icon: '◉', color: 'text-red-400' }; // Circle target - seeking
-    if (score >= 300) return { rank: 'Clarity Practitioner', icon: '◎', color: 'text-blue-400' }; // Double circle - practice
-    if (score >= 150) return { rank: 'Clarity Student', icon: '▲', color: 'text-green-400' }; // Triangle up - growth
-    if (score >= 75) return { rank: 'Clarity Apprentice', icon: '●', color: 'text-orange-400' }; // Solid circle - foundation
-    if (score >= 25) return { rank: 'Clarity Beginner', icon: '○', color: 'text-gray-400' }; // Empty circle - starting
-    return { rank: 'Clarity Novice', icon: '·', color: 'text-gray-500' }; // Dot - origin point
+    // Prior window: the `windowDays` period immediately preceding the current one.
+    // Computed in-memory from the same fetched entries — no second Firestore query.
+    const priorEntries = all.filter(e => withinOffsetWindow(e.createdAt, windowDays, windowDays));
+    const prior = tally(priorEntries);
+    return { ...current, prior };
+  } catch (err) {
+    logger.warn('getConfrontationRate: read failed', err?.message);
+    const fallback = { engagedCount: 0, dismissedCount: 0, percentage: null };
+    return compareToPrior ? { ...fallback, prior: { ...fallback } } : fallback;
   }
+}
+
+// ─── Drift Signals ────────────────────────────────────────────────────────────
+
+/**
+ * Thin wrapper around detectDriftSignals. Returns the signals array (current
+ * point-in-time detector output) and, when `compareToPrior: true`, a count of
+ * signals that would have fired against the prior window's data.
+ *
+ * Prior-window approximation:
+ *   detectDriftSignals is a point-in-time detector that reads the full
+ *   relapse/kill-target history. To approximate "how many signals were active
+ *   during the previous window," we re-run the detector against only the
+ *   entries whose timestamps fall inside the prior window. This is a
+ *   principled reuse of the same rules engine, not a new heuristic — it asks
+ *   "given only the data the user had produced in those 14 days, would the
+ *   drift rules have fired?" Kill-target escapes are filtered by escape.date;
+ *   relapse entries by their createdAt/timestamp.
+ *
+ * @param {string} userId
+ * @param {{
+ *   readUserData?: Function,
+ *   detectDriftSignals?: Function,
+ *   compareToPrior?: boolean,
+ *   windowDays?: number
+ * }} deps
+ * @returns {Promise<Array<object>> | Promise<{ signals: Array<object>, priorSignalCount: number }>}
+ */
+export async function getActiveDriftSignals(userId, deps = {}) {
+  let readUserData = deps.readUserData;
+  let detectDriftSignals = deps.detectDriftSignals;
+  if (!readUserData || !detectDriftSignals) {
+    const d = await loadDefaults();
+    readUserData = readUserData || d.defaultReadUserData;
+    detectDriftSignals = detectDriftSignals || d.defaultDetectDriftSignals;
+  }
+  const compareToPrior = deps.compareToPrior === true;
+  const windowDays = deps.windowDays ?? 14;
+  try {
+    const [relapse, killTargets] = await Promise.all([
+      readUserData('relapseEntries'),
+      readUserData('killTargets'),
+    ]);
+    const relapseArr = relapse || [];
+    const killArr = killTargets || [];
+    const { signals } = detectDriftSignals(relapseArr, killArr);
+    const currentSignals = signals || [];
+
+    if (!compareToPrior) return currentSignals;
+
+    // Prior window: filter raw data by timestamp, then re-run the same detector.
+    // Matches detectDriftSignals' own time extraction: createdAt.toDate() or
+    // timestamp for relapse entries; escape.date for kill-target escapes.
+    const relapseTime = (e) => e.createdAt?.toDate?.()?.getTime?.() ?? e.timestamp ?? 0;
+    const priorRelapse = relapseArr.filter(e => {
+      const t = relapseTime(e);
+      return t && withinOffsetWindow(t, windowDays, windowDays);
+    });
+    const priorKillTargets = killArr
+      .map(target => {
+        const escapes = Array.isArray(target.escapes) ? target.escapes : [];
+        const priorEscapes = escapes.filter(esc =>
+          esc?.date && withinOffsetWindow(esc.date, windowDays, windowDays)
+        );
+        return { ...target, escapes: priorEscapes };
+      })
+      .filter(target => (target.escapes || []).length > 0);
+
+    const priorResult = detectDriftSignals(priorRelapse, priorKillTargets);
+    const priorSignalCount = (priorResult?.signals || []).length;
+
+    return { signals: currentSignals, priorSignalCount };
+  } catch (err) {
+    logger.warn('getActiveDriftSignals: read failed', err?.message);
+    return compareToPrior ? { signals: [], priorSignalCount: 0 } : [];
+  }
+}
+
+// ─── Rule Integrity ───────────────────────────────────────────────────────────
+
+/**
+ * Count finalized Hard Lessons rules and how many were violated inside the
+ * window. A "finalized rule" is a Hard Lesson with `isFinalized === true` and
+ * a non-empty `ruleGoingForward`. A violation is recorded when the same lesson
+ * carries a `violations` array entry whose timestamp falls inside the window,
+ * or a `lastViolatedAt` inside the window.
+ *
+ * @param {string} userId
+ * @param {number} windowDays — default 30.
+ * @param {{ readUserData?: Function, compareToPrior?: boolean }} deps — for tests.
+ * @returns {Promise<{
+ *   finalizedRuleCount: number,
+ *   violatedInWindow: number,
+ *   priorViolatedInWindow?: number
+ * }>}
+ */
+export async function getRuleIntegrityStatus(userId, windowDays = 30, deps = {}) {
+  const readUserData = deps.readUserData || (await loadDefaults()).defaultReadUserData;
+  const compareToPrior = deps.compareToPrior === true;
+  try {
+    const hardLessons = (await readUserData('hardLessons')) || [];
+    const finalized = hardLessons.filter(
+      l => l.isFinalized === true && (l.ruleGoingForward || '').trim().length > 0
+    );
+
+    // Shared counter so current and prior windows use identical logic.
+    const countViolations = (predicate) => finalized.reduce((count, lesson) => {
+      const violations = Array.isArray(lesson.violations) ? lesson.violations : [];
+      const hitInArray = violations.some(v => predicate(v?.date || v?.timestamp || v));
+      const hitLastViolated = predicate(lesson.lastViolatedAt);
+      return count + (hitInArray || hitLastViolated ? 1 : 0);
+    }, 0);
+
+    const violatedInWindow = countViolations(v => withinWindow(v, windowDays));
+
+    if (!compareToPrior) {
+      return { finalizedRuleCount: finalized.length, violatedInWindow };
+    }
+
+    const priorViolatedInWindow = countViolations(
+      v => withinOffsetWindow(v, windowDays, windowDays)
+    );
+
+    return {
+      finalizedRuleCount: finalized.length,
+      violatedInWindow,
+      priorViolatedInWindow,
+    };
+  } catch (err) {
+    logger.warn('getRuleIntegrityStatus: read failed', err?.message);
+    const fallback = { finalizedRuleCount: 0, violatedInWindow: 0 };
+    return compareToPrior ? { ...fallback, priorViolatedInWindow: 0 } : fallback;
+  }
+}
+
+// ─── Behavioral Record Density ────────────────────────────────────────────────
+
+// Read-time shim mirrors KillList.jsx / KillListDashboard.jsx. Legacy targets
+// used a string `difficulty` (surface/deep/core) or `priority` (low/medium/high)
+// before `consecutiveDaysRequired` was added. Resolve to the numeric field so
+// density counts match the threshold the target was actually committed to.
+const LEGACY_DIFFICULTY_TO_DAYS = { surface: 21, deep: 30, core: 60 };
+const LEGACY_PRIORITY_TO_DAYS = { high: 60, medium: 30, low: 21 };
+const MIN_DAYS_REQUIRED = 21;
+
+const resolveConsecutiveDaysRequired = (target) => {
+  const raw = Number(target?.consecutiveDaysRequired);
+  if (Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED) return Math.floor(raw);
+  if (target?.difficulty && LEGACY_DIFFICULTY_TO_DAYS[target.difficulty]) {
+    return LEGACY_DIFFICULTY_TO_DAYS[target.difficulty];
+  }
+  if (target?.priority && LEGACY_PRIORITY_TO_DAYS[target.priority]) {
+    return LEGACY_PRIORITY_TO_DAYS[target.priority];
+  }
+  return 30;
+};
+
+/**
+ * Behavioral Record Density — a factual census of the raw mass of work the
+ * user has produced. Not a score. Not a rank. Every field is a count of
+ * artifacts that required real effort to create (autopsy entries carry
+ * context + rationalization; finalized rules carry a full forensic structure;
+ * kills carry the user-set consecutive-day threshold).
+ *
+ * Consumers render only non-zero lines; all-zero inventories get an empty-
+ * state message at the component layer.
+ *
+ * @param {string} userId
+ * @param {{ readUserData?: Function, detectDriftSignals?: Function }} deps
+ * @returns {Promise<{
+ *   autopsies: number,
+ *   rulesFinalized: number,
+ *   kills60Plus: number,
+ *   kills21Plus: number,
+ *   activeDriftSignals: number,
+ *   structuredJournalEntries: number
+ * }>}
+ */
+export async function getBehavioralRecordDensity(userId, deps = {}) {
+  let readUserData = deps.readUserData;
+  let detectDriftSignals = deps.detectDriftSignals;
+  if (!readUserData || !detectDriftSignals) {
+    const d = await loadDefaults();
+    readUserData = readUserData || d.defaultReadUserData;
+    detectDriftSignals = detectDriftSignals || d.defaultDetectDriftSignals;
+  }
+  try {
+    const [killTargets, hardLessons, journalEntries, relapseEntries] = await Promise.all([
+      readUserData('killTargets'),
+      readUserData('hardLessons'),
+      readUserData('journalEntries'),
+      readUserData('relapseEntries'),
+    ]);
+
+    const targets = killTargets || [];
+
+    // Autopsies: count of escape entries across all targets where at least
+    // one of context / rationalization / prevention carries content. The
+    // submit-guard in KillList.jsx already requires context + rationalization,
+    // so most entries qualify — the filter protects against legacy or
+    // partially-migrated records.
+    const autopsies = targets.reduce((sum, t) => {
+      const escapes = Array.isArray(t.escapeData) ? t.escapeData : [];
+      const written = escapes.filter(
+        e => (e?.context || '').trim() ||
+             (e?.rationalization || '').trim() ||
+             (e?.prevention || '').trim()
+      ).length;
+      return sum + written;
+    }, 0);
+
+    // Finalized rules: same predicate as getRuleIntegrityStatus.
+    const rulesFinalized = (hardLessons || []).filter(
+      l => l.isFinalized === true && (l.ruleGoingForward || '').trim().length > 0
+    ).length;
+
+    // Kills at threshold: status === 'killed' AND the resolved consecutive-day
+    // threshold meets the bucket. 21+ is the full-kill population; 60+ is a
+    // strict subset rendered as a separate line by the component.
+    const killed = targets.filter(t => t.status === 'killed');
+    const kills21Plus = killed.filter(t => resolveConsecutiveDaysRequired(t) >= 21).length;
+    const kills60Plus = killed.filter(t => resolveConsecutiveDaysRequired(t) >= 60).length;
+
+    // Active drift signals: detector output, counted.
+    const { signals } = detectDriftSignals(relapseEntries || [], killTargets || []);
+    const activeDriftSignals = (signals || []).length;
+
+    // Structured journal entries: both event (30+ char) and attribution
+    // (40+ char) fields present. Surfaces post-Spec-3 work volume.
+    const structuredJournalEntries = (journalEntries || []).filter(
+      e => (e?.event || '').trim().length >= 30 &&
+           (e?.attribution || '').trim().length >= 40
+    ).length;
+
+    return {
+      autopsies,
+      rulesFinalized,
+      kills60Plus,
+      kills21Plus,
+      activeDriftSignals,
+      structuredJournalEntries,
+    };
+  } catch (err) {
+    logger.warn('getBehavioralRecordDensity: read failed', err?.message);
+    return {
+      autopsies: 0,
+      rulesFinalized: 0,
+      kills60Plus: 0,
+      kills21Plus: 0,
+      activeDriftSignals: 0,
+      structuredJournalEntries: 0,
+    };
+  }
+}
+
+// ─── Composer ─────────────────────────────────────────────────────────────────
+
+/**
+ * Compose the three readers into a single structured report. No numeric
+ * composite. Consumers (e.g. SignalReport.jsx) format this into prose.
+ *
+ * Dashboard opts in to prior-window trajectory deltas by default. Callers that
+ * want the plain current-window report can pass `compareToPrior: false`.
+ *
+ * @param {string} userId
+ * @param {{
+ *   readUserData?: Function,
+ *   detectDriftSignals?: Function,
+ *   compareToPrior?: boolean
+ * }} deps
+ * @returns {Promise<object>}
+ */
+export async function composeSignalReport(userId, deps = {}) {
+  const compareToPrior = deps.compareToPrior !== false; // default true
+  const readerDeps = { ...deps, compareToPrior };
+
+  const [confrontationRate, driftSignalsResult, ruleIntegrity] = await Promise.all([
+    getConfrontationRate(userId, 14, readerDeps),
+    getActiveDriftSignals(userId, { ...readerDeps, windowDays: 14 }),
+    getRuleIntegrityStatus(userId, 30, readerDeps),
+  ]);
+
+  // Normalize the drift-signal return shape: with compareToPrior we get
+  // { signals, priorSignalCount }; without, we get a bare array.
+  const driftSignals = Array.isArray(driftSignalsResult)
+    ? driftSignalsResult
+    : (driftSignalsResult?.signals || []);
+  const priorDriftSignalCount = Array.isArray(driftSignalsResult)
+    ? undefined
+    : driftSignalsResult?.priorSignalCount;
+
+  return {
+    confrontationRate,
+    driftSignals,
+    priorDriftSignalCount,
+    ruleIntegrity,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+// Legacy compatibility: the Dashboard and any remaining callers previously
+// imported `clarityScoreUtils` from this module. We keep the name so imports
+// don't break mid-migration, but every surface it exposes returns the
+// structured Signal Report — never a numeric score, never a rank.
+export const clarityScoreUtils = {
+  composeSignalReport,
+  getConfrontationRate,
+  getActiveDriftSignals,
+  getRuleIntegrityStatus,
+  getBehavioralRecordDensity,
 };

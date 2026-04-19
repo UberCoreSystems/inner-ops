@@ -1,5 +1,5 @@
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { getDb, getAuth } from '../firebase';
+import { getDb, getAuth } from '../firebase.js';
 
 export const saveUserProfile = async (profile) => {
   const auth = await getAuth();

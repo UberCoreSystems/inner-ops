@@ -316,28 +316,20 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     }
   };
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high':
-      case 'core': return 'text-[#ef4444]';
-      case 'medium':
-      case 'deep': return 'text-[#f59e0b]';
-      case 'low':
-      case 'surface': return 'text-[#22c55e]';
-      default: return 'text-[#5a5a5a]';
+  // Read-time shim for legacy tier docs — mirrors KillList.jsx mapping.
+  const MIN_DAYS_REQUIRED = 21;
+  const LEGACY_DIFFICULTY_TO_DAYS = { surface: 21, deep: 30, core: 60 };
+  const LEGACY_PRIORITY_TO_DAYS = { high: 60, medium: 30, low: 21 };
+  const getConsecutiveDaysRequired = (target) => {
+    const raw = Number(target?.consecutiveDaysRequired);
+    if (Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED) return Math.floor(raw);
+    if (target?.difficulty && LEGACY_DIFFICULTY_TO_DAYS[target.difficulty]) {
+      return LEGACY_DIFFICULTY_TO_DAYS[target.difficulty];
     }
-  };
-
-  const getPriorityIcon = (priority) => {
-    switch (priority) {
-      case 'high':
-      case 'core': return <span className="w-2 h-2 rounded-full bg-[#ef4444] inline-block" style={{ boxShadow: '0 0 8px #ef4444' }}></span>;
-      case 'medium':
-      case 'deep': return <span className="w-2 h-2 rounded-full bg-[#f59e0b] inline-block" style={{ boxShadow: '0 0 8px #f59e0b' }}></span>;
-      case 'low':
-      case 'surface': return <span className="w-2 h-2 rounded-full bg-[#22c55e] inline-block" style={{ boxShadow: '0 0 8px #22c55e' }}></span>;
-      default: return <span className="w-2 h-2 rounded-full bg-[#5a5a5a] inline-block"></span>;
+    if (target?.priority && LEGACY_PRIORITY_TO_DAYS[target.priority]) {
+      return LEGACY_PRIORITY_TO_DAYS[target.priority];
     }
+    return 30;
   };
 
   if (initialLoad && loading) {
@@ -445,23 +437,20 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  {getPriorityIcon(target.priority || target.difficulty)}
                   <h3 className="font-medium text-white">{target.title}</h3>
                   <span className={`px-2 py-0.5 text-xs font-light rounded-full border ${getStatusColor(target.status || 'active')}`}>
                     {(target.status || 'active').toUpperCase()}
                   </span>
                 </div>
                 <p className="text-[#8a8a8a] text-sm mb-3 font-light">{target.description}</p>
-                <div className="flex items-center gap-4 text-xs text-[#5a5a5a]">
-                  <span className={getPriorityColor(target.priority || target.difficulty)}>
-                    {(target.difficulty || target.priority || 'deep').toUpperCase()}
-                  </span>
-                  {target.completedAt && (
-                    <span>
-                      Completed: {target.completedAt.toLocaleTimeString()}
-                    </span>
-                  )}
-                </div>
+                <p className="text-[#5a5a5a] text-xs mb-2">
+                  Kill requires {getConsecutiveDaysRequired(target)} consecutive days of held execution.
+                </p>
+                {target.completedAt && (
+                  <div className="text-xs text-[#5a5a5a]">
+                    Completed: {target.completedAt.toLocaleTimeString()}
+                  </div>
+                )}
               </div>
             </div>
 

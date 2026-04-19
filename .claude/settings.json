@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(firebase deploy:*)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(npm cache *)",
+      "Bash(npm install *)",
+      "Bash(git add *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\boliv\\.claude\\plans"

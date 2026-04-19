@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { readUserData, writeData } from '../utils/firebaseUtils';
 // Pass 2 Finding 7 remediation: privileged admin helpers (data migration,
@@ -7,16 +7,19 @@ import { readUserData, writeData } from '../utils/firebaseUtils';
 // the dev-only debug effect below. In production they are not included in
 // the page's static import graph, so Vite/Terser can omit them entirely.
 import { authService } from '../utils/authService';
-import { clarityScoreUtils } from '../utils/clarityScore';
+import { composeSignalReport, getBehavioralRecordDensity } from '../utils/clarityScore';
+import { formatDriftSignalText } from '../utils/relapseTaxonomy';
+import SignalReport from '../components/SignalReport';
+import BehavioralRecordDensity from '../components/BehavioralRecordDensity';
+import MorningBrief from '../components/MorningBrief';
 import KillListDashboard from '../components/KillListDashboard';
 import QuickJournalModal from '../components/QuickJournalModal';
 import DailyPrompt from '../components/DailyPrompt';
-import { CircularProgressRing, TripleRing, ScoreCard, ActivityItem } from '../components/OuraRing';
+import { ScoreCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
-import { detectDriftSignals } from '../utils/detectDriftSignals';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -32,16 +35,16 @@ export default function Dashboard() {
   const [recentEntries, setRecentEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
-  const [clarityScore, setClarityScore] = useState({
-    totalScore: 0,
-    rank: { rank: 'Clarity Novice', icon: '🌱', color: 'text-gray-500' },
-    isFrozen: false,
-    breakdown: {}
-  });
-  
-  // Store raw data for deferred clarity score calculation
+
+  // Signal report replaces the former numeric clarity score + rank.
+  const [signalReport, setSignalReport] = useState(null);
+
+  // Behavioral Record Density — factual inventory of work produced.
+  const [density, setDensity] = useState(null);
+
+  // Store raw data for deferred signal report composition
   const [rawUserData, setRawUserData] = useState(null);
-  const [calculatingClarity, setCalculatingClarity] = useState(false);
+  const [composingReport, setComposingReport] = useState(false);
 
   // Early warning signal
   const [earlyWarning, setEarlyWarning] = useState(null);
@@ -255,27 +258,25 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  // Deferred clarity score calculation - runs after UI renders
+  // Deferred Signal Report composition — runs after UI renders.
+  // The Dashboard already holds the raw cross-module data, so we feed it to
+  // composeSignalReport via a synchronous in-memory reader instead of
+  // re-fetching from Firestore.
   useEffect(() => {
-    if (!loading && rawUserData && !calculatingClarity) {
-      setCalculatingClarity(true);
-      
-      logger.log("🧮 Dashboard: Starting clarity score calculation with data:", {
-        journalEntries: rawUserData.journalEntries?.length || 0,
-        killTargets: rawUserData.killTargets?.length || 0,
-        relapseEntries: rawUserData.relapseEntries?.length || 0,
-        blackMirrorEntries: rawUserData.blackMirrorEntries?.length || 0,
-        hardLessons: rawUserData.hardLessons?.length || 0
-      });
-      
-      // Use setTimeout to allow UI to render first
+    if (!loading && rawUserData && !composingReport) {
+      setComposingReport(true);
+
       const timer = setTimeout(async () => {
         try {
-          const scoreData = await clarityScoreUtils.calculateClarityScore(rawUserData);
-          const rank = clarityScoreUtils.getClarityRank(scoreData.totalScore);
-          setClarityScore({ ...scoreData, rank });
+          const inMemoryReader = async (name) => rawUserData[name] || [];
+          const [report, densityResult] = await Promise.all([
+            composeSignalReport(user?.uid, { readUserData: inMemoryReader }),
+            getBehavioralRecordDensity(user?.uid, { readUserData: inMemoryReader }),
+          ]);
+          setSignalReport(report);
+          setDensity(densityResult);
 
-          // Compute early warning signal
+          // Compute early warning signal (unchanged — distinct from Signal Report)
           const NEGATIVE_MOODS = new Set(['heavy','hollow','foggy','chaotic']);
           const POSITIVE_MOODS = new Set(['electric','light','radiant','triumphant','focused','sharp','steady','calm']);
           const recentJournal = (rawUserData.journalEntries || []).slice(0, 7);
@@ -304,123 +305,22 @@ export default function Dashboard() {
             setEarlyWarning({ level, signals, moodDots, daysSinceRelapse, daysSinceJournal });
           }
 
-          // Compute behavioral drift signals (archetype frequency, precursor patterns, correlated escapes)
-          // Finding 14: detector now returns { signals, skippedCount }.
-          const { signals: detected } = detectDriftSignals(rawUserData.relapseEntries || [], rawUserData.killTargets || []);
-          if (detected.length > 0) {
-            setDriftSignals(detected);
+          // Mirror drift signals into the existing Drift Warning banner.
+          if (report.driftSignals && report.driftSignals.length > 0) {
+            setDriftSignals(report.driftSignals);
           }
-          
-          logger.log("✅ Dashboard: Clarity score calculated successfully", {
-            score: scoreData.totalScore,
-            rank: rank.rank,
-            breakdown: scoreData.breakdown
-          });
         } catch (error) {
-          logger.error("❌ Dashboard: Error calculating clarity score:", error);
-          logger.error("Error details:", error.message, error.stack);
+          logger.error("❌ Dashboard: Error composing signal report:", error);
         } finally {
-          setCalculatingClarity(false);
+          setComposingReport(false);
         }
-      }, 100); // Small delay to let UI render first
-      
+      }, 100);
+
       return () => clearTimeout(timer);
     }
-  }, [loading, rawUserData]); // Remove calculatingClarity from dependencies to avoid loop
+  }, [loading, rawUserData]);
 
   const showShell = loading || showSkeleton || !user;
-
-  // Calculate ring percentages for visualization - Based on realistic, meaningful goals (memoized to prevent recalculation)
-  
-  // Mastery: Overall progress toward full mastery (0-1000 scale)
-  // 1000 represents years of consistent practice - the full journey
-  const MASTERY_SCORE = 1100;
-  const masteryPercent = Math.min(100, (clarityScore.totalScore / MASTERY_SCORE) * 100);
-
-  // Also calculate rank progress for display context
-  // Final Expert→Master stretch is 350 pts (750→1100) vs 250 for all prior tiers — intentionally harder
-  const RANK_TIERS = [0, 25, 75, 150, 300, 500, 750, 1100];
-
-  const getCurrentRankThreshold = (score) => {
-    // Returns the floor of the tier the score currently sits in
-    for (let i = RANK_TIERS.length - 1; i >= 0; i--) {
-      if (score >= RANK_TIERS[i]) return RANK_TIERS[i];
-    }
-    return 0;
-  };
-
-  const getNextRankThreshold = (score) => {
-    // Returns the ceiling of the current tier (floor of the next rank)
-    const current = getCurrentRankThreshold(score);
-    const idx = RANK_TIERS.indexOf(current);
-    return RANK_TIERS[Math.min(idx + 1, RANK_TIERS.length - 1)];
-  };
-
-  const currentRankFloor = getCurrentRankThreshold(clarityScore.totalScore);
-  const nextRankThreshold = getNextRankThreshold(clarityScore.totalScore);
-  const pointsToNextRank = nextRankThreshold - clarityScore.totalScore;
-  const rangeSize = nextRankThreshold - currentRankFloor;
-  const progressInRange = clarityScore.totalScore - currentRankFloor;
-  
-  // Clarity Ring: Progress within current rank toward next rank
-  // This gives actionable short-term motivation
-  const clarityPercent = rangeSize > 0 ? Math.min(100, (progressInRange / rangeSize) * 100) : 100;
-  
-  // Streak Ring: Progress toward 30-day milestone (a meaningful recovery goal)
-  const streakPercent = Math.min(100, (stats.streakDays / 30) * 100);
-  
-  // Activity Ring: Based on RECENT activity (last 30 days) across all modules
-  // This measures current engagement, not lifetime totals
-  
-  // Helper to count entries from last 30 days
-  const countRecentEntries = (entries, daysBack = 30) => {
-    if (!entries || !Array.isArray(entries)) return 0;
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-    
-    return entries.filter(entry => {
-      if (!entry?.createdAt) return false;
-      const entryDate = entry.createdAt?.toDate ? entry.createdAt.toDate() : new Date(entry.createdAt);
-      return entryDate >= cutoffDate;
-    }).length;
-  };
-  
-  // Helper to count recent entries from recentEntries (already loaded)
-  // Since we don't have the full arrays in state, we'll use the stats for now
-  // but apply a decay factor based on the most recent entry time
-  
-  // Monthly goals (30-day targets):
-  // - Journal: 8 entries/month (2/week) = most important daily habit
-  // - Kill Targets: 3 targets actively worked on = ongoing elimination
-  // - Hard Lessons: 2 lessons/month = meaningful reflection
-  // - Black Mirror: 4 checks/month (weekly) = digital awareness
-  
-  const journalGoal = 8;
-  const killGoal = 3;
-  const lessonsGoal = 2;
-  const mirrorGoal = 4;
-  
-  // Calculate progress for each module
-  // For kill targets: count both active targets and successfully killed ones
-  const activeKillTargets = stats.killTargets || 0;
-  
-  // Cap each at 100% to prevent one area from inflating overall score
-  const journalProgress = Math.min(100, (countRecentEntries(rawUserData?.journalEntries) / journalGoal) * 100);
-  const killProgress = Math.min(100, (countRecentEntries(rawUserData?.killTargets?.filter(t => t.status === 'active')) / killGoal) * 100);
-  const lessonsProgress = Math.min(100, (countRecentEntries(rawUserData?.hardLessons) / lessonsGoal) * 100);
-  const mirrorProgress = Math.min(100, (countRecentEntries(rawUserData?.blackMirrorEntries) / mirrorGoal) * 100);
-  
-  // Weighted average with clear rationale:
-  // - Journal (35%): Daily reflection is foundational to self-awareness
-  // - Kill List (25%): Actively eliminating destructive patterns
-  // - Hard Lessons (25%): Extracting wisdom from pain prevents repeat mistakes
-  // - Black Mirror (15%): Digital consciousness checks support overall clarity
-  const activityPercent = Math.round(
-    journalProgress * 0.35 +
-    killProgress * 0.25 +
-    lessonsProgress * 0.25 +
-    mirrorProgress * 0.15
-  );
 
   const formatTimeAgo = useCallback((date) => {
     const now = new Date();
@@ -453,6 +353,11 @@ export default function Dashboard() {
           <div className="max-w-6xl mx-auto px-4 py-8">
             
             {/* Oura-style Header */}
+            {/* NOTE (Morning Brief integration): the "Good morning, <name>" greeting
+                below is the kind of cozy UX Inner Ops rejects now that the
+                Morning Brief is the first-contact surface. Flagged for removal
+                in a follow-up — keeping it here without product sign-off would
+                overreach the current task's scope. */}
             <header className="mb-10 animate-fade-in-up">
               <p className="text-[#5a5a5a] text-sm uppercase tracking-widest mb-2">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -461,6 +366,10 @@ export default function Dashboard() {
                 Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Warrior'}
               </h1>
             </header>
+
+        {/* Morning Brief — operator-cadence daily readout. First content surface
+            below the header. One generation per calendar day, Firestore-cached. */}
+        {user?.uid && <MorningBrief userId={user.uid} />}
 
         {/* Synthesis Briefing — Forced State (non-dismissible, must open before clearing) */}
         {latestSynthesisIsNew && (
@@ -537,19 +446,17 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Drift Signal Warning */}
+        {/* Drift Signal Warning — UXR-002 Spec 4: bare lowercase prose. No color
+            coding, no badges, no alert-state visuals. The language carries the
+            weight, not the styling. */}
         {driftSignals.length > 0 && (
           <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.09s' }}>
-            <div className="oura-card p-5 border-l-4 border-[#f59e0b]">
-              <p className="text-xs font-medium uppercase tracking-widest text-[#f59e0b] mb-3">Relapse Radar — Drift Detected</p>
-              <div className="space-y-2">
-                {driftSignals.map((signal, idx) => (
-                  <div key={idx} className={`p-3 rounded-xl border-l-2 ${signal.severity === 'warning' ? 'border-[#f59e0b] bg-[#f59e0b]/5' : 'border-[#a855f7] bg-[#a855f7]/5'}`}>
-                    <p className="text-white text-sm">{signal.description}</p>
-                    {signal.detail && <p className="text-[#5a5a5a] text-xs mt-0.5">{signal.detail}</p>}
-                  </div>
-                ))}
-              </div>
+            <div className="space-y-1">
+              {driftSignals.map((signal, idx) => (
+                <p key={idx} className="text-[#8a8a8a] text-sm lowercase">
+                  {formatDriftSignalText(signal)}
+                </p>
+              ))}
             </div>
           </section>
         )}
@@ -636,127 +543,33 @@ export default function Dashboard() {
           );
         })()}
 
-        {/* Main Score Section - Oura Triple Ring Style */}
+        {/* Signal Report — prose-only, no score, no rank, no rings */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className="oura-card p-8 flex flex-col lg:flex-row items-center gap-8">
-            
-            {/* Triple Ring Visualization */}
-            <div className="relative flex-shrink-0">
-              <TripleRing 
-                size={220}
-                rings={[
-                  { progress: clarityPercent, color: '#00d4aa', label: 'Clarity' },
-                  { progress: activityPercent, color: '#4da6ff', label: 'Activity' },
-                  { progress: streakPercent, color: '#a855f7', label: 'Streak' }
-                ]}
-                centerContent={
-                  <div className="text-center">
-                    <div className="text-5xl font-bold text-white oura-score">
-                      {clarityScore.totalScore}
-                    </div>
-                    <div className="text-[#5a5a5a] text-xs uppercase tracking-wider mt-1">
-                      Clarity
-                    </div>
-                  </div>
-                }
-              />
-            </div>
+          <div className="oura-card p-6">
+            <p className="text-xs font-medium uppercase tracking-widest text-[#5a5a5a] mb-3">Signal Report</p>
+            <SignalReport report={signalReport} />
+          </div>
+        </section>
 
-            {/* Score Details */}
-            <div className="flex-1 w-full">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-3xl">{clarityScore.rank.icon}</span>
-                <div>
-                  <h2 className="text-xl font-semibold text-white">{clarityScore.rank.rank}</h2>
-                  <p className="text-[#5a5a5a] text-sm">Your current clarity level</p>
-                </div>
-              </div>
-              
-              {/* Ring Legend */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-[#00d4aa]"></div>
-                  <div>
-                    <p className="text-white text-sm font-medium">{clarityPercent.toFixed(0)}%</p>
-                    <p className="text-[#5a5a5a] text-xs">Clarity</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-[#4da6ff]"></div>
-                  <div>
-                    <p className="text-white text-sm font-medium">{activityPercent.toFixed(0)}%</p>
-                    <p className="text-[#5a5a5a] text-xs">Activity</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 group relative cursor-help">
-                  <div className="w-3 h-3 rounded-full bg-[#a855f7]"></div>
-                  <div>
-                    <p className="text-white text-sm font-medium">{stats.streakDays}d</p>
-                    <p className="text-[#5a5a5a] text-xs">Streak</p>
-                  </div>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[#2a2a2a] text-[#8a8a8a] text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                    Days since last relapse
-                  </div>
-                </div>
-              </div>
-
-              {/* Score Breakdown */}
-              {(() => {
-                const bd = clarityScore.breakdown || {};
-                const rawTotal = (bd.journal || 0) + (bd.killList || 0) + (bd.hardLessons || 0) + (bd.blackMirror || 0) + (bd.relapseAwareness || 0) + (bd.bonuses || 0);
-                const modules = [
-                  { label: 'Journal',      pts: bd.journal || 0,            color: '#a855f7' },
-                  { label: 'Kill List',    pts: bd.killList || 0,            color: '#ef4444' },
-                  { label: 'Hard Lessons', pts: bd.hardLessons || 0,         color: '#f59e0b' },
-                  { label: 'Mirror',       pts: bd.blackMirror || 0,         color: '#4da6ff' },
-                  { label: 'Awareness',    pts: bd.relapseAwareness || 0,    color: '#22c55e' },
-                  { label: 'Bonuses',      pts: bd.bonuses || 0,             color: '#00d4aa' },
-                ];
-                const multiplier = bd.completionMultiplier ?? 1;
-                const completionPct = bd.completionRate != null ? Math.round(bd.completionRate * 100) : null;
-                return (
-                  <div className="space-y-3">
-                    {modules.map(({ label, pts, color }) => {
-                      const barPct = rawTotal > 0 ? Math.round((pts / rawTotal) * 100) : 0;
-                      return (
-                        <div key={label} className="flex items-center gap-3">
-                          <span className="text-[#5a5a5a] text-xs w-24 shrink-0">{label}</span>
-                          <div className="flex-1 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-700"
-                              style={{ width: `${barPct}%`, backgroundColor: color }}
-                            />
-                          </div>
-                          <span className="text-xs font-semibold tabular-nums w-10 text-right" style={{ color }}>
-                            +{pts}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {/* Multiplier row */}
-                    <div className="pt-2 border-t border-[#1a1a1a] flex items-center justify-between text-xs text-[#5a5a5a]">
-                      <span>Kill-list completion rate</span>
-                      <span className={`font-semibold ${multiplier >= 1 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                        ×{multiplier.toFixed(2)}{completionPct != null ? ` (${completionPct}%)` : ''}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+        {/* Behavioral Record Density — factual inventory of work produced.
+            Leads the factual-metrics surface; SignalReport leads the trajectory
+            surface above. No scores, no ranks, no bars. Only non-zero lines. */}
+        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Behavioral Record</h3>
+          <div className="oura-card p-6">
+            <BehavioralRecordDensity density={density} />
           </div>
         </section>
 
         {/* Stats Grid - Oura Score Cards */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <ScoreCard score={stats.streakDays} label="Streak" sublabel="Days strong" color="#00d4aa" icon={<AppIcon name="streak" size={20} color="#00d4aa" />} size="small" />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" />
             <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" />
             <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" />
             <ScoreCard score={stats.blackMirrorEntries || 0} label="Mirror" sublabel={`of ${stats.blackMirrorEntriesTotal || 0} total`} color="#4da6ff" icon={<AppIcon name="mirror" size={20} color="#4da6ff" />} size="small" />
-            <ScoreCard score={clarityScore.journalStreak || 0} label="Writing" sublabel="Day streak" color="#22c55e" icon={<AppIcon name="writing" size={20} color="#22c55e" />} size="small" />
+            <ScoreCard score={stats.relapseEntries || 0} label="Awareness" sublabel={`of ${stats.relapseEntries || 0} total`} color="#22c55e" icon={<AppIcon name="writing" size={20} color="#22c55e" />} size="small" />
           </div>
         </section>
 

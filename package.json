@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js"
+    "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js src/utils/dailyBrief.test.js"
   },
   "keywords": [],
   "author": "",

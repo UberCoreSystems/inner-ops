@@ -1,10 +1,10 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth as getFirebaseAuth } from 'firebase/auth';
-import { getUserProfile } from './userProfile';
-import { getBehavioralContext } from './getBehavioralContext';
-import { resolveTriggeredCriterion } from './confrontationCriteria';
-import { track } from './analytics';
-import { detectEvasionMarkers } from './detectEvasionMarkers';
+import { getUserProfile } from './userProfile.js';
+import { getBehavioralContext } from './getBehavioralContext.js';
+import { resolveTriggeredCriterion } from './confrontationCriteria.js';
+import { track } from './analytics.js';
+import { detectEvasionMarkers } from './detectEvasionMarkers.js';
 
 const logger = {
   info: (...args) => console.info(...args),
@@ -16,6 +16,57 @@ const MAX_RECENT_FINGERPRINTS = 8;
 const MIN_LENSES = 1;
 const MAX_LENSES = 3;
 const BANNED_TONE_REGEX = /\b(proud of you|you got this|safe space|healing journey|you deserve|be gentle with yourself|everything happens for a reason)\b/i;
+
+// UXR-002 Spec 5: Oracle evasion-aware tone calibration thresholds.
+// detectEvasionMarkers returns an integer `count` in [0,4] — the number of
+// distinct marker categories (passiveVoice, externalization, hedging,
+// lowSpecificity) present above their internal frequency bars. A single
+// marker category is not a pattern; two categories is a credible signal;
+// three or more is a strong signal that posture must harden.
+// Conservative defaults — calibrate against production Oracle logs after
+// 2+ weeks of data (Spec 5 validation deferred until live traffic exists).
+const EVASION_THRESHOLD_LOW = 2;
+const EVASION_THRESHOLD_HIGH = 3;
+
+// Frame override for high-evasion entries. `stoic_drill_down` is the
+// closest in-catalog equivalent of the "challenge" posture referenced by
+// the cloud function's posture matching; it anchors the fallback template
+// composer to direct confrontation rather than reframing.
+export const HIGH_EVASION_FRAME = 'stoic_drill_down';
+
+export const EVASION_THRESHOLDS = Object.freeze({
+  low: EVASION_THRESHOLD_LOW,
+  high: EVASION_THRESHOLD_HIGH
+});
+
+const EVASION_MARKER_LABELS = {
+  passiveVoice: 'passive voice (actions without an actor)',
+  externalization: 'externalization (circumstances framed as the cause)',
+  hedging: 'hedged language (softeners, epistemic retreat)',
+  lowSpecificity: 'abstraction without concrete detail'
+};
+
+const listActiveMarkers = (markers) => Object.keys(EVASION_MARKER_LABELS)
+  .filter((key) => markers[key])
+  .map((key) => EVASION_MARKER_LABELS[key]);
+
+export const classifyEvasion = (markers) => {
+  if (!markers || typeof markers.count !== 'number') return 'low';
+  if (markers.count >= EVASION_THRESHOLD_HIGH) return 'high';
+  if (markers.count >= EVASION_THRESHOLD_LOW) return 'moderate';
+  return 'low';
+};
+
+export const buildEvasionNote = (markers, band) => {
+  if (band === 'low') return '';
+  const active = listActiveMarkers(markers).slice(0, 3);
+  const markerList = active.length > 0 ? active.join('; ') : 'nonspecific avoidance patterning';
+  if (band === 'high') {
+    return `\n\nEVASION CALIBRATION (high): The entry shows linguistic markers of avoidance — specifically: ${markerList}. Name the evasion pattern directly by citing the user's own language. Do not offer reframes, do not build content, do not soften. Ask one specific question that cannot be answered without the user taking a position on what they actually did.`;
+  }
+  // moderate
+  return `\n\nEVASION CALIBRATION (moderate): Evasion markers present — ${markerList}. Reference them if relevant to your feedback.`;
+};
 
 const RESPONSE_FRAMES = [
   'stoic_drill_down',
@@ -340,8 +391,8 @@ const buildCrossModuleInstruction = (behavioralContext) => {
   if (behavioralContext.blackMirrorTrend) {
     parts.push(`Black Mirror attention trend: ${behavioralContext.blackMirrorTrend}.`);
   }
-  if (behavioralContext.journalMoodPattern) {
-    parts.push(`Dominant journal mood (last 7d): ${behavioralContext.journalMoodPattern}.`);
+  if (behavioralContext.journalLanguagePattern) {
+    parts.push(`Dominant journal language pattern (last 7d): ${behavioralContext.journalLanguagePattern}.`);
   }
   // BER-137: identity direction contradiction detection
   if (behavioralContext.identityDirection) {
@@ -761,14 +812,29 @@ export const generateFeedback = async ({
     lenses
   });
 
-  // BER-138: evasion detection for Journal and Hard Lessons only
-  let evasionNote = '';
-  const evasionModules = ['journal', 'hardlessons', 'hard_lessons'];
-  if (evasionModules.includes(safeModuleName.toLowerCase())) {
-    const evasionMarkers = detectEvasionMarkers(cleanEntry);
-    if (evasionMarkers.count >= 2) {
-      evasionNote = '\n\nEVASION ALERT: The user\'s language contains significant avoidance markers. Your primary task is to break through the evasion. Name what they are avoiding. Do not accept the frame they have provided.';
-    }
+  // UXR-002 Spec 5: evasion-aware tone calibration.
+  // Runs for every module (Journal, Kill List, Hard Lessons, Relapse Radar,
+  // Black Mirror, Emergency) so confrontation precision scales with avoidance
+  // density regardless of entry surface. detectEvasionMarkers short-circuits
+  // entries under 20 chars internally, so this is safe for brief inputs.
+  const evasionMarkers = detectEvasionMarkers(cleanEntry);
+  const evasionBand = classifyEvasion(evasionMarkers);
+  const evasionNote = buildEvasionNote(evasionMarkers, evasionBand);
+
+  // High-evasion entries harden the fallback frame to the closest in-catalog
+  // "challenge" posture. Moderate/low keep the frame chosen by pickFrame.
+  if (evasionBand === 'high') {
+    antiRepetitionData.frame = HIGH_EVASION_FRAME;
+  }
+
+  // Server-side only logging for threshold tuning. Never surfaced to the UI.
+  if (evasionBand !== 'low') {
+    logger.info('[aiFeedback] evasion', {
+      module: safeModuleName,
+      band: evasionBand,
+      count: evasionMarkers.count,
+      markers: listActiveMarkers(evasionMarkers)
+    });
   }
 
   const promptBundle = buildPrompt({
@@ -829,19 +895,72 @@ export const generateFeedback = async ({
   }
 };
 
-export const generateAIFeedback = async (moduleName, userInput, pastEntries = [], behavioralContext = null) => {
+/**
+ * Build the combined `content` string from the Journal's structured fields.
+ * Used both when Journal calls with `{ event, attribution, expansion }` and
+ * when downstream consumers read the saved entry's `content` field.
+ */
+export const composeJournalContent = ({ event = '', attribution = '', expansion = '' } = {}) => {
+  const parts = [];
+  if (event && event.trim()) parts.push(`[EVENT]\n${event.trim()}`);
+  if (attribution && attribution.trim()) parts.push(`[ATTRIBUTION]\n${attribution.trim()}`);
+  if (expansion && expansion.trim()) parts.push(expansion.trim());
+  return parts.join('\n\n');
+};
+
+/**
+ * generateAIFeedback supports two call shapes for backward compatibility:
+ *
+ *   Legacy: (moduleName: string, userInput: string, pastEntries?: any[], behavioralContext?: object)
+ *   Structured: ({ moduleName, event, attribution, expansion, pastEntries?, behavioralContext? })
+ *
+ * The structured form is used by the retired-mood Journal entry flow
+ * (Spec 3, UXR-002). Other modules (Kill List, Hard Lessons, Relapse Radar,
+ * Emergency, Black Mirror, QuickJournalModal, OracleModal) continue to pass
+ * the legacy string form.
+ */
+export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntries = [], behavioralContext = null) => {
+  let moduleName;
+  let resolvedInput;
+  let resolvedPast = pastEntries;
+  let resolvedContext = behavioralContext;
+
+  if (moduleNameOrArgs && typeof moduleNameOrArgs === 'object' && !Array.isArray(moduleNameOrArgs)) {
+    // Structured form — destructured object.
+    const {
+      moduleName: mod,
+      event = '',
+      attribution = '',
+      expansion = '',
+      content = '',
+      pastEntries: pEntries = [],
+      behavioralContext: bCtx = null,
+    } = moduleNameOrArgs;
+    moduleName = mod;
+    // Prefer structured journal fields when provided; fall back to `content`
+    // (mirrors downstream shape — see composeJournalContent).
+    resolvedInput = (event || attribution || expansion)
+      ? composeJournalContent({ event, attribution, expansion })
+      : content;
+    resolvedPast = pEntries;
+    resolvedContext = bCtx;
+  } else {
+    // Legacy positional form — preserved exactly for non-Journal callers.
+    moduleName = moduleNameOrArgs;
+    resolvedInput = userInput;
+  }
+
   try {
-    const entryText = normalizeEntryText(userInput);
-    const priorFeedbackSummary = Array.isArray(pastEntries)
-      ? pastEntries
+    const entryText = normalizeEntryText(resolvedInput);
+    const priorFeedbackSummary = Array.isArray(resolvedPast)
+      ? resolvedPast
           .slice(-3)
           .map((entry) => normalizeEntryText(entry))
           .filter(Boolean)
           .join(' | ')
       : '';
 
-    // Auto-fetch behavioral context when not explicitly provided
-    let resolvedContext = behavioralContext;
+    // Auto-fetch behavioral context when not explicitly provided by caller.
     let uid = null;
     try {
       const auth = getFirebaseAuth();
@@ -876,7 +995,7 @@ export const generateAIFeedback = async (moduleName, userInput, pastEntries = []
     return { text: formatFeedbackAsText(feedback), metacognitiveDepth: null };
   } catch (error) {
     logger.error('Error generating AI feedback:', error);
-    const fallback = buildFallbackFeedback(moduleName, normalizeEntryText(userInput));
+    const fallback = buildFallbackFeedback(moduleName, normalizeEntryText(resolvedInput));
     return { text: formatFeedbackAsText(fallback), metacognitiveDepth: null };
   }
 };

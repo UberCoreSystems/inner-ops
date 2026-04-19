@@ -13,37 +13,19 @@ import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { useOuraData } from '../hooks/useOuraData';
+import {
+  ARCHETYPE_IDS,
+  HABIT_IDS,
+  SUBSTANCE_OPTIONS,
+  resolveArchetypeLabel,
+  resolveHabitLabel,
+  resolveSubstanceLabel,
+  formatDriftSignalText,
+} from '../utils/relapseTaxonomy';
 
-const relapseSelves = [
-  'The Addict',
-  'The Victim', 
-  'The Procrastinator',
-  'The Pessimist',
-  'The Perfectionist',
-  'The People-Pleaser',
-  'The Imposter',
-  'The Self-Saboteur'
-];
-
-const relapseHabits = [
-  'Excessive social media scrolling',
-  'Binge eating',
-  'Procrastination',
-  'Negative self-talk',
-  'Isolation',
-  'Overthinking',
-  'Comparing myself to others',
-  'Avoiding responsibilities'
-];
-
-const substanceOptions = [
-  'Alcohol',
-  'Nicotine',
-  'Cannabis',
-  'Caffeine (excessive)',
-  'Sugar (excessive)',
-  'None'
-];
+// UXR-002 Spec 4: archetype IDs, habit IDs, and substance options live in
+// src/utils/relapseTaxonomy.js. See that file for the rationale (self-
+// verification theory, behavioral-descriptor labels over identity nouns).
 
 const PRECURSOR_CONDITIONS = [
   'Sleep deprived',
@@ -187,7 +169,7 @@ const RelapseRadar = () => {
     });
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .map(([name, count]) => ({ name, count }));
+      .map(([id, count]) => ({ id, label: resolveArchetypeLabel(id), count }));
   }, [relapseEntries]);
 
   const daysSinceLastRelapse = useMemo(() => {
@@ -208,7 +190,7 @@ const RelapseRadar = () => {
     const counts = {};
     allHabits.forEach(h => { counts[h] = (counts[h] || 0) + 1; });
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    return top ? { name: top[0], count: top[1] } : null;
+    return top ? { id: top[0], label: resolveHabitLabel(top[0]), count: top[1] } : null;
   }, [relapseEntries]);
 
   const driftSignals = useMemo(() => {
@@ -225,7 +207,7 @@ const RelapseRadar = () => {
     relapseEntries.forEach(e => {
       const t = e.createdAt?.toDate?.()?.getTime() ?? e.timestamp ?? 0;
       if (now - t < windowMs) {
-        events.push({ type: 'relapse', date: t, label: e.selectedSelf || 'Relapse', id: e.id });
+        events.push({ type: 'relapse', date: t, label: resolveArchetypeLabel(e.selectedSelf) || 'Relapse', id: e.id });
       }
     });
 
@@ -245,8 +227,8 @@ const RelapseRadar = () => {
   // BER-133: active kill targets correlated with dominant archetype (48h escape window)
   const archetypeKillTargets = useMemo(() => {
     if (!archetypeFrequency[0]) return [];
-    const dominantArchetype = archetypeFrequency[0].name;
-    const archetypeEntries = relapseEntries.filter(e => e.selectedSelf === dominantArchetype);
+    const dominantArchetypeId = archetypeFrequency[0].id;
+    const archetypeEntries = relapseEntries.filter(e => e.selectedSelf === dominantArchetypeId);
     const windowMs = 48 * 60 * 60 * 1000;
     const activeTargets = killTargets.filter(t => t.status === 'active');
 
@@ -300,12 +282,17 @@ const RelapseRadar = () => {
     if (!normalizedQuery) return relapseEntries;
 
     return relapseEntries.filter((entry) => {
+      // Search across stored IDs AND resolved behavioral-descriptor labels so
+      // users can find historical entries using the new taxonomy.
       const haystack = [
         entry.selectedSelf,
+        resolveArchetypeLabel(entry.selectedSelf),
         entry.selectedHabits?.join(' '),
+        entry.selectedHabits?.map(resolveHabitLabel).join(' '),
         entry.substanceUse?.join(' '),
+        entry.substanceUse?.map(resolveSubstanceLabel).join(' '),
         entry.reflection,
-        entry.oracleFeedback
+        entry.oracleFeedback,
       ]
         .filter(Boolean)
         .join(' ')
@@ -364,7 +351,10 @@ const RelapseRadar = () => {
         ? ' [ENTRY CONTEXT: This entry was written significantly after the event. The user\'s recollection may be reconstructed rather than accurate. Weight behavioral specifics cautiously and probe for what details may have been edited by hindsight.]'
         : '';
 
-      const entryText = `Self: ${selectedSelf}, Habits: ${selectedHabits.join(', ')}, Substances: ${substanceUse.join(', ')}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}${proximityNote}`;
+      const archetypeLabelForPrompt = resolveArchetypeLabel(selectedSelf);
+      const habitLabelsForPrompt = selectedHabits.map(resolveHabitLabel).join(', ');
+      const substanceLabelsForPrompt = substanceUse.map(resolveSubstanceLabel).join(', ');
+      const entryText = `Pattern: ${archetypeLabelForPrompt}, Habits: ${habitLabelsForPrompt}, Substances: ${substanceLabelsForPrompt}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}${proximityNote}`;
       oracleEntryTextRef.current = entryText;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
       const { text: oracleFeedback } = await generateAIFeedback('relapse', entryText, pastReflections);
@@ -475,12 +465,12 @@ const RelapseRadar = () => {
             <div className="space-y-2">
               {archetypeFrequency[0] && (
                 <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
-                  Top archetype: {archetypeFrequency[0].name} ({archetypeFrequency[0].count}×)
+                  Top archetype: {archetypeFrequency[0].label} ({archetypeFrequency[0].count}×)
                 </div>
               )}
               {topHabit && (
                 <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
-                  Top trigger: {topHabit.name} ({topHabit.count}×)
+                  Top trigger: {topHabit.label} ({topHabit.count}×)
                 </div>
               )}
               {daysSinceLastRelapse !== null && (
@@ -520,12 +510,12 @@ const RelapseRadar = () => {
           <div className="mb-6 oura-card p-5">
             <h3 className="text-xs text-gray-500 tracking-widest uppercase mb-4">Archetype Frequency</h3>
             <div className="space-y-2.5">
-              {archetypeFrequency.map(({ name, count }) => {
+              {archetypeFrequency.map(({ id, label, count }) => {
                 const maxCount = archetypeFrequency[0].count;
                 const pct = Math.round((count / maxCount) * 100);
                 return (
-                  <div key={name} className="flex items-center gap-3">
-                    <div className="text-gray-400 text-xs w-36 shrink-0 truncate">{name}</div>
+                  <div key={id} className="flex items-center gap-3">
+                    <div className="text-gray-400 text-xs w-36 shrink-0 truncate">{label}</div>
                     <div className="flex-1 bg-oura-border rounded-full h-1.5 overflow-hidden">
                       <div
                         className="h-1.5 rounded-full bg-oura-amber transition-all duration-500"
@@ -662,34 +652,30 @@ const RelapseRadar = () => {
       )}
 
       {step === 2 && driftSignals.length > 0 && (
-        <div className="mb-6 space-y-2 animate-fade-in-up">
+        <div className="mb-6 space-y-1 animate-fade-in-up">
           {driftSignals.map((signal, idx) => (
-            <div
-              key={idx}
-              className={`p-4 rounded-2xl border-l-4 ${signal.severity === 'warning' ? 'border-oura-amber bg-oura-amber/10' : 'border-oura-purple bg-oura-purple/10'}`}
-            >
-              <div className="text-white text-sm font-medium">{signal.description}</div>
-              {signal.detail && <div className="text-gray-400 text-xs mt-1">{signal.detail}</div>}
-            </div>
+            <p key={idx} className="text-gray-400 text-sm lowercase">
+              {formatDriftSignalText(signal)}
+            </p>
           ))}
         </div>
       )}
 
       {step === 2 && (
         <div className="space-y-6 animate-fade-in-up">
-          <h3 className="text-xl font-light text-white tracking-tight">Which self showed up today?</h3>
+          <h3 className="text-xl font-light text-white tracking-tight">Which pattern showed up today?</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {relapseSelves.map((self) => (
+            {ARCHETYPE_IDS.map((id) => (
               <button
-                key={self}
-                onClick={() => setSelectedSelf(self)}
+                key={id}
+                onClick={() => setSelectedSelf(id)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
-                  selectedSelf === self
+                  selectedSelf === id
                     ? 'bg-oura-amber text-black font-medium shadow-oura-glow-amber'
                     : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
-                {self}
+                {resolveArchetypeLabel(id)}
               </button>
             ))}
           </div>
@@ -701,17 +687,17 @@ const RelapseRadar = () => {
           <h3 className="text-xl font-light text-white tracking-tight">What patterns emerged?</h3>
           <p className="text-gray-500 text-sm">Skip if none apply.</p>
           <div className="grid grid-cols-1 gap-3">
-            {relapseHabits.map((habit) => (
+            {HABIT_IDS.map((id) => (
               <button
-                key={habit}
-                onClick={() => handleHabitToggle(habit)}
+                key={id}
+                onClick={() => handleHabitToggle(id)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
-                  selectedHabits.includes(habit)
+                  selectedHabits.includes(id)
                     ? 'bg-oura-amber text-black font-medium shadow-oura-glow-amber'
                     : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
-                {habit}
+                {resolveHabitLabel(id)}
               </button>
             ))}
           </div>
@@ -723,7 +709,7 @@ const RelapseRadar = () => {
           <h3 className="text-xl font-light text-white tracking-tight">Any substance use?</h3>
           <p className="text-gray-500 text-sm">Skip if none apply.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {substanceOptions.map((substance) => (
+            {SUBSTANCE_OPTIONS.map((substance) => (
               <button
                 key={substance}
                 onClick={() => handleSubstanceToggle(substance)}
@@ -783,7 +769,7 @@ const RelapseRadar = () => {
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <p className="text-gray-300 text-sm leading-relaxed">
-                <span className="text-oura-amber">{archetypeMatchPrompt.targetName}</span> has been escaped in similar contexts. Review the autopsy?
+                <span className="text-oura-amber">{archetypeMatchPrompt.targetName}</span> has been escaped in similar contexts under {resolveArchetypeLabel(archetypeMatchPrompt.archetype)}. Review the autopsy?
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -868,7 +854,7 @@ const RelapseRadar = () => {
             <div className="space-y-3">
               {filteredRelapseEntries.slice(0, 3).map((entry) => (
                 <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-sm transition-shadow duration-300">
-                  <div className="text-oura-amber font-light text-lg">{entry.selectedSelf}</div>
+                  <div className="text-oura-amber font-light text-lg">{resolveArchetypeLabel(entry.selectedSelf)}</div>
                   <div className="text-gray-500 text-sm mt-2">
                     {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </div>

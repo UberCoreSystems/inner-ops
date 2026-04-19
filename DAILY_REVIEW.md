@@ -1,3 +1,197 @@
+## [2026-04-19] — DAILY_REVIEW
+
+**QA Agent:** 64512fb6-7c2b-48f8-9bb6-f88eb108a5f1
+**Run:** BER-277 — DAILY_APP_REVIEW routine execution
+**Deploy readiness:** REVIEW REQUIRED — large-scale uncommitted refactor in working tree (23 files, ~2,767 insertions / 2,962 deletions vs HEAD). Functionally intact from code review, but must be committed before any deploy.
+
+---
+
+## Section 1 — Quality Findings
+
+### Stability
+
+- [PASS] **Journaling** — Three-field structured frame (event/attribution/expansion) intact. Field minimums enforced. Oracle integration functional. Cross-module extraction to Kill List and Relapse Radar operational. Hard Lesson extraction bridge present. No bugs found.
+
+- [PASS] **Kill List** — Import structure clean (no aiUtils, subscribeToUserData, debounce, VirtualizedList). Autopsy pattern aggregation present. Streak/escape tracking logic intact. Skeleton loading in place.
+
+- [PASS] **Relapse Radar** — 5-step multi-step flow starts with precursor conditions (24–48h pre-event detection). Correct early-warning design. Oura Ring biometric integration present. Cross-signal timeline functional. Archetype-to-Kill-List correlation bridge present.
+
+- [PASS] **Hard Lessons** — 7-field forensic extraction form. Rules Library present. Rule violation detection (keyword overlap, 0.12 threshold). Scar inventory first-run flow present. Kill List bridge functional (finalizing a rule violation triggers bridge prompt). Oracle extraction path operational.
+
+- [PASS] **Black Mirror** — `getAnalyticsReport()` imported at line 10 and called in `loadAnalytics()` (line 184–194). Analytics loads on mount and refreshes post-entry-save. Pattern Analysis section rendering confirmed (lines 690–815). Analytics layer fully connected — PASS.
+
+- [WARNING] **Repository — Uncommitted Working Tree** — `git diff --stat HEAD` shows 23 modified files with substantial changes: `Journal.jsx` (+2393/−xxxx), `clarityScore.js` (+751), `clarityScore.test.js` (+749), `Dashboard.jsx` (+333), `QuickJournalModal.jsx` (+398), `aiFeedback.js` (+163), `KillList.jsx` (+291), `KillListDashboard.jsx` (+51), `firestore.rules` (+10), `functions/index.js` (+26), and others. Changes have not been committed. Deploy-blocking until SSE commits or reverts. The working tree versions reviewed here appear structurally sound — this is a process finding, not a code defect.
+
+- [WARNING] **useBreathing.js:58** — `case 'complete': return 'Well Done'` — carry-forward from 2026-04-16. Returns wellness-soft copy on protocol completion. Should be `'Protocol Complete'` or equivalent. Low severity.
+
+- [PASS] **BER-274 CONFIRMED RESOLVED** — No `aiUtils.js` import anywhere in `Dashboard.jsx`. No `InsightCard`, no wellness/motivational copy from that source. Dashboard now uses `SignalReport`, `BehavioralRecordDensity`, `MorningBrief`, `KillListDashboard`, `DailyPrompt`. Issue should be closed.
+
+### Optimization
+
+- [OPTIMIZE] **EmergencyButton.jsx** — `groundingTechniques` array exposes technique names ("5-4-3-2-1 Grounding", "Box Breathing", "Cold Water Reset") to users. These are functional crisis tools but the naming convention is wellness-adjacent. Pending product decision on whether the Emergency module's intervention language requires the same alignment pass as the other modules. Not a code defect — a product language question.
+
+- [OPTIMIZE] **Relapse Radar recent entries** — `filteredRelapseEntries.slice(0, 3)` silently caps the display at 3 entries. No "show more" or pagination. If a user has 20+ entries, this causes silent data truncation in the UI. Low priority but creates an impression of sparse data.
+
+---
+
+## Section 2 — UX Improvement Opportunities
+
+- [IMPROVEMENT] **Dashboard — "Good morning/evening" greeting** — Line 366, retained despite the inline code comment at line 360 explicitly noting: *"the Morning Brief integration: the 'Good morning, <name>' greeting below is the kind of cozy UX Inner Ops rejects now that the Morning Brief is the first-contact surface. Flagged for removal in a follow-up."* The code self-documents the intent to remove this. No product sign-off received — QA flags this as unresolved deferred alignment work.
+
+- [IMPROVEMENT] **Black Mirror — header description** — "Track mindless scrolling and its impact on consciousness" is the subheader. This frames the module as a logging tool rather than an attention sovereignty system. Inconsistent with the product intent (attention is being extracted; this is a reckoning, not a tracker). Minor language alignment issue.
+
+- [IMPROVEMENT] **Relapse Radar — Step 5 reflection placeholder** — "What led to this? What can you learn? How will you recover?" — The phrase "How will you recover?" is mildly rehabilitation-framed. The module is pattern capture, not recovery planning. Minor.
+
+---
+
+## Summary
+
+| Category | Count |
+|---|---|
+| PASS | 5 |
+| WARNING | 2 |
+| OPTIMIZE | 2 |
+| IMPROVEMENT | 3 |
+
+**Deploy Readiness: REVIEW REQUIRED**
+- No blockers in committed code
+- WARNING: 23-file uncommitted refactor in working tree — SSE must commit before deploy
+- WARNING: useBreathing.js 'Well Done' string (carry-forward, low severity)
+- BER-274: CLOSED — fix confirmed present
+
+**Git Status:** Branch is 2 commits ahead of origin/main. Working tree has 23 uncommitted modified files. Repo state has not been altered by QA.
+
+---
+
+## [2026-04-16] — DAILY_REVIEW
+
+**QA Agent:** 64512fb6-7c2b-48f8-9bb6-f88eb108a5f1
+**Run:** BER-271 — DAILY_REVIEW routine execution
+**Commits reviewed:** 2d5c1de, e015b53, 5f01a99, 9ed7f30, 466fd7c
+**Deploy readiness:** READY — SSE has active uncommitted work in progress (see Git Status below)
+
+---
+
+## Section 1 — Quality Findings
+
+### Module Verdicts
+
+| Module | Verdict | Notes |
+|--------|---------|-------|
+| Journaling | PASS | Action plan reference cleanly removed (466fd7c). No regressions. |
+| Kill List | PASS | BER-268 RESOLVED (2d5c1de) — `await getDb()` at both call sites confirmed. |
+| Relapse Radar | PASS | Auth listener clean. PRECURSOR_MAP covers all 10 Oracle conditions. |
+| Hard Lessons | PASS | No changes since last review. No regressions. |
+| Black Mirror | PASS | Analytics connected — `getAnalyticsReport()` rendered in JSX lines 698–796. |
+| Synthesis | PASS | SynthesisGuard wired in App.jsx (lines 160–300). `/profile` still not in GUARD_EXEMPT (carry-forward). |
+| Emergency Button | PASS | `useBreathing` hook correctly used. Language clean. |
+| Dashboard | WARNING | aiUtils.js alignment issue — SSE actively fixing (uncommitted). See below. |
+
+---
+
+### CORRECTION: Prior Partial Review (same day) Had Incorrect Firestore FAIL
+
+A partial review written to this file earlier today flagged `confirmedKills`, `cueRestructurings`, `emergencyLogs`, `syntheses`, and `userSettings` as missing Firestore rules. **This was incorrect.** All five collections have owner-gated rules in the current `firestore.rules`:
+
+- `confirmedKills` — lines 121–126 ✓
+- `cueRestructurings` — lines 129–134 ✓
+- `emergencyLogs` — lines 137–142 ✓
+- `syntheses` — lines 146–150 (client read + update; CF creates via Admin SDK) ✓
+- `userSettings` — lines 153–158 ✓
+- `users/{userId}/biometrics/{docId}` — lines 163–166 (read-only; CF writes only) ✓
+
+Those FAIL findings should NOT be filed as issues.
+
+---
+
+### WARNING — aiUtils.js: Alignment Issue (SSE Actively Fixing)
+
+**Severity:** MEDIUM — product alignment failure. **Status: SSE fix in progress, uncommitted.**
+
+`generateActionSteps()` in `src/utils/aiUtils.js` produces wellness/motivational copy rendered on the Dashboard:
+- `"Consider a mindfulness or grounding exercise to center yourself."` — wellness-speak
+- `"Consider where you might be compromising your authentic self."` — identity-wellness framing
+- `"What would your highest self do in today's challenges?"` — motivational platitude
+
+SSE has uncommitted changes (visible in `git diff HEAD`) removing `aiUtils.js` entirely and stripping the "AI Insights" section from Dashboard.jsx. Fix is architecturally correct — Synthesis Briefing already provides cross-module behavioral intelligence.
+
+**Action required:** SSE must commit the in-progress changes. Do not file a new issue — the fix is already staged.
+
+---
+
+### WARNING — useBreathing.js: Soft Completion Language
+
+**Severity:** LOW — product tone inconsistency
+
+`src/hooks/useBreathing.js:58` returns `'Well Done'` for the complete phase:
+```js
+case 'complete': return 'Well Done';
+```
+"Well Done" is complimentary/soft framing. Should be `'Protocol Complete'` or `'Breathing Complete'` per product tone. Carry-forward from prior run — still unresolved.
+
+---
+
+### Resolved Since Last Review
+
+| Issue | Commit |
+|-------|--------|
+| BER-268 — KillListDashboard `getDb()` without await (both call sites) | 2d5c1de |
+| BER-116 — localStorage.js orphan | removed in refactor |
+| BER-249 — PRECURSOR_MAP incomplete | 9830436 |
+
+---
+
+### Stability Observations
+
+- **firebaseUtils.js** — CLEAN. Refactored to 308 lines. All Firebase operations properly await `getDb()`/`getAuth()`. `readUserData()` re-throws on permission-denied. `subscribeToUserData()` present and correctly exported (KillList.jsx consumers confirmed). DEV_MODE bypass removed.
+- **firebaseAdmin.js** — NOT imported by production code. Dashboard.jsx references it only in comments. No security risk.
+- **KillList subscriptions** — Both `killTargets` and `confirmedKills` subscriptions properly handle async unsubscribe (`.then()` pattern with mounted guard + cleanup return). CLEAN.
+- **authService.js** — Uses `getCachedAuth() || await getAuth()` pattern. Pass 3 auth state listener init failure remediated. CLEAN.
+- **VoiceInputButton.jsx** — Correctly imports from `src/hooks/useVoiceInput.js` (moved from utils/ in 5f01a99). CLEAN.
+- **SynthesisGuard** — Wired correctly in App.jsx. `latestSynthesisIsNew` from `useSynthesisNewFlag(user?.uid || null)`. EmergencyButton outside guard boundary (correct — overlay must never be blocked).
+- **aiFeedback.js Oracle** — BANNED_TONE_REGEX present. System prompt: confrontational, data-driven. Fallback copy: terse. CLEAN.
+- **CueRestructuringFlow.jsx / Layer 4** — Architecture intact. `cueRestructurings` Firestore rules confirmed present.
+
+---
+
+## Section 2 — UX Improvement Opportunities
+
+**IMPROVEMENT** — `Journal.jsx:410`: `"High chaos energy detected. Consider grounding techniques or channeling this into creative work."` — "grounding techniques" is wellness-adjacent; "channeling into creative work" is vague lifestyle advice. Neither is a behavioral directive. Replace with a specific action (e.g., "Log this to EmergencyButton if the urge is active. Add to Relapse Radar if it's a pattern.").
+
+**IMPROVEMENT (carry-forward)** — `useBreathing.js:58` `'Well Done'` completion copy. Replace with `'Protocol Complete'`. Flagged multiple cycles; no action taken.
+
+**IMPROVEMENT (carry-forward)** — `/profile` not in `SynthesisGuard` GUARD_EXEMPT set. Navigating to profile while synthesis is new redirects to dashboard — unexpected friction.
+
+**IMPROVEMENT (carry-forward)** — OracleModal has no UI-side timeout on loading state. If Cloud Function times out (30s), user remains in spinner.
+
+**IMPROVEMENT (carry-forward)** — QuickJournalModal discards `metacognitiveDepth` — not persisted for quick journal entries.
+
+**IMPROVEMENT (carry-forward)** — Relapse Radar Pattern Data section has no first-session onboarding prompt when `relapseEntries.length === 0`.
+
+**IMPROVEMENT (carry-forward)** — Dashboard drift signal detection runs once on load; no mid-session re-run trigger.
+
+**IMPROVEMENT (carry-forward)** — EmergencyButton breathing circle oversized on 375px mobile (192×192px).
+
+---
+
+### Summary
+
+| Category | Count |
+|---|---|
+| PASS | 7 modules |
+| WARNING | 2 (aiUtils alignment — WIP fix; useBreathing tone) |
+| CORRECTION | 1 (prior Firestore FAIL finding was incorrect) |
+| IMPROVEMENT | 8 (1 new, 7 carry-forward) |
+| New issues to file | 0 |
+
+**Deploy Readiness: READY**
+
+No blockers. All prior FAILs resolved. BER-268 confirmed fixed. Firestore rules complete. SSE has active uncommitted changes removing the aiUtils alignment issue — must commit before next deploy sync. No source files modified by this review run.
+
+**Git status:** `DAILY_REVIEW.md` modified (this output). `src/pages/Dashboard.jsx` modified (SSE removing aiUtils). `src/utils/aiUtils.js` pending deletion (SSE fix). These are SSE work-in-progress, not QA changes. QA review is read-only.
+
+---
+
 ## [2026-04-15] — DAILY_REVIEW
 
 **Reviewer:** QA Engineer (64512fb6)

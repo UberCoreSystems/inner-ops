@@ -7,7 +7,7 @@
 // configured. This prevents the package from affecting the app bundle or
 // causing load errors when analytics is not set up.
 
-import logger from './logger';
+import logger from './logger.js';
 
 let ph = null;
 

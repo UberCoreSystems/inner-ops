@@ -82,13 +82,12 @@ export default function Onboarding() {
           title: killTarget.trim(),
           description: 'First kill contract — set during onboarding',
           category: 'bad-habit',
-          difficulty: 'core',
+          consecutiveDaysRequired: 60,
           status: 'active',
           streak: 0,
           longestStreak: 0,
           checkIns: [],
           lastCheckIn: null,
-          milestonesReached: [],
           escapeData: [],
           targetDate: new Date().toISOString().split('T')[0],
           createdAt: new Date().toISOString(),
@@ -261,15 +260,15 @@ export default function Onboarding() {
 
             {/* Archetype */}
             <div className="mb-5">
-              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">When I relapse as</label>
+              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">When the pattern is</label>
               <select
                 value={criterionArchetype}
                 onChange={(e) => setCriterionArchetype(e.target.value)}
                 className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none transition-colors appearance-none"
               >
-                <option value="">Select an archetype...</option>
-                {RELAPSE_ARCHETYPES.map((a) => (
-                  <option key={a} value={a}>{a}</option>
+                <option value="">Select a pattern...</option>
+                {RELAPSE_ARCHETYPES.map(({ id, label }) => (
+                  <option key={id} value={id}>{label}</option>
                 ))}
               </select>
             </div>

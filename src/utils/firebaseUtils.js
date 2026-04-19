@@ -1,6 +1,6 @@
 import { doc, setDoc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getAuth, getDb } from '../firebase.js';
-import logger from './logger';
+import logger from './logger.js';
 
 // Pass 2 Finding 18 remediation: removed the hardcoded `DEV_MODE` boolean
 // and its unreachable branches. The anonymous-auth and mock-user paths in

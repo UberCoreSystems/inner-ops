@@ -9,21 +9,23 @@
  * Trigger check: run against raw relapseEntries per criterion.
  */
 
-import { saveUserProfile, getUserProfile } from './userProfile';
-import { readUserData } from './firebaseUtils';
+import { saveUserProfile, getUserProfile } from './userProfile.js';
+import { readUserData } from './firebaseUtils.js';
 import { getAuth as getFirebaseAuth } from 'firebase/auth';
+import {
+  ARCHETYPE_IDS,
+  resolveArchetypeLabel,
+} from './relapseTaxonomy.js';
 
-// Must stay in sync with relapseSelves in RelapseRadar.jsx
-export const RELAPSE_ARCHETYPES = [
-  'The Addict',
-  'The Victim',
-  'The Procrastinator',
-  'The Pessimist',
-  'The Perfectionist',
-  'The People-Pleaser',
-  'The Imposter',
-  'The Self-Saboteur',
-];
+/**
+ * RELAPSE_ARCHETYPES — {id, label} pairs sourced from relapseTaxonomy.
+ * `id` matches the stored relapseEntries.selectedSelf value (stable). `label`
+ * is the behavioral-descriptor for display (UXR-002 Spec 4).
+ */
+export const RELAPSE_ARCHETYPES = ARCHETYPE_IDS.map((id) => ({
+  id,
+  label: resolveArchetypeLabel(id),
+}));
 
 /**
  * Persist confrontation criteria to the user's Firestore profile.
@@ -71,7 +73,8 @@ export function checkTriggeredCriteria(criteria, relapseEntries) {
 
     if (matchCount >= threshold) {
       const period = periodDays || 30;
-      const dataSummary = `${matchCount} ${archetypeName} relapse${matchCount !== 1 ? 's' : ''} in the last ${period} day${period !== 1 ? 's' : ''}`;
+      const label = resolveArchetypeLabel(archetypeName);
+      const dataSummary = `${matchCount} ${label} relapse${matchCount !== 1 ? 's' : ''} in the last ${period} day${period !== 1 ? 's' : ''}`;
       return { criterion, matchCount, dataSummary };
     }
   }

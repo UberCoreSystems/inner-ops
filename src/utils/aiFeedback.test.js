@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractThemes, selectLenses, generateFeedback } from './aiFeedback.js';
+import {
+  extractThemes,
+  selectLenses,
+  generateFeedback,
+  classifyEvasion,
+  buildEvasionNote,
+  EVASION_THRESHOLDS,
+  HIGH_EVASION_FRAME
+} from './aiFeedback.js';
 import { feedbackFixtures } from './aiFeedback.fixtures.js';
 
 const flattenFeedback = (feedback) => [
@@ -63,4 +71,65 @@ test('feedback references entry specifics with at least two touchpoints', async 
   const hits = touchpoints.reduce((count, phrase) => (combined.includes(phrase) ? count + 1 : count), 0);
 
   assert.ok(hits >= 2, 'feedback should cite at least two distinct entry touchpoints');
+});
+
+// UXR-002 Spec 5: evasion-aware tone calibration.
+// Exercises the three bands with synthetic marker objects — the detection
+// step is a pure function of text, so we validate the classification/note
+// layer directly to keep the test deterministic and detector-agnostic.
+
+test('Spec 5: low evasion produces no prompt augmentation', () => {
+  const lowMarkers = {
+    passiveVoice: false,
+    externalization: false,
+    hedging: false,
+    lowSpecificity: false,
+    count: 0
+  };
+  const band = classifyEvasion(lowMarkers);
+  const note = buildEvasionNote(lowMarkers, band);
+
+  assert.equal(band, 'low');
+  assert.equal(note, '', 'low evasion must not append a prompt note');
+});
+
+test('Spec 5: moderate evasion appends a reference note and preserves frame choice', () => {
+  const moderateMarkers = {
+    passiveVoice: true,
+    externalization: false,
+    hedging: true,
+    lowSpecificity: false,
+    count: EVASION_THRESHOLDS.low // exactly at the lower boundary
+  };
+  const band = classifyEvasion(moderateMarkers);
+  const note = buildEvasionNote(moderateMarkers, band);
+
+  assert.equal(band, 'moderate');
+  assert.match(note, /EVASION CALIBRATION \(moderate\)/);
+  assert.match(note, /passive voice/);
+  assert.match(note, /hedged language/);
+  // Moderate must NOT instruct the Oracle to abandon reframes or content-building.
+  assert.doesNotMatch(note, /Do not offer reframes/);
+});
+
+test('Spec 5: high evasion overrides frame to challenge posture and injects hardline prompt', () => {
+  const highMarkers = {
+    passiveVoice: false,
+    externalization: true,
+    hedging: true,
+    lowSpecificity: true,
+    count: EVASION_THRESHOLDS.high
+  };
+  const band = classifyEvasion(highMarkers);
+  const note = buildEvasionNote(highMarkers, band);
+
+  assert.equal(band, 'high');
+  assert.equal(HIGH_EVASION_FRAME, 'stoic_drill_down', 'high-evasion frame must be the drill-down challenge frame');
+  assert.match(note, /EVASION CALIBRATION \(high\)/);
+  assert.match(note, /externalization/);
+  assert.match(note, /hedged language/);
+  assert.match(note, /abstraction without concrete detail/);
+  assert.match(note, /Do not offer reframes/);
+  assert.match(note, /Do not .*soften/);
+  assert.match(note, /one specific question/);
 });

@@ -59,12 +59,6 @@ const CATEGORY_ICONS = {
   ),
 };
 
-const DIFFICULTY_TIERS = [
-  { value: 'surface', label: 'Surface', description: 'Quick fix — 7 day streak to kill', streakToKill: 7, points: 10, color: 'text-[#22c55e]', bgColor: 'bg-[#22c55e]/10', borderColor: 'border-[#22c55e]/30', icon: '○' },
-  { value: 'deep', label: 'Deep', description: 'Ingrained pattern — 21 day streak', streakToKill: 21, points: 25, color: 'text-[#f59e0b]', bgColor: 'bg-[#f59e0b]/10', borderColor: 'border-[#f59e0b]/30', icon: '●' },
-  { value: 'core', label: 'Core', description: 'Identity-level — 60 day streak', streakToKill: 60, points: 50, color: 'text-[#ef4444]', bgColor: 'bg-[#ef4444]/10', borderColor: 'border-[#ef4444]/40', icon: '◆' },
-];
-
 // BER-134: Autopsy pattern aggregation for targets with 3+ escapes
 const STOP_WORDS = new Set(['i','the','a','an','was','it','in','to','of','and','my','me','at','just','this','that','when','if','is','not','but','had','did','would','could','were','felt','feel','so','do','be','have','by','from','what','they','we','he','she','then','about','on','with','very','really']);
 
@@ -98,13 +92,24 @@ function aggregateAutopsyPatterns(escapeData) {
   };
 }
 
-// Legacy priority → difficulty mapping for existing targets
-const PRIORITY_TO_DIFFICULTY = { high: 'core', medium: 'deep', low: 'surface' };
-const getDifficulty = (target) => target.difficulty || PRIORITY_TO_DIFFICULTY[target.priority] || 'deep';
-const getTier = (target) => DIFFICULTY_TIERS.find(t => t.value === getDifficulty(target)) || DIFFICULTY_TIERS[1];
-const getStreakToKill = (target) => getTier(target).streakToKill;
+// Read-time shim for consecutiveDaysRequired — historic docs used a three-tier
+// difficulty field (surface/deep/core) and an older priority field. Map both to
+// the numeric field so nothing needs a Firestore migration.
+const LEGACY_DIFFICULTY_TO_DAYS = { surface: 21, deep: 30, core: 60 };
+const LEGACY_PRIORITY_TO_DAYS = { high: 60, medium: 30, low: 21 };
+const MIN_DAYS_REQUIRED = 21;
+const getConsecutiveDaysRequired = (target) => {
+  const raw = Number(target?.consecutiveDaysRequired);
+  if (Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED) return Math.floor(raw);
+  if (target?.difficulty && LEGACY_DIFFICULTY_TO_DAYS[target.difficulty]) {
+    return LEGACY_DIFFICULTY_TO_DAYS[target.difficulty];
+  }
+  if (target?.priority && LEGACY_PRIORITY_TO_DAYS[target.priority]) {
+    return LEGACY_PRIORITY_TO_DAYS[target.priority];
+  }
+  return 30;
+};
 
-const MILESTONES = [3, 7, 14, 30, 60, 90];
 const todayKey = () => new Date().toISOString().split('T')[0];
 
 const CATEGORIES = [
@@ -121,7 +126,7 @@ const KillList = () => {
   const [targets, setTargets] = useState([]);
   const [newTarget, setNewTarget] = useState('');
   const [newTargetCategory, setNewTargetCategory] = useState('bad-habit');
-  const [newTargetDifficulty, setNewTargetDifficulty] = useState('deep');
+  const [newTargetDays, setNewTargetDays] = useState(30);
   const [autopsyTarget, setAutopsyTarget] = useState(null);
   const [autopsyData, setAutopsyData] = useState({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '' });
   const [editingTarget, setEditingTarget] = useState(null);
@@ -319,12 +324,12 @@ const KillList = () => {
     let targetData = null;
 
     try {
-      const tier = DIFFICULTY_TIERS.find(t => t.value === newTargetDifficulty) || DIFFICULTY_TIERS[1];
+      const days = Math.max(MIN_DAYS_REQUIRED, Math.floor(Number(newTargetDays) || 30));
       targetData = {
         title: newTarget.trim(),
         description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label || 'target'}`,
         category: newTargetCategory,
-        difficulty: newTargetDifficulty,
+        consecutiveDaysRequired: days,
         status: 'active',
         streak: 0,
         longestStreak: 0,
@@ -332,7 +337,6 @@ const KillList = () => {
         implementationIntention: { trigger: newIntention.trigger.trim(), response: newIntention.response.trim() },
         checkIns: [],
         lastCheckIn: null,
-        milestonesReached: [],
         escapeData: [],
         targetDate: getTodaysDate(),
         createdAt: new Date().toISOString(),
@@ -355,7 +359,7 @@ const KillList = () => {
 
       setNewTarget('');
       setNewTargetCategory('bad-habit');
-      setNewTargetDifficulty('deep');
+      setNewTargetDays(30);
       setNewIntention({ trigger: '', response: '' });
     } catch (error) {
       logger.error('❌ Error adding target:', error);
@@ -405,15 +409,10 @@ const KillList = () => {
       const newTotalTrackedDays = (target.totalTrackedDays || 0) + 1;
       const newCheckIn = { date: today, held, ...(note ? { note } : {}) };
       const checkIns = [...(target.checkIns || []), newCheckIn];
-      const tier = getTier(target);
-
-      // Check for milestone
-      const milestonesReached = [...(target.milestonesReached || [])];
-      const hitMilestone = held && MILESTONES.includes(newStreak) && !milestonesReached.includes(newStreak);
-      if (hitMilestone) milestonesReached.push(newStreak);
+      const threshold = getConsecutiveDaysRequired(target);
 
       // Check for kill (streak reached threshold)
-      const isKill = held && newStreak >= tier.streakToKill;
+      const isKill = held && newStreak >= threshold;
 
       const targetUpdate = {
         streak: newStreak,
@@ -421,12 +420,10 @@ const KillList = () => {
         totalTrackedDays: newTotalTrackedDays,
         checkIns,
         lastCheckIn: today,
-        milestonesReached,
         lastUpdated: new Date(),
       };
 
       if (isKill) {
-        // Archive to confirmedKills — silent, immediate, no celebration, no auto-Oracle
         const killedAt = new Date();
         const createdAtMs = target.createdAt?.toDate
           ? target.createdAt.toDate().getTime()
@@ -439,27 +436,18 @@ const KillList = () => {
         await deleteData('killTargets', targetId);
 
         setTargets(prev => prev.filter(t => t.id !== targetId));
-        ouraToast.success(`Target eliminated: ${target.title}`);
+        ouraToast.success('Target killed. Record updated.');
       } else {
         await updateData('killTargets', targetId, targetUpdate);
         setTargets(prev => prev.map(t => t.id === targetId ? { ...t, ...targetUpdate } : t));
 
-        if (hitMilestone) {
-        // Milestone Oracle feedback
-        ouraToast.success(`${newStreak}-day milestone on "${target.title}"`);
-        setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
-        try {
-          const milestoneText = `I've held the line against "${target.title}" for ${newStreak} consecutive days. This is a ${tier.label.toLowerCase()} pattern (${tier.streakToKill} days to kill). ${newStreak === 3 ? 'Just getting started.' : newStreak < 14 ? 'Building momentum.' : newStreak < 30 ? 'Deep into the fight now.' : 'This is becoming part of who I am.'} ${target.escapeData?.length ? `I've escaped ${target.escapeData.length} time${target.escapeData.length > 1 ? 's' : ''} before.` : ''}`;
-          const { text: feedback } = await generateAIFeedback('killList', milestoneText, []);
-          setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
-        } catch { setOracleModal({ isOpen: true, content: 'Milestone reached. The Oracle marks your progress. Hold the line.', isLoading: false, entryCount: null }); }
-      } else if (held) {
-        ouraToast.success(`Day ${newStreak} — streak continues`);
-      } else {
-        // Streak broken — open autopsy
-        setAutopsyTarget(target);
-        ouraToast.warning(`Streak reset on "${target.title}"`);
-      }
+        if (held) {
+          ouraToast.success(`Day ${newStreak} held.`);
+        } else {
+          // Streak broken — open autopsy
+          setAutopsyTarget(target);
+          ouraToast.warning(`Streak reset on "${target.title}"`);
+        }
       }
 
     } catch (error) {
@@ -843,18 +831,11 @@ const KillList = () => {
       .sort((a, b) => b[1] - a[1])
       .map(([cat, count]) => ({ cat, count }));
 
-    // Difficulty distribution
-    const diffCounts = { surface: 0, deep: 0, core: 0 };
-    [...targets, ...confirmedKills].forEach(t => {
-      const d = getDifficulty(t);
-      diffCounts[d] = (diffCounts[d] || 0) + 1;
-    });
-
-    return { total, completed, active, escaped, completionRate, avgStreakToKill, categoryDist, diffCounts };
+    return { total, completed, active, escaped, completionRate, avgStreakToKill, categoryDist };
   }, [targets, confirmedKills]);
 
   const getStreakColor = (streak, target) => {
-    const threshold = getStreakToKill(target);
+    const threshold = getConsecutiveDaysRequired(target);
     const pct = streak / threshold;
     if (pct >= 1) return '#22c55e';
     if (pct >= 0.5) return '#f59e0b';
@@ -864,9 +845,8 @@ const KillList = () => {
 
   const renderTargetItem = useCallback((target, index) => {
     const category = categories.find(c => c.value === target.category) || categories[0];
-    const tier = getTier(target);
     const streak = target.streak || 0;
-    const threshold = tier.streakToKill;
+    const threshold = getConsecutiveDaysRequired(target);
     const daysActive = Math.floor((Date.now() - new Date(target.createdAt).getTime()) / 86400000);
     const checkedInToday = target.lastCheckIn === todayKey();
     const latestEscape = target.escapeData?.length ? target.escapeData[target.escapeData.length - 1] : null;
@@ -888,9 +868,6 @@ const KillList = () => {
                   {target.title}
                 </h3>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span className={`text-xs px-2 py-0.5 rounded-lg ${tier.color} ${tier.bgColor}`}>
-                    {tier.icon} {tier.label}
-                  </span>
                   <span className={`text-xs px-2 py-0.5 rounded-lg ${category.color} ${category.bgColor}`}>
                     {category.label}
                   </span>
@@ -903,6 +880,9 @@ const KillList = () => {
                   </span>
                   <span className="text-[#3a3a3a] text-xs">Day {daysActive} · {new Date(target.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: new Date(target.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })}</span>
                 </div>
+                <p className="text-[#5a5a5a] text-xs mt-2">
+                  Kill requires {threshold} consecutive days of held execution.
+                </p>
               </>
             )}
           </div>
@@ -965,19 +945,6 @@ const KillList = () => {
                   <div className="text-[#3a3a3a] text-xs mt-0.5">Longest Run</div>
                 </div>
               </div>
-              {/* Milestone dots */}
-              {(target.milestonesReached || []).length > 0 && (
-                <div className="flex items-center gap-1 pt-1">
-                  {MILESTONES.filter(m => m <= threshold).map(m => (
-                    <div
-                      key={m}
-                      className={`w-2 h-2 rounded-full ${(target.milestonesReached || []).includes(m) ? '' : 'bg-[#1a1a1a]'}`}
-                      style={(target.milestonesReached || []).includes(m) ? { backgroundColor: getStreakColor(streak, target) } : undefined}
-                      title={`${m}-day milestone`}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Implementation intention — collapsed by default */}
@@ -1252,7 +1219,7 @@ const KillList = () => {
                 <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Avg Streak to Kill</div>
                 {stats.avgStreakToKill !== null ? (
                   <div>
-                    <span className={`text-4xl font-light tabular-nums ${stats.avgStreakToKill <= 7 ? 'text-[#22c55e]' : stats.avgStreakToKill <= 21 ? 'text-[#f59e0b]' : 'text-[#ef4444]'}`}>
+                    <span className="text-4xl font-light tabular-nums text-white">
                       {stats.avgStreakToKill}
                     </span>
                     <span className="text-[#5a5a5a] text-sm ml-2">days</span>
@@ -1265,88 +1232,68 @@ const KillList = () => {
             </div>
           )}
 
-          {/* Kill Patterns — strategic intelligence (3+ killed targets required) */}
-          {confirmedKills.length >= 3 && (() => {
-            const killed = confirmedKills;
-            const allEscapes = targets.flatMap(t => (t.escapeData || []));
+          {/* Behavioral Record — flat chronological list of creations, escapes, kills */}
+          {(() => {
+            const rows = [];
+            const allTargets = [...targets, ...confirmedKills];
 
-            // Category win rate
-            const catStats = {};
+            allTargets.forEach(t => {
+              // Creation event
+              const createdAtMs = t.createdAt?.toDate
+                ? t.createdAt.toDate().getTime()
+                : new Date(t.createdAt || 0).getTime();
+              if (Number.isFinite(createdAtMs) && createdAtMs > 0) {
+                rows.push({ ts: createdAtMs, type: 'created', title: t.title || 'untitled', context: '' });
+              }
+
+              // Escape events
+              (t.escapeData || []).forEach(e => {
+                const escapeMs = new Date(e.date || 0).getTime();
+                if (!Number.isFinite(escapeMs) || escapeMs <= 0) return;
+                rows.push({
+                  ts: escapeMs,
+                  type: 'escaped',
+                  title: t.title || 'untitled',
+                  context: (e.context || '').trim(),
+                });
+              });
+            });
+
+            // Kill events — only from confirmedKills
             confirmedKills.forEach(k => {
-              if (!k.category) return;
-              if (!catStats[k.category]) catStats[k.category] = { kills: 0, escapes: 0 };
-              catStats[k.category].kills++;
-              const escCount = (k.escapeData || []).length;
-              catStats[k.category].escapes += escCount;
-            });
-            targets.forEach(t => {
-              if (!t.category) return;
-              if (!catStats[t.category]) catStats[t.category] = { kills: 0, escapes: 0 };
-              const escCount = (t.escapeData || []).length;
-              catStats[t.category].escapes += escCount;
+              const killedAtMs = k.killedAt?.toDate
+                ? k.killedAt.toDate().getTime()
+                : new Date(k.killedAt || 0).getTime();
+              if (!Number.isFinite(killedAtMs) || killedAtMs <= 0) return;
+              rows.push({ ts: killedAtMs, type: 'killed', title: k.title || 'untitled', context: '' });
             });
 
-            // Most common escape day
-            const escapeDays = [0,0,0,0,0,0,0]; // Sun-Sat
-            allEscapes.forEach(e => {
-              if (e.date) escapeDays[new Date(e.date).getDay()]++;
-            });
-            const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-            const peakEscapeDay = escapeDays.some(d => d > 0)
-              ? dayNames[escapeDays.indexOf(Math.max(...escapeDays))]
-              : null;
+            rows.sort((a, b) => b.ts - a.ts);
 
-            // Avg streak by difficulty
-            const diffStreaks = { surface: [], deep: [], core: [] };
-            killed.forEach(t => {
-              const d = getDifficulty(t);
-              diffStreaks[d]?.push(t.streak || t.longestStreak || 0);
-            });
-            const avgStreak = (arr) => arr.length ? Math.round(arr.reduce((a,b) => a+b, 0) / arr.length) : null;
+            if (rows.length === 0) return null;
+
+            const fmtDate = (ms) => new Date(ms).toISOString().split('T')[0];
+            const truncate = (s, n = 80) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
             return (
               <div className="mt-6 oura-card p-5 animate-fade-in-up">
-                <h3 className="text-xs text-[#5a5a5a] uppercase tracking-widest mb-4">Kill Patterns</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  {/* Category win rates */}
-                  <div>
-                    <div className="text-[#3a3a3a] text-xs uppercase tracking-widest mb-2">By Category</div>
-                    {Object.entries(catStats).sort((a,b) => b[1].kills - a[1].kills).slice(0, 4).map(([cat, s]) => {
-                      const catDef = CATEGORIES.find(c => c.value === cat);
-                      return (
-                        <div key={cat} className="flex items-center justify-between py-1">
-                          <span className={`text-xs ${catDef?.color || 'text-[#5a5a5a]'}`}>{catDef?.label || cat}</span>
-                          <span className="text-[#5a5a5a] text-xs tabular-nums">{s.kills}K / {s.escapes}E</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Streaks by difficulty + escape day */}
-                  <div>
-                    <div className="text-[#3a3a3a] text-xs uppercase tracking-widest mb-2">Avg Streak to Kill</div>
-                    {['surface', 'deep', 'core'].map(d => {
-                      const avg = avgStreak(diffStreaks[d]);
-                      const tier = DIFFICULTY_TIERS.find(t => t.value === d);
-                      return avg !== null ? (
-                        <div key={d} className="flex items-center justify-between py-1">
-                          <span className={`text-xs ${tier?.color || 'text-[#5a5a5a]'}`}>{tier?.label || d}</span>
-                          <span className="text-[#5a5a5a] text-xs tabular-nums">{avg} days</span>
-                        </div>
-                      ) : null;
-                    })}
-                    {peakEscapeDay && (
-                      <div className="mt-3 pt-3 border-t border-[#1a1a1a]">
-                        <span className="text-[#3a3a3a] text-xs">Peak escape day: </span>
-                        <span className="text-[#ef4444] text-xs font-medium">{peakEscapeDay}</span>
-                      </div>
-                    )}
-                    {allEscapes.length > 0 && (
-                      <div className="mt-1">
-                        <span className="text-[#3a3a3a] text-xs">Total escapes: </span>
-                        <span className="text-[#5a5a5a] text-xs tabular-nums">{allEscapes.length}</span>
-                      </div>
-                    )}
-                  </div>
+                <h3 className="text-xs text-[#5a5a5a] uppercase tracking-widest mb-4">Behavioral Record</h3>
+                <div className="divide-y divide-[#1a1a1a]">
+                  {rows.map((row, i) => (
+                    <div key={i} className="py-2 text-xs text-[#8a8a8a] font-mono leading-relaxed">
+                      <span className="text-[#5a5a5a]">{fmtDate(row.ts)}</span>
+                      <span className="text-[#3a3a3a]"> · </span>
+                      <span className="text-[#8a8a8a]">{row.type}</span>
+                      <span className="text-[#3a3a3a]"> · </span>
+                      <span className="text-white">{row.title}</span>
+                      {row.type === 'escaped' && row.context && (
+                        <>
+                          <span className="text-[#3a3a3a]"> · </span>
+                          <span className="text-[#5a5a5a]">{truncate(row.context)}</span>
+                        </>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             );
@@ -1400,29 +1347,31 @@ const KillList = () => {
                 </div>
               </div>
 
-              {/* Difficulty Tier */}
+              {/* Consecutive days required — user names their own weight */}
               <div>
                 <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
-                  Difficulty
+                  Consecutive Days Required
                 </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {DIFFICULTY_TIERS.map((d) => (
-                    <button
-                      key={d.value}
-                      type="button"
-                      onClick={() => setNewTargetDifficulty(d.value)}
-                      className={`p-4 rounded-xl border transition-all duration-200 flex flex-col items-center gap-2 ${
-                        newTargetDifficulty === d.value
-                          ? `${d.bgColor} ${d.color} ${d.borderColor} border-2 scale-105`
-                          : 'bg-[#0a0a0a] text-[#5a5a5a] border-[#1a1a1a] hover:border-[#2a2a2a] hover:text-[#8a8a8a]'
-                      }`}
-                    >
-                      <span className="text-2xl">{d.icon}</span>
-                      <span className="text-sm font-medium">{d.label}</span>
-                      <span className="text-xs opacity-70">{d.description}</span>
-                    </button>
-                  ))}
-                </div>
+                <input
+                  type="number"
+                  min={MIN_DAYS_REQUIRED}
+                  step={1}
+                  value={newTargetDays}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') { setNewTargetDays(''); return; }
+                    const n = parseInt(raw, 10);
+                    setNewTargetDays(Number.isFinite(n) ? n : '');
+                  }}
+                  onBlur={() => {
+                    const n = parseInt(newTargetDays, 10);
+                    if (!Number.isFinite(n) || n < MIN_DAYS_REQUIRED) setNewTargetDays(MIN_DAYS_REQUIRED);
+                  }}
+                  className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors tabular-nums"
+                />
+                <p className="text-[#5a5a5a] text-xs mt-2">
+                  Kill requires {Number.isFinite(parseInt(newTargetDays, 10)) ? Math.max(MIN_DAYS_REQUIRED, parseInt(newTargetDays, 10)) : MIN_DAYS_REQUIRED} consecutive days of held execution. Minimum {MIN_DAYS_REQUIRED}.
+                </p>
               </div>
 
               {/* Implementation Intention — required */}
@@ -1607,7 +1556,7 @@ const KillList = () => {
               {confirmedKills.map(kill => {
                 const killedAtDate = kill.killedAt?.toDate ? kill.killedAt.toDate() : new Date(kill.killedAt || 0);
                 const killDateStr = killedAtDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                const tier = getTier(kill);
+                const killThreshold = getConsecutiveDaysRequired(kill);
                 const category = CATEGORIES.find(c => c.value === kill.category);
                 return (
                   <div key={kill.id} className="oura-card p-5 border-[#1a1a1a]">
@@ -1615,11 +1564,6 @@ const KillList = () => {
                       <div className="flex-1 min-w-0">
                         <h4 className="text-[#8a8a8a] font-medium line-through truncate">{kill.title}</h4>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          {tier && (
-                            <span className={`text-xs px-2 py-0.5 rounded-lg ${tier.color} ${tier.bgColor}`}>
-                              {tier.icon} {tier.label}
-                            </span>
-                          )}
                           {category && (
                             <span className={`text-xs px-2 py-0.5 rounded-lg ${category.color} ${category.bgColor}`}>
                               {category.label}
@@ -1628,6 +1572,9 @@ const KillList = () => {
                           <span className="text-[#3a3a3a] text-xs">Killed {killDateStr}</span>
                           <span className="text-[#3a3a3a] text-xs">Tracked {kill.activeDuration ?? 0} days</span>
                         </div>
+                        <p className="text-[#5a5a5a] text-xs mt-2">
+                          Kill required {killThreshold} consecutive days of held execution.
+                        </p>
                       </div>
                     </div>
                     {kill.oracleStatement ? (

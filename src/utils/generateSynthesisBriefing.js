@@ -24,10 +24,10 @@ import {
   RELAPSE_FIELDS,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
-  JOURNAL_FIELDS,
   BLACK_MIRROR_FIELDS,
   USER_SETTINGS_FIELDS,
 } from './schema';
+import { resolveArchetypeLabel } from './relapseTaxonomy';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
 
@@ -82,7 +82,11 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     const archetype = e[RELAPSE_FIELDS.ARCHETYPE];
     if (archetype) archetypeCounts[archetype] = (archetypeCounts[archetype] || 0) + 1;
   });
-  const dominantArchetype = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  // UXR-002 Spec 4: resolve to behavioral-descriptor label for all downstream
+  // consumers (convergence copy, Oracle confrontation prompt). The ID is
+  // already captured in `archetypeCounts` keys if needed.
+  const dominantArchetypeId = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const dominantArchetype = dominantArchetypeId ? resolveArchetypeLabel(dominantArchetypeId) : null;
   const recentRelapseCount = recentRelapses.length;
 
   // --- Kill List: active targets, escape patterns ---
@@ -102,19 +106,14 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     .filter(l => l[HARD_LESSON_FIELDS.IS_FINALIZED] && l[HARD_LESSON_FIELDS.RULE])
     .map(l => l[HARD_LESSON_FIELDS.RULE]);
 
-  // --- Journal: dominant mood ---
+  // --- Journal: cadence signal (entries per week in 28d window) ---
+  // Mood labels were retired (Spec 3, UXR-002). Language is the signal;
+  // dominant-mood reads are gone. Replace with a cheap cadence proxy so
+  // downstream logic that cared about "journal activity" still has a read.
   const recentJournals = (journalEntries || []).filter(e => now - getTimestamp(e) < windowMs28);
-  const moodCounts = {};
-  recentJournals.forEach(e => {
-    const mood = e[JOURNAL_FIELDS.MOOD] || e[JOURNAL_FIELDS.MOOD_ALT];
-    if (mood) moodCounts[mood] = (moodCounts[mood] || 0) + 1;
-  });
-  const dominantMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const journalEntriesPerWeek = Number((recentJournals.length / 4).toFixed(1));
 
-  // --- Black Mirror: trend over 4 weeks (BER-149: incorporates violatedRules + journal mood) ---
-  const NEGATIVE_MOODS = ['anxious', 'low', 'frustrated', 'foggy', 'numb'];
-  const hasNegativeMood = dominantMood && NEGATIVE_MOODS.some(m => dominantMood.toLowerCase().includes(m));
-
+  // --- Black Mirror: trend over 4 weeks (BER-149: incorporates violatedRules) ---
   let signalDelta = 'stable';
   if ((blackMirrorEntries || []).length >= 4) {
     const bmSorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
@@ -122,17 +121,17 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     const older2 = bmSorted.slice(2, 4).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
     const recentAvg = recent2.reduce((s, v) => s + v, 0) / 2;
     const olderAvg = older2.reduce((s, v) => s + v, 0) / 2;
-    if (recentRelapseCount === 0 && totalEscapes28d <= 1 && recentAvg < olderAvg * 0.9 && violatedRules.length === 0 && !hasNegativeMood) signalDelta = 'improving';
-    else if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || recentAvg > olderAvg * 1.2 || violatedRules.length >= 2 || (violatedRules.length >= 1 && hasNegativeMood)) signalDelta = 'deteriorating';
+    if (recentRelapseCount === 0 && totalEscapes28d <= 1 && recentAvg < olderAvg * 0.9 && violatedRules.length === 0) signalDelta = 'improving';
+    else if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || recentAvg > olderAvg * 1.2 || violatedRules.length >= 2) signalDelta = 'deteriorating';
   } else {
     // Fallback without Black Mirror data
-    if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || violatedRules.length >= 2 || (violatedRules.length >= 1 && hasNegativeMood)) signalDelta = 'deteriorating';
-    else if (recentRelapseCount === 0 && activeTargets.some(t => t.streak > 14) && violatedRules.length === 0 && !hasNegativeMood) signalDelta = 'improving';
+    if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || violatedRules.length >= 2) signalDelta = 'deteriorating';
+    else if (recentRelapseCount === 0 && activeTargets.some(t => t.streak > 14) && violatedRules.length === 0) signalDelta = 'improving';
   }
 
   // --- Convergence Point (cross-module pattern, rules-based) ---
   const convergencePoint = deriveConvergencePoint({
-    dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, dominantMood, recentRelapseCount, signalDelta
+    dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, recentRelapseCount, signalDelta
   });
 
   // BER-137: signal delta note on identity direction alignment
@@ -144,9 +143,9 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
 
   // --- Confrontation Question (LLM, strict prompt) ---
   const confrontationQuestion = await generateConfrontationQuestion({
-    convergencePoint, violatedRules, finalizedRules, dominantArchetype, signalDelta, dominantMood,
+    convergencePoint, violatedRules, finalizedRules, dominantArchetype, signalDelta,
     recentRelapseCount, activeTargetCount: activeTargets.length, highEscapeTargets,
-    identityDirection,
+    identityDirection, journalEntriesPerWeek,
   });
 
   const briefing = {
@@ -163,7 +162,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
     _meta: {
       recentRelapseCount,
       dominantArchetype,
-      dominantMood,
+      journalEntriesPerWeek,
       activeTargetCount: activeTargets.length,
       highEscapeTargetCount: highEscapeTargets.length,
       finalizedRuleCount: finalizedRules.length,
@@ -175,7 +174,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
   return { status: 'ok', briefing };
 }
 
-function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, dominantMood, recentRelapseCount, signalDelta }) {
+function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, recentRelapseCount, signalDelta }) {
   const signals = [];
 
   if (dominantArchetype && recentRelapseCount >= 2) {
@@ -189,9 +188,6 @@ function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violated
     signals.push(`${violatedRules.length} finalized rule${violatedRules.length > 1 ? 's' : ''} violated`);
   } else if (finalizedRules.length > 0 && (recentRelapseCount >= 2 || highEscapeTargets.length >= 1)) {
     signals.push(`Behavioral drift active against ${finalizedRules.length} committed rule${finalizedRules.length > 1 ? 's' : ''}`);
-  }
-  if (dominantMood && ['anxious', 'low', 'frustrated', 'foggy', 'numb'].some(m => dominantMood.toLowerCase().includes(m))) {
-    signals.push(`Journal mood pattern: ${dominantMood} dominant`);
   }
 
   if (signals.length === 0) {
@@ -210,7 +206,7 @@ async function generateConfrontationQuestion(data) {
     data.violatedRules.length > 0 && `Violated rules: ${data.violatedRules.map(r => r.rule).join('; ')}`,
     data.finalizedRules?.length > 0 && `Committed behavioral rules: ${data.finalizedRules.join('; ')}`,
     data.signalDelta && `Signal trend: ${data.signalDelta}`,
-    data.dominantMood && `Journal mood: ${data.dominantMood}`,
+    typeof data.journalEntriesPerWeek === 'number' && `Journal cadence (28d avg): ${data.journalEntriesPerWeek} entries/week`,
     data.highEscapeTargets.length > 0 && `Kill List repeated failures: ${data.highEscapeTargets.map(t => t.title).join(', ')}`,
     data.identityDirection && `User's stated identity direction: "${data.identityDirection}"`,
   ].filter(Boolean).join('\n');

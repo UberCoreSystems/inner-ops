@@ -69,7 +69,7 @@ export default function HardLessons() {
   const [savingScars, setSavingScars] = useState(false);
 
   // BER-131: Kill List bridge
-  const [bridgePrompt, setBridgePrompt] = useState({ visible: false, ruleText: '', difficulty: 'deep', lessonId: null });
+  const [bridgePrompt, setBridgePrompt] = useState({ visible: false, ruleText: '', consecutiveDaysRequired: 30, lessonId: null });
   const [bridgeAdded, setBridgeAdded] = useState(false);
 
   // BER-130: Rules Library + Rule Violation Detection
@@ -307,10 +307,12 @@ export default function HardLessons() {
   // BER-131: add kill list target from bridge prompt or lesson card
   const addToKillListFromBridge = async () => {
     if (!bridgePrompt.ruleText.trim()) return;
+    const daysRaw = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
+    const days = Number.isFinite(daysRaw) && daysRaw >= 21 ? daysRaw : 30;
     try {
       await writeData('killTargets', {
         title: bridgePrompt.ruleText.trim(),
-        difficulty: bridgePrompt.difficulty,
+        consecutiveDaysRequired: days,
         status: 'active',
         streak: 0,
         longestStreak: 0,
@@ -332,7 +334,7 @@ export default function HardLessons() {
     try {
       await writeData('killTargets', {
         title: lesson.ruleGoingForward.trim(),
-        difficulty: 'deep',
+        consecutiveDaysRequired: 30,
         status: 'active',
         streak: 0,
         longestStreak: 0,
@@ -490,8 +492,8 @@ Please help extract the core lesson and rule from this experience.
         const alreadyDismissed = sessionStorage.getItem(dismissKey);
         if (!alreadyDismissed) {
           const violationCount = lessons.filter(l => l.isRuleViolation && l.violatedRuleId === lessonData.violatedRuleId).length;
-          const suggestedDifficulty = violationCount >= 2 ? 'core' : 'deep';
-          setBridgePrompt({ visible: true, ruleText: lessonData.ruleGoingForward, difficulty: suggestedDifficulty, lessonId: editingLesson?.id || null });
+          const suggestedDays = violationCount >= 2 ? 60 : 30;
+          setBridgePrompt({ visible: true, ruleText: lessonData.ruleGoingForward, consecutiveDaysRequired: suggestedDays, lessonId: editingLesson?.id || null });
           setBridgeAdded(false);
         }
       }
@@ -943,10 +945,28 @@ Please help extract the core lesson and rule from this experience.
                   onChange={(e) => setBridgePrompt(prev => ({ ...prev, ruleText: e.target.value }))}
                   className="w-full p-4 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm mb-4"
                 />
-                <div className="flex gap-2 mb-6">
-                  {[{ value: 'surface', label: 'Surface (7d)' }, { value: 'deep', label: 'Deep (21d)' }, { value: 'core', label: 'Core (60d)' }].map(d => (
-                    <button key={d.value} onClick={() => setBridgePrompt(prev => ({ ...prev, difficulty: d.value }))} className={`flex-1 px-3 py-2 rounded-lg text-xs transition-colors ${bridgePrompt.difficulty === d.value ? 'bg-[#f59e0b] text-black font-medium' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}>{d.label}</button>
-                  ))}
+                <div className="mb-6">
+                  <label className="block text-[#8a8a8a] text-xs uppercase tracking-widest mb-2">Consecutive Days Required</label>
+                  <input
+                    type="number"
+                    min={21}
+                    step={1}
+                    value={bridgePrompt.consecutiveDaysRequired}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') { setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: '' })); return; }
+                      const n = parseInt(raw, 10);
+                      setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: Number.isFinite(n) ? n : '' }));
+                    }}
+                    onBlur={() => {
+                      const n = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
+                      if (!Number.isFinite(n) || n < 21) setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: 21 }));
+                    }}
+                    className="w-full p-3 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm tabular-nums"
+                  />
+                  <p className="text-[#5a5a5a] text-xs mt-2">
+                    Kill requires {Number.isFinite(parseInt(bridgePrompt.consecutiveDaysRequired, 10)) ? Math.max(21, parseInt(bridgePrompt.consecutiveDaysRequired, 10)) : 21} consecutive days of held execution. Minimum 21.
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={addToKillListFromBridge} className="flex-1 px-5 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-xl font-medium transition-colors">Add to Kill List</button>

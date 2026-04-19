@@ -157,6 +157,16 @@ service cloud.firestore {
       allow list: if ownerListAllowed();
     }
 
+    // Morning Brief — one document per user per calendar day.
+    // Document id format: `{userId}_{YYYY-MM-DD}`. Clients read/write their
+    // own briefs; never enumerate across users.
+    match /dailyBriefs/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
     // ─── Subcollections ─────────────────────────────────────────────────
 
     // Oura Ring biometrics cache — CF writes via Admin SDK; client reads only.

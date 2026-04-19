@@ -12,17 +12,17 @@
  * @returns {Promise<BehavioralContext>}
  */
 import { getAuth } from 'firebase/auth';
-import { readUserData } from './firebaseUtils';
-import logger from './logger';
+import { readUserData } from './firebaseUtils.js';
+import logger from './logger.js';
 import {
   COLLECTIONS,
   RELAPSE_FIELDS,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
-  JOURNAL_FIELDS,
   BLACK_MIRROR_FIELDS,
   USER_SETTINGS_FIELDS,
-} from './schema';
+} from './schema.js';
+import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 
 const contextCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -94,7 +94,13 @@ export async function getBehavioralContext(userId) {
       const archetype = e[RELAPSE_FIELDS.ARCHETYPE];
       if (archetype) archetypeCounts[archetype] = (archetypeCounts[archetype] || 0) + 1;
     });
-    const dominantRelapseArchetype = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    // UXR-002 Spec 4: pass the behavioral-descriptor label to Oracle prompts,
+    // not the identity-noun ID. Storage keeps the ID; the wire-format to the
+    // LLM carries the behavioral phrasing.
+    const dominantArchetypeId = Object.entries(archetypeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    const dominantRelapseArchetype = dominantArchetypeId
+      ? resolveArchetypeLabel(dominantArchetypeId)
+      : null;
 
     // --- Hard Lessons: violated rules ---
     const violatedHardLessons = (hardLessons || [])
@@ -119,16 +125,14 @@ export async function getBehavioralContext(userId) {
       else blackMirrorTrend = 'stable';
     }
 
-    // --- Journaling: dominant mood last 7 days ---
+    // --- Journaling: dominant language pattern last 7 days ---
+    // Mood labels were retired (Spec 3, UXR-002). Language is the signal.
+    // Pull the top 3 substantive words across recent entries. Lightweight,
+    // not instrumented for subtlety — Oracle can ignore if low-value.
     const recentJournals = (journalEntries || []).filter(
       e => ts - getTimestamp(e) < windowMs7
     );
-    const moodCounts = {};
-    recentJournals.forEach(e => {
-      const mood = e[JOURNAL_FIELDS.MOOD] || e[JOURNAL_FIELDS.MOOD_ALT];
-      if (mood) moodCounts[mood] = (moodCounts[mood] || 0) + 1;
-    });
-    const journalMoodPattern = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    const journalLanguagePattern = deriveLanguagePattern(recentJournals);
 
     // BER-167: behavioral record density for Oracle trust calibration
     const totalEntryCount =
@@ -143,7 +147,7 @@ export async function getBehavioralContext(userId) {
       recentRelapseCount,
       blackMirrorTrend,
       violatedHardLessons,
-      journalMoodPattern,
+      journalLanguagePattern,
       identityDirection, // BER-137
       totalEntryCount,   // BER-167
       missingCollections, // Finding 6: surface partial-load state to consumers
@@ -164,11 +168,40 @@ function buildEmpty() {
     recentRelapseCount: 0,
     blackMirrorTrend: null,
     violatedHardLessons: [],
-    journalMoodPattern: null,
+    journalLanguagePattern: null,
     identityDirection: null,
     totalEntryCount: 0, // BER-167
     missingCollections: [], // Finding 6
   };
+}
+
+// Stop-word list kept tight — we want substantive signal words, not filler.
+const LANGUAGE_STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'to', 'of', 'in', 'for', 'is', 'it',
+  'that', 'this', 'with', 'on', 'as', 'at', 'be', 'are', 'was', 'were', 'am',
+  'i', 'you', 'me', 'my', 'your', 'we', 'us', 'our', 'they', 'them', 'their',
+  'he', 'she', 'him', 'her', 'his', 'so', 'if', 'then', 'than', 'just', 'not',
+  'no', 'yes', 'do', 'did', 'done', 'have', 'has', 'had', 'will', 'would',
+  'could', 'should', 'can', 'event', 'attribution', // frame markers from composeJournalContent
+]);
+
+function deriveLanguagePattern(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  const counts = new Map();
+  entries.forEach((e) => {
+    const text = String(e?.content || '').toLowerCase();
+    if (!text) return;
+    text
+      .split(/[^a-z0-9']+/)
+      .filter((w) => w.length > 3 && !LANGUAGE_STOP_WORDS.has(w))
+      .forEach((w) => counts.set(w, (counts.get(w) || 0) + 1));
+  });
+  const top = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .filter(([, n]) => n >= 2) // require repetition across entries
+    .map(([w]) => w);
+  return top.length > 0 ? top.join(', ') : null;
 }
 
 /** Invalidate cache for a user (call after data mutations if needed) */
