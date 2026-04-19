@@ -5,7 +5,9 @@
       "Bash(netstat -ano)",
       "Bash(npm cache *)",
       "Bash(npm install *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\boliv\\.claude\\plans"
