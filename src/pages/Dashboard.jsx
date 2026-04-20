@@ -15,6 +15,9 @@ import MorningBrief from '../components/MorningBrief';
 import KillListDashboard from '../components/KillListDashboard';
 import QuickJournalModal from '../components/QuickJournalModal';
 import DailyPrompt from '../components/DailyPrompt';
+import ActiveTargetCommandBoard from '../components/ActiveTargetCommandBoard';
+import MirrorStack from '../components/MirrorStack';
+import PatternConfrontationCard from '../components/PatternConfrontationCard';
 import { ScoreCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
@@ -367,13 +370,9 @@ export default function Dashboard() {
               </h1>
             </header>
 
-        {/* Morning Brief — operator-cadence daily readout. First content surface
-            below the header. One generation per calendar day, Firestore-cached. */}
-        {user?.uid && <MorningBrief userId={user.uid} />}
-
         {/* Synthesis Briefing — Forced State (non-dismissible, must open before clearing) */}
         {latestSynthesisIsNew && (
-          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.04s' }}>
+          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.02s' }}>
             <div className="oura-card p-6 border border-white/25 bg-[#0d0d0d]">
               <p className="text-xs font-medium uppercase tracking-widest text-white mb-2">Synthesis Briefing</p>
               <p className="text-[#8a8a8a] text-sm mb-5 leading-relaxed">
@@ -388,6 +387,25 @@ export default function Dashboard() {
             </div>
           </section>
         )}
+
+        {/* Active Target Command Board — top-of-fold priority stack (up to 3) */}
+        <ActiveTargetCommandBoard killTargets={rawUserData?.killTargets || []} />
+
+        {/* Mirror Stack — declared vs. observed */}
+        <MirrorStack
+          killTargets={rawUserData?.killTargets || []}
+          hardLessons={rawUserData?.hardLessons || []}
+          signalReport={signalReport}
+        />
+
+        {/* Morning Brief — operator-cadence daily readout, Firestore-cached. */}
+        {user?.uid && <MorningBrief userId={user.uid} />}
+
+        {/* Pattern Confrontation Card — promotes the top drift signal or rule violation */}
+        <PatternConfrontationCard
+          signalReport={signalReport}
+          hardLessons={rawUserData?.hardLessons || []}
+        />
 
         {/* Daily Prompt Section */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>

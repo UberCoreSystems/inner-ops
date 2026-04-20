@@ -128,4 +128,4 @@ UI · UX · AI quality · feature completeness — **equal weight.**
 
 ## Repo
 
-`C:\Users\boliv\OneDrive\One Drive 2\OneDrive\Desktop\UberCore Systems\inner-ops`
+`C:\Users\boliv\dev\inner-ops`
