@@ -44,48 +44,52 @@ export default function MirrorStack({ killTargets = [], hardLessons = [], signal
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
       <div className="oura-card p-6">
-        <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-5">Mirror</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <p className="text-[#3a3a3a] text-[10px] uppercase tracking-widest mb-3">Declared</p>
+        <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Mirror</h3>
+        <div className="grid grid-cols-2 gap-6 divide-x divide-[#1e3a5f]/40">
+          <div className="pr-6">
+            <p className="text-[#6a6a6a] text-[10px] uppercase tracking-widest mb-3">Declared</p>
             <div className="space-y-3">
               <p className="text-white text-sm">
-                <span className="font-light text-2xl tabular-nums">{finalizedCount}</span>
-                <span className="text-[#5a5a5a] ml-2">finalized rule{finalizedCount !== 1 ? 's' : ''}</span>
+                <span className="font-light text-2xl tabular-nums text-[#4da6ff]/90">{finalizedCount}</span>
+                <span className="text-[#858585] ml-2">finalized rule{finalizedCount !== 1 ? 's' : ''}</span>
               </p>
               <p className="text-white text-sm">
-                <span className="font-light text-2xl tabular-nums">{activeCount}</span>
-                <span className="text-[#5a5a5a] ml-2">active kill contract{activeCount !== 1 ? 's' : ''}</span>
+                <span className="font-light text-2xl tabular-nums text-[#4da6ff]/90">{activeCount}</span>
+                <span className="text-[#858585] ml-2">active kill contract{activeCount !== 1 ? 's' : ''}</span>
               </p>
             </div>
           </div>
-          <div>
-            <p className="text-[#3a3a3a] text-[10px] uppercase tracking-widest mb-3">Observed</p>
+          <div className="pl-6">
+            <p className="text-[#6a6a6a] text-[10px] uppercase tracking-widest mb-3">Observed</p>
             <div className="space-y-3">
               <p className="text-white text-sm">
                 {finalizedCount > 0 ? (
                   <>
-                    <span className="font-light text-2xl tabular-nums">{violatedInWindow}</span>
-                    <span className="text-[#5a5a5a] ml-2">violated in 14d</span>
+                    <span className={`font-light text-2xl tabular-nums ${violatedInWindow > 0 ? 'text-[#b45309]' : 'text-[#ababab]'}`}>{violatedInWindow}</span>
+                    <span className="text-[#858585] ml-2">violated in 14d</span>
                   </>
                 ) : (
-                  <span className="text-[#5a5a5a]">no rules to measure</span>
+                  <span className="text-[#858585]">no rules to measure</span>
                 )}
               </p>
               <p className="text-white text-sm">
                 {activeCount > 0 ? (
-                  <span className="text-[#8a8a8a]">
+                  <span className="text-[#ababab]">
                     {held} held · {escaped} escaped · {untouched} untouched in 7d
                   </span>
                 ) : (
-                  <span className="text-[#5a5a5a]">no contracts to measure</span>
+                  <span className="text-[#858585]">no contracts to measure</span>
                 )}
               </p>
             </div>
           </div>
         </div>
-        <p className="text-[#5a5a5a] text-xs mt-5 pt-4 border-t border-[#1a1a1a]">
-          Trajectory: {trajectoryText}.
+        <p className="text-[#858585] text-xs mt-5 pt-4 border-t border-[#1a1a1a]">
+          Trajectory: <span className={
+            trajectoryText === 'improving' ? 'text-[#4da6ff]' :
+            trajectoryText === 'deteriorating' ? 'text-[#b45309]' :
+            'text-[#ababab]'
+          }>{trajectoryText}</span>.
         </p>
       </div>
     </section>

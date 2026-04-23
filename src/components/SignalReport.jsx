@@ -92,11 +92,11 @@ export default function SignalReport({ report: reportProp, userId }) {
   }, [userId, reportProp]);
 
   if (loading) {
-    return <p className="text-[#5a5a5a] text-sm">Loading signal report…</p>;
+    return <p className="text-[#858585] text-sm">Loading signal report…</p>;
   }
 
   if (!report) {
-    return <p className="text-[#5a5a5a] text-sm">Signal report unavailable.</p>;
+    return <p className="text-[#858585] text-sm">Signal report unavailable.</p>;
   }
 
   const { confrontationRate, driftSignals, priorDriftSignalCount, ruleIntegrity } = report;

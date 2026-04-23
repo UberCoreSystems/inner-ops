@@ -229,7 +229,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Dismiss button — always visible so user is never trapped on Oracle failure */}
               <button
                 onClick={onClose}
-                className="absolute top-0 right-0 text-[#3a3a3a] hover:text-[#8a8a8a] transition-colors"
+                className="absolute top-0 right-0 text-[#6a6a6a] hover:text-[#ababab] transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -256,7 +256,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   }}
                 />
               </div>
-              <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">Reading</div>
+              <div className="text-[#858585] text-xs uppercase tracking-widest">Reading</div>
             </div>
           ) : (
             /* ── Feedback state ── */
@@ -264,10 +264,10 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* BER-200: Confrontation trigger — user's own pre-committed question */}
               {resolvedCriterion && (
                 <div className="border border-[#2a2a2a] rounded-xl p-4 space-y-3">
-                  <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">Confrontation Trigger</div>
-                  <div className="text-[#8a8a8a] text-xs">{resolvedCriterion.dataSummary}</div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest">Confrontation Trigger</div>
+                  <div className="text-[#ababab] text-xs">{resolvedCriterion.dataSummary}</div>
                   <div className="border-l-2 border-[#3a3a3a] pl-3">
-                    <div className="text-[#5a5a5a] text-[10px] uppercase tracking-widest mb-1">Your pre-committed question</div>
+                    <div className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">Your pre-committed question</div>
                     <div className="text-[#d1d1d1] text-sm leading-relaxed">{resolvedCriterion.criterion.question}</div>
                   </div>
                 </div>
@@ -277,11 +277,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-[#d1d1d1]" />
-                  <span className="text-[#5a5a5a] text-xs uppercase tracking-widest font-medium">Oracle</span>
+                  <span className="text-[#858585] text-xs uppercase tracking-widest font-medium">Oracle</span>
                 </div>
                 <button
                   onClick={onClose}
-                  className="text-[#3a3a3a] hover:text-[#8a8a8a] transition-colors"
+                  className="text-[#6a6a6a] hover:text-[#ababab] transition-colors"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M18 6L6 18M6 6l12 12" />
@@ -291,7 +291,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
               {/* BER-225/BER-229: Metacognitive depth — use local state so regen updates it */}
               {displayDepth && (
-                <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">
+                <div className="text-[#858585] text-xs uppercase tracking-widest">
                   Depth: {displayDepth}
                 </div>
               )}
@@ -304,7 +304,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Follow-up response */}
               {followUpResponse && (
                 <div className="border-l-2 border-[#5a5a5a] pl-4">
-                  <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Your challenge addressed</div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Your challenge addressed</div>
                   <div className="text-[#c0c0c0] text-sm leading-relaxed font-light">{followUpResponse}</div>
                 </div>
               )}
@@ -312,7 +312,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Follow-up input */}
               {showFollowUp && !followUpUsed && (
                 <div className="space-y-3">
-                  <div className="text-[#5a5a5a] text-xs uppercase tracking-widest">Challenge the Oracle's assessment</div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest">Challenge the Oracle's assessment</div>
                   {/* Pass 2 Finding 14 remediation: maxLength + visible
                       counter so the user sees the cap before the server
                       truncates. Matches MAX_USER_RESPONSE_CHARS in
@@ -322,23 +322,23 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                     onChange={e => setFollowUpText(e.target.value)}
                     rows={2}
                     maxLength={8000}
-                    className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#3a3a3a]"
+                    className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a]"
                     placeholder="State your specific pushback..."
                   />
-                  <div className="text-[#3a3a3a] text-xs text-right" aria-live="polite">
+                  <div className="text-[#6a6a6a] text-xs text-right" aria-live="polite">
                     {followUpText.length} / 8000
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={handleFollowUp}
                       disabled={!followUpText.trim() || followUpLoading}
-                      className="flex-1 py-2.5 text-sm font-medium rounded-xl transition-all bg-[#1a1a1a] border border-[#2a2a2a] text-[#8a8a8a] hover:text-white disabled:opacity-40"
+                      className="flex-1 py-2.5 text-sm font-medium rounded-xl transition-all bg-[#1a1a1a] border border-[#2a2a2a] text-[#ababab] hover:text-white disabled:opacity-40"
                     >
                       {followUpLoading ? 'Processing...' : 'Submit'}
                     </button>
                     <button
                       onClick={() => { setShowFollowUp(false); setFollowUpText(''); }}
-                      className="px-4 py-2.5 text-sm rounded-xl bg-transparent text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors"
+                      className="px-4 py-2.5 text-sm rounded-xl bg-transparent text-[#6a6a6a] hover:text-[#858585] transition-colors"
                     >
                       Cancel
                     </button>
@@ -353,7 +353,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                     <button
                       onClick={handleRegenerate}
                       disabled={regenLoading}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#5a5a5a] hover:border-[#2a2a2a] hover:text-[#8a8a8a] transition-all disabled:opacity-40"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#858585] hover:border-[#2a2a2a] hover:text-[#ababab] transition-all disabled:opacity-40"
                     >
                       {regenLoading ? 'Regenerating...' : `Regenerate · ${MAX_REGEN - regenCount} of ${MAX_REGEN} remaining`}
                     </button>
@@ -361,7 +361,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   {canFollowUp && !showFollowUp && (
                     <button
                       onClick={() => setShowFollowUp(true)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#5a5a5a] hover:border-[#2a2a2a] hover:text-[#8a8a8a] transition-all"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#858585] hover:border-[#2a2a2a] hover:text-[#ababab] transition-all"
                     >
                       Go deeper
                     </button>
@@ -375,7 +375,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Reactions */}
               {currentFeedback && (
                 <div>
-                  <div className="text-[#3a3a3a] text-xs uppercase tracking-widest mb-3">How did this land?</div>
+                  <div className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-3">How did this land?</div>
                   <div className="flex flex-wrap gap-2">
                     {REACTIONS.map((r) => {
                       const isSelected = selectedReaction === r.id;
@@ -386,7 +386,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                           className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                             isSelected
                               ? ''
-                              : 'bg-transparent border border-[#1a1a1a] text-[#5a5a5a] hover:border-[#2a2a2a] hover:text-[#8a8a8a]'
+                              : 'bg-transparent border border-[#1a1a1a] text-[#858585] hover:border-[#2a2a2a] hover:text-[#ababab]'
                           }`}
                           style={isSelected ? {
                             backgroundColor: `${r.color}12`,
@@ -408,7 +408,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Close */}
               <button
                 onClick={onClose}
-                className="w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 bg-[#111] border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a]"
+                className="w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 bg-[#111] border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a]"
               >
                 {selectedReaction ? 'Done' : 'Close'}
               </button>

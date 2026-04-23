@@ -132,13 +132,13 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
             <AppIcon name={meta.icon} size={22} color={meta.color} glow={true} glowIntensity={0.5} />
           </div>
           <div>
-            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest">Today's Reflection</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest">Today's Reflection</p>
             <p className="text-sm" style={{ color: meta.color }}>{meta.label}</p>
           </div>
         </div>
         
         {/* Refresh hint */}
-        <div className="flex items-center gap-2 text-[#3a3a3a] text-xs">
+        <div className="flex items-center gap-2 text-[#6a6a6a] text-xs">
           <AppIcon name="sunrise" size={16} color="#f59e0b" glow={true} glowIntensity={0.3} />
           <span>New prompt daily</span>
         </div>
@@ -167,16 +167,16 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
         </button>
         
         <Link
-          to="/killlist"
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-[#8a8a8a] rounded-xl text-sm font-medium border border-[#2a2a2a] hover:border-[#ef4444]/50 hover:text-[#ef4444] transition-all duration-200 hover:scale-105 group"
+          to="/ledger"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-[#ababab] rounded-xl text-sm font-medium border border-[#2a2a2a] hover:border-[#ef4444]/50 hover:text-[#ef4444] transition-all duration-200 hover:scale-105 group"
         >
           <AppIcon name="target" size={16} color="currentColor" glow={false} />
-          <span>Add to Kill List</span>
+          <span>Add to Ledger</span>
         </Link>
         
         <Link
           to="/hardlessons"
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-[#8a8a8a] rounded-xl text-sm font-medium border border-[#2a2a2a] hover:border-[#f59e0b]/50 hover:text-[#f59e0b] transition-all duration-200 hover:scale-105 group"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-[#ababab] rounded-xl text-sm font-medium border border-[#2a2a2a] hover:border-[#f59e0b]/50 hover:text-[#f59e0b] transition-all duration-200 hover:scale-105 group"
         >
           <AppIcon name="bolt" size={16} color="currentColor" glow={false} />
           <span>Extract Lesson</span>

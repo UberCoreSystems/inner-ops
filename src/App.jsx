@@ -243,7 +243,7 @@ function App() {
             } 
           />
           <Route 
-            path="/killlist" 
+            path="/ledger"
             element={
               <InlineErrorBoundary name="KillList">
                 {user ? (

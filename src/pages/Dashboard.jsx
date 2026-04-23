@@ -362,7 +362,7 @@ export default function Dashboard() {
                 in a follow-up — keeping it here without product sign-off would
                 overreach the current task's scope. */}
             <header className="mb-10 animate-fade-in-up">
-              <p className="text-[#5a5a5a] text-sm uppercase tracking-widest mb-2">
+              <p className="text-[#858585] text-sm uppercase tracking-widest mb-2">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </p>
               <h1 className="text-3xl font-bold text-white">
@@ -375,7 +375,7 @@ export default function Dashboard() {
           <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.02s' }}>
             <div className="oura-card p-6 border border-white/25 bg-[#0d0d0d]">
               <p className="text-xs font-medium uppercase tracking-widest text-white mb-2">Synthesis Briefing</p>
-              <p className="text-[#8a8a8a] text-sm mb-5 leading-relaxed">
+              <p className="text-[#ababab] text-sm mb-5 leading-relaxed">
                 A new cross-module intelligence briefing has been generated. Open it to proceed.
               </p>
               <button
@@ -388,15 +388,15 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Active Target Command Board — top-of-fold priority stack (up to 3) */}
-        <ActiveTargetCommandBoard killTargets={rawUserData?.killTargets || []} />
-
         {/* Mirror Stack — declared vs. observed */}
         <MirrorStack
           killTargets={rawUserData?.killTargets || []}
           hardLessons={rawUserData?.hardLessons || []}
           signalReport={signalReport}
         />
+
+        {/* Active Target Command Board — top-of-fold priority stack (up to 3) */}
+        <ActiveTargetCommandBoard killTargets={rawUserData?.killTargets || []} />
 
         {/* Morning Brief — operator-cadence daily readout, Firestore-cached. */}
         {user?.uid && <MorningBrief userId={user.uid} />}
@@ -432,7 +432,7 @@ export default function Dashboard() {
                        earlyWarning.level === 'elevated' ? 'Elevated Risk' : 'On Track'}
                     </span>
                     {earlyWarning.daysSinceRelapse !== null && (
-                      <span className="text-[#5a5a5a] text-xs">
+                      <span className="text-[#858585] text-xs">
                         {earlyWarning.daysSinceRelapse === 0 ? 'relapsed today' : `${earlyWarning.daysSinceRelapse}d since last relapse`}
                       </span>
                     )}
@@ -440,14 +440,14 @@ export default function Dashboard() {
                   {earlyWarning.signals.length > 0 && (
                     <div className="space-y-1 mb-3">
                       {earlyWarning.signals.map((s, i) => (
-                        <p key={i} className="text-[#8a8a8a] text-sm">{s}</p>
+                        <p key={i} className="text-[#ababab] text-sm">{s}</p>
                       ))}
                     </div>
                   )}
                   {/* Mood dots — last 7 journal entries, left = most recent */}
                   {earlyWarning.moodDots.length > 0 && (
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[#3a3a3a] text-xs mr-1">Mood</span>
+                      <span className="text-[#6a6a6a] text-xs mr-1">Mood</span>
                       {earlyWarning.moodDots.map((color, i) => (
                         <div
                           key={i}
@@ -455,7 +455,7 @@ export default function Dashboard() {
                           style={{ backgroundColor: color === 'red' ? '#ef4444' : color === 'green' ? '#22c55e' : '#2a2a2a' }}
                         />
                       ))}
-                      <span className="text-[#3a3a3a] text-xs ml-1">← recent</span>
+                      <span className="text-[#6a6a6a] text-xs ml-1">← recent</span>
                     </div>
                   )}
                 </div>
@@ -471,7 +471,7 @@ export default function Dashboard() {
           <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.09s' }}>
             <div className="space-y-1">
               {driftSignals.map((signal, idx) => (
-                <p key={idx} className="text-[#8a8a8a] text-sm lowercase">
+                <p key={idx} className="text-[#ababab] text-sm lowercase">
                   {formatDriftSignalText(signal)}
                 </p>
               ))}
@@ -486,11 +486,11 @@ export default function Dashboard() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="text-white text-sm font-medium mb-1">What did this week cost you?</h3>
-                  <p className="text-[#5a5a5a] text-xs">Name one thing you'd handle differently. This becomes a Hard Lesson draft.</p>
+                  <p className="text-[#858585] text-xs">Name one thing you'd handle differently. This becomes a Hard Lesson draft.</p>
                 </div>
                 <button
                   onClick={() => { sessionStorage.setItem(autopsySessionKey, 'true'); setAutopsyDismissed(true); }}
-                  className="text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors shrink-0"
+                  className="text-[#6a6a6a] hover:text-[#858585] transition-colors shrink-0"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M18 6L6 18M6 6l12 12" />
@@ -503,13 +503,13 @@ export default function Dashboard() {
                   value={autopsyText}
                   onChange={(e) => setAutopsyText(e.target.value)}
                   placeholder="I should have..."
-                  className="flex-1 p-3 bg-[#0a0a0a] text-white text-sm rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#2a2a2a]"
+                  className="flex-1 p-3 bg-[#0a0a0a] text-white text-sm rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#555555]"
                   onKeyDown={(e) => { if (e.key === 'Enter' && autopsyText.trim()) submitAutopsy(); }}
                 />
                 <button
                   onClick={submitAutopsy}
                   disabled={autopsySaving || !autopsyText.trim()}
-                  className="px-4 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white text-sm font-medium rounded-xl transition-all shrink-0"
+                  className="px-4 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white text-sm font-medium rounded-xl transition-all shrink-0"
                 >
                   {autopsySaving ? '...' : 'Capture'}
                 </button>
@@ -542,19 +542,19 @@ export default function Dashboard() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-white text-sm font-medium mb-1">Last Week's Record</h3>
-                    <p className="text-[#5a5a5a] text-xs">Across {activeTargets.length} active battle{activeTargets.length !== 1 ? 's' : ''}</p>
+                    <p className="text-[#858585] text-xs">Across {activeTargets.length} active battle{activeTargets.length !== 1 ? 's' : ''}</p>
                   </div>
-                  <button onClick={() => setKillReportDismissed(true)} className="text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors shrink-0">
+                  <button onClick={() => setKillReportDismissed(true)} className="text-[#6a6a6a] hover:text-[#858585] transition-colors shrink-0">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                   </button>
                 </div>
                 <div className="flex items-center gap-4">
                   {held > 0 && <span className="text-[#22c55e] text-sm"><span className="text-lg font-medium tabular-nums">{held}</span> held</span>}
                   {escaped > 0 && <span className="text-[#ef4444] text-sm"><span className="text-lg font-medium tabular-nums">{escaped}</span> escaped</span>}
-                  {untouched > 0 && <span className="text-[#5a5a5a] text-sm"><span className="text-lg font-medium tabular-nums">{untouched}</span> untouched</span>}
+                  {untouched > 0 && <span className="text-[#858585] text-sm"><span className="text-lg font-medium tabular-nums">{untouched}</span> untouched</span>}
                 </div>
                 {untouched > 0 && (
-                  <p className="text-[#3a3a3a] text-xs mt-2">{untouched} target{untouched > 1 ? 's' : ''} had zero check-ins last week.</p>
+                  <p className="text-[#6a6a6a] text-xs mt-2">{untouched} target{untouched > 1 ? 's' : ''} had zero check-ins last week.</p>
                 )}
               </div>
             </section>
@@ -564,7 +564,7 @@ export default function Dashboard() {
         {/* Signal Report — prose-only, no score, no rank, no rings */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <div className="oura-card p-6">
-            <p className="text-xs font-medium uppercase tracking-widest text-[#5a5a5a] mb-3">Signal Report</p>
+            <p className="text-xs font-medium uppercase tracking-widest text-[#858585] mb-3">Signal Report</p>
             <SignalReport report={signalReport} />
           </div>
         </section>
@@ -573,7 +573,7 @@ export default function Dashboard() {
             Leads the factual-metrics surface; SignalReport leads the trajectory
             surface above. No scores, no ranks, no bars. Only non-zero lines. */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Behavioral Record</h3>
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Behavioral Record</h3>
           <div className="oura-card p-6">
             <BehavioralRecordDensity density={density} />
           </div>
@@ -581,7 +581,7 @@ export default function Dashboard() {
 
         {/* Stats Grid - Oura Score Cards */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" />
             <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" />
@@ -593,22 +593,22 @@ export default function Dashboard() {
 
         {/* Quick Actions - Oura Style */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Quick Actions</h3>
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#a855f7]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="journal" size={28} color="#a855f7" />
               </div>
               <h4 className="text-white font-medium mb-1">Journal</h4>
-              <p className="text-[#5a5a5a] text-sm">Reflect & process</p>
+              <p className="text-[#858585] text-sm">Reflect & process</p>
             </Link>
             
-            <Link to="/killlist" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all">
+            <Link to="/ledger" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="target" size={28} color="#ef4444" />
               </div>
-              <h4 className="text-white font-medium mb-1">Kill List</h4>
-              <p className="text-[#5a5a5a] text-sm">Eliminate patterns</p>
+              <h4 className="text-white font-medium mb-1">The Ledger</h4>
+              <p className="text-[#858585] text-sm">Eliminate patterns</p>
             </Link>
             
             <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all">
@@ -616,7 +616,7 @@ export default function Dashboard() {
                 <AppIcon name="hardLessons" size={28} color="#f59e0b" />
               </div>
               <h4 className="text-white font-medium mb-1">Hard Lessons</h4>
-              <p className="text-[#5a5a5a] text-sm">Turn pain to wisdom</p>
+              <p className="text-[#858585] text-sm">Turn pain to wisdom</p>
             </Link>
             
             <Link to="/blackmirror" className="oura-card p-5 group hover:border-[#4da6ff]/50 transition-all">
@@ -624,7 +624,7 @@ export default function Dashboard() {
                 <AppIcon name="mirror" size={28} color="#4da6ff" />
               </div>
               <h4 className="text-white font-medium mb-1">Black Mirror</h4>
-              <p className="text-[#5a5a5a] text-sm">Reality check</p>
+              <p className="text-[#858585] text-sm">Reality check</p>
             </Link>
           </div>
         </section>
@@ -635,10 +635,10 @@ export default function Dashboard() {
             onClick={() => setKillListExpanded(prev => !prev)}
             className="flex items-center justify-between w-full mb-4 group"
           >
-            <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest group-hover:text-[#8a8a8a] transition-colors">Kill List Overview</h3>
+            <h3 className="text-[#858585] text-xs uppercase tracking-widest group-hover:text-[#ababab] transition-colors">The Ledger</h3>
             <svg
               width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className={`text-[#3a3a3a] group-hover:text-[#5a5a5a] transition-all duration-200 ${killListExpanded ? 'rotate-180' : ''}`}
+              className={`text-[#6a6a6a] group-hover:text-[#858585] transition-all duration-200 ${killListExpanded ? 'rotate-180' : ''}`}
             >
               <polyline points="6 9 12 15 18 9" />
             </svg>
@@ -651,7 +651,7 @@ export default function Dashboard() {
           
           {/* Recent Activity */}
           <section>
-            <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Recent Activity</h3>
+            <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Recent Activity</h3>
             <div className="space-y-3">
               {recentEntries.length > 0 ? (
                 recentEntries.map((entry, index) => {
@@ -673,8 +673,8 @@ export default function Dashboard() {
               ) : (
                 <div className="oura-card p-8 text-center">
                   <div className="text-4xl mb-3 opacity-30">📊</div>
-                  <p className="text-[#5a5a5a]">No recent activity</p>
-                  <p className="text-[#3a3a3a] text-sm mt-1">Start using the modules to track progress</p>
+                  <p className="text-[#858585]">No recent activity</p>
+                  <p className="text-[#6a6a6a] text-sm mt-1">Start using the modules to track progress</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
                     <button
                       onClick={() => setQuickJournalOpen(true)}
@@ -683,8 +683,8 @@ export default function Dashboard() {
                       Quick Journal
                     </button>
                     <Link
-                      to="/killlist"
-                      className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#8a8a8a] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
+                      to="/ledger"
+                      className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
                     >
                       Add a Kill Contract
                     </Link>

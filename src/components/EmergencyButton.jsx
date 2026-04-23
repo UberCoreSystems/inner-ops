@@ -235,7 +235,7 @@ const EmergencyButton = () => {
                       onClick={goToRelapseRadar}
                       className="w-full py-4 bg-oura-card border border-oura-border text-white rounded-2xl font-medium hover:bg-oura-darker transition-all flex items-center justify-center gap-2"
                     >
-                      <span>📡</span> Full Relapse Radar
+                      <span>📡</span> Full Signal
                     </button>
                   </div>
                 </div>
@@ -352,7 +352,7 @@ const EmergencyButton = () => {
                       onClick={goToRelapseRadar}
                       className="flex-1 py-3 bg-oura-amber text-black rounded-2xl font-medium"
                     >
-                      Full Relapse Radar
+                      Full Signal
                     </button>
                   </div>
                 </div>

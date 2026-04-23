@@ -127,7 +127,7 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
             seen48.add(key);
             signals.push({
               type: 'correlated_escape',
-              description: `Kill List escape and relapse entry within 48h`,
+              description: `Ledger escape and relapse entry within 48h`,
               detail: `Target: ${target[KILL_TARGET_FIELDS.TITLE]}${entryArchetype ? ` · Archetype: ${entryArchetype}` : ''}`,
               severity: 'signal',
               targetTitle: target[KILL_TARGET_FIELDS.TITLE],

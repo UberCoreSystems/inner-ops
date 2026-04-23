@@ -146,28 +146,28 @@ export default function Onboarding() {
         {/* Step 0: Welcome */}
         {step === 0 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Inner Operations</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Inner Operations</p>
             <h1 className="text-4xl font-light text-white mb-6 leading-tight">
               This is your inner command center.
             </h1>
-            <p className="text-[#8a8a8a] text-lg leading-relaxed mb-4">
+            <p className="text-[#ababab] text-lg leading-relaxed mb-4">
               Every module — your journal, kill list, hard lessons, relapse tracking — feeds an AI advisor called the Oracle.
             </p>
-            <p className="text-[#8a8a8a] text-lg leading-relaxed mb-4">
+            <p className="text-[#ababab] text-lg leading-relaxed mb-4">
               The Oracle reads what you actually write and responds to it directly. No generic advice. No comfort. The more honest you are, the more useful it becomes.
             </p>
-            <p className="text-[#5a5a5a] text-sm leading-relaxed mb-2">
-              <span className="text-[#8a8a8a] font-medium">Where to start:</span> Kill List first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. Relapse Radar when you slip. Black Mirror when attention drifts.
+            <p className="text-[#858585] text-sm leading-relaxed mb-2">
+              <span className="text-[#ababab] font-medium">Where to start:</span> Ledger first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. The Signal when you slip. Black Mirror when attention drifts.
             </p>
-            <p className="text-[#5a5a5a] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
-            <p className="text-[#5a5a5a] text-sm mt-6">Three questions before you start. Takes 90 seconds.</p>
+            <p className="text-[#858585] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
+            <p className="text-[#858585] text-sm mt-6">Three questions before you start. Takes 90 seconds.</p>
           </div>
         )}
 
         {/* Step 1: Primary driver */}
         {step === 1 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Question 1 of 3</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Question 1 of 3</p>
             <h2 className="text-2xl font-light text-white mb-8">What's the main reason you're here?</h2>
             <div className="space-y-3">
               {DRIVERS.map((d) => (
@@ -177,7 +177,7 @@ export default function Onboarding() {
                   className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 ${
                     driver === d.value
                       ? 'border-white bg-white/5 text-white'
-                      : 'border-[#1a1a1a] text-[#8a8a8a] hover:border-[#2a2a2a] hover:text-white'
+                      : 'border-[#1a1a1a] text-[#ababab] hover:border-[#2a2a2a] hover:text-white'
                   }`}
                 >
                   {d.label}
@@ -190,9 +190,9 @@ export default function Onboarding() {
         {/* Step 2: Feedback style */}
         {step === 2 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Question 2 of 3</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Question 2 of 3</p>
             <h2 className="text-2xl font-light text-white mb-2">How should the Oracle respond to you?</h2>
-            <p className="text-[#5a5a5a] text-sm mb-8">This can be changed later in your profile.</p>
+            <p className="text-[#858585] text-sm mb-8">This can be changed later in your profile.</p>
             <div className="space-y-3">
               {FEEDBACK_STYLES.map((s) => (
                 <button
@@ -204,10 +204,10 @@ export default function Onboarding() {
                       : 'border-[#1a1a1a] hover:border-[#2a2a2a]'
                   }`}
                 >
-                  <div className={`font-medium mb-0.5 transition-colors ${feedbackStyle === s.value ? 'text-white' : 'text-[#8a8a8a]'}`}>
+                  <div className={`font-medium mb-0.5 transition-colors ${feedbackStyle === s.value ? 'text-white' : 'text-[#ababab]'}`}>
                     {s.label}
                   </div>
-                  <div className="text-[#5a5a5a] text-sm">{s.description}</div>
+                  <div className="text-[#858585] text-sm">{s.description}</div>
                 </button>
               ))}
             </div>
@@ -217,17 +217,17 @@ export default function Onboarding() {
         {/* Step 3: Focus statement */}
         {step === 3 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Question 3 of 3</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Question 3 of 3</p>
             <h2 className="text-2xl font-light text-white mb-3">In one sentence — what do you most want to eliminate or become?</h2>
-            <p className="text-[#5a5a5a] text-sm mb-8">The Oracle will use this as context every time it responds to you.</p>
+            <p className="text-[#858585] text-sm mb-8">The Oracle will use this as context every time it responds to you.</p>
             <textarea
               value={focusStatement}
               onChange={(e) => setFocusStatement(e.target.value)}
               placeholder="e.g. Stop numbing discomfort with distraction and build the discipline to do hard things alone."
               rows={3}
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#3a3a3a] transition-colors"
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
             />
-            <div className={`text-xs mt-2 text-right transition-colors ${focusStatement.trim().length >= 8 ? 'text-[#5a5a5a]' : 'text-[#2a2a2a]'}`}>
+            <div className={`text-xs mt-2 text-right transition-colors ${focusStatement.trim().length >= 8 ? 'text-[#858585]' : 'text-[#2a2a2a]'}`}>
               {focusStatement.trim().length} characters
             </div>
           </div>
@@ -236,15 +236,15 @@ export default function Onboarding() {
         {/* Step 4: Kill target seed */}
         {step === 4 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">One more thing</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">One more thing</p>
             <h2 className="text-2xl font-light text-white mb-3">Name the one pattern that's costing you the most right now.</h2>
-            <p className="text-[#5a5a5a] text-sm mb-8">This becomes your first kill contract. You can skip this and add targets later.</p>
+            <p className="text-[#858585] text-sm mb-8">This becomes your first kill contract. You can skip this and add targets later.</p>
             <input
               type="text"
               value={killTarget}
               onChange={(e) => setKillTarget(e.target.value)}
               placeholder="e.g. Doomscrolling at night, avoiding hard conversations, porn..."
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none placeholder-[#3a3a3a] transition-colors"
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none placeholder-[#6a6a6a] transition-colors"
             />
           </div>
         )}
@@ -252,15 +252,15 @@ export default function Onboarding() {
         {/* Step 5: Confrontation criteria — BER-200 */}
         {step === 5 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">Optional</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional</p>
             <h2 className="text-2xl font-light text-white mb-3">Set a confrontation trigger.</h2>
-            <p className="text-[#5a5a5a] text-sm mb-8">
+            <p className="text-[#858585] text-sm mb-8">
               When a specific pattern repeats, the Oracle puts your own question back to you — not a system-generated one. You can skip this and set it later.
             </p>
 
             {/* Archetype */}
             <div className="mb-5">
-              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">When the pattern is</label>
+              <label className="text-[#858585] text-xs uppercase tracking-widest block mb-2">When the pattern is</label>
               <select
                 value={criterionArchetype}
                 onChange={(e) => setCriterionArchetype(e.target.value)}
@@ -275,7 +275,7 @@ export default function Onboarding() {
 
             {/* Threshold */}
             <div className="mb-5">
-              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">
+              <label className="text-[#858585] text-xs uppercase tracking-widest block mb-2">
                 {criterionThreshold} time{criterionThreshold !== 1 ? 's' : ''} in 30 days
               </label>
               <input
@@ -286,20 +286,20 @@ export default function Onboarding() {
                 onChange={(e) => setCriterionThreshold(Number(e.target.value))}
                 className="w-full accent-white"
               />
-              <div className="flex justify-between text-[#3a3a3a] text-xs mt-1">
+              <div className="flex justify-between text-[#6a6a6a] text-xs mt-1">
                 <span>1</span><span>10</span>
               </div>
             </div>
 
             {/* Question */}
             <div className="mb-2">
-              <label className="text-[#5a5a5a] text-xs uppercase tracking-widest block mb-2">I want to be asked</label>
+              <label className="text-[#858585] text-xs uppercase tracking-widest block mb-2">I want to be asked</label>
               <textarea
                 value={criterionQuestion}
                 onChange={(e) => setCriterionQuestion(e.target.value)}
                 rows={3}
                 placeholder="e.g. What exactly are you running from right now?"
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#3a3a3a] transition-colors"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
               />
             </div>
           </div>
@@ -310,14 +310,14 @@ export default function Onboarding() {
           {step > 0 ? (
             <button
               onClick={() => setStep(step - 1)}
-              className="text-[#5a5a5a] hover:text-white transition-colors text-sm"
+              className="text-[#858585] hover:text-white transition-colors text-sm"
             >
               Back
             </button>
           ) : (
             <button
               onClick={() => navigate('/dashboard')}
-              className="text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors text-sm"
+              className="text-[#6a6a6a] hover:text-[#858585] transition-colors text-sm"
             >
               Skip
             </button>

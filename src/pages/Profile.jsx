@@ -193,7 +193,7 @@ export default function Profile() {
           <h1 className="text-2xl font-bold text-white mb-6">Profile Settings</h1>
           <form onSubmit={handleUpdateProfile} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-[#8a8a8a] mb-2">Display Name</label>
+              <label className="block text-sm font-medium text-[#ababab] mb-2">Display Name</label>
               <input
                 type="text"
                 value={displayName}
@@ -203,18 +203,18 @@ export default function Profile() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#8a8a8a] mb-2">Email</label>
+              <label className="block text-sm font-medium text-[#ababab] mb-2">Email</label>
               <input
                 type="email"
                 value={authService.getCurrentUser()?.email || ''}
                 disabled
-                className="w-full p-3 bg-[#0a0a0a] text-[#5a5a5a] rounded-xl border border-[#1a1a1a]"
+                className="w-full p-3 bg-[#0a0a0a] text-[#858585] rounded-xl border border-[#1a1a1a]"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#00d4aa] hover:bg-[#00b894] disabled:bg-[#2a2a2a] disabled:text-[#5a5a5a] text-black font-medium py-3 px-4 rounded-xl transition-colors"
+              className="w-full bg-[#00d4aa] hover:bg-[#00b894] disabled:bg-[#2a2a2a] disabled:text-[#858585] text-black font-medium py-3 px-4 rounded-xl transition-colors"
             >
               {loading ? 'Updating...' : 'Update Profile'}
             </button>
@@ -226,12 +226,12 @@ export default function Profile() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h2 className="text-lg font-light text-white">Identity Direction</h2>
-              <p className="text-[#5a5a5a] text-xs mt-1">Who you are in the process of becoming.</p>
+              <p className="text-[#858585] text-xs mt-1">Who you are in the process of becoming.</p>
             </div>
             {identityDirection && !editingIdentity && !quarterlyReviewDue && (
               <button
                 onClick={() => { setIdentityDirectionDraft(identityDirection); setEditingIdentity(true); }}
-                className="text-xs text-[#5a5a5a] hover:text-[#8a8a8a] transition-colors"
+                className="text-xs text-[#858585] hover:text-[#ababab] transition-colors"
               >
                 Revise
               </button>
@@ -241,19 +241,19 @@ export default function Profile() {
           {/* Quarterly review prompt */}
           {quarterlyReviewDue && identityDirection && !editingIdentity && (
             <div className="mb-5 p-4 border border-[#2a2a2a] rounded-xl space-y-3">
-              <p className="text-[#8a8a8a] text-sm">Does this still describe who you are becoming?</p>
+              <p className="text-[#ababab] text-sm">Does this still describe who you are becoming?</p>
               <p className="text-white text-sm font-light italic">"{identityDirection}"</p>
               <div className="flex gap-3">
                 <button
                   onClick={handleConfirmReview}
                   disabled={savingIdentity}
-                  className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#8a8a8a] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors"
+                  className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors"
                 >
                   Still accurate
                 </button>
                 <button
                   onClick={() => { setIdentityDirectionDraft(identityDirection); setEditingIdentity(true); }}
-                  className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#8a8a8a] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors"
+                  className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors"
                 >
                   Rewrite it
                 </button>
@@ -266,7 +266,7 @@ export default function Profile() {
             <div className="mb-4 p-4 bg-[#050505] border border-[#1a1a1a] rounded-xl">
               <p className="text-[#d1d1d1] text-sm font-light leading-relaxed">"{identityDirection}"</p>
               {identityDirectionSetAt && (
-                <p className="text-[#3a3a3a] text-xs mt-2">
+                <p className="text-[#6a6a6a] text-xs mt-2">
                   Set {new Date(identityDirectionSetAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
               )}
@@ -276,7 +276,7 @@ export default function Profile() {
           {/* Edit / first-time entry */}
           {editingIdentity && (
             <div className="space-y-3">
-              <label className="block text-[#5a5a5a] text-xs uppercase tracking-widest">
+              <label className="block text-[#858585] text-xs uppercase tracking-widest">
                 In one sentence: who are you in the process of becoming?
               </label>
               <textarea
@@ -284,11 +284,11 @@ export default function Profile() {
                 onChange={(e) => setIdentityDirectionDraft(e.target.value)}
                 maxLength={200}
                 rows={2}
-                className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#3a3a3a] transition-colors"
+                className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a] transition-colors"
                 placeholder="One sentence. Plain text. Present tense."
               />
               <div className="flex items-center justify-between">
-                <span className="text-[#3a3a3a] text-xs">{identityDirectionDraft.trim().length}/200</span>
+                <span className="text-[#6a6a6a] text-xs">{identityDirectionDraft.trim().length}/200</span>
                 <div className="flex gap-2">
                   {identityDirection && (
                     <>
@@ -304,7 +304,7 @@ export default function Profile() {
                       </button>
                       <button
                         onClick={() => { setEditingIdentity(false); setIdentityDirectionDraft(identityDirection); }}
-                        className="px-4 py-2 text-xs text-[#5a5a5a] hover:text-white transition-colors"
+                        className="px-4 py-2 text-xs text-[#858585] hover:text-white transition-colors"
                       >
                         Cancel
                       </button>
@@ -313,7 +313,7 @@ export default function Profile() {
                   <button
                     onClick={() => saveIdentityDirection(identityDirectionDraft)}
                     disabled={savingIdentity || identityDirectionDraft.trim().length < 20}
-                    className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#8a8a8a] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
+                    className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
                   >
                     {savingIdentity ? 'Saving...' : 'Save'}
                   </button>
@@ -327,7 +327,7 @@ export default function Profile() {
             <div className="mt-5 pt-4 border-t border-[#1a1a1a]">
               <button
                 onClick={() => setShowHistory(p => !p)}
-                className="text-[#3a3a3a] text-xs hover:text-[#5a5a5a] transition-colors"
+                className="text-[#6a6a6a] text-xs hover:text-[#858585] transition-colors"
               >
                 {showHistory ? 'Hide' : 'Show'} prior statements ({identityDirectionHistory.length})
               </button>
@@ -335,7 +335,7 @@ export default function Profile() {
                 <div className="mt-3 space-y-3">
                   {[...identityDirectionHistory].reverse().map((h, i) => (
                     <div key={i} className="p-3 bg-[#050505] border border-[#0f0f0f] rounded-xl">
-                      <p className="text-[#5a5a5a] text-xs italic">"{h.statement}"</p>
+                      <p className="text-[#858585] text-xs italic">"{h.statement}"</p>
                       <p className="text-[#2a2a2a] text-[10px] mt-1">
                         Set {new Date(h.setAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         {h.supersededAt && ` · Superseded ${new Date(h.supersededAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}

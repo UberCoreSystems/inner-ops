@@ -182,7 +182,7 @@ function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violated
   }
   if (highEscapeTargets.length >= 2) {
     const names = highEscapeTargets.slice(0, 2).map(t => t.title).join(', ');
-    signals.push(`Repeated escape on Kill List targets (${names})`);
+    signals.push(`Repeated escape on Ledger targets (${names})`);
   }
   if (violatedRules.length > 0) {
     signals.push(`${violatedRules.length} finalized rule${violatedRules.length > 1 ? 's' : ''} violated`);
@@ -207,7 +207,7 @@ async function generateConfrontationQuestion(data) {
     data.finalizedRules?.length > 0 && `Committed behavioral rules: ${data.finalizedRules.join('; ')}`,
     data.signalDelta && `Signal trend: ${data.signalDelta}`,
     typeof data.journalEntriesPerWeek === 'number' && `Journal cadence (28d avg): ${data.journalEntriesPerWeek} entries/week`,
-    data.highEscapeTargets.length > 0 && `Kill List repeated failures: ${data.highEscapeTargets.map(t => t.title).join(', ')}`,
+    data.highEscapeTargets.length > 0 && `Ledger repeated failures: ${data.highEscapeTargets.map(t => t.title).join(', ')}`,
     data.identityDirection && `User's stated identity direction: "${data.identityDirection}"`,
   ].filter(Boolean).join('\n');
 

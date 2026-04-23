@@ -201,7 +201,7 @@ export const ScoreCard = React.memo(function ScoreCard({
       tabIndex={onClick ? 0 : undefined}
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[#8a8a8a] text-sm font-medium uppercase tracking-wider">
+        <span className="text-[#ababab] text-sm font-medium uppercase tracking-wider">
           {label}
         </span>
         {icon && (
@@ -226,7 +226,7 @@ export const ScoreCard = React.memo(function ScoreCard({
       </div>
       
       {sublabel && (
-        <p className="text-[#5a5a5a] text-sm mt-2">{sublabel}</p>
+        <p className="text-[#858585] text-sm mt-2">{sublabel}</p>
       )}
     </div>
   );
@@ -259,7 +259,7 @@ export const InsightCard = React.memo(function InsightCard({
         </div>
         <div className="flex-1">
           <h4 className="text-white font-medium mb-1">{title}</h4>
-          <p className="text-[#8a8a8a] text-sm leading-relaxed">{description}</p>
+          <p className="text-[#ababab] text-sm leading-relaxed">{description}</p>
           {action && (
             <button 
               className="mt-3 text-sm font-medium transition-colors"
@@ -302,11 +302,11 @@ export const ActivityItem = React.memo(function ActivityItem({
           >
             {type}
           </span>
-          <span className="text-[#5a5a5a] text-xs">{time}</span>
+          <span className="text-[#858585] text-xs">{time}</span>
         </div>
         <p className="text-white text-sm truncate">{title}</p>
         {description && (
-          <p className="text-[#5a5a5a] text-sm mt-1 line-clamp-2">{description}</p>
+          <p className="text-[#858585] text-sm mt-1 line-clamp-2">{description}</p>
         )}
       </div>
     </div>

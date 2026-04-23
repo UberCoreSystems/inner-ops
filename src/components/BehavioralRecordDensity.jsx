@@ -29,7 +29,7 @@ import React from 'react';
  */
 export default function BehavioralRecordDensity({ density }) {
   if (!density) {
-    return <p className="text-[#5a5a5a] text-sm">Loading behavioral record…</p>;
+    return <p className="text-[#858585] text-sm">Loading behavioral record…</p>;
   }
 
   const {
@@ -100,7 +100,7 @@ export default function BehavioralRecordDensity({ density }) {
 
   if (lines.length === 0) {
     return (
-      <p className="text-[#8a8a8a] text-sm lowercase">
+      <p className="text-[#ababab] text-sm lowercase">
         record empty. the inventory fills as work accumulates.
       </p>
     );
@@ -113,7 +113,7 @@ export default function BehavioralRecordDensity({ density }) {
           <span className="text-white tabular-nums font-medium min-w-[3ch] text-right">
             {value}
           </span>
-          <span className="text-[#8a8a8a] lowercase">{label}</span>
+          <span className="text-[#ababab] lowercase">{label}</span>
         </li>
       ))}
     </ul>

@@ -66,7 +66,7 @@ const CueRestructuringFlow = ({ pattern, onSave, onCancel }) => {
   return (
     <div className="mt-4 border border-oura-border bg-oura-darker rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs uppercase tracking-widest text-[#5a5a5a]">
+        <span className="text-xs uppercase tracking-widest text-[#858585]">
           Cue Restructuring — Step {step}/4
         </span>
         <button

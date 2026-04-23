@@ -65,6 +65,22 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
+/* Active card surface — carries a subtle blue accent for modules/cards that
+   need to feel "alive" (Active Targets, Oracle modal, focal CTAs). */
+.oura-card-active {
+  background: linear-gradient(180deg, #0a0a0a 0%, #050505 100%);
+  border: 1px solid rgba(77, 166, 255, 0.2);
+  border-radius: 20px;
+  box-shadow: 0 0 32px rgba(77, 166, 255, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.oura-card-active:hover {
+  border-color: rgba(77, 166, 255, 0.35);
+  box-shadow: 0 0 40px rgba(77, 166, 255, 0.12);
+  transform: translateY(-2px);
+}
+
 /* Score Display */
 .oura-score {
   font-weight: 700;
@@ -82,9 +98,9 @@ body {
   line-height: 1;
 }
 
-/* Oura Gradient Text */
+/* Oura Gradient Text — blue-to-blue so it reads cleanly in the blue-forward scheme */
 .oura-gradient-text {
-  background: linear-gradient(135deg, #00d4aa 0%, #4da6ff 100%);
+  background: linear-gradient(135deg, #7cc4ff 0%, #4da6ff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

@@ -19,7 +19,7 @@ const SIGNAL_DELTA_LABELS = {
 
 const SIGNAL_DELTA_COLORS = {
   improving: 'text-[#22c55e]',
-  stable: 'text-[#8a8a8a]',
+  stable: 'text-[#ababab]',
   deteriorating: 'text-[#ef4444]',
 };
 
@@ -113,7 +113,7 @@ export default function SynthesisBriefing() {
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-[#3a3a3a] text-sm">Loading...</div>
+        <div className="text-[#6a6a6a] text-sm">Loading...</div>
       </div>
     );
   }
@@ -124,7 +124,7 @@ export default function SynthesisBriefing() {
         {/* Header */}
         <div className="mb-10">
           <h1 className="text-4xl font-light text-white tracking-tight mb-3">Synthesis Briefing</h1>
-          <p className="text-[#5a5a5a] text-sm leading-relaxed">
+          <p className="text-[#858585] text-sm leading-relaxed">
             Cross-module behavioral intelligence. What your own data reveals across domains.
           </p>
         </div>
@@ -138,7 +138,7 @@ export default function SynthesisBriefing() {
                   <button
                     key={opt.value}
                     onClick={() => setCadence(opt.value)}
-                    className={`px-4 py-2 rounded-xl text-sm transition-colors ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#8a8a8a] hover:text-white'}`}
+                    className={`px-4 py-2 rounded-xl text-sm transition-colors ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}
                   >
                     {opt.label}
                   </button>
@@ -147,16 +147,16 @@ export default function SynthesisBriefing() {
               <button
                 onClick={handleGenerate}
                 disabled={generating || !!cadenceLockDate}
-                className="px-6 py-2.5 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a] text-white rounded-xl font-medium transition-colors text-sm"
+                className="px-6 py-2.5 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-xl font-medium transition-colors text-sm"
               >
                 {generating ? 'Generating...' : 'Generate Briefing'}
               </button>
             </div>
 
             {cadenceLockDate && (
-              <p className="mt-4 text-[#5a5a5a] text-sm">
+              <p className="mt-4 text-[#858585] text-sm">
                 Next briefing available:{' '}
-                <span className="text-[#8a8a8a]">
+                <span className="text-[#ababab]">
                   {cadenceLockDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </span>
               </p>
@@ -167,8 +167,8 @@ export default function SynthesisBriefing() {
         {/* No briefings yet */}
         {briefings.length === 0 && (
           <div className="oura-card p-12 text-center">
-            <p className="text-[#5a5a5a] text-sm mb-2">No briefings generated yet.</p>
-            <p className="text-[#3a3a3a] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
+            <p className="text-[#858585] text-sm mb-2">No briefings generated yet.</p>
+            <p className="text-[#6a6a6a] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
           </div>
         )}
 
@@ -177,12 +177,12 @@ export default function SynthesisBriefing() {
           <div className="mb-10">
             {selectedArchive && (
               <div className="flex items-center gap-3 mb-4">
-                <button onClick={() => setSelectedArchive(null)} className="text-[#5a5a5a] text-xs hover:text-white transition-colors">← Latest</button>
-                <span className="text-[#3a3a3a] text-xs">Archive record</span>
+                <button onClick={() => setSelectedArchive(null)} className="text-[#858585] text-xs hover:text-white transition-colors">← Latest</button>
+                <span className="text-[#6a6a6a] text-xs">Archive record</span>
               </div>
             )}
 
-            <div className="text-[#3a3a3a] text-xs mb-6">
+            <div className="text-[#6a6a6a] text-xs mb-6">
               {new Date(displayBriefing.generatedAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               {' · '}
               {displayBriefing.cadencePeriod}
@@ -190,41 +190,41 @@ export default function SynthesisBriefing() {
 
             {/* Section 1: Convergence Point */}
             <div className="mb-8">
-              <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
+              <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
               <p className="text-[#d1d1d1] text-base leading-relaxed">{displayBriefing.convergencePoint}</p>
             </div>
 
             {/* Section 2: Violated Rules */}
             <div className="mb-8">
-              <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-3">Violated Rules</div>
+              <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Violated Rules</div>
               {displayBriefing.violatedRules?.length > 0 ? (
                 <div className="space-y-2">
                   {displayBriefing.violatedRules.map((vr, idx) => (
                     <div key={idx} className="border-l-4 border-[#ef4444]/60 pl-4 py-1">
                       <p className="text-[#d1d1d1] text-sm">{vr.rule}</p>
-                      <p className="text-[#3a3a3a] text-xs mt-0.5">{vr.source}</p>
+                      <p className="text-[#6a6a6a] text-xs mt-0.5">{vr.source}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-[#3a3a3a] text-sm">No rule violations detected this period.</p>
+                <p className="text-[#6a6a6a] text-sm">No rule violations detected this period.</p>
               )}
             </div>
 
             {/* Section 3: Signal Delta */}
             <div className="mb-8">
-              <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-3">Signal Delta</div>
-              <div className={`text-2xl font-light ${SIGNAL_DELTA_COLORS[displayBriefing.signalDelta] || 'text-[#8a8a8a]'}`}>
+              <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Signal Delta</div>
+              <div className={`text-2xl font-light ${SIGNAL_DELTA_COLORS[displayBriefing.signalDelta] || 'text-[#ababab]'}`}>
                 {SIGNAL_DELTA_LABELS[displayBriefing.signalDelta] || displayBriefing.signalDelta}
               </div>
               {displayBriefing.signalDeltaNote && (
-                <p className="text-[#8a8a8a] text-sm mt-3 leading-relaxed">{displayBriefing.signalDeltaNote}</p>
+                <p className="text-[#ababab] text-sm mt-3 leading-relaxed">{displayBriefing.signalDeltaNote}</p>
               )}
             </div>
 
             {/* Section 4: Confrontation Question */}
             <div className="border-t border-[#1a1a1a] pt-8">
-              <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-5">Confrontation Question</div>
+              <div className="text-[#858585] text-xs uppercase tracking-widest mb-5">Confrontation Question</div>
               <p className="text-white text-xl font-light leading-relaxed">
                 {displayBriefing.confrontationQuestion}
               </p>
@@ -235,7 +235,7 @@ export default function SynthesisBriefing() {
         {/* Archive */}
         {archiveBriefings.length > 0 && (
           <div className="mt-10">
-            <div className="text-[#3a3a3a] text-xs uppercase tracking-widest mb-4">Previous Briefings</div>
+            <div className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-4">Previous Briefings</div>
             <div className="space-y-2">
               {archiveBriefings.map((b, idx) => (
                 <button
@@ -243,10 +243,10 @@ export default function SynthesisBriefing() {
                   onClick={() => setSelectedArchive(b)}
                   className={`w-full text-left px-5 py-4 rounded-xl border transition-colors ${selectedArchive === b ? 'border-[#f59e0b]/40 bg-[#f59e0b]/5' : 'border-[#1a1a1a] hover:border-[#2a2a2a] bg-[#0a0a0a]'}`}
                 >
-                  <div className="text-[#8a8a8a] text-sm">
+                  <div className="text-[#ababab] text-sm">
                     {new Date(b.generatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </div>
-                  <div className={`text-xs mt-1 ${SIGNAL_DELTA_COLORS[b.signalDelta] || 'text-[#5a5a5a]'}`}>
+                  <div className={`text-xs mt-1 ${SIGNAL_DELTA_COLORS[b.signalDelta] || 'text-[#858585]'}`}>
                     {SIGNAL_DELTA_LABELS[b.signalDelta] || b.signalDelta}
                   </div>
                 </button>

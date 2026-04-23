@@ -59,15 +59,15 @@ export default function MorningBrief({ userId }) {
 
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.03s' }}>
-      <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-4">
+      <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">
         {label}
       </h3>
       <div className="oura-card p-6">
         {status === 'loading' && (
-          <p className="text-[#5a5a5a] text-sm">Generating today's brief…</p>
+          <p className="text-[#858585] text-sm">Generating today's brief…</p>
         )}
         {status === 'error' && (
-          <p className="text-[#8a8a8a] text-sm leading-relaxed">
+          <p className="text-[#ababab] text-sm leading-relaxed">
             Brief unavailable. Refresh the page or engage a module to restore signal.
           </p>
         )}

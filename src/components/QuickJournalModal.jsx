@@ -119,12 +119,12 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
             </div>
             <div>
               <h2 className="text-white font-light">Quick Entry</h2>
-              <p className="text-[#5a5a5a] text-xs">Name the event. Name what in you produced the reading.</p>
+              <p className="text-[#858585] text-xs">Name the event. Name what in you produced the reading.</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-[#5a5a5a] hover:text-white hover:bg-[#1a1a1a] transition-all"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-all"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12" />
@@ -139,7 +139,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
               <label htmlFor="quick-event-input" className="block text-white text-sm font-medium mb-1">
                 What actually happened?
               </label>
-              <p className="text-[#5a5a5a] text-xs mb-2">Time, place, what occurred, one concrete detail.</p>
+              <p className="text-[#858585] text-xs mb-2">Time, place, what occurred, one concrete detail.</p>
               <textarea
                 id="quick-event-input"
                 value={event}
@@ -151,7 +151,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                 placeholder="The event, in specifics."
                 autoFocus
               />
-              <div className={`mt-1 text-[11px] ${eventValid ? 'text-[#5a5a5a]' : 'text-[#8a8a8a]'}`}>
+              <div className={`mt-1 text-[11px] ${eventValid ? 'text-[#858585]' : 'text-[#ababab]'}`}>
                 {event.trim().length}/{EVENT_MIN} {eventValid ? '— ok' : '— minimum not met'}
               </div>
             </div>
@@ -161,7 +161,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
               <label htmlFor="quick-attribution-input" className="block text-white text-sm font-medium mb-1">
                 What in me produced this reading of it?
               </label>
-              <p className="text-[#5a5a5a] text-xs mb-2">The belief, pattern, or expectation that shaped your interpretation. Not how you felt — what produced the feeling.</p>
+              <p className="text-[#858585] text-xs mb-2">The belief, pattern, or expectation that shaped your interpretation. Not how you felt — what produced the feeling.</p>
               <textarea
                 id="quick-attribution-input"
                 value={attribution}
@@ -172,7 +172,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                 } focus:border-[#00d4aa] focus:outline-none resize-none transition-colors text-sm`}
                 placeholder="The assumption, fear, or frame in you that produced this read."
               />
-              <div className={`mt-1 text-[11px] ${attributionValid ? 'text-[#5a5a5a]' : 'text-[#8a8a8a]'}`}>
+              <div className={`mt-1 text-[11px] ${attributionValid ? 'text-[#858585]' : 'text-[#ababab]'}`}>
                 {attribution.trim().length}/{ATTRIBUTION_MIN} {attributionValid ? '— ok' : '— minimum not met'}
               </div>
             </div>
@@ -181,7 +181,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
             <div className="flex items-center justify-between p-4 border-t border-[#1a1a1a] bg-[#050505]">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-[#5a5a5a] text-sm hover:text-white transition-all"
+                className="px-4 py-2 text-[#858585] text-sm hover:text-white transition-all"
               >
                 Cancel
               </button>
@@ -191,7 +191,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                 className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
                   canSubmit
                     ? 'bg-[#a855f7] text-white hover:bg-[#9333ea] hover:shadow-lg hover:shadow-[#a855f7]/20'
-                    : 'bg-[#1a1a1a] text-[#3a3a3a] cursor-not-allowed'
+                    : 'bg-[#1a1a1a] text-[#6a6a6a] cursor-not-allowed'
                 }`}
               >
                 {saving ? (

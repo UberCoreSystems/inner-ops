@@ -82,14 +82,17 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
   return (
     <>
       <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.07s' }}>
-        <div className="oura-card p-6 border-l-4 border-[#f59e0b]">
+        <div
+          className="oura-card p-6 border-l-2 border-[#b45309]"
+          style={{ background: 'linear-gradient(90deg, rgba(180, 83, 9, 0.05) 0%, transparent 40%), linear-gradient(180deg, #0a0a0a 0%, #050505 100%)' }}
+        >
           <div className="flex items-start justify-between mb-3">
-            <p className="text-[#f59e0b] text-xs font-medium uppercase tracking-widest">
+            <p className="text-[#b45309] text-xs font-medium uppercase tracking-widest">
               Pattern Surfaced — {label}
             </p>
             <button
               onClick={handleDismiss}
-              className="text-[#3a3a3a] hover:text-[#5a5a5a] transition-colors shrink-0"
+              className="text-[#6a6a6a] hover:text-[#858585] transition-colors shrink-0"
               aria-label="Dismiss for 24 hours"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -101,7 +104,7 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
           <button
             onClick={handleConfront}
             disabled={modalState.isLoading}
-            className="px-5 py-2.5 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] disabled:opacity-50 transition-colors"
+            className="px-5 py-2.5 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] disabled:opacity-50 transition-all"
           >
             {modalState.isLoading ? 'Oracle thinking' : 'Confront this'}
           </button>

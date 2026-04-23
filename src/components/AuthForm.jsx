@@ -112,7 +112,7 @@ export default function AuthForm({ onAuthSuccess }) {
               className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${
                 isSignIn 
                   ? 'bg-[#00d4aa] text-black' 
-                  : 'text-[#5a5a5a] hover:text-white'
+                  : 'text-[#858585] hover:text-white'
               }`}
             >
               Sign In
@@ -127,7 +127,7 @@ export default function AuthForm({ onAuthSuccess }) {
               className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${
                 !isSignIn 
                   ? 'bg-[#00d4aa] text-black' 
-                  : 'text-[#5a5a5a] hover:text-white'
+                  : 'text-[#858585] hover:text-white'
               }`}
             >
               Create Account
@@ -137,7 +137,7 @@ export default function AuthForm({ onAuthSuccess }) {
           <h2 className="text-2xl font-light text-white mb-2 tracking-wide">
             {isSignIn ? 'Welcome Back' : 'Begin Your Journey'}
           </h2>
-          <p className="text-[#5a5a5a] text-sm mb-8">
+          <p className="text-[#858585] text-sm mb-8">
             {isSignIn 
               ? 'Continue your path of self-mastery'
               : 'Create your account to start the inner work'
@@ -150,7 +150,7 @@ export default function AuthForm({ onAuthSuccess }) {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div className="space-y-2">
-              <label htmlFor="email" className="block text-xs font-medium text-[#5a5a5a] uppercase tracking-wider">
+              <label htmlFor="email" className="block text-xs font-medium text-[#858585] uppercase tracking-wider">
                 Email Address
               </label>
               <div className={`relative transition-all duration-300 ${focusedField === 'email' ? 'transform scale-[1.01]' : ''}`}>
@@ -163,7 +163,7 @@ export default function AuthForm({ onAuthSuccess }) {
                   onChange={handleInputChange}
                   onFocus={() => setFocusedField('email')}
                   onBlur={() => setFocusedField(null)}
-                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#3a3a3a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#6a6a6a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
                   placeholder="you@example.com"
                 />
                 {focusedField === 'email' && (
@@ -175,7 +175,7 @@ export default function AuthForm({ onAuthSuccess }) {
             {/* Display Name (Register only) */}
             {!isSignIn && (
               <div className="space-y-2 animate-fade-in-up">
-                <label htmlFor="displayName" className="block text-xs font-medium text-[#5a5a5a] uppercase tracking-wider">
+                <label htmlFor="displayName" className="block text-xs font-medium text-[#858585] uppercase tracking-wider">
                   Your Name
                 </label>
                 <div className={`relative transition-all duration-300 ${focusedField === 'displayName' ? 'transform scale-[1.01]' : ''}`}>
@@ -187,7 +187,7 @@ export default function AuthForm({ onAuthSuccess }) {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedField('displayName')}
                     onBlur={() => setFocusedField(null)}
-                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#3a3a3a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#6a6a6a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
                     placeholder="How should we call you?"
                   />
                   {focusedField === 'displayName' && (
@@ -199,7 +199,7 @@ export default function AuthForm({ onAuthSuccess }) {
 
             {/* Password */}
             <div className="space-y-2">
-              <label htmlFor="password" className="block text-xs font-medium text-[#5a5a5a] uppercase tracking-wider">
+              <label htmlFor="password" className="block text-xs font-medium text-[#858585] uppercase tracking-wider">
                 Password
               </label>
               <div className={`relative transition-all duration-300 ${focusedField === 'password' ? 'transform scale-[1.01]' : ''}`}>
@@ -212,7 +212,7 @@ export default function AuthForm({ onAuthSuccess }) {
                   onChange={handleInputChange}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField(null)}
-                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#3a3a3a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#6a6a6a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
                   placeholder="••••••••"
                 />
                 {focusedField === 'password' && (
@@ -224,7 +224,7 @@ export default function AuthForm({ onAuthSuccess }) {
             {/* Confirm Password (Register only) */}
             {!isSignIn && (
               <div className="space-y-2 animate-fade-in-up">
-                <label htmlFor="confirmPassword" className="block text-xs font-medium text-[#5a5a5a] uppercase tracking-wider">
+                <label htmlFor="confirmPassword" className="block text-xs font-medium text-[#858585] uppercase tracking-wider">
                   Confirm Password
                 </label>
                 <div className={`relative transition-all duration-300 ${focusedField === 'confirmPassword' ? 'transform scale-[1.01]' : ''}`}>
@@ -237,7 +237,7 @@ export default function AuthForm({ onAuthSuccess }) {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedField('confirmPassword')}
                     onBlur={() => setFocusedField(null)}
-                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#3a3a3a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#6a6a6a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
                     placeholder="••••••••"
                   />
                   {focusedField === 'confirmPassword' && (
@@ -294,15 +294,15 @@ export default function AuthForm({ onAuthSuccess }) {
 
         {/* Footer */}
         <div className="text-center mt-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <div className="flex items-center justify-center gap-2 text-[#3a3a3a] text-xs mb-4">
+          <div className="flex items-center justify-center gap-2 text-[#6a6a6a] text-xs mb-4">
             <div className="w-8 h-px bg-[#1a1a1a]" />
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[#5a5a5a]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[#858585]">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             <div className="w-8 h-px bg-[#1a1a1a]" />
           </div>
-          <p className="text-[#5a5a5a] text-xs">Your data is private, encrypted, and user-scoped — no one else sees it</p>
-          <p className="text-[#3a3a3a] text-xs mt-1">The Oracle awaits your commitment</p>
+          <p className="text-[#858585] text-xs">Your data is private, encrypted, and user-scoped — no one else sees it</p>
+          <p className="text-[#6a6a6a] text-xs mt-1">The Oracle awaits your commitment</p>
         </div>
       </div>
     </div>

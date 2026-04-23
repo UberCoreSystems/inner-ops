@@ -309,10 +309,10 @@ const KillListDashboard = React.memo(function KillListDashboard() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'killed': return 'text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/30';
-      case 'escaped': return 'text-[#ef4444] bg-[#ef4444]/10 border-[#ef4444]/30';
-      case 'active': return 'text-[#f59e0b] bg-[#f59e0b]/10 border-[#f59e0b]/30';
-      default: return 'text-[#5a5a5a] bg-[#1a1a1a] border-[#2a2a2a]';
+      case 'killed': return 'text-[#858585] bg-transparent border-[#2a2a2a]';
+      case 'escaped': return 'text-[#b45309] bg-transparent border-[#b45309]/40';
+      case 'active': return 'text-white bg-transparent border-[#2a2a2a]';
+      default: return 'text-[#858585] bg-transparent border-[#2a2a2a]';
     }
   };
 
@@ -338,9 +338,9 @@ const KillListDashboard = React.memo(function KillListDashboard() {
         <div className="flex items-center justify-center h-32">
           <div className="relative w-12 h-12">
             <div className="absolute inset-0 rounded-full border-2 border-[#1a1a1a]"></div>
-            <div className="absolute inset-0 rounded-full border-2 border-[#ef4444] border-t-transparent animate-spin"></div>
+            <div className="absolute inset-0 rounded-full border-2 border-[#4da6ff] border-t-transparent animate-spin"></div>
           </div>
-          <span className="ml-4 text-[#5a5a5a] text-sm font-light">Loading targets...</span>
+          <span className="ml-4 text-[#858585] text-sm font-light">Loading targets...</span>
         </div>
       </div>
     );
@@ -350,15 +350,15 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     return (
       <div className="oura-card p-8">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[#ef4444]/10 flex items-center justify-center">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[#1a1a1a] border border-[#b45309]/30 flex items-center justify-center">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2L2 22h20L12 2z" />
               <line x1="12" y1="9" x2="12" y2="14" />
-              <circle cx="12" cy="18" r="1" fill="#ef4444" stroke="none" />
+              <circle cx="12" cy="18" r="1" fill="#b45309" stroke="none" />
             </svg>
           </div>
           <h3 className="text-lg font-light text-white mb-2">Error Loading Targets</h3>
-          <p className="text-[#5a5a5a] text-sm mb-6">{error}</p>
+          <p className="text-[#858585] text-sm mb-6">{error}</p>
           <button 
             onClick={refetch}
             className="px-6 py-3 bg-[#1a1a1a] text-white text-sm font-light rounded-xl border border-[#2a2a2a] hover:border-[#3a3a3a] hover:bg-[#2a2a2a] transition-all"
@@ -378,22 +378,22 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             <svg viewBox="0 0 80 80" className="w-full h-full">
               {/* Outer ring */}
               <circle cx="40" cy="40" r="36" fill="none" stroke="#1a1a1a" strokeWidth="2" />
-              <circle cx="40" cy="40" r="36" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="226" strokeDashoffset="170" strokeLinecap="round" opacity="0.3" />
+              <circle cx="40" cy="40" r="36" fill="none" stroke="#4da6ff" strokeWidth="2" strokeDasharray="226" strokeDashoffset="170" strokeLinecap="round" opacity="0.25" />
               {/* Middle ring */}
               <circle cx="40" cy="40" r="26" fill="none" stroke="#1a1a1a" strokeWidth="2" />
-              <circle cx="40" cy="40" r="26" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="163" strokeDashoffset="120" strokeLinecap="round" opacity="0.5" />
+              <circle cx="40" cy="40" r="26" fill="none" stroke="#4da6ff" strokeWidth="2" strokeDasharray="163" strokeDashoffset="120" strokeLinecap="round" opacity="0.4" />
               {/* Inner ring */}
               <circle cx="40" cy="40" r="16" fill="none" stroke="#1a1a1a" strokeWidth="2" />
-              <circle cx="40" cy="40" r="16" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="100" strokeDashoffset="75" strokeLinecap="round" opacity="0.7" />
+              <circle cx="40" cy="40" r="16" fill="none" stroke="#4da6ff" strokeWidth="2" strokeDasharray="100" strokeDashoffset="75" strokeLinecap="round" opacity="0.6" />
               {/* Center dot */}
-              <circle cx="40" cy="40" r="4" fill="#ef4444" opacity="0.9" />
+              <circle cx="40" cy="40" r="4" fill="#4da6ff" opacity="0.8" />
             </svg>
           </div>
           <h3 className="text-xl font-light text-white mb-2">No Active Battles</h3>
-          <p className="text-[#5a5a5a] text-sm mb-6 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
+          <p className="text-[#858585] text-sm mb-6 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
           <button
-            onClick={() => window.location.href = '/killlist'}
-            className="px-6 py-3 bg-[#ef4444] text-white text-sm font-medium rounded-xl hover:bg-[#dc2626] transition-all hover:shadow-lg hover:shadow-[#ef4444]/20"
+            onClick={() => window.location.href = '/ledger'}
+            className="px-6 py-3 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] transition-colors"
           >
             Start a Kill Contract
           </button>
@@ -406,23 +406,23 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     <div className="oura-card p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="w-12 h-12 rounded-2xl bg-[#1a1a1a] flex items-center justify-center">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4da6ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="6" opacity="0.6" />
-              <circle cx="12" cy="12" r="2" fill="#ef4444" stroke="none" />
+              <circle cx="12" cy="12" r="2" fill="#4da6ff" stroke="none" />
             </svg>
           </div>
           <div>
             <h2 className="text-lg font-light text-white">Active Battles</h2>
-            <p className="text-[#5a5a5a] text-sm font-light">
+            <p className="text-[#858585] text-sm font-light">
               <span className="text-[#4da6ff]">{stats.active} active</span>
             </p>
           </div>
         </div>
         <button 
-          onClick={() => window.location.href = '/killlist'}
-          className="px-4 py-2 text-sm font-light text-[#5a5a5a] border border-[#2a2a2a] rounded-xl hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all"
+          onClick={() => window.location.href = '/ledger'}
+          className="px-4 py-2 text-sm font-light text-[#858585] border border-[#2a2a2a] rounded-xl hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all"
         >
           Manage All
         </button>
@@ -442,12 +442,12 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                     {(target.status || 'active').toUpperCase()}
                   </span>
                 </div>
-                <p className="text-[#8a8a8a] text-sm mb-3 font-light">{target.description}</p>
-                <p className="text-[#5a5a5a] text-xs mb-2">
+                <p className="text-[#ababab] text-sm mb-3 font-light">{target.description}</p>
+                <p className="text-[#858585] text-xs mb-2">
                   Kill requires {getConsecutiveDaysRequired(target)} consecutive days of held execution.
                 </p>
                 {target.completedAt && (
-                  <div className="text-xs text-[#5a5a5a]">
+                  <div className="text-xs text-[#858585]">
                     Completed: {target.completedAt.toLocaleTimeString()}
                   </div>
                 )}
@@ -459,55 +459,55 @@ const KillListDashboard = React.memo(function KillListDashboard() {
               <button
                 onClick={() => handleQuickKill(target)}
                 disabled={updating[target.id] || target.status === 'killed'}
-                className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
+                className={`px-4 py-2 text-sm font-light rounded-xl transition-all border ${
                   target.status === 'killed'
-                    ? 'bg-[#22c55e] text-black'
-                    : 'bg-[#1a1a1a] text-[#8a8a8a] border border-[#2a2a2a] hover:border-[#22c55e]/50 hover:text-[#22c55e]'
+                    ? 'bg-[#1a1a1a] text-[#7cc4ff] border-[#4da6ff]/40'
+                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#7cc4ff]/50 hover:text-[#7cc4ff]'
                 } disabled:opacity-50`}
               >
                 <span className="flex items-center gap-2">
-                  <AppIcon name="check" size={14} color={target.status === 'killed' ? '#000' : '#22c55e'} glow={false} />
+                  <AppIcon name="check" size={14} color={target.status === 'killed' ? '#7cc4ff' : '#8a8a8a'} glow={false} />
                   Killed
                 </span>
               </button>
               <button
                 onClick={() => handleQuickEscape(target)}
                 disabled={updating[target.id] || target.status === 'escaped'}
-                className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
+                className={`px-4 py-2 text-sm font-light rounded-xl transition-all border ${
                   target.status === 'escaped'
-                    ? 'bg-[#ef4444] text-white'
-                    : 'bg-[#1a1a1a] text-[#8a8a8a] border border-[#2a2a2a] hover:border-[#ef4444]/50 hover:text-[#ef4444]'
+                    ? 'bg-[#1a1a1a] text-[#b45309] border-[#b45309]/40'
+                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#b45309]/50 hover:text-[#b45309]'
                 } disabled:opacity-50`}
               >
                 <span className="flex items-center gap-2">
-                  <AppIcon name="relapse" size={14} color={target.status === 'escaped' ? '#fff' : '#ef4444'} glow={false} />
+                  <AppIcon name="relapse" size={14} color={target.status === 'escaped' ? '#b45309' : '#8a8a8a'} glow={false} />
                   Escaped
                 </span>
               </button>
               <button
                 onClick={() => handleQuickReset(target.id)}
                 disabled={updating[target.id] || target.status === 'active'}
-                className={`px-4 py-2 text-sm font-light rounded-xl transition-all ${
+                className={`px-4 py-2 text-sm font-light rounded-xl transition-all border ${
                   target.status === 'active'
-                    ? 'bg-[#f59e0b] text-black'
-                    : 'bg-[#1a1a1a] text-[#8a8a8a] border border-[#2a2a2a] hover:border-[#f59e0b]/50 hover:text-[#f59e0b]'
+                    ? 'bg-[#1a1a1a] text-[#4da6ff] border-[#4da6ff]/40'
+                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#4da6ff]/50 hover:text-[#4da6ff]'
                 } disabled:opacity-50`}
               >
                 <span className="flex items-center gap-2">
-                  <AppIcon name="activity" size={14} color={target.status === 'active' ? '#000' : '#f59e0b'} glow={false} />
+                  <AppIcon name="activity" size={14} color={target.status === 'active' ? '#4da6ff' : '#8a8a8a'} glow={false} />
                   Reset
                 </span>
               </button>
               <button
                 onClick={() => handleStatusCycle(target)}
                 disabled={updating[target.id]}
-                className="px-3 py-2 text-xs bg-[#1a1a1a] text-[#a855f7] rounded-xl border border-[#2a2a2a] hover:border-[#a855f7]/50 disabled:opacity-50 transition-all"
+                className="px-3 py-2 text-xs bg-transparent text-[#858585] rounded-xl border border-[#2a2a2a] hover:border-[#3a3a3a] hover:text-[#ababab] disabled:opacity-50 transition-all"
                 title={`Quick toggle: ${target.status} → ${
-                  target.status === 'active' ? 'killed' : 
+                  target.status === 'active' ? 'killed' :
                   target.status === 'killed' ? 'escaped' : 'active'
                 }`}
               >
-                <AppIcon name="dashboard" size={14} color="#a855f7" glow={false} />
+                <AppIcon name="dashboard" size={14} color="#5a5a5a" glow={false} />
               </button>
             </div>
 
@@ -518,7 +518,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                   ...prev, 
                   [target.id]: !prev[target.id] 
                 }))}
-                className="flex items-center gap-2 text-sm text-[#5a5a5a] hover:text-white transition-colors mb-3"
+                className="flex items-center gap-2 text-sm text-[#858585] hover:text-white transition-colors mb-3"
               >
                 <AppIcon name="journal" size={14} color="#a855f7" glow={false} />
                 <span className="font-light">Reflection Notes</span>
@@ -544,13 +544,13 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                       [target.id]: e.target.value
                     }))}
                     placeholder="How did this target challenge you? What did you learn?"
-                    className="w-full h-24 p-4 bg-[#0a0a0a] text-white border border-[#2a2a2a] rounded-xl text-sm font-light resize-none focus:outline-none focus:border-[#a855f7]/50 placeholder-[#3a3a3a] transition-all"
+                    className="w-full h-24 p-4 bg-[#0a0a0a] text-white border border-[#2a2a2a] rounded-xl text-sm font-light resize-none focus:outline-none focus:border-[#a855f7]/50 placeholder-[#6a6a6a] transition-all"
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={() => saveReflectionNotes(target.id)}
                       disabled={updating[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-4 py-2 text-sm font-light bg-[#4da6ff] text-black rounded-xl hover:bg-[#3d96ef] disabled:opacity-50 transition-all flex items-center gap-2"
+                      className="px-4 py-2 text-sm font-light bg-white text-black rounded-xl hover:bg-[#d1d1d1] disabled:opacity-50 transition-all flex items-center gap-2"
                     >
                       <AppIcon name="check" size={14} color="#000" glow={false} />
                       Save Notes
@@ -558,9 +558,9 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                     <button
                       onClick={() => handleClearReflection(target.id)}
                       disabled={updating[target.id] || !reflectionNotes[target.id]?.trim()}
-                      className="px-4 py-2 text-sm font-light bg-[#1a1a1a] text-[#ef4444] border border-[#2a2a2a] rounded-xl hover:border-[#ef4444]/50 disabled:opacity-50 transition-all flex items-center gap-2"
+                      className="px-4 py-2 text-sm font-light bg-transparent text-[#ababab] border border-[#2a2a2a] rounded-xl hover:border-[#b45309]/50 hover:text-[#b45309] disabled:opacity-50 transition-all flex items-center gap-2"
                     >
-                      <AppIcon name="relapse" size={14} color="#ef4444" glow={false} />
+                      <AppIcon name="relapse" size={14} color="#8a8a8a" glow={false} />
                       Clear
                     </button>
                     <button
@@ -579,7 +579,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                         <AppIcon name="insight" size={14} color="#a855f7" />
                         Oracle's Stored Wisdom
                       </h4>
-                      <div className="text-[#8a8a8a] text-sm leading-relaxed font-light italic">
+                      <div className="text-[#ababab] text-sm leading-relaxed font-light italic">
                         {oracleFeedbacks[target.id]}
                       </div>
                     </div>
@@ -596,31 +596,22 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       <div className="mt-6 pt-6 border-t border-[#1a1a1a]">
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
-            <div className="text-2xl font-bold text-[#22c55e]" style={{ textShadow: '0 0 20px rgba(34, 197, 94, 0.3)' }}>{stats.killed}</div>
-            <div className="text-xs text-[#5a5a5a] font-light mt-1">Killed</div>
+            <div className="text-2xl font-light tabular-nums text-white" style={{ textShadow: '0 0 12px rgba(77, 166, 255, 0.15)' }}>{stats.killed}</div>
+            <div className="text-xs text-[#858585] font-light mt-1">Killed</div>
           </div>
           <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
-            <div className="text-2xl font-bold text-[#ef4444]" style={{ textShadow: '0 0 20px rgba(239, 68, 68, 0.3)' }}>{stats.escaped}</div>
-            <div className="text-xs text-[#5a5a5a] font-light mt-1">Escaped</div>
+            <div className="text-2xl font-light tabular-nums text-white" style={{ textShadow: '0 0 12px rgba(77, 166, 255, 0.15)' }}>{stats.escaped}</div>
+            <div className="text-xs text-[#858585] font-light mt-1">Escaped</div>
           </div>
           <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
-            <div className="text-2xl font-bold text-[#f59e0b]" style={{ textShadow: '0 0 20px rgba(245, 158, 11, 0.3)' }}>{stats.active}</div>
-            <div className="text-xs text-[#5a5a5a] font-light mt-1">Active</div>
+            <div className="text-2xl font-light tabular-nums text-white" style={{ textShadow: '0 0 12px rgba(77, 166, 255, 0.15)' }}>{stats.active}</div>
+            <div className="text-xs text-[#858585] font-light mt-1">Active</div>
           </div>
         </div>
         {stats.total > 0 && (
           <div className="mt-4 text-center">
-            <div className="text-sm text-[#5a5a5a] font-light">
-              Completion Rate: <span className={`font-medium ${
-                stats.completionRate >= 80 ? 'text-[#22c55e]' : 
-                stats.completionRate >= 60 ? 'text-[#f59e0b]' : 'text-[#ef4444]'
-              }`} style={{ 
-                textShadow: stats.completionRate >= 80 
-                  ? '0 0 10px rgba(34, 197, 94, 0.3)' 
-                  : stats.completionRate >= 60 
-                  ? '0 0 10px rgba(245, 158, 11, 0.3)' 
-                  : '0 0 10px rgba(239, 68, 68, 0.3)'
-              }}>
+            <div className="text-sm text-[#858585] font-light">
+              Completion Rate: <span className="font-medium text-white tabular-nums">
                 {stats.completionRate.toFixed(1)}%
               </span>
             </div>

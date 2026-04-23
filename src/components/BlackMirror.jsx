@@ -337,11 +337,11 @@ const BlackMirror = () => {
         {entries.length >= 2 && (
           <div className="oura-card p-5 mb-8 animate-fade-in-up">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-[#5a5a5a] text-xs uppercase tracking-widest">Index History</h3>
-              <span className="text-[10px] text-[#3a3a3a]">last {Math.min(entries.length, 20)} entries</span>
+              <h3 className="text-[#858585] text-xs uppercase tracking-widest">Index History</h3>
+              <span className="text-[10px] text-[#6a6a6a]">last {Math.min(entries.length, 20)} entries</span>
             </div>
             {/* Index formula explanation */}
-            <p className="text-[10px] text-[#3a3a3a] mb-4">
+            <p className="text-[10px] text-[#6a6a6a] mb-4">
               Score = screen×8 + fog×2.5 − interaction×2 + unconscious×8 — lower is better
             </p>
             <div className="flex items-end gap-1 h-14">
@@ -738,7 +738,7 @@ const BlackMirror = () => {
             {/* Detected patterns with Restructure buttons */}
             {analyticsReport.patterns.filter(p => p.detected).length > 0 && (
               <div>
-                <h3 className="text-xs uppercase tracking-widest text-[#5a5a5a] mb-3">Detected Patterns</h3>
+                <h3 className="text-xs uppercase tracking-widest text-[#858585] mb-3">Detected Patterns</h3>
                 <div className="space-y-4">
                   {analyticsReport.patterns.filter(p => p.detected).map(pattern => {
                     const patternRestructurings = restructurings.filter(r => r.patternRule === pattern.rule);
@@ -796,7 +796,7 @@ const BlackMirror = () => {
               { key: 'restructuring_alignment', label: 'Restructuring Alignment', data: analyticsReport.insights.restructuring_alignment },
             ].map(({ key, label, data }) => (
               <div key={key}>
-                <h3 className="text-xs uppercase tracking-widest text-[#5a5a5a] mb-3">{label}</h3>
+                <h3 className="text-xs uppercase tracking-widest text-[#858585] mb-3">{label}</h3>
                 <ul className="space-y-2">
                   {data.map((insight, i) => (
                     insight === 'Insufficient data to generate insight' ? (
@@ -855,7 +855,7 @@ const BlackMirror = () => {
                   <span>{correlationData[0]?.weekLabel}</span>
                   <span>now</span>
                 </div>
-                <div className="flex gap-4 mt-2 text-[10px] text-[#5a5a5a]">
+                <div className="flex gap-4 mt-2 text-[10px] text-[#858585]">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#ef4444] opacity-70 inline-block" /> BMI</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#f59e0b] opacity-70 inline-block" /> Relapses</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#3a3a3a] opacity-70 inline-block" /> BMI below threshold</span>

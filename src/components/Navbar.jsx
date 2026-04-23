@@ -73,12 +73,12 @@ const Icons = {
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard },
   { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal },
-  { path: '/killlist', label: 'Kill List', mobileLabel: 'Kill', icon: Icons.killList },
+  { path: '/ledger', label: 'The Ledger', mobileLabel: 'Ledger', icon: Icons.killList },
   { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
   ...(BLACK_MIRROR_ENABLED
     ? [{ path: '/blackmirror', label: 'Black Mirror', mobileLabel: 'Mirror', icon: Icons.blackMirror }]
     : []),
-  { path: '/relapse', label: 'Relapse', mobileLabel: 'Relapse', icon: Icons.relapse },
+  { path: '/relapse', label: 'The Signal', mobileLabel: 'Signal', icon: Icons.relapse },
   { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis },
 ];
 
@@ -192,7 +192,7 @@ export default function Navbar({ onLogout, user }) {
                       <path d="M4 4h16v16H4z" />
                       <path d="M8 8h8M8 12h8M8 16h4" opacity="0.7" />
                     </>}
-                    {item.path === '/killlist' && <>
+                    {item.path === '/ledger' && <>
                       <circle cx="12" cy="12" r="10" />
                       <circle cx="12" cy="12" r="6" opacity="0.5" />
                       <line x1="12" y1="2" x2="12" y2="6" />

@@ -6,7 +6,7 @@ const MODE_CONFIG = {
     headerEyebrow: 'Closing Contract',
     prompt: 'What ended this?',
     placeholder: 'One sentence. Be specific — what made this kill possible now?',
-    accent: '#22c55e',
+    accent: '#4da6ff',
     submitLabel: 'Close Contract',
     tags: [
       { value: 'identity_shifted', label: 'Identity shifted' },
@@ -18,7 +18,7 @@ const MODE_CONFIG = {
     headerEyebrow: 'Contract Breach',
     prompt: 'What caught you?',
     placeholder: 'One sentence. What surprised you, what did you miss?',
-    accent: '#ef4444',
+    accent: '#b45309',
     submitLabel: 'Log Breach',
     tags: [
       { value: 'trigger_surprised', label: 'Trigger surprised you' },
@@ -154,7 +154,7 @@ export default function KillClosureModal({
           {oraclePhase !== 'idle' && (
             <button
               onClick={onClose}
-              className="ml-3 w-8 h-8 flex items-center justify-center rounded-full text-[#5a5a5a] hover:text-white hover:bg-[#1a1a1a] transition-colors"
+              className="ml-3 w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
               title="Dismiss"
             >
               ✕
@@ -164,7 +164,7 @@ export default function KillClosureModal({
 
         {showForm && (
           <>
-            <label className="block text-[#8a8a8a] text-sm uppercase tracking-wider mb-3">
+            <label className="block text-[#ababab] text-sm uppercase tracking-wider mb-3">
               {config.prompt}
             </label>
             <textarea
@@ -173,12 +173,12 @@ export default function KillClosureModal({
               placeholder={config.placeholder}
               rows={3}
               autoFocus
-              className="w-full bg-[#0a0a0a] text-white p-4 rounded-xl border border-[#1a1a1a] focus:outline-none resize-none text-sm placeholder-[#3a3a3a] transition-colors"
+              className="w-full bg-[#0a0a0a] text-white p-4 rounded-xl border border-[#1a1a1a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a] transition-colors"
               style={{ borderColor: note ? `${config.accent}80` : undefined }}
             />
 
             <div className="mt-4">
-              <div className="text-[#5a5a5a] text-xs uppercase tracking-widest mb-2">Optional framing</div>
+              <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Optional framing</div>
               <div className="flex flex-wrap gap-2">
                 {config.tags.map(tag => {
                   const selected = tags.includes(tag.value);
@@ -213,14 +213,14 @@ export default function KillClosureModal({
               <button
                 onClick={onClose}
                 disabled={submitting}
-                className="px-4 py-2 text-sm bg-[#1a1a1a] text-[#8a8a8a] border border-[#2a2a2a] rounded-xl hover:text-white disabled:opacity-50 transition-colors"
+                className="px-4 py-2 text-sm bg-[#1a1a1a] text-[#ababab] border border-[#2a2a2a] rounded-xl hover:text-white disabled:opacity-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={!canSubmit}
-                className="px-5 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 disabled:bg-[#1a1a1a] disabled:text-[#5a5a5a]"
+                className="px-5 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 disabled:bg-[#1a1a1a] disabled:text-[#858585]"
                 style={canSubmit ? { backgroundColor: config.accent, color: '#000' } : undefined}
               >
                 {config.submitLabel}
@@ -247,7 +247,7 @@ export default function KillClosureModal({
                   {tags.map(t => {
                     const def = config.tags.find(c => c.value === t);
                     return (
-                      <span key={t} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#8a8a8a] rounded-lg border border-[#2a2a2a]">
+                      <span key={t} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">
                         {def?.label || t}
                       </span>
                     );
@@ -262,7 +262,7 @@ export default function KillClosureModal({
                 Oracle
               </div>
               {oraclePhase === 'loading' ? (
-                <div className="flex items-center gap-2 text-[#5a5a5a] text-sm italic">
+                <div className="flex items-center gap-2 text-[#858585] text-sm italic">
                   <div className="w-3 h-3 border border-[#a855f7] border-t-transparent rounded-full animate-spin" />
                   Reading the closure…
                 </div>

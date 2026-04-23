@@ -455,7 +455,7 @@ const RelapseRadar = () => {
     <div className="oura-card p-6">
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-light text-white tracking-tight">Relapse Radar</h2>
+          <h2 className="text-3xl font-light text-white tracking-tight">The Signal</h2>
           <div className="text-sm text-gray-500">Step {step} of 5</div>
         </div>
         {/* Pattern Data */}
@@ -529,12 +529,12 @@ const RelapseRadar = () => {
             </div>
             {archetypeKillTargets.length > 0 && (
               <div className="mt-5 pt-4 border-t border-oura-border">
-                <div className="text-[10px] text-[#5a5a5a] uppercase tracking-widest mb-3">Active Kill List targets associated with this archetype:</div>
+                <div className="text-[10px] text-[#858585] uppercase tracking-widest mb-3">Active Ledger targets associated with this archetype:</div>
                 <div className="space-y-2">
                   {archetypeKillTargets.map(({ target, correlatedEscapes }) => (
                     <Link
                       key={target.id}
-                      to="/killlist"
+                      to="/ledger"
                       className="flex items-center justify-between px-3 py-2.5 bg-oura-darker rounded-xl hover:bg-oura-border transition-colors"
                     >
                       <span className="text-gray-300 text-sm truncate">{target.title}</span>
@@ -774,7 +774,7 @@ const RelapseRadar = () => {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Link
-                to="/killlist"
+                to="/ledger"
                 className="text-xs px-3 py-1.5 bg-oura-amber/20 text-oura-amber rounded-lg hover:bg-oura-amber/30 transition-colors"
               >
                 Review
@@ -909,7 +909,7 @@ const RelapseRadar = () => {
                     <div className="pb-1">
                       <div className="text-gray-300 text-sm">{event.label}</div>
                       <div className={`text-xs mt-0.5 ${event.type === 'relapse' ? 'text-oura-amber' : 'text-red-400'}`}>
-                        {event.type === 'relapse' ? 'Relapse' : 'Kill List Escape'} · {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {event.type === 'relapse' ? 'Relapse' : 'Ledger Escape'} · {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </div>
                     </div>
                   </div>

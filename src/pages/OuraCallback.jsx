@@ -61,7 +61,7 @@ const OuraCallback = () => {
               onClick={() => navigate('/relapse')}
               className="text-gray-500 text-xs hover:text-gray-300 transition-colors"
             >
-              Return to Relapse Radar
+              Return to The Signal
             </button>
           </>
         )}
