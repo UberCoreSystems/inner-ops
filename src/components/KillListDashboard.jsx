@@ -338,7 +338,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
         <div className="flex items-center justify-center h-32">
           <div className="relative w-12 h-12">
             <div className="absolute inset-0 rounded-full border-2 border-[#1a1a1a]"></div>
-            <div className="absolute inset-0 rounded-full border-2 border-[#4da6ff] border-t-transparent animate-spin"></div>
+            <div className="absolute inset-0 rounded-full border-2 border-[#ef4444] border-t-transparent animate-spin"></div>
           </div>
           <span className="ml-4 text-[#858585] text-sm font-light">Loading targets...</span>
         </div>
@@ -378,15 +378,15 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             <svg viewBox="0 0 80 80" className="w-full h-full">
               {/* Outer ring */}
               <circle cx="40" cy="40" r="36" fill="none" stroke="#1a1a1a" strokeWidth="2" />
-              <circle cx="40" cy="40" r="36" fill="none" stroke="#4da6ff" strokeWidth="2" strokeDasharray="226" strokeDashoffset="170" strokeLinecap="round" opacity="0.25" />
+              <circle cx="40" cy="40" r="36" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="226" strokeDashoffset="170" strokeLinecap="round" opacity="0.25" />
               {/* Middle ring */}
               <circle cx="40" cy="40" r="26" fill="none" stroke="#1a1a1a" strokeWidth="2" />
-              <circle cx="40" cy="40" r="26" fill="none" stroke="#4da6ff" strokeWidth="2" strokeDasharray="163" strokeDashoffset="120" strokeLinecap="round" opacity="0.4" />
+              <circle cx="40" cy="40" r="26" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="163" strokeDashoffset="120" strokeLinecap="round" opacity="0.4" />
               {/* Inner ring */}
               <circle cx="40" cy="40" r="16" fill="none" stroke="#1a1a1a" strokeWidth="2" />
-              <circle cx="40" cy="40" r="16" fill="none" stroke="#4da6ff" strokeWidth="2" strokeDasharray="100" strokeDashoffset="75" strokeLinecap="round" opacity="0.6" />
+              <circle cx="40" cy="40" r="16" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="100" strokeDashoffset="75" strokeLinecap="round" opacity="0.6" />
               {/* Center dot */}
-              <circle cx="40" cy="40" r="4" fill="#4da6ff" opacity="0.8" />
+              <circle cx="40" cy="40" r="4" fill="#ef4444" opacity="0.8" />
             </svg>
           </div>
           <h3 className="text-xl font-light text-white mb-2">No Active Battles</h3>
@@ -407,16 +407,16 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-[#1a1a1a] flex items-center justify-center">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4da6ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="6" opacity="0.6" />
-              <circle cx="12" cy="12" r="2" fill="#4da6ff" stroke="none" />
+              <circle cx="12" cy="12" r="2" fill="#ef4444" stroke="none" />
             </svg>
           </div>
           <div>
             <h2 className="text-lg font-light text-white">Active Battles</h2>
             <p className="text-[#858585] text-sm font-light">
-              <span className="text-[#4da6ff]">{stats.active} active</span>
+              <span className="text-[#ef4444]">{stats.active} active</span>
             </p>
           </div>
         </div>
@@ -461,12 +461,12 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                 disabled={updating[target.id] || target.status === 'killed'}
                 className={`px-4 py-2 text-sm font-light rounded-xl transition-all border ${
                   target.status === 'killed'
-                    ? 'bg-[#1a1a1a] text-[#7cc4ff] border-[#4da6ff]/40'
-                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#7cc4ff]/50 hover:text-[#7cc4ff]'
+                    ? 'bg-[#1a1a1a] text-[#fca5a5] border-[#ef4444]/40'
+                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#fca5a5]/50 hover:text-[#fca5a5]'
                 } disabled:opacity-50`}
               >
                 <span className="flex items-center gap-2">
-                  <AppIcon name="check" size={14} color={target.status === 'killed' ? '#7cc4ff' : '#8a8a8a'} glow={false} />
+                  <AppIcon name="check" size={14} color={target.status === 'killed' ? '#fca5a5' : '#8a8a8a'} glow={false} />
                   Killed
                 </span>
               </button>
@@ -489,12 +489,12 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                 disabled={updating[target.id] || target.status === 'active'}
                 className={`px-4 py-2 text-sm font-light rounded-xl transition-all border ${
                   target.status === 'active'
-                    ? 'bg-[#1a1a1a] text-[#4da6ff] border-[#4da6ff]/40'
-                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#4da6ff]/50 hover:text-[#4da6ff]'
+                    ? 'bg-[#1a1a1a] text-[#ef4444] border-[#ef4444]/40'
+                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#ef4444]/50 hover:text-[#ef4444]'
                 } disabled:opacity-50`}
               >
                 <span className="flex items-center gap-2">
-                  <AppIcon name="activity" size={14} color={target.status === 'active' ? '#4da6ff' : '#8a8a8a'} glow={false} />
+                  <AppIcon name="activity" size={14} color={target.status === 'active' ? '#ef4444' : '#8a8a8a'} glow={false} />
                   Reset
                 </span>
               </button>

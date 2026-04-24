@@ -13,7 +13,7 @@ export default function ActiveTargetCommandBoard({ killTargets = [] }) {
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.03s' }}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-[#858585] text-xs uppercase tracking-widest">Active Targets</h3>
-        <Link to="/ledger" className="text-[#858585] text-xs hover:text-[#4da6ff] transition-colors">
+        <Link to="/ledger" className="text-[#858585] text-xs hover:text-[#ef4444] transition-colors">
           View all
         </Link>
       </div>
@@ -33,7 +33,7 @@ export default function ActiveTargetCommandBoard({ killTargets = [] }) {
             <Link
               key={target.id}
               to="/ledger"
-              className="oura-card-active p-5 block hover:shadow-[0_0_32px_rgba(77,166,255,0.15)]"
+              className="oura-card-active p-5 block hover:shadow-[0_0_32px_rgba(239,68,68,0.15)]"
             >
               <p className="text-white text-sm font-medium mb-3 line-clamp-2 min-h-[2.5rem]">
                 {target.title}
@@ -44,7 +44,7 @@ export default function ActiveTargetCommandBoard({ killTargets = [] }) {
               <p className="text-[#858585] text-xs mb-3">
                 held. {streak} of {required} required.
               </p>
-              <p className={`text-xs ${intentionArmed ? 'text-[#4da6ff]/70' : 'text-[#6a6a6a]'}`}>
+              <p className={`text-xs ${intentionArmed ? 'text-[#ef4444]/70' : 'text-[#6a6a6a]'}`}>
                 Intention {intentionArmed ? 'armed' : 'not set'}.
               </p>
             </Link>

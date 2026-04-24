@@ -125,6 +125,39 @@ service cloud.firestore {
       allow list: if ownerListAllowed();
     }
 
+    // ─── User-initiated archive collections ────────────────────────────
+    // Parallel-collection pattern: each active collection has a sibling
+    // `{name}Archive` the user can move entries into. `restoreEntry` moves
+    // them back. Hard-delete is only available from the archive view.
+
+    match /journalEntriesArchive/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    match /killTargetsArchive/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    match /hardLessonsArchive/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
+    match /relapseEntriesArchive/{docId} {
+      allow create: if createsOwnDocument();
+      allow get, delete: if isOwner(resource.data.userId);
+      allow update: if updatesOwnDocument();
+      allow list: if ownerListAllowed();
+    }
+
     // BER-264: Black Mirror cue-restructuring saves
     match /cueRestructurings/{docId} {
       allow create: if createsOwnDocument();

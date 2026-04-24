@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
+import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
+import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getBehavioralContext, getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
+import ArchiveToggle from '../components/ArchiveToggle';
+import { AppIcon } from '../components/AppIcons';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
@@ -149,7 +152,7 @@ const IntensityRing = ({ level, selected, onClick }) => {
   // Color gradient from cool to warm
   const getColor = (lvl) => {
     // Single-accent intensity scale — ring count already conveys level.
-    const colors = ['#4da6ff', '#4da6ff', '#4da6ff', '#4da6ff', '#4da6ff'];
+    const colors = ['#a855f7', '#a855f7', '#a855f7', '#a855f7', '#a855f7'];
     return colors[lvl - 1];
   };
   
@@ -207,7 +210,8 @@ export default function Journal() {
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry the modal is for
-  const pendingEntryDeletes = useRef(new Map());
+  const [view, setView] = useState('active');
+  const [archivedEntries, setArchivedEntries] = useState([]);
   
   // State for rotating prompts
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
@@ -260,6 +264,18 @@ export default function Journal() {
 
   useEffect(() => {
     loadJournalEntries();
+  }, []);
+
+  useEffect(() => {
+    let unsub = null;
+    let mounted = true;
+    subscribeToArchive('journalEntries', (data) => {
+      if (mounted) setArchivedEntries(data);
+    }).then(u => {
+      if (!mounted) { try { u(); } catch {} return; }
+      unsub = u;
+    });
+    return () => { mounted = false; if (unsub) try { unsub(); } catch {} };
   }, []);
 
   useEffect(() => {
@@ -573,77 +589,51 @@ export default function Journal() {
     }
   };
 
-  // Delete journal entry
-  const deleteEntry = async (entryId) => {
-    const entryToDelete = entries.find(e => e.id === entryId);
+  // Archive journal entry (was hard delete). Archive is recoverable via
+  // the Archive view, so the former 5-sec-undo toast is unnecessary.
+  const archiveEntryById = async (entryId) => {
+    const entry = entries.find(e => e.id === entryId);
     const entryIndex = entries.findIndex(e => e.id === entryId);
+    if (!entry) return;
 
-    if (!entryToDelete) return;
+    setEntries(prev => prev.filter(e => e.id !== entryId));
 
-    logger.log("🗑️ Journal: Deleting entry:", entryId);
-
-    // Optimistic UI update
-    setEntries(prev => prev.filter(entry => entry.id !== entryId));
-
-    // Clear any pending delete for the same entry
-    const existingPending = pendingEntryDeletes.current.get(entryId);
-    if (existingPending) {
-      clearTimeout(existingPending.timeoutId);
-      pendingEntryDeletes.current.delete(entryId);
-    }
-
-    const undoDelete = () => {
-      const pending = pendingEntryDeletes.current.get(entryId);
-      if (!pending) return;
-
-      clearTimeout(pending.timeoutId);
-      pendingEntryDeletes.current.delete(entryId);
-
+    try {
+      await archiveEntry('journalEntries', entry);
+      ouraToast.success('Entry archived');
+    } catch (error) {
+      logger.error('❌ Journal: Error archiving entry:', error);
       setEntries(prev => {
-        if (prev.some(entry => entry.id === entryId)) return prev;
+        if (prev.some(e => e.id === entryId)) return prev;
         const next = [...prev];
-        const insertIndex = Math.min(pending.index, next.length);
-        next.splice(insertIndex, 0, pending.entry);
+        const insertIndex = Math.min(entryIndex, next.length);
+        next.splice(insertIndex, 0, entry);
         return next;
       });
+      ouraToast.error('Failed to archive entry');
+    }
+  };
 
-      ouraToast.dismiss(pending.toastId);
-      ouraToast.success('Deletion undone');
-    };
+  const restoreArchivedJournalEntry = async (archived) => {
+    try {
+      await restoreEntry('journalEntries', archived);
+      setEntries(prev => [{ ...archived, archivedAt: undefined }, ...prev]);
+      ouraToast.success('Entry restored');
+    } catch (error) {
+      logger.error('❌ Journal: Error restoring entry:', error);
+      ouraToast.error('Failed to restore entry');
+    }
+  };
 
-    const toastId = ouraToast.warning(
-      <div className="flex items-center gap-3">
-        <span>Journal entry deleted</span>
-        <button
-          onClick={undoDelete}
-          className="px-2 py-1 text-xs rounded-md border border-white/20 text-white hover:bg-white/10 transition-colors"
-        >
-          Undo
-        </button>
-      </div>,
-      { duration: 5000 }
-    );
-
-    const timeoutId = setTimeout(async () => {
-      try {
-        await deleteData('journalEntries', entryId);
-        logger.log('✅ Journal: Entry deleted successfully');
-      } catch (error) {
-        logger.error('❌ Journal: Error deleting entry:', error);
-        setEntries(prev => {
-          if (prev.some(entry => entry.id === entryId)) return prev;
-          const next = [...prev];
-          const insertIndex = Math.min(entryIndex, next.length);
-          next.splice(insertIndex, 0, entryToDelete);
-          return next;
-        });
-        ouraToast.error('Failed to delete journal entry');
-      } finally {
-        pendingEntryDeletes.current.delete(entryId);
-      }
-    }, 5000);
-
-    pendingEntryDeletes.current.set(entryId, { timeoutId, entry: entryToDelete, index: entryIndex, toastId });
+  const permanentlyDeleteJournalEntry = async (archived) => {
+    if (!window.confirm('Permanently delete this entry? This cannot be undone.')) return;
+    try {
+      await deleteArchivedEntry('journalEntries', archived);
+      ouraToast.success('Entry permanently deleted');
+    } catch (error) {
+      logger.error('❌ Journal: Error permanently deleting entry:', error);
+      ouraToast.error('Failed to delete entry');
+    }
   };
 
   // Save oracle reaction
@@ -880,8 +870,15 @@ export default function Journal() {
           <p className="text-[#858585] text-sm uppercase tracking-widest mb-2">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
-          <h1 className="text-3xl font-bold text-white mb-2">Journal</h1>
-          <p className="text-[#ababab]">Write freely. The Oracle reads for signal.</p>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-2xl bg-[#a855f7]/10 border border-[#a855f7]/20 flex items-center justify-center shrink-0">
+              <AppIcon name="journal" size={22} color="#a855f7" glow={false} />
+            </div>
+            <h1 className="text-3xl font-bold text-white">Journal</h1>
+          </div>
+          <div className="border-l-4 border-[#a855f7] pl-4 py-1">
+            <p className="text-[#ababab]">Write freely. The Oracle reads for signal.</p>
+          </div>
         </header>
 
         {/* 30-Day Mood Calendar */}
@@ -948,11 +945,11 @@ export default function Journal() {
 
         {/* Entry Form */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className={`oura-card p-6 mb-8 ${editingEntryId ? 'border border-[#4da6ff]/40' : ''}`}>
+          <div className={`oura-card p-6 mb-8 ${editingEntryId ? 'border border-[#a855f7]/40' : ''}`}>
             {editingEntryId && (
-              <div className="flex items-center justify-between mb-5 p-3 bg-[#4da6ff]/10 border border-[#4da6ff]/20 rounded-xl">
-                <span className="text-[#4da6ff] text-sm font-medium">Editing entry — Oracle feedback will not regenerate on update</span>
-                <button type="button" onClick={cancelEdit} className="text-[#4da6ff] text-xs hover:text-white transition-colors">Cancel</button>
+              <div className="flex items-center justify-between mb-5 p-3 bg-[#a855f7]/10 border border-[#a855f7]/20 rounded-xl">
+                <span className="text-[#a855f7] text-sm font-medium">Editing entry — Oracle feedback will not regenerate on update</span>
+                <button type="button" onClick={cancelEdit} className="text-[#a855f7] text-xs hover:text-white transition-colors">Cancel</button>
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -1106,8 +1103,8 @@ export default function Journal() {
                       className="h-full rounded-full transition-all duration-500"
                       style={{
                         width: `${((intensity - 1) / 4) * 100}%`,
-                        background: `linear-gradient(90deg, #4da6ff 0%, #7cc4ff 100%)`,
-                        boxShadow: '0 0 8px rgba(77, 166, 255, 0.25)',
+                        background: `linear-gradient(90deg, #a855f7 0%, #c084fc 100%)`,
+                        boxShadow: '0 0 8px rgba(168, 85, 247, 0.25)',
                       }}
                     />
                   </div>
@@ -1138,7 +1135,7 @@ export default function Journal() {
                       className={`text-center p-5 ${
                         currentPromptIndex < oraclePrompts.length
                           ? 'bg-gradient-to-r from-[#a855f7]/80 to-[#a855f7]/40 hover:from-[#a855f7] hover:to-[#a855f7]/60 border border-[#a855f7]/30'
-                          : 'bg-gradient-to-r from-[#a855f7] to-[#4da6ff] hover:from-[#9333ea] hover:to-[#3b82f6]'
+                          : 'bg-gradient-to-r from-[#a855f7] to-[#9333ea] hover:from-[#9333ea] hover:to-[#7e22ce]'
                       } text-white rounded-2xl text-sm font-medium transition-all duration-600 transform ${
                         promptVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
                       } min-h-[5rem] flex items-center justify-center shadow-lg hover:shadow-xl max-w-2xl mx-auto w-full`}
@@ -1162,7 +1159,7 @@ export default function Journal() {
                         <div
                           key={index}
                           className={`w-2 h-2 rounded-full transition-colors duration-300 ${
-                            index === currentPromptIndex ? 'bg-[#4da6ff]' : 'bg-[#2a2a2a]'
+                            index === currentPromptIndex ? 'bg-[#a855f7]' : 'bg-[#2a2a2a]'
                           }`}
                         />
                       ))}
@@ -1178,7 +1175,7 @@ export default function Journal() {
                     onFocus={() => setIsTextareaFocused(true)}
                     onBlur={() => setIsTextareaFocused(false)}
                     rows={6}
-                    className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#4da6ff] focus:outline-none resize-none transition-colors"
+                    className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none resize-none transition-colors"
                     placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
                     required
                   />
@@ -1201,7 +1198,7 @@ export default function Journal() {
                     value={eventOccurredAt}
                     max={new Date().toISOString().slice(0, 16)}
                     onChange={(e) => setEventOccurredAt(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#4da6ff] focus:outline-none transition-colors text-sm"
+                    className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none transition-colors text-sm"
                   />
                 </div>
               )}
@@ -1240,32 +1237,90 @@ export default function Journal() {
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <h3 className="text-[#858585] text-xs uppercase tracking-widest">
-              Previous Entries
-              {searchQuery.trim() && (
-                <span className="text-[#6a6a6a] ml-2">
-                  ({filteredEntries.length}/{entries.length})
-                </span>
-              )}
-            </h3>
-            <div className="relative w-full sm:w-80">
-              <input
-                type="search"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search entries..."
-                className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#4da6ff] focus:outline-none transition-colors"
+            <div className="flex items-center gap-4 flex-wrap">
+              <h3 className="text-[#858585] text-xs uppercase tracking-widest">
+                {view === 'archive' ? 'Archive' : 'Previous Entries'}
+                {searchQuery.trim() && view === 'active' && (
+                  <span className="text-[#6a6a6a] ml-2">
+                    ({filteredEntries.length}/{entries.length})
+                  </span>
+                )}
+              </h3>
+              <ArchiveToggle
+                view={view}
+                onChange={setView}
+                activeCount={entries.length}
+                archiveCount={archivedEntries.length}
               />
-              {searchInput && (
-                <button
-                  onClick={() => { setSearchInput(''); setSearchQuery(''); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#858585] hover:text-white text-xs"
-                >
-                  Clear
-                </button>
-              )}
             </div>
+            {view === 'active' && (
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search entries..."
+                  className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none transition-colors"
+                />
+                {searchInput && (
+                  <button
+                    onClick={() => { setSearchInput(''); setSearchQuery(''); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#858585] hover:text-white text-xs"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
           </div>
+
+          {view === 'archive' && (
+            <div className="space-y-4">
+              {archivedEntries.length === 0 ? (
+                <div className="oura-card p-10 text-center">
+                  <p className="text-[#858585] text-sm">No archived entries.</p>
+                </div>
+              ) : archivedEntries.map(entry => {
+                const moodOption = moodOptions.find(m => m.value === entry.mood);
+                return (
+                  <div key={entry.id} className="oura-card p-6 opacity-75 hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-between mb-4">
+                      {moodOption ? (
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center" style={{ color: moodOption.color }}>
+                            <span className="w-5 h-5 block">{MoodIcons[moodOption.value]}</span>
+                          </div>
+                          <div>
+                            <p className="text-white text-sm font-medium">{moodOption.label}</p>
+                            <p className="text-[#858585] text-xs">Archived {entry.archivedAt ? new Date(entry.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[#858585] text-xs uppercase tracking-widest">Archived Entry</div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => restoreArchivedJournalEntry(entry)}
+                          className="px-3 py-1.5 text-xs rounded-lg border border-[#a855f7]/30 text-[#a855f7] hover:bg-[#a855f7]/10 transition-colors"
+                        >
+                          Restore
+                        </button>
+                        <button
+                          onClick={() => permanentlyDeleteJournalEntry(entry)}
+                          className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors"
+                        >
+                          Delete permanently
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[#d1d1d1] leading-relaxed text-sm">{entry.content}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {view === 'active' && (
           <div className="relative">
             <div className={`fade-pane ${showSkeleton ? 'visible' : 'hidden'}`}>
               <SkeletonList count={4} ItemComponent={SkeletonJournalEntry} />
@@ -1333,14 +1388,14 @@ export default function Journal() {
                               </svg>
                             </button>
                             <button
-                              onClick={() => deleteEntry(entry.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-[#b45309] hover:bg-[#1a1a1a] transition-colors"
-                              title="Delete this entry"
+                              onClick={() => archiveEntryById(entry.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
+                              title="Archive this entry"
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6l-1.5 14a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2L5 6" />
-                                <path d="M10 11v6M14 11v6" />
+                                <rect x="3" y="4" width="18" height="4" rx="1" />
+                                <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+                                <line x1="10" y1="12" x2="14" y2="12" />
                               </svg>
                             </button>
                           </div>
@@ -1454,7 +1509,7 @@ export default function Journal() {
                             document.getElementById('journal-entry-input')?.focus();
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
-                          className="px-6 py-2.5 bg-[#4da6ff] hover:bg-[#357abd] text-white rounded-xl transition-all duration-300 font-medium text-sm"
+                          className="px-6 py-2.5 bg-[#a855f7] hover:bg-[#9333ea] text-white rounded-xl transition-all duration-300 font-medium text-sm"
                         >
                           Write Your First Entry
                         </button>
@@ -1474,6 +1529,7 @@ export default function Journal() {
               )}
             </div>
           </div>
+          )}
         </section>
       </div>
 

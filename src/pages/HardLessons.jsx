@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { writeData, readUserData, deleteData, updateData } from '../utils/firebaseUtils';
+import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
+import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
+import ArchiveToggle from '../components/ArchiveToggle';
+import { AppIcon } from '../components/AppIcons';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import logger from '../utils/logger';
@@ -60,7 +63,6 @@ export default function HardLessons() {
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
   const [pendingOracleWisdom, setPendingOracleWisdom] = useState('');
-  const pendingLessonDeletes = useRef(new Map());
   const autoOpenedIds = useRef(new Set());
 
   // Scar Inventory state (first-time guided flow)
@@ -82,6 +84,20 @@ export default function HardLessons() {
   const [costPatternNarrative, setCostPatternNarrative] = useState('');
   const [loadingNarrative, setLoadingNarrative] = useState(false);
   const violationCheckedRef = useRef('');
+  const [view, setView] = useState('active');
+  const [archivedLessons, setArchivedLessons] = useState([]);
+
+  useEffect(() => {
+    let unsub = null;
+    let mounted = true;
+    subscribeToArchive('hardLessons', (data) => {
+      if (mounted) setArchivedLessons(data);
+    }).then(u => {
+      if (mounted) unsub = u;
+      else try { u(); } catch {}
+    });
+    return () => { mounted = false; if (unsub) try { unsub(); } catch {} };
+  }, []);
 
   useEffect(() => {
     loadHardLessons();
@@ -553,71 +569,47 @@ Please help extract the core lesson and rule from this experience.
     const lessonIndex = lessons.findIndex(l => l.id === lessonId);
 
     if (lesson?.isFinalized) {
-      ouraToast.info('Finalized lessons cannot be deleted. They are permanent strategic assets.');
+      ouraToast.info('Finalized lessons cannot be archived. They are permanent strategic assets.');
       return;
     }
-
     if (!lesson) return;
 
     setLessons(prev => prev.filter(l => l.id !== lessonId));
-
-    const existingPending = pendingLessonDeletes.current.get(lessonId);
-    if (existingPending) {
-      clearTimeout(existingPending.timeoutId);
-      pendingLessonDeletes.current.delete(lessonId);
-    }
-
-    const undoDelete = () => {
-      const pending = pendingLessonDeletes.current.get(lessonId);
-      if (!pending) return;
-
-      clearTimeout(pending.timeoutId);
-      pendingLessonDeletes.current.delete(lessonId);
-
+    try {
+      await archiveEntry('hardLessons', lesson);
+      ouraToast.success('Lesson archived');
+    } catch (error) {
+      logger.error('Error archiving Hard Lesson:', error);
       setLessons(prev => {
         if (prev.some(l => l.id === lessonId)) return prev;
         const next = [...prev];
-        const insertIndex = Math.min(pending.index, next.length);
-        next.splice(insertIndex, 0, pending.lesson);
+        next.splice(Math.min(lessonIndex, next.length), 0, lesson);
         return next;
       });
+      ouraToast.error('Failed to archive lesson');
+    }
+  };
 
-      ouraToast.dismiss(pending.toastId);
-      ouraToast.success('Deletion undone');
-    };
+  const restoreArchivedLesson = async (archived) => {
+    try {
+      await restoreEntry('hardLessons', archived);
+      setLessons(prev => [{ ...archived, archivedAt: undefined }, ...prev]);
+      ouraToast.success('Lesson restored');
+    } catch (error) {
+      logger.error('Error restoring Hard Lesson:', error);
+      ouraToast.error('Failed to restore lesson');
+    }
+  };
 
-    const toastId = ouraToast.warning(
-      <div className="flex items-center gap-3">
-        <span>Hard Lesson deleted</span>
-        <button
-          onClick={undoDelete}
-          className="px-2 py-1 text-xs rounded-md border border-white/20 text-white hover:bg-white/10 transition-colors"
-        >
-          Undo
-        </button>
-      </div>,
-      { duration: 5000 }
-    );
-
-    const timeoutId = setTimeout(async () => {
-      try {
-        await deleteData('hardLessons', lessonId);
-      } catch (error) {
-        logger.error('Error deleting Hard Lesson:', error);
-        setLessons(prev => {
-          if (prev.some(l => l.id === lessonId)) return prev;
-          const next = [...prev];
-          const insertIndex = Math.min(lessonIndex, next.length);
-          next.splice(insertIndex, 0, lesson);
-          return next;
-        });
-        ouraToast.error('Failed to delete lesson');
-      } finally {
-        pendingLessonDeletes.current.delete(lessonId);
-      }
-    }, 5000);
-
-    pendingLessonDeletes.current.set(lessonId, { timeoutId, lesson, index: lessonIndex, toastId });
+  const permanentlyDeleteArchivedLesson = async (archived) => {
+    if (!window.confirm('Permanently delete this lesson? This cannot be undone.')) return;
+    try {
+      await deleteArchivedEntry('hardLessons', archived);
+      ouraToast.success('Lesson permanently deleted');
+    } catch (error) {
+      logger.error('Error permanently deleting Hard Lesson:', error);
+      ouraToast.error('Failed to delete lesson');
+    }
   };
 
   // Derive which of the 7 form fields are complete
@@ -637,7 +629,12 @@ Please help extract the core lesson and rule from this experience.
       <div className="max-w-6xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8 animate-fade-in-up">
-          <h1 className="text-4xl font-bold text-white mb-3">⚡ Hard Lessons</h1>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#f59e0b]/10 border border-[#f59e0b]/20 flex items-center justify-center shrink-0">
+              <AppIcon name="hardLessons" size={22} color="#f59e0b" glow={false} />
+            </div>
+            <h1 className="text-4xl font-bold text-white">Hard Lessons</h1>
+          </div>
           <p className="text-[#ababab] text-lg mb-4">
             Forensic extraction of irreversible signal from irreversible pain
           </p>
@@ -646,7 +643,7 @@ Please help extract the core lesson and rule from this experience.
               <span className="text-[#f59e0b] font-semibold">Purpose:</span> Ensure the same lesson is never paid for twice. Memory with teeth.
             </p>
           </div>
-          <p className="text-[#858585] text-xs mt-3">Lesson maps to active pattern → <Link to="/ledger" className="text-[#ababab] hover:text-white transition-colors">The Ledger</Link></p>
+          <p className="text-[#858585] text-xs mt-3">Lesson maps to active pattern → <Link to="/ledger" className="text-[#ababab] hover:text-white transition-colors">General Ledger</Link></p>
         </div>
 
         {/* Stats Overview */}
@@ -1102,31 +1099,78 @@ Please help extract the core lesson and rule from this experience.
       {/* Lessons List */}
       <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h3 className="text-[#858585] text-xs uppercase tracking-widest">
-            Extracted Lessons
-            {searchQuery.trim() && (
-              <span className="text-[#6a6a6a] ml-2">({filteredLessons.length}/{lessons.length})</span>
-            )}
-          </h3>
-          <div className="relative w-full sm:w-80">
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search lessons..."
-              className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
+          <div className="flex items-center gap-4 flex-wrap">
+            <h3 className="text-[#858585] text-xs uppercase tracking-widest">
+              {view === 'archive' ? 'Archive' : 'Extracted Lessons'}
+              {searchQuery.trim() && view === 'active' && (
+                <span className="text-[#6a6a6a] ml-2">({filteredLessons.length}/{lessons.length})</span>
+              )}
+            </h3>
+            <ArchiveToggle
+              view={view}
+              onChange={setView}
+              activeCount={lessons.length}
+              archiveCount={archivedLessons.length}
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#858585] hover:text-white text-xs"
-              >
-                Clear
-              </button>
-            )}
           </div>
+          {view === 'active' && (
+            <div className="relative w-full sm:w-80">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search lessons..."
+                className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#858585] hover:text-white text-xs"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
+        {view === 'archive' && (
+          <div className="space-y-3">
+            {archivedLessons.length === 0 ? (
+              <div className="oura-card p-10 text-center">
+                <p className="text-[#858585] text-sm">No archived lessons.</p>
+              </div>
+            ) : archivedLessons.map(l => (
+              <div key={l.id} className="oura-card p-5 opacity-75 hover:opacity-100 transition-opacity">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium">{l.eventDescription || 'Untitled lesson'}</p>
+                    {l.extractedLesson && <p className="text-[#858585] text-xs mt-2">{l.extractedLesson}</p>}
+                    <p className="text-[#6a6a6a] text-xs mt-2">
+                      Archived {l.archivedAt ? new Date(l.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => restoreArchivedLesson(l)}
+                      className="px-3 py-1.5 text-xs rounded-lg border border-[#f59e0b]/30 text-[#f59e0b] hover:bg-[#f59e0b]/10 transition-colors"
+                    >
+                      Restore
+                    </button>
+                    <button
+                      onClick={() => permanentlyDeleteArchivedLesson(l)}
+                      className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors"
+                    >
+                      Delete permanently
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {view === 'active' && (
         <div className="relative">
           <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
             <SkeletonList count={3} ItemComponent={SkeletonCard} />
@@ -1241,7 +1285,7 @@ Please help extract the core lesson and rule from this experience.
                           {!lesson.isFinalized && (
                             <button
                               onClick={() => editLesson(lesson)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#4da6ff]/10 text-[#4da6ff] hover:bg-[#4da6ff]/20 transition-colors"
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors"
                             >
                               ✏️
                             </button>
@@ -1425,6 +1469,7 @@ Please help extract the core lesson and rule from this experience.
             )}
           </div>
         </div>
+        )}
       </section>
 
       {/* Oracle Modal */}

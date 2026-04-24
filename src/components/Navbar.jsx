@@ -73,7 +73,7 @@ const Icons = {
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard },
   { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal },
-  { path: '/ledger', label: 'The Ledger', mobileLabel: 'Ledger', icon: Icons.killList },
+  { path: '/ledger', label: 'General Ledger', mobileLabel: 'General Ledger', icon: Icons.killList },
   { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
   ...(BLACK_MIRROR_ENABLED
     ? [{ path: '/blackmirror', label: 'Black Mirror', mobileLabel: 'Mirror', icon: Icons.blackMirror }]
@@ -106,13 +106,25 @@ export default function Navbar({ onLogout, user }) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
               <Link to="/dashboard" className="flex items-center space-x-2 group">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-oura-cyan">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="text-oura-cyan transition-all duration-300 group-hover:scale-105"
+                  style={{ filter: 'drop-shadow(0 0 6px rgba(0, 212, 170, 0.45))' }}
+                >
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
                   <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
                   <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" opacity="0.3" />
                 </svg>
                 <span className="text-xl font-light tracking-tight">
-                  <span className="text-oura-cyan">Inner</span>
+                  <span
+                    className="text-oura-cyan"
+                    style={{ textShadow: '0 0 12px rgba(0, 212, 170, 0.35)' }}
+                  >
+                    Inner
+                  </span>
                   <span className="text-white ml-1">Ops</span>
                 </span>
               </Link>

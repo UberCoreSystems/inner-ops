@@ -538,7 +538,7 @@ export default function Dashboard() {
           if (held === 0 && escaped === 0 && untouched === 0) return null;
           return (
             <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.092s' }}>
-              <div className="oura-card p-5 border-l-4 border-[#4da6ff]">
+              <div className="oura-card p-5 border-l-4 border-[#00d4aa]">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-white text-sm font-medium mb-1">Last Week's Record</h3>
@@ -563,8 +563,8 @@ export default function Dashboard() {
 
         {/* Signal Report — prose-only, no score, no rank, no rings */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className="oura-card p-6">
-            <p className="text-xs font-medium uppercase tracking-widest text-[#858585] mb-3">Signal Report</p>
+          <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40">
+            <p className="text-xs font-medium uppercase tracking-widest text-[#00d4aa] mb-3">Signal Report</p>
             <SignalReport report={signalReport} />
           </div>
         </section>
@@ -574,7 +574,7 @@ export default function Dashboard() {
             surface above. No scores, no ranks, no bars. Only non-zero lines. */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Behavioral Record</h3>
-          <div className="oura-card p-6">
+          <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40">
             <BehavioralRecordDensity density={density} />
           </div>
         </section>
@@ -582,12 +582,11 @@ export default function Dashboard() {
         {/* Stats Grid - Oura Score Cards */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" />
             <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" />
             <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" />
-            <ScoreCard score={stats.blackMirrorEntries || 0} label="Mirror" sublabel={`of ${stats.blackMirrorEntriesTotal || 0} total`} color="#4da6ff" icon={<AppIcon name="mirror" size={20} color="#4da6ff" />} size="small" />
-            <ScoreCard score={stats.relapseEntries || 0} label="Awareness" sublabel={`of ${stats.relapseEntries || 0} total`} color="#22c55e" icon={<AppIcon name="writing" size={20} color="#22c55e" />} size="small" />
+            <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#4da6ff" icon={<AppIcon name="relapse" size={20} color="#4da6ff" />} size="small" />
           </div>
         </section>
 
@@ -607,10 +606,10 @@ export default function Dashboard() {
               <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="target" size={28} color="#ef4444" />
               </div>
-              <h4 className="text-white font-medium mb-1">The Ledger</h4>
+              <h4 className="text-white font-medium mb-1">General Ledger</h4>
               <p className="text-[#858585] text-sm">Eliminate patterns</p>
             </Link>
-            
+
             <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#f59e0b]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="hardLessons" size={28} color="#f59e0b" />
@@ -618,13 +617,13 @@ export default function Dashboard() {
               <h4 className="text-white font-medium mb-1">Hard Lessons</h4>
               <p className="text-[#858585] text-sm">Turn pain to wisdom</p>
             </Link>
-            
-            <Link to="/blackmirror" className="oura-card p-5 group hover:border-[#4da6ff]/50 transition-all">
+
+            <Link to="/relapse" className="oura-card p-5 group hover:border-[#4da6ff]/50 transition-all">
               <div className="w-12 h-12 rounded-2xl bg-[#4da6ff]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <AppIcon name="mirror" size={28} color="#4da6ff" />
+                <AppIcon name="relapse" size={28} color="#4da6ff" />
               </div>
-              <h4 className="text-white font-medium mb-1">Black Mirror</h4>
-              <p className="text-[#858585] text-sm">Reality check</p>
+              <h4 className="text-white font-medium mb-1">The Signal</h4>
+              <p className="text-[#858585] text-sm">Catch the drift</p>
             </Link>
           </div>
         </section>
@@ -635,7 +634,7 @@ export default function Dashboard() {
             onClick={() => setKillListExpanded(prev => !prev)}
             className="flex items-center justify-between w-full mb-4 group"
           >
-            <h3 className="text-[#858585] text-xs uppercase tracking-widest group-hover:text-[#ababab] transition-colors">The Ledger</h3>
+            <h3 className="text-[#858585] text-xs uppercase tracking-widest group-hover:text-[#ababab] transition-colors">General Ledger</h3>
             <svg
               width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               className={`text-[#6a6a6a] group-hover:text-[#858585] transition-all duration-200 ${killListExpanded ? 'rotate-180' : ''}`}

@@ -65,19 +65,19 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-/* Active card surface — carries a subtle blue accent for modules/cards that
-   need to feel "alive" (Active Targets, Oracle modal, focal CTAs). */
+/* Active card surface — subtle red accent. Used by Ledger's Active Targets
+   card on the Dashboard; carries the Ledger module theme forward. */
 .oura-card-active {
   background: linear-gradient(180deg, #0a0a0a 0%, #050505 100%);
-  border: 1px solid rgba(77, 166, 255, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 20px;
-  box-shadow: 0 0 32px rgba(77, 166, 255, 0.06);
+  box-shadow: 0 0 32px rgba(239, 68, 68, 0.06);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .oura-card-active:hover {
-  border-color: rgba(77, 166, 255, 0.35);
-  box-shadow: 0 0 40px rgba(77, 166, 255, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.12);
   transform: translateY(-2px);
 }
 

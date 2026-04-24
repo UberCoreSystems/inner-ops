@@ -34,10 +34,10 @@ export default function KillListBackfillCard({
   };
 
   return (
-    <div className="oura-card p-5 border-l-2 border-[#4da6ff]/40 mb-3">
+    <div className="oura-card p-5 border-l-2 border-[#ef4444]/40 mb-3">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <p className="text-[#4da6ff] text-[10px] uppercase tracking-widest mb-1">Reconcile gap</p>
+          <p className="text-[#ef4444] text-[10px] uppercase tracking-widest mb-1">Reconcile gap</p>
           <p className="text-white text-sm leading-relaxed">
             No check-in on <span className="font-medium">{target.title}</span> for {gapDays} day{gapDays !== 1 ? 's' : ''}. How did it hold up?
           </p>
@@ -59,7 +59,7 @@ export default function KillListBackfillCard({
           <button
             onClick={onAllHeld}
             disabled={busy}
-            className="px-4 py-2 text-sm rounded-xl bg-transparent text-white border border-[#2a2a2a] hover:border-[#4da6ff] hover:bg-[#4da6ff]/5 disabled:opacity-50 transition-all"
+            className="px-4 py-2 text-sm rounded-xl bg-transparent text-white border border-[#2a2a2a] hover:border-[#ef4444] hover:bg-[#ef4444]/5 disabled:opacity-50 transition-all"
           >
             All held
           </button>
@@ -121,8 +121,8 @@ export default function KillListBackfillCard({
                       disabled={busy}
                       className={`flex-1 py-2 text-xs rounded-lg border transition-all ${
                         entry.held === true
-                          ? 'bg-[#1a1a1a] text-white border-[#4da6ff]/40'
-                          : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#4da6ff]/30 hover:text-white'
+                          ? 'bg-[#1a1a1a] text-white border-[#ef4444]/40'
+                          : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#ef4444]/30 hover:text-white'
                       }`}
                     >
                       Held
