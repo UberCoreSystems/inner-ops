@@ -30,7 +30,6 @@ export default function SynthesisBriefing() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [cadence, setCadence] = useState('weekly');
-  const [cadenceLockDate, setCadenceLockDate] = useState(null);
   const [selectedArchive, setSelectedArchive] = useState(null);
 
   useEffect(() => {
@@ -78,14 +77,11 @@ export default function SynthesisBriefing() {
   const handleGenerate = async () => {
     if (!userId || generating) return;
     setGenerating(true);
-    setCadenceLockDate(null);
     try {
-      // Finding 13: discriminated return — no more string-coded errors.
-      const result = await generateSynthesisBriefing(userId, cadence);
-      if (result?.status === 'locked') {
-        setCadenceLockDate(new Date(result.nextEligibleAt));
-        return;
-      }
+      // Manual on-demand trigger bypasses the cadence gate — Oracle CF's
+      // 20/day rate limit is the effective cap. The auto-generate hook still
+      // honors cadence via its default path.
+      const result = await generateSynthesisBriefing(userId, cadence, { bypassCadence: true });
       if (result?.status === 'ok' && result.briefing) {
         setBriefings(prev => [result.briefing, ...prev]);
         ouraToast.info('Briefing generated');
@@ -101,14 +97,6 @@ export default function SynthesisBriefing() {
   const latestBriefing = briefings[0] || null;
   const archiveBriefings = briefings.slice(1);
   const displayBriefing = selectedArchive || latestBriefing;
-
-  // Determine if a current-period briefing exists (matches user's selected cadence)
-  const cadenceDaysMap = { weekly: 7, biweekly: 14 };
-  const hasCurrentPeriodBriefing = (() => {
-    if (!latestBriefing?.generatedAt) return false;
-    const days = (Date.now() - new Date(latestBriefing.generatedAt).getTime()) / (1000 * 60 * 60 * 24);
-    return days < (cadenceDaysMap[cadence] ?? 7);
-  })();
 
   if (initialLoading) {
     return (
@@ -129,40 +117,42 @@ export default function SynthesisBriefing() {
           </p>
         </div>
 
-        {/* Generate controls — hidden when current-period briefing exists */}
-        {!hasCurrentPeriodBriefing && (
-          <div className="oura-card p-6 mb-8">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex gap-2">
-                {CADENCE_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setCadence(opt.value)}
-                    className={`px-4 py-2 rounded-xl text-sm transition-colors ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={handleGenerate}
-                disabled={generating || !!cadenceLockDate}
-                className="px-6 py-2.5 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-xl font-medium transition-colors text-sm"
-              >
-                {generating ? 'Generating...' : 'Generate Briefing'}
-              </button>
+        {/* Generate controls — always visible. Manual trigger bypasses cadence. */}
+        <div className="oura-card p-6 mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-[#ababab] text-sm mb-1">Run a briefing on-the-spot.</p>
+              <p className="text-[#6a6a6a] text-xs">The cadence below governs the automatic weekly/biweekly generation.</p>
             </div>
-
-            {cadenceLockDate && (
-              <p className="mt-4 text-[#858585] text-sm">
-                Next briefing available:{' '}
-                <span className="text-[#ababab]">
-                  {cadenceLockDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                </span>
-              </p>
-            )}
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="px-6 py-2.5 bg-[#a855f7] hover:bg-[#9333ea] hover:shadow-lg hover:shadow-[#a855f7]/20 disabled:bg-[#1a1a1a] disabled:text-[#858585] disabled:shadow-none text-white rounded-xl font-medium transition-all text-sm flex items-center gap-2"
+            >
+              {generating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                'Generate now'
+              )}
+            </button>
           </div>
-        )}
+
+          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-[#1a1a1a]">
+            <span className="text-[#6a6a6a] text-xs uppercase tracking-widest mr-1">Auto cadence</span>
+            {CADENCE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setCadence(opt.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* No briefings yet */}
         {briefings.length === 0 && (

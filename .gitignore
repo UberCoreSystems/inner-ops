@@ -138,3 +138,9 @@ dist-check
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Paperclip agent run artifacts — generated locally, not committed
+DAILY_REVIEW.md
+DEAD_CODE_REPORT.md
+QA_REVIEW_REPORT*.md
+WEEKLY_HEALTH.md

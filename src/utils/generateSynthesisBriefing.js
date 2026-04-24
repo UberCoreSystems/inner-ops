@@ -34,17 +34,20 @@ const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
 const getTimestamp = (entry) =>
   entry?.createdAt?.toDate?.()?.getTime() ?? entry?.timestamp ?? 0;
 
-export async function generateSynthesisBriefing(userId, cadence = 'weekly') {
+export async function generateSynthesisBriefing(userId, cadence = 'weekly', options = {}) {
   if (!userId) throw new Error('userId required');
 
   const cadenceDays = CADENCE_DAYS[cadence] ?? 7;
 
   // --- Cadence check ---
+  // Auto-generate path enforces the cadence so users don't drown in briefings.
+  // Manual on-demand path passes { bypassCadence: true } to skip this gate —
+  // Oracle CF's 20/day rate limit is the effective cap.
   const syntheses = await readUserData(COLLECTIONS.SYNTHESES).catch(() => []);
   const sorted = (syntheses || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
   const lastBriefing = sorted[0];
 
-  if (lastBriefing?.generatedAt) {
+  if (!options.bypassCadence && lastBriefing?.generatedAt) {
     const daysSinceLast = (Date.now() - new Date(lastBriefing.generatedAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceLast < cadenceDays) {
       const nextEligibleAt = new Date(
