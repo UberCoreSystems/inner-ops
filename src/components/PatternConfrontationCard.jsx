@@ -92,7 +92,7 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
             </p>
             <button
               onClick={handleDismiss}
-              className="text-[#6a6a6a] hover:text-[#858585] transition-colors shrink-0"
+              className="text-[#858585] hover:text-[#858585] transition-colors shrink-0"
               aria-label="Dismiss for 24 hours"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

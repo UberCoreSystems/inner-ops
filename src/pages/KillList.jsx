@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { writeData, updateData, deleteData, subscribeToUserData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
+import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
@@ -442,6 +443,7 @@ const KillList = () => {
       setNewIntention({ trigger: '', response: '' });
     } catch (error) {
       logger.error('❌ Error adding target:', error);
+      if (redirectIfAuthLost(error)) return;
       ouraToast.error('Failed to save kill target');
     } finally {
       // IMPORTANT: release the submit guard as soon as the write settles —
@@ -531,6 +533,8 @@ const KillList = () => {
 
     } catch (error) {
       logger.error('Error during check-in:', error);
+      if (redirectIfAuthLost(error)) return;
+      ouraToast.error('Check-in failed. Please try again.');
     }
   }, [categories]);
 
@@ -614,6 +618,7 @@ const KillList = () => {
 
     } catch (error) {
       logger.error('Error saving autopsy:', error);
+      if (redirectIfAuthLost(error)) return;
       ouraToast.error('Failed to save autopsy');
     }
   }, [autopsyTarget, autopsyData]);
@@ -837,6 +842,8 @@ const KillList = () => {
       ouraToast.success('Contract restored');
     } catch (error) {
       logger.error('❌ KillList: Error restoring target:', error);
+      if (redirectIfAuthLost(error)) return;
+      // Real-time subscription will reconcile target list automatically.
       ouraToast.error('Failed to restore contract');
     }
   }, []);
@@ -1124,7 +1131,7 @@ const KillList = () => {
                   <span className="text-xs text-[#858585] uppercase tracking-wider">
                     {category.label}
                   </span>
-                  <span className="text-[#6a6a6a] text-xs">·</span>
+                  <span className="text-[#858585] text-xs">·</span>
                   <span className={`text-xs uppercase tracking-wider ${
                     target.status === 'killed' ? 'text-[#858585]' :
                     target.status === 'escaped' ? 'text-[#b45309]' :
@@ -1132,8 +1139,8 @@ const KillList = () => {
                   }`}>
                     {target.status}
                   </span>
-                  <span className="text-[#6a6a6a] text-xs">·</span>
-                  <span className="text-[#6a6a6a] text-xs">Day {daysActive} · {new Date(target.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: new Date(target.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })}</span>
+                  <span className="text-[#858585] text-xs">·</span>
+                  <span className="text-[#858585] text-xs">Day {daysActive} · {new Date(target.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: new Date(target.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })}</span>
                 </div>
                 <p className="text-[#858585] text-xs mt-2">
                   Kill requires {threshold} consecutive days of held execution.
@@ -1146,21 +1153,21 @@ const KillList = () => {
           <div className="flex gap-1.5 shrink-0 ml-3">
             {editingTarget !== target.id && (
               <>
-                <button onClick={() => startEditing(target)} title="Edit" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
+                <button onClick={() => startEditing(target)} aria-label="Edit contract" title="Edit" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
                 </button>
                 {target.status === 'escaped' && (
-                  <button onClick={() => reactivateTarget(target.id)} title="Reactivate" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
+                  <button onClick={() => reactivateTarget(target.id)} aria-label="Reactivate contract" title="Reactivate" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 12a9 9 0 1 0 3-6.7" />
                       <polyline points="3 4 3 10 9 10" />
                     </svg>
                   </button>
                 )}
-                <button onClick={() => deleteTarget(target.id)} title="Archive" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
+                <button onClick={() => deleteTarget(target.id)} aria-label="Archive contract" title="Archive" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="4" rx="1" />
                     <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
@@ -1195,19 +1202,19 @@ const KillList = () => {
                   <span className="text-2xl font-light tabular-nums text-white">
                     {streak}
                   </span>
-                  <div className="text-[#6a6a6a] text-xs mt-0.5">Current Streak</div>
+                  <div className="text-[#858585] text-xs mt-0.5">Current Streak</div>
                 </div>
                 <div>
                   <span className="text-2xl font-light tabular-nums text-[#ababab]">
                     {target.totalTrackedDays || 0}
                   </span>
-                  <div className="text-[#6a6a6a] text-xs mt-0.5">Behavioral Record</div>
+                  <div className="text-[#858585] text-xs mt-0.5">Behavioral Record</div>
                 </div>
                 <div>
                   <span className="text-2xl font-light tabular-nums text-[#858585]">
                     {target.longestStreak || 0}
                   </span>
-                  <div className="text-[#6a6a6a] text-xs mt-0.5">Longest Run</div>
+                  <div className="text-[#858585] text-xs mt-0.5">Longest Run</div>
                 </div>
               </div>
             </div>
@@ -1221,15 +1228,15 @@ const KillList = () => {
                     <>
                       <button
                         onClick={() => setShowIntention(prev => ({ ...prev, [target.id]: !prev[target.id] }))}
-                        className="flex items-center gap-2 text-[#6a6a6a] hover:text-[#858585] text-xs transition-colors w-full text-left"
+                        className="flex items-center gap-2 text-[#858585] hover:text-[#858585] text-xs transition-colors w-full text-left"
                       >
                         <span className="uppercase tracking-widest">Implementation Intention</span>
                         <span>{showIntention[target.id] ? '▲' : '▼'}</span>
                       </button>
                       {showIntention[target.id] && (
                         <div className="mt-2 space-y-1 text-xs text-[#858585]">
-                          <p><span className="text-[#6a6a6a]">When:</span> {target.implementationIntention.trigger}</p>
-                          <p><span className="text-[#6a6a6a]">I will:</span> {target.implementationIntention.response}</p>
+                          <p><span className="text-[#858585]">When:</span> {target.implementationIntention.trigger}</p>
+                          <p><span className="text-[#858585]">I will:</span> {target.implementationIntention.response}</p>
                         </div>
                       )}
                       {failedIntentions >= 3 && (
@@ -1269,7 +1276,7 @@ const KillList = () => {
 
             {/* Already checked in today */}
             {target.status === 'active' && checkedInToday && (
-              <div className="text-center py-2 text-[#6a6a6a] text-xs">
+              <div className="text-center py-2 text-[#858585] text-xs">
                 Checked in today
               </div>
             )}
@@ -1346,7 +1353,7 @@ const KillList = () => {
 
             {/* Escape count */}
             {(target.escapeData || []).length > 0 && target.status !== 'escaped' && (
-              <div className="text-[#6a6a6a] text-xs">
+              <div className="text-[#858585] text-xs">
                 {target.escapeData.length} escape{target.escapeData.length > 1 ? 's' : ''} recorded
               </div>
             )}
@@ -1363,7 +1370,7 @@ const KillList = () => {
                     className="w-full flex items-center justify-between px-4 py-2.5 bg-[#0a0a0a] text-left hover:bg-[#1a1a1a] transition-colors"
                   >
                     <span className="text-[#858585] text-xs uppercase tracking-widest">Autopsy Pattern ({patterns.escapeCount} escapes)</span>
-                    <span className="text-[#6a6a6a] text-xs">{isExpanded ? '▲' : '▼'}</span>
+                    <span className="text-[#858585] text-xs">{isExpanded ? '▲' : '▼'}</span>
                   </button>
                   {isExpanded && (
                     <div className="px-4 py-3 space-y-2 bg-[#080808]">
@@ -1399,7 +1406,7 @@ const KillList = () => {
                   <p className="text-[#ababab] text-xs leading-relaxed">This pattern has repeated {target.escapeData.length} times without resolution. Document it in Hard Lessons?</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Link to="/hard-lessons" onClick={() => {
+                  <Link to="/hardlessons" onClick={() => {
                     sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({ eventDescription: `${target.title} — ${target.escapeData.length} escapes recorded` }));
                   }} className="px-3 py-1.5 bg-transparent text-[#b45309] border border-[#b45309]/30 rounded-lg text-xs hover:bg-[#b45309]/10 transition-colors">Document</Link>
                   <button onClick={() => sessionStorage.setItem(`hl_bridge_dismissed_${target.id}`, '1')} className="px-3 py-1.5 bg-[#1a1a1a] text-[#858585] rounded-lg text-xs hover:text-white transition-colors">×</button>
@@ -1499,7 +1506,7 @@ const KillList = () => {
                     <div className="text-[#858585] text-xs mt-1">across {confirmedKills.length} confirmed kills</div>
                   </div>
                 ) : (
-                  <div className="text-[#6a6a6a] text-sm">No kills recorded yet</div>
+                  <div className="text-[#858585] text-sm">No kills recorded yet</div>
                 )}
               </div>
             </div>
@@ -1555,13 +1562,13 @@ const KillList = () => {
                   {rows.map((row, i) => (
                     <div key={i} className="py-2 text-xs text-[#ababab] font-mono leading-relaxed">
                       <span className="text-[#858585]">{fmtDate(row.ts)}</span>
-                      <span className="text-[#6a6a6a]"> · </span>
+                      <span className="text-[#858585]"> · </span>
                       <span className="text-[#ababab]">{row.type}</span>
-                      <span className="text-[#6a6a6a]"> · </span>
+                      <span className="text-[#858585]"> · </span>
                       <span className="text-white">{row.title}</span>
                       {row.type === 'escaped' && row.context && (
                         <>
-                          <span className="text-[#6a6a6a]"> · </span>
+                          <span className="text-[#858585]"> · </span>
                           <span className="text-[#858585]">{truncate(row.context)}</span>
                         </>
                       )}
@@ -1652,7 +1659,7 @@ const KillList = () => {
                 <label className="block text-[#ababab] text-sm uppercase tracking-wider mb-1">
                   When This Happens, I Will Do This Instead
                 </label>
-                <p className="text-[#6a6a6a] text-xs mb-4">Pre-decide your response to the trigger. Both fields required (min 20 chars).</p>
+                <p className="text-[#858585] text-xs mb-4">Pre-decide your response to the trigger. Both fields required (min 20 chars).</p>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[#858585] text-xs uppercase tracking-widest mb-2">
@@ -1665,7 +1672,7 @@ const KillList = () => {
                       placeholder="I feel the urge to [X] after [context]..."
                       className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
                     />
-                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.trigger.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#6a6a6a]'}`}>
+                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.trigger.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>
                       {newIntention.trigger.trim().length}/20
                     </div>
                   </div>
@@ -1680,7 +1687,7 @@ const KillList = () => {
                       placeholder="I will immediately [specific action] for at least [duration]..."
                       className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
                     />
-                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.response.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#6a6a6a]'}`}>
+                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.response.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>
                       {newIntention.response.trim().length}/20
                     </div>
                   </div>
@@ -1891,8 +1898,8 @@ const KillList = () => {
                               {category.label}
                             </span>
                           )}
-                          <span className="text-[#6a6a6a] text-xs">Killed {killDateStr}</span>
-                          <span className="text-[#6a6a6a] text-xs">Tracked {kill.activeDuration ?? 0} days</span>
+                          <span className="text-[#858585] text-xs">Killed {killDateStr}</span>
+                          <span className="text-[#858585] text-xs">Tracked {kill.activeDuration ?? 0} days</span>
                         </div>
                         <p className="text-[#858585] text-xs mt-2">
                           Kill required {killThreshold} consecutive days of held execution.
@@ -1905,7 +1912,7 @@ const KillList = () => {
                       <button
                         onClick={() => requestKillOracleStatement(kill)}
                         disabled={requestingOracleForKillId === kill.id}
-                        className="mt-3 text-xs text-[#6a6a6a] hover:text-[#858585] transition-colors disabled:opacity-40"
+                        className="mt-3 text-xs text-[#858585] hover:text-[#858585] transition-colors disabled:opacity-40"
                       >
                         {requestingOracleForKillId === kill.id ? 'Requesting...' : 'Request Oracle statement'}
                       </button>
@@ -1934,7 +1941,7 @@ const KillList = () => {
             <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-white font-medium">Revise Intention: {reviseTarget.title}</h3>
-                <button onClick={() => { setReviseTarget(null); setReviseIntention({ trigger: '', response: '' }); }} className="text-[#6a6a6a] hover:text-white transition-colors">
+                <button onClick={() => { setReviseTarget(null); setReviseIntention({ trigger: '', response: '' }); }} className="text-[#858585] hover:text-white transition-colors">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -1943,12 +1950,12 @@ const KillList = () => {
                 <div>
                   <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">When [triggering condition]</label>
                   <textarea value={reviseIntention.trigger} onChange={(e) => setReviseIntention(prev => ({ ...prev, trigger: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm" />
-                  <div className={`text-xs mt-1 text-right tabular-nums ${reviseIntention.trigger.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#6a6a6a]'}`}>{reviseIntention.trigger.trim().length}/20</div>
+                  <div className={`text-xs mt-1 text-right tabular-nums ${reviseIntention.trigger.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>{reviseIntention.trigger.trim().length}/20</div>
                 </div>
                 <div>
                   <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">I will [competing behavior]</label>
                   <textarea value={reviseIntention.response} onChange={(e) => setReviseIntention(prev => ({ ...prev, response: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm" />
-                  <div className={`text-xs mt-1 text-right tabular-nums ${reviseIntention.response.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#6a6a6a]'}`}>{reviseIntention.response.trim().length}/20</div>
+                  <div className={`text-xs mt-1 text-right tabular-nums ${reviseIntention.response.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>{reviseIntention.response.trim().length}/20</div>
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
@@ -1969,7 +1976,7 @@ const KillList = () => {
             <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-white font-medium">Escape Autopsy: {autopsyTarget.title}</h3>
-                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '', eventDate: '' }); }} className="text-[#6a6a6a] hover:text-white transition-colors">
+                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '', eventDate: '' }); }} className="text-[#858585] hover:text-white transition-colors">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -1986,7 +1993,7 @@ const KillList = () => {
                   <>
                     <div>
                       <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">Did your implementation intention activate? <span className="text-[#b45309]">*</span></label>
-                      <div className="text-[#6a6a6a] text-xs mb-2 italic">{autopsyTarget.implementationIntention.trigger}</div>
+                      <div className="text-[#858585] text-xs mb-2 italic">{autopsyTarget.implementationIntention.trigger}</div>
                       <div className="flex gap-2">
                         {['yes', 'partially', 'no'].map(val => (
                           <button
@@ -2026,7 +2033,7 @@ const KillList = () => {
                   <textarea value={autopsyData.rationalization} onChange={(e) => setAutopsyData(prev => ({ ...prev, rationalization: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555]" placeholder="The rationalization that made it feel okay..." />
                 </div>
                 <div>
-                  <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">What would have stopped it? <span className="text-[#6a6a6a]">(optional)</span></label>
+                  <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">What would have stopped it? <span className="text-[#858585]">(optional)</span></label>
                   <input type="text" value={autopsyData.prevention} onChange={(e) => setAutopsyData(prev => ({ ...prev, prevention: e.target.value }))} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#555555]" placeholder="One thing that would have changed the outcome..." />
                 </div>
               </div>

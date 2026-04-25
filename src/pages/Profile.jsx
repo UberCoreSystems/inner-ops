@@ -266,7 +266,7 @@ export default function Profile() {
             <div className="mb-4 p-4 bg-[#050505] border border-[#1a1a1a] rounded-xl">
               <p className="text-[#d1d1d1] text-sm font-light leading-relaxed">"{identityDirection}"</p>
               {identityDirectionSetAt && (
-                <p className="text-[#6a6a6a] text-xs mt-2">
+                <p className="text-[#858585] text-xs mt-2">
                   Set {new Date(identityDirectionSetAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
               )}
@@ -288,7 +288,7 @@ export default function Profile() {
                 placeholder="One sentence. Plain text. Present tense."
               />
               <div className="flex items-center justify-between">
-                <span className="text-[#6a6a6a] text-xs">{identityDirectionDraft.trim().length}/200</span>
+                <span className="text-[#858585] text-xs">{identityDirectionDraft.trim().length}/200</span>
                 <div className="flex gap-2">
                   {identityDirection && (
                     <>
@@ -327,7 +327,7 @@ export default function Profile() {
             <div className="mt-5 pt-4 border-t border-[#1a1a1a]">
               <button
                 onClick={() => setShowHistory(p => !p)}
-                className="text-[#6a6a6a] text-xs hover:text-[#858585] transition-colors"
+                className="text-[#858585] text-xs hover:text-[#858585] transition-colors"
               >
                 {showHistory ? 'Hide' : 'Show'} prior statements ({identityDirectionHistory.length})
               </button>

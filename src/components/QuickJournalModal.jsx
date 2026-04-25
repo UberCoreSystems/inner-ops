@@ -1,60 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { InlineErrorBoundary } from './ErrorBoundary';
+import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // Quick capture mirrors the Journal page entry form: mood, intensity, freeform
 // textarea. Trimmed layout for modal context — no category tabs, no rotating
 // prompts — but the underlying shape (content + mood + intensity) and the
 // Oracle feedback pass match Journal.jsx exactly so entries stay consistent
 // across surfaces.
-
-const moodCategories = [
-  {
-    name: 'Energized',
-    color: '#4da6ff',
-    moods: [
-      { label: 'Electric', value: 'electric' },
-      { label: 'Light', value: 'light' },
-      { label: 'Radiant', value: 'radiant' },
-      { label: 'Triumphant', value: 'triumphant' },
-    ],
-  },
-  {
-    name: 'Grounded',
-    color: '#8a8a8a',
-    moods: [
-      { label: 'Focused', value: 'focused' },
-      { label: 'Sharp', value: 'sharp' },
-      { label: 'Steady', value: 'steady' },
-      { label: 'Calm', value: 'calm' },
-    ],
-  },
-  {
-    name: 'Challenged',
-    color: '#b45309',
-    moods: [
-      { label: 'Heavy', value: 'heavy' },
-      { label: 'Hollow', value: 'hollow' },
-      { label: 'Foggy', value: 'foggy' },
-      { label: 'Chaotic', value: 'chaotic' },
-    ],
-  },
-];
-
-const moodOptions = moodCategories.flatMap(cat =>
-  cat.moods.map(m => ({ ...m, category: cat.name, color: cat.color }))
-);
-
-const intensityLevels = [
-  { value: 1, label: 'Subtle' },
-  { value: 2, label: 'Present' },
-  { value: 3, label: 'Strong' },
-  { value: 4, label: 'Overwhelming' },
-  { value: 5, label: 'Consuming' },
-];
 
 const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClose, onSuccess }) {
   const [entry, setEntry] = useState('');
@@ -126,16 +83,24 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
     onClose();
   }, [onSuccess, onClose]);
 
+  // a11y: focus trap + Esc handler
+  const trapRef = useFocusTrap(isOpen);
+
   if (!isOpen) return null;
 
   const selectedMoodOption = moodOptions.find(m => m.value === mood);
 
   return (
     <InlineErrorBoundary name="QuickJournalModal">
-      <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label="Quick journal entry" className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <button
+          type="button"
+          aria-label="Close quick entry"
+          onClick={onClose}
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm cursor-default"
+        />
 
-        <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0a0a0a] border border-[#1a1a1a] rounded-2xl shadow-2xl animate-fade-in-up">
+        <div ref={trapRef} className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0a0a0a] border border-[#1a1a1a] rounded-2xl shadow-2xl animate-fade-in-up">
 
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-[#1a1a1a] sticky top-0 bg-[#0a0a0a] z-10">
@@ -153,9 +118,10 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
             </div>
             <button
               onClick={onClose}
+              aria-label="Close quick entry"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-all"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
@@ -169,7 +135,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                 <div className="space-y-2">
                   {moodCategories.map(cat => (
                     <div key={cat.name} className="flex items-center gap-2">
-                      <span className="text-[10px] text-[#6a6a6a] uppercase tracking-widest w-20 shrink-0" style={{ color: `${cat.color}99` }}>{cat.name}</span>
+                      <span className="text-[10px] text-[#858585] uppercase tracking-widest w-20 shrink-0" style={{ color: `${cat.color}99` }}>{cat.name}</span>
                       <div className="flex flex-wrap gap-1.5 flex-1">
                         {cat.moods.map(m => {
                           const active = mood === m.value;
@@ -251,7 +217,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                   className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
                     canSubmit
                       ? 'bg-[#a855f7] text-white hover:bg-[#9333ea] hover:shadow-lg hover:shadow-[#a855f7]/20'
-                      : 'bg-[#1a1a1a] text-[#6a6a6a] cursor-not-allowed'
+                      : 'bg-[#1a1a1a] text-[#858585] cursor-not-allowed'
                   }`}
                 >
                   {saving ? (
@@ -279,7 +245,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                 </div>
                 <span className="text-xs font-medium uppercase tracking-widest text-[#888]">Oracle</span>
                 {selectedMoodOption && (
-                  <span className="text-[10px] text-[#6a6a6a] ml-auto" style={{ color: `${selectedMoodOption.color}99` }}>
+                  <span className="text-[10px] text-[#858585] ml-auto" style={{ color: `${selectedMoodOption.color}99` }}>
                     {selectedMoodOption.label} · {intensity}/5
                   </span>
                 )}

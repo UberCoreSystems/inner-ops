@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function MirrorStack({ killTargets = [], hardLessons = [], signalReport }) {
+function MirrorStack({ killTargets = [], hardLessons = [], signalReport }) {
   const finalizedCount = (hardLessons || []).filter(
     l => l?.isFinalized && (l?.ruleGoingForward || '').trim().length > 0
   ).length;
@@ -47,7 +47,7 @@ export default function MirrorStack({ killTargets = [], hardLessons = [], signal
         <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Mirror</h3>
         <div className="grid grid-cols-2 gap-6 divide-x divide-[#00d4aa]/20">
           <div className="pr-6">
-            <p className="text-[#6a6a6a] text-[10px] uppercase tracking-widest mb-3">Declared</p>
+            <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-3">Declared</p>
             <div className="space-y-3">
               <p className="text-white text-sm">
                 <span className="font-light text-2xl tabular-nums text-[#00d4aa]/90">{finalizedCount}</span>
@@ -60,7 +60,7 @@ export default function MirrorStack({ killTargets = [], hardLessons = [], signal
             </div>
           </div>
           <div className="pl-6">
-            <p className="text-[#6a6a6a] text-[10px] uppercase tracking-widest mb-3">Observed</p>
+            <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-3">Observed</p>
             <div className="space-y-3">
               <p className="text-white text-sm">
                 {finalizedCount > 0 ? (
@@ -95,3 +95,5 @@ export default function MirrorStack({ killTargets = [], hardLessons = [], signal
     </section>
   );
 }
+
+export default React.memo(MirrorStack);

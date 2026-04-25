@@ -33,7 +33,7 @@ export default function CrossModuleExtractionPrompts({
             </div>
             <button
               onClick={onDismissKillList}
-              className="text-[#6a6a6a] hover:text-[#ababab] transition-colors text-xs flex-shrink-0 mt-0.5"
+              className="text-[#858585] hover:text-[#ababab] transition-colors text-xs flex-shrink-0 mt-0.5"
               title="Dismiss"
             >
               ✕
@@ -42,7 +42,7 @@ export default function CrossModuleExtractionPrompts({
           <p className="text-[#ababab] text-xs leading-relaxed mb-3">
             {killList.targetDescription}
           </p>
-          <p className="text-[#6a6a6a] text-xs italic mb-3 border-l-2 border-[#ef4444]/20 pl-2">
+          <p className="text-[#858585] text-xs italic mb-3 border-l-2 border-[#ef4444]/20 pl-2">
             "{killList.evidenceFromEntry}"
           </p>
           <div className="flex gap-2">
@@ -54,7 +54,7 @@ export default function CrossModuleExtractionPrompts({
             </button>
             <button
               onClick={onDismissKillList}
-              className="px-4 py-1.5 text-[#6a6a6a] hover:text-[#858585] text-xs transition-colors"
+              className="px-4 py-1.5 text-[#858585] hover:text-[#858585] text-xs transition-colors"
             >
               Dismiss
             </button>
@@ -84,7 +84,7 @@ export default function CrossModuleExtractionPrompts({
             </div>
             <button
               onClick={onDismissRelapseRadar}
-              className="text-[#6a6a6a] hover:text-[#ababab] transition-colors text-xs flex-shrink-0 mt-0.5"
+              className="text-[#858585] hover:text-[#ababab] transition-colors text-xs flex-shrink-0 mt-0.5"
               title="Dismiss"
             >
               ✕
@@ -99,7 +99,7 @@ export default function CrossModuleExtractionPrompts({
               ))}
             </div>
           )}
-          <p className="text-[#6a6a6a] text-xs italic mb-3 border-l-2 border-[#f59e0b]/20 pl-2">
+          <p className="text-[#858585] text-xs italic mb-3 border-l-2 border-[#f59e0b]/20 pl-2">
             "{relapseRadar.evidenceFromEntry}"
           </p>
           {relapseRadar.relatedKillTarget && (
@@ -116,7 +116,7 @@ export default function CrossModuleExtractionPrompts({
             </button>
             <button
               onClick={onDismissRelapseRadar}
-              className="px-4 py-1.5 text-[#6a6a6a] hover:text-[#858585] text-xs transition-colors"
+              className="px-4 py-1.5 text-[#858585] hover:text-[#858585] text-xs transition-colors"
             >
               Dismiss
             </button>

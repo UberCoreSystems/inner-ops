@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function ActiveTargetCommandBoard({ killTargets = [] }) {
+function ActiveTargetCommandBoard({ killTargets = [] }) {
   const active = (killTargets || [])
     .filter(t => t?.status === 'active')
     .sort((a, b) => (b.streak || 0) - (a.streak || 0))
@@ -44,7 +44,7 @@ export default function ActiveTargetCommandBoard({ killTargets = [] }) {
               <p className="text-[#858585] text-xs mb-3">
                 held. {streak} of {required} required.
               </p>
-              <p className={`text-xs ${intentionArmed ? 'text-[#ef4444]/70' : 'text-[#6a6a6a]'}`}>
+              <p className={`text-xs ${intentionArmed ? 'text-[#ef4444]/70' : 'text-[#858585]'}`}>
                 Intention {intentionArmed ? 'armed' : 'not set'}.
               </p>
             </Link>
@@ -54,3 +54,5 @@ export default function ActiveTargetCommandBoard({ killTargets = [] }) {
     </section>
   );
 }
+
+export default React.memo(ActiveTargetCommandBoard);

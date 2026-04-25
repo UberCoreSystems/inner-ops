@@ -295,7 +295,10 @@ function App() {
 
           {/* Default Routes */}
           <Route path="/login" element={<Navigate to="/auth" />} />
+          <Route path="/killlist" element={<Navigate to="/ledger" replace />} />
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/auth" />} />
+          {/* Catch-all: unmapped URLs go home (or to auth if signed-out). */}
+          <Route path="*" element={<Navigate to={user ? '/dashboard' : '/auth'} replace />} />
         </Routes>
         </SynthesisGuard>
       </div>

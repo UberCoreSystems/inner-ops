@@ -45,6 +45,12 @@ export const archiveEntry = async (collectionName, entry) => {
 
 // Restore inverse of archiveEntry: copy back into active collection, strip
 // `archivedAt`, delete from archive.
+//
+// Failure handling: if the archive delete fails AFTER the active write
+// succeeds, the document exists in both collections. Real-time listeners
+// reconcile by showing both lists; the user sees the entry restored. We log
+// a warning and surface a soft toast on the consumer side rather than
+// throwing, so partial-success isn't reported as total failure.
 export const restoreEntry = async (collectionName, archivedEntry) => {
   if (!archivedEntry?.id) {
     throw new Error('restoreEntry requires an archived entry with an id');
@@ -60,8 +66,23 @@ export const restoreEntry = async (collectionName, archivedEntry) => {
   };
 
   const activeRef = doc(db, collectionName, id);
+  // Step 1: write to active collection. If this throws the consumer's catch
+  // block fires and nothing has been mutated.
   await setDoc(activeRef, restorePayload);
-  await deleteDoc(doc(db, archiveNameFor(collectionName), id));
+
+  // Step 2: best-effort delete from archive. If this fails, the doc lingers
+  // in archive but the restore is functionally complete (entry visible in
+  // active list). Returning success here matches user intent.
+  try {
+    await deleteDoc(doc(db, archiveNameFor(collectionName), id));
+  } catch (deleteError) {
+    logger.warn(`♻️  Archive delete failed after restore — doc lives in both collections`, {
+      id,
+      collection: collectionName,
+      code: deleteError?.code,
+    });
+  }
+
   logger.log(`♻️  Restored ${archiveNameFor(collectionName)}/${id} → ${collectionName}/${id}`);
   return { id, ...restorePayload };
 };

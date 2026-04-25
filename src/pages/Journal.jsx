@@ -8,6 +8,8 @@ import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
+import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
+import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
@@ -89,60 +91,8 @@ const MoodIcons = {
   ),
 };
 
-// Mood categories grouped by emotional valence. Dark Oura palette — semantics
-// preserved (three distinct categories) but saturation stripped.
-const moodCategories = [
-  {
-    name: 'Energized',
-    color: '#4da6ff',
-    bgColor: 'bg-[#4da6ff]/10',
-    borderColor: 'border-[#4da6ff]',
-    moods: [
-      { label: 'Electric', value: 'electric', description: 'Charged and alive' },
-      { label: 'Light', value: 'light', description: 'Unburdened and free' },
-      { label: 'Radiant', value: 'radiant', description: 'Glowing from within' },
-      { label: 'Triumphant', value: 'triumphant', description: 'Victorious and proud' },
-    ]
-  },
-  {
-    name: 'Grounded',
-    color: '#8a8a8a',
-    bgColor: 'bg-[#1a1a1a]',
-    borderColor: 'border-white/40',
-    moods: [
-      { label: 'Focused', value: 'focused', description: 'Clear and intentional' },
-      { label: 'Sharp', value: 'sharp', description: 'Precise and alert' },
-      { label: 'Steady', value: 'steady', description: 'Balanced and stable' },
-      { label: 'Calm', value: 'calm', description: 'Peaceful and still' },
-    ]
-  },
-  {
-    name: 'Challenged',
-    color: '#b45309',
-    bgColor: 'bg-[#b45309]/10',
-    borderColor: 'border-[#b45309]',
-    moods: [
-      { label: 'Heavy', value: 'heavy', description: 'Weighed down' },
-      { label: 'Hollow', value: 'hollow', description: 'Empty inside' },
-      { label: 'Foggy', value: 'foggy', description: 'Unclear and hazy' },
-      { label: 'Chaotic', value: 'chaotic', description: 'Scattered energy' },
-    ]
-  }
-];
-
-// Flatten for backward compatibility
-const moodOptions = moodCategories.flatMap(cat => 
-  cat.moods.map(m => ({ ...m, category: cat.name, color: cat.color }))
-);
-
-// Ring-based intensity levels
-const intensityLevels = [
-  { value: 1, label: 'Subtle', description: 'A whisper in the background', rings: 1 },
-  { value: 2, label: 'Present', description: 'Noticeable but manageable', rings: 2 },
-  { value: 3, label: 'Strong', description: 'Commanding your attention', rings: 3 },
-  { value: 4, label: 'Overwhelming', description: 'Hard to ignore', rings: 4 },
-  { value: 5, label: 'Consuming', description: 'All-encompassing', rings: 5 },
-];
+// Mood/intensity taxonomy lives in [src/constants/moods.js] so the
+// Journal page and the Quick Entry modal stay in sync.
 
 // Intensity ring visualization component
 const IntensityRing = ({ level, selected, onClick }) => {
@@ -210,6 +160,7 @@ export default function Journal() {
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry the modal is for
+  const submittingRef = useRef(false);
   const [view, setView] = useState('active');
   const [archivedEntries, setArchivedEntries] = useState([]);
   
@@ -514,6 +465,10 @@ export default function Journal() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!entry.trim()) return;
+    // Double-submit guard — prevent duplicate writes if the user clicks
+    // before the in-flight submit returns.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
 
     setLoading(true);
 
@@ -583,9 +538,11 @@ export default function Journal() {
 
     } catch (error) {
       logger.error("Error saving journal entry:", error);
+      if (redirectIfAuthLost(error)) return;
       openOracleWithContent("Oracle unavailable. Entry saved. Submit again to request feedback.");
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -621,6 +578,10 @@ export default function Journal() {
       ouraToast.success('Entry restored');
     } catch (error) {
       logger.error('❌ Journal: Error restoring entry:', error);
+      if (redirectIfAuthLost(error)) return;
+      // Optimistic state was not yet updated, so no rollback is needed.
+      // Refresh from server to make sure the local list reflects truth.
+      loadJournalEntries();
       ouraToast.error('Failed to restore entry');
     }
   };
@@ -887,7 +848,7 @@ export default function Journal() {
             <div className="oura-card p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[#858585] text-xs uppercase tracking-widest">30-Day Mood</h3>
-                <div className="flex items-center gap-3 text-[10px] text-[#6a6a6a]">
+                <div className="flex items-center gap-3 text-[10px] text-[#858585]">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#4da6ff]" />Energized</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#8a8a8a]" />Grounded</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#b45309]" />Challenged</span>
@@ -1241,7 +1202,7 @@ export default function Journal() {
               <h3 className="text-[#858585] text-xs uppercase tracking-widest">
                 {view === 'archive' ? 'Archive' : 'Previous Entries'}
                 {searchQuery.trim() && view === 'active' && (
-                  <span className="text-[#6a6a6a] ml-2">
+                  <span className="text-[#858585] ml-2">
                     ({filteredEntries.length}/{entries.length})
                   </span>
                 )}
@@ -1380,6 +1341,7 @@ export default function Journal() {
                             <button
                               onClick={() => startEditEntry(entry)}
                               className="w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
+                              aria-label="Edit this entry"
                               title="Edit this entry"
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1390,6 +1352,7 @@ export default function Journal() {
                             <button
                               onClick={() => archiveEntryById(entry.id)}
                               className="w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
+                              aria-label="Archive this entry"
                               title="Archive this entry"
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1448,7 +1411,7 @@ export default function Journal() {
                               <button
                                 onClick={() => extractLessonFromEntry(entry)}
                                 disabled={extracting === entry.id}
-                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#b45309] hover:text-[#d97706] disabled:text-[#6a6a6a] transition-colors w-full"
+                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#b45309] hover:text-[#d97706] disabled:text-[#858585] transition-colors w-full"
                               >
                                 {extracting === entry.id ? (
                                   <>
@@ -1463,7 +1426,7 @@ export default function Journal() {
                               <button
                                 onClick={() => extractLessonFromEntry(entry)}
                                 disabled={extracting === entry.id}
-                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#ababab] hover:text-white disabled:text-[#6a6a6a] transition-colors w-full"
+                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#ababab] hover:text-white disabled:text-[#858585] transition-colors w-full"
                               >
                                 {extracting === entry.id ? (
                                   <>

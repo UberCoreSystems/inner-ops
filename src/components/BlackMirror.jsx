@@ -338,10 +338,10 @@ const BlackMirror = () => {
           <div className="oura-card p-5 mb-8 animate-fade-in-up">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-[#858585] text-xs uppercase tracking-widest">Index History</h3>
-              <span className="text-[10px] text-[#6a6a6a]">last {Math.min(entries.length, 20)} entries</span>
+              <span className="text-[10px] text-[#858585]">last {Math.min(entries.length, 20)} entries</span>
             </div>
             {/* Index formula explanation */}
-            <p className="text-[10px] text-[#6a6a6a] mb-4">
+            <p className="text-[10px] text-[#858585] mb-4">
               Score = screen×8 + fog×2.5 − interaction×2 + unconscious×8 — lower is better
             </p>
             <div className="flex items-end gap-1 h-14">

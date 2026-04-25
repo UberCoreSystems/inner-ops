@@ -286,7 +286,7 @@ export default function Onboarding() {
                 onChange={(e) => setCriterionThreshold(Number(e.target.value))}
                 className="w-full accent-white"
               />
-              <div className="flex justify-between text-[#6a6a6a] text-xs mt-1">
+              <div className="flex justify-between text-[#858585] text-xs mt-1">
                 <span>1</span><span>10</span>
               </div>
             </div>
@@ -317,7 +317,7 @@ export default function Onboarding() {
           ) : (
             <button
               onClick={() => navigate('/dashboard')}
-              className="text-[#6a6a6a] hover:text-[#858585] transition-colors text-sm"
+              className="text-[#858585] hover:text-[#858585] transition-colors text-sm"
             >
               Skip
             </button>

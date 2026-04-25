@@ -66,7 +66,7 @@ export function formatDeltaClause(currentValue, priorValue, metricType, opts = {
   return `previously ${priorValue}`;
 }
 
-export default function SignalReport({ report: reportProp, userId }) {
+function SignalReport({ report: reportProp, userId }) {
   const [report, setReport] = useState(reportProp || null);
   const [loading, setLoading] = useState(!reportProp);
 
@@ -167,3 +167,5 @@ export default function SignalReport({ report: reportProp, userId }) {
     </div>
   );
 }
+
+export default React.memo(SignalReport);

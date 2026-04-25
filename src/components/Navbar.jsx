@@ -162,12 +162,13 @@ export default function Navbar({ onLogout, user }) {
               </Link>
               <button
                 onClick={onLogout}
+                aria-label="Sign out"
                 className="text-gray-400 hover:text-white transition-all duration-200 text-sm font-light px-3 md:px-4 py-2 border border-oura-border rounded-xl hover:border-gray-500 hover:bg-oura-card"
               >
                 <span className="hidden sm:inline">Sign Out</span>
                 {/* Mobile sign-out icon */}
-                <span className="sm:hidden">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <span className="sm:hidden" aria-label="Sign out">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                     <polyline points="16 17 21 12 16 7" />
                     <line x1="21" y1="12" x2="9" y2="12" />
@@ -234,7 +235,7 @@ export default function Navbar({ onLogout, user }) {
                     </>}
                   </svg>
                 </span>
-                <span className="text-[9px] font-light tracking-wide leading-none">{item.mobileLabel}</span>
+                <span className="text-[9px] font-light tracking-wide leading-none truncate w-full text-center px-0.5">{item.mobileLabel}</span>
               </Link>
             );
           })}

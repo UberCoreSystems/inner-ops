@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
+import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
@@ -64,6 +65,7 @@ export default function HardLessons() {
   const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
   const [pendingOracleWisdom, setPendingOracleWisdom] = useState('');
   const autoOpenedIds = useRef(new Set());
+  const submittingRef = useRef(false);
 
   // Scar Inventory state (first-time guided flow)
   const [scarInventory, setScarInventory] = useState(['', '', '']);
@@ -472,6 +474,8 @@ Please help extract the core lesson and rule from this experience.
 
   const submitLesson = async (finalize = false) => {
     if (!validateLesson()) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
 
     setLoading(true);
 
@@ -524,9 +528,11 @@ Please help extract the core lesson and rule from this experience.
 
     } catch (error) {
       logger.error('Error saving Hard Lesson:', error);
+      if (redirectIfAuthLost(error)) return;
       ouraToast.error('Failed to save Hard Lesson');
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -597,6 +603,9 @@ Please help extract the core lesson and rule from this experience.
       ouraToast.success('Lesson restored');
     } catch (error) {
       logger.error('Error restoring Hard Lesson:', error);
+      if (redirectIfAuthLost(error)) return;
+      // Refresh from server so the active list reflects truth.
+      loadHardLessons();
       ouraToast.error('Failed to restore lesson');
     }
   };
@@ -730,7 +739,7 @@ Please help extract the core lesson and rule from this experience.
                     step.done ? 'bg-[#f59e0b]' : 'bg-[#1a1a1a]'
                   }`} />
                   <span className={`text-[9px] uppercase tracking-wide leading-none transition-colors duration-200 ${
-                    step.done ? 'text-[#f59e0b]' : 'text-[#6a6a6a]'
+                    step.done ? 'text-[#f59e0b]' : 'text-[#858585]'
                   }`}>{step.label}</span>
                 </div>
               ))}
@@ -1055,7 +1064,7 @@ Please help extract the core lesson and rule from this experience.
             {costPatternNarrative ? (
               <p className="text-[#ababab] text-sm leading-relaxed">{costPatternNarrative}</p>
             ) : (
-              <p className="text-[#6a6a6a] text-sm">Pattern identification across all finalized rules, grouped by cost type.</p>
+              <p className="text-[#858585] text-sm">Pattern identification across all finalized rules, grouped by cost type.</p>
             )}
           </div>
 
@@ -1103,7 +1112,7 @@ Please help extract the core lesson and rule from this experience.
             <h3 className="text-[#858585] text-xs uppercase tracking-widest">
               {view === 'archive' ? 'Archive' : 'Extracted Lessons'}
               {searchQuery.trim() && view === 'active' && (
-                <span className="text-[#6a6a6a] ml-2">({filteredLessons.length}/{lessons.length})</span>
+                <span className="text-[#858585] ml-2">({filteredLessons.length}/{lessons.length})</span>
               )}
             </h3>
             <ArchiveToggle
@@ -1146,7 +1155,7 @@ Please help extract the core lesson and rule from this experience.
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-medium">{l.eventDescription || 'Untitled lesson'}</p>
                     {l.extractedLesson && <p className="text-[#858585] text-xs mt-2">{l.extractedLesson}</p>}
-                    <p className="text-[#6a6a6a] text-xs mt-2">
+                    <p className="text-[#858585] text-xs mt-2">
                       Archived {l.archivedAt ? new Date(l.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                     </p>
                   </div>

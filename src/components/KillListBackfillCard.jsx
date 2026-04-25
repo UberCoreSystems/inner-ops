@@ -45,7 +45,7 @@ export default function KillListBackfillCard({
         <button
           onClick={onDismiss}
           disabled={busy}
-          className="text-[#6a6a6a] hover:text-[#858585] text-xs transition-colors shrink-0"
+          className="text-[#858585] hover:text-[#858585] text-xs transition-colors shrink-0"
           title="Dismiss for now"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -98,7 +98,7 @@ export default function KillListBackfillCard({
           <button
             onClick={() => setMode('idle')}
             disabled={busy}
-            className="text-[#6a6a6a] hover:text-[#ababab] text-xs transition-colors"
+            className="text-[#858585] hover:text-[#ababab] text-xs transition-colors"
           >
             Back
           </button>

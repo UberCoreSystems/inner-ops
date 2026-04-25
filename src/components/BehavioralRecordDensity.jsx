@@ -27,7 +27,7 @@ import React from 'react';
  *   structuredJournalEntries: number
  * } | null }} props
  */
-export default function BehavioralRecordDensity({ density }) {
+function BehavioralRecordDensity({ density }) {
   if (!density) {
     return <p className="text-[#858585] text-sm">Loading behavioral record…</p>;
   }
@@ -119,3 +119,5 @@ export default function BehavioralRecordDensity({ density }) {
     </ul>
   );
 }
+
+export default React.memo(BehavioralRecordDensity);

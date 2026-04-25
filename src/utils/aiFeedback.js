@@ -5,6 +5,7 @@ import { getBehavioralContext } from './getBehavioralContext.js';
 import { resolveTriggeredCriterion } from './confrontationCriteria.js';
 import { track } from './analytics.js';
 import { detectEvasionMarkers } from './detectEvasionMarkers.js';
+import ouraToast from './toast.js';
 
 const logger = {
   info: (...args) => console.info(...args),
@@ -624,6 +625,17 @@ export const callLLM = async (promptBundle, generationContext) => {
   } catch (error) {
     // Cloud Function unavailable (not yet deployed, network issue, rate limit) —
     // fall back to the local template system so the app stays functional.
+    // Surface a distinct toast for the two failure modes that users care
+    // about: rate-limit (Oracle is temporarily off) vs timeout/network
+    // (Oracle is slow or unreachable). Generic errors fall back silently
+    // to the templated response since a toast on every transient failure
+    // would be noisy.
+    const code = error?.code || '';
+    if (code === 'resource-exhausted' || code === 'functions/resource-exhausted') {
+      try { ouraToast.warning('Oracle daily limit reached — using local response.'); } catch { /* ignore */ }
+    } else if (code === 'deadline-exceeded' || code === 'functions/deadline-exceeded') {
+      try { ouraToast.warning('Oracle is slow — using local response.'); } catch { /* ignore */ }
+    }
     logger.warn('Oracle Cloud Function unavailable, using local fallback:', error.message);
 
     const draft = composeFeedback({

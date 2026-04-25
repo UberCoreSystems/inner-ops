@@ -101,7 +101,7 @@ export default function SynthesisBriefing() {
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-[#6a6a6a] text-sm">Loading...</div>
+        <div className="text-[#858585] text-sm">Loading...</div>
       </div>
     );
   }
@@ -122,7 +122,7 @@ export default function SynthesisBriefing() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-[#ababab] text-sm mb-1">Run a briefing on-the-spot.</p>
-              <p className="text-[#6a6a6a] text-xs">The cadence below governs the automatic weekly/biweekly generation.</p>
+              <p className="text-[#858585] text-xs">The cadence below governs the automatic weekly/biweekly generation.</p>
             </div>
             <button
               onClick={handleGenerate}
@@ -141,7 +141,7 @@ export default function SynthesisBriefing() {
           </div>
 
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-[#1a1a1a]">
-            <span className="text-[#6a6a6a] text-xs uppercase tracking-widest mr-1">Auto cadence</span>
+            <span className="text-[#858585] text-xs uppercase tracking-widest mr-1">Auto cadence</span>
             {CADENCE_OPTIONS.map(opt => (
               <button
                 key={opt.value}
@@ -158,7 +158,7 @@ export default function SynthesisBriefing() {
         {briefings.length === 0 && (
           <div className="oura-card p-12 text-center">
             <p className="text-[#858585] text-sm mb-2">No briefings generated yet.</p>
-            <p className="text-[#6a6a6a] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
+            <p className="text-[#858585] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
           </div>
         )}
 
@@ -168,11 +168,11 @@ export default function SynthesisBriefing() {
             {selectedArchive && (
               <div className="flex items-center gap-3 mb-4">
                 <button onClick={() => setSelectedArchive(null)} className="text-[#858585] text-xs hover:text-white transition-colors">← Latest</button>
-                <span className="text-[#6a6a6a] text-xs">Archive record</span>
+                <span className="text-[#858585] text-xs">Archive record</span>
               </div>
             )}
 
-            <div className="text-[#6a6a6a] text-xs mb-6">
+            <div className="text-[#858585] text-xs mb-6">
               {new Date(displayBriefing.generatedAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               {' · '}
               {displayBriefing.cadencePeriod}
@@ -192,12 +192,12 @@ export default function SynthesisBriefing() {
                   {displayBriefing.violatedRules.map((vr, idx) => (
                     <div key={idx} className="border-l-4 border-[#ef4444]/60 pl-4 py-1">
                       <p className="text-[#d1d1d1] text-sm">{vr.rule}</p>
-                      <p className="text-[#6a6a6a] text-xs mt-0.5">{vr.source}</p>
+                      <p className="text-[#858585] text-xs mt-0.5">{vr.source}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-[#6a6a6a] text-sm">No rule violations detected this period.</p>
+                <p className="text-[#858585] text-sm">No rule violations detected this period.</p>
               )}
             </div>
 
@@ -225,7 +225,7 @@ export default function SynthesisBriefing() {
         {/* Archive */}
         {archiveBriefings.length > 0 && (
           <div className="mt-10">
-            <div className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-4">Previous Briefings</div>
+            <div className="text-[#858585] text-xs uppercase tracking-widest mb-4">Previous Briefings</div>
             <div className="space-y-2">
               {archiveBriefings.map((b, idx) => (
                 <button

@@ -1,34 +1,18 @@
-import { useLocation, Navigate } from 'react-router-dom';
+// Synthesis briefing visibility is now handled by a non-blocking banner on
+// the Dashboard ([src/pages/Dashboard.jsx]: "Synthesis Briefing — Open
+// Briefing"). The previous hard-redirect approach broke module navigation
+// when an unread briefing existed: every click on a module link bounced to
+// /dashboard, including legitimate cases where the user wanted to journal
+// or check the Ledger before reading the briefing.
+//
+// This component is now a passthrough that preserves the public API
+// (latestSynthesisIsNew prop) so callers don't need to change. The forced-
+// state UX lives entirely in the Dashboard banner, which the user can see
+// every time they return to the dashboard until the briefing is opened.
 
-// Routes that bypass the Synthesis Briefing guard
-const GUARD_EXEMPT = new Set([
-  '/dashboard',
-  '/synthesis',
-  '/auth',
-  '/onboarding',
-  '/oura/callback',
-  '/login',
-  '/',
-]);
-
-/**
- * Global route guard for the Synthesis Briefing forced state.
- * When latestSynthesisIsNew is true, any navigation to a module route
- * is hard-redirected to /dashboard until the briefing is opened.
- *
- * Pass 3 New Finding 15: `latestSynthesisIsNew` is sourced from
- * useSynthesisNewFlag which subscribes to the syntheses collection in
- * real time. That means the guard activates as soon as a briefing is
- * generated in this tab. A briefing generated in ANOTHER tab or device
- * will also propagate via Firestore listeners, so multi-tab coherence
- * is fine. No remount required.
- */
 export default function SynthesisGuard({ latestSynthesisIsNew, children }) {
-  const { pathname } = useLocation();
-
-  if (latestSynthesisIsNew && !GUARD_EXEMPT.has(pathname)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
+  // latestSynthesisIsNew is intentionally unused — kept for API stability
+  // and to make future re-enablement of guarded routes a one-line change.
+  void latestSynthesisIsNew;
   return children;
 }

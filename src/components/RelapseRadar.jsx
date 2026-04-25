@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
+import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { detectDriftSignals } from '../utils/detectDriftSignals';
@@ -75,6 +76,7 @@ const RelapseRadar = () => {
 
   // BER-136: capture entry text for Oracle regen
   const oracleEntryTextRef = useRef(null);
+  const submittingRef = useRef(false);
 
   const [view, setView] = useState('active');
   const [archivedEntries, setArchivedEntries] = useState([]);
@@ -199,6 +201,8 @@ const RelapseRadar = () => {
       ouraToast.success('Entry restored');
     } catch (error) {
       logger.error('Error restoring relapse entry:', error);
+      if (redirectIfAuthLost(error)) return;
+      loadRelapseEntries();
       ouraToast.error('Failed to restore entry');
     }
   };
@@ -389,6 +393,8 @@ const RelapseRadar = () => {
   };
 
   const submitRelapseEntry = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
       setLoading(true);
       
@@ -484,9 +490,11 @@ const RelapseRadar = () => {
 
     } catch (error) {
       logger.error("Error generating Oracle feedback:", error);
+      if (redirectIfAuthLost(error)) return;
       openOracleWithContent("Oracle unavailable. Check-in recorded.");
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -964,6 +972,7 @@ const RelapseRadar = () => {
                     </div>
                     <button
                       onClick={() => archiveRelapseEntry(entry)}
+                      aria-label="Archive entry"
                       title="Archive"
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-white hover:bg-oura-darker transition-colors shrink-0"
                     >

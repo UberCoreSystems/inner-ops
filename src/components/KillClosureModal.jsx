@@ -154,10 +154,11 @@ export default function KillClosureModal({
           {oraclePhase !== 'idle' && (
             <button
               onClick={onClose}
+              aria-label="Dismiss closure dialog"
               className="ml-3 w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
               title="Dismiss"
             >
-              ✕
+              <span aria-hidden="true">✕</span>
             </button>
           )}
         </div>

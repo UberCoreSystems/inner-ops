@@ -294,7 +294,7 @@ export default function AuthForm({ onAuthSuccess }) {
 
         {/* Footer */}
         <div className="text-center mt-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <div className="flex items-center justify-center gap-2 text-[#6a6a6a] text-xs mb-4">
+          <div className="flex items-center justify-center gap-2 text-[#858585] text-xs mb-4">
             <div className="w-8 h-px bg-[#1a1a1a]" />
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[#858585]">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -302,7 +302,7 @@ export default function AuthForm({ onAuthSuccess }) {
             <div className="w-8 h-px bg-[#1a1a1a]" />
           </div>
           <p className="text-[#858585] text-xs">Your data is private, encrypted, and user-scoped — no one else sees it</p>
-          <p className="text-[#6a6a6a] text-xs mt-1">The Oracle awaits your commitment</p>
+          <p className="text-[#858585] text-xs mt-1">The Oracle awaits your commitment</p>
         </div>
       </div>
     </div>

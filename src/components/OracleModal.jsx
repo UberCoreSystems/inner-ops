@@ -7,6 +7,7 @@ import { resolveTriggeredCriterion } from '../utils/confrontationCriteria';
 import logger from '../utils/logger';
 import { ouraToast } from '../utils/toast';
 import { InlineErrorBoundary } from './ErrorBoundary';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 const REACTIONS = [
   { id: 'landed',   label: 'This landed',           color: '#22c55e', icon: '◉' },
@@ -214,12 +215,28 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   const canRegen = !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
   const canFollowUp = !!entryText && !followUpUsed && !followUpLoading && !isCurrentlyLoading && !!currentFeedback;
 
+  // a11y: trap keyboard focus inside the modal while open and restore focus on close.
+  const trapRef = useFocusTrap(isOpen);
+
+  // a11y: Esc closes the modal.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
     <InlineErrorBoundary name="OracleModal">
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-      <div className="bg-black rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col border border-[#1a1a1a]">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Oracle feedback"
+      className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4"
+    >
+      <div ref={trapRef} className="bg-black rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col border border-[#1a1a1a]">
 
         {/* Content */}
         <div className="p-6 flex-1 overflow-y-auto">
@@ -229,9 +246,10 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Dismiss button — always visible so user is never trapped on Oracle failure */}
               <button
                 onClick={onClose}
-                className="absolute top-0 right-0 text-[#6a6a6a] hover:text-[#ababab] transition-colors"
+                aria-label="Close Oracle"
+                className="absolute top-0 right-0 text-[#858585] hover:text-[#ababab] transition-colors"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
@@ -281,7 +299,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 </div>
                 <button
                   onClick={onClose}
-                  className="text-[#6a6a6a] hover:text-[#ababab] transition-colors"
+                  className="text-[#858585] hover:text-[#ababab] transition-colors"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M18 6L6 18M6 6l12 12" />
@@ -325,7 +343,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                     className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a]"
                     placeholder="State your specific pushback..."
                   />
-                  <div className="text-[#6a6a6a] text-xs text-right" aria-live="polite">
+                  <div className="text-[#858585] text-xs text-right" aria-live="polite">
                     {followUpText.length} / 8000
                   </div>
                   <div className="flex gap-2">
@@ -338,7 +356,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                     </button>
                     <button
                       onClick={() => { setShowFollowUp(false); setFollowUpText(''); }}
-                      className="px-4 py-2.5 text-sm rounded-xl bg-transparent text-[#6a6a6a] hover:text-[#858585] transition-colors"
+                      className="px-4 py-2.5 text-sm rounded-xl bg-transparent text-[#858585] hover:text-[#858585] transition-colors"
                     >
                       Cancel
                     </button>
@@ -375,7 +393,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Reactions */}
               {currentFeedback && (
                 <div>
-                  <div className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-3">How did this land?</div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">How did this land?</div>
                   <div className="flex flex-wrap gap-2">
                     {REACTIONS.map((r) => {
                       const isSelected = selectedReaction === r.id;

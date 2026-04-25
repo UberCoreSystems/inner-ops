@@ -11,6 +11,7 @@ export default {
         // Oura-inspired color palette
         oura: {
           bg: '#000000',
+          darker: '#050505',
           card: '#0a0a0a',
           cardHover: '#111111',
           border: '#1a1a1a',
@@ -80,6 +81,12 @@ export default {
   },
   safelist: [
     'duration-[4000ms]',
+    // Navbar mobile bottom-bar uses dynamic grid-cols-N constructed at runtime
+    // based on whether Black Mirror is enabled (6 cols) or disabled (5 cols).
+    // Safelist guarantees these classes survive purge.
+    'grid-cols-5',
+    'grid-cols-6',
+    'grid-cols-7',
   ],
   plugins: [],
 }

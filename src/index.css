@@ -106,23 +106,6 @@ body {
   background-clip: text;
 }
 
-/* Subtle Glow Effects */
-.glow-cyan {
-  box-shadow: 0 0 30px rgba(0, 212, 170, 0.2);
-}
-
-.glow-blue {
-  box-shadow: 0 0 30px rgba(77, 166, 255, 0.2);
-}
-
-.glow-purple {
-  box-shadow: 0 0 30px rgba(168, 85, 247, 0.2);
-}
-
-.glow-amber {
-  box-shadow: 0 0 30px rgba(245, 158, 11, 0.2);
-}
-
 /* Staggered Animation Delays */
 .animate-delay-100 { animation-delay: 0.1s; }
 .animate-delay-200 { animation-delay: 0.2s; }
@@ -281,4 +264,19 @@ html {
 
 .fade-pane.visible {
   opacity: 1;
+}
+
+/* Honor prefers-reduced-motion across all custom animations and transitions.
+   Tailwind's `animate-*` utilities and our `@keyframes` (spin, ringPulse,
+   scoreCount, fadeInUp, fadeIn, glowPulse, priority-pulse, skel-breathe)
+   all collapse to no-op for users who have the OS setting enabled. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

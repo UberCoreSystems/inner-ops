@@ -24,6 +24,9 @@ import { SkeletonDashboard } from '../components/SkeletonLoader';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 
+// BM v2 deferred — match the gate used in App.jsx and Navbar.jsx.
+const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -167,7 +170,9 @@ export default function Dashboard() {
     try {
       logger.log("📡 Dashboard: Loading data for user:", currentUser.uid);
       
-      // Load ALL data at once - await everything before setting state
+      // Load ALL data at once - await everything before setting state.
+      // blackMirrorEntries is gated behind the feature flag so v1 deploys
+      // (BM disabled) skip the round-trip entirely.
       const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons] = await Promise.all([
         readUserData('journalEntries').then(data => {
           logger.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
@@ -181,10 +186,12 @@ export default function Dashboard() {
           logger.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
           return data || [];
         }),
-        readUserData('blackMirrorEntries').then(data => {
-          logger.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
-          return data || [];
-        }),
+        BLACK_MIRROR_ENABLED
+          ? readUserData('blackMirrorEntries').then(data => {
+              logger.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
+              return data || [];
+            })
+          : Promise.resolve([]),
         readUserData('hardLessons').then(data => {
           logger.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
           return data || [];
@@ -447,7 +454,7 @@ export default function Dashboard() {
                   {/* Mood dots — last 7 journal entries, left = most recent */}
                   {earlyWarning.moodDots.length > 0 && (
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[#6a6a6a] text-xs mr-1">Mood</span>
+                      <span className="text-[#858585] text-xs mr-1">Mood</span>
                       {earlyWarning.moodDots.map((color, i) => (
                         <div
                           key={i}
@@ -455,7 +462,7 @@ export default function Dashboard() {
                           style={{ backgroundColor: color === 'red' ? '#ef4444' : color === 'green' ? '#22c55e' : '#2a2a2a' }}
                         />
                       ))}
-                      <span className="text-[#6a6a6a] text-xs ml-1">← recent</span>
+                      <span className="text-[#858585] text-xs ml-1">← recent</span>
                     </div>
                   )}
                 </div>
@@ -490,7 +497,7 @@ export default function Dashboard() {
                 </div>
                 <button
                   onClick={() => { sessionStorage.setItem(autopsySessionKey, 'true'); setAutopsyDismissed(true); }}
-                  className="text-[#6a6a6a] hover:text-[#858585] transition-colors shrink-0"
+                  className="text-[#858585] hover:text-[#858585] transition-colors shrink-0"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M18 6L6 18M6 6l12 12" />
@@ -544,7 +551,7 @@ export default function Dashboard() {
                     <h3 className="text-white text-sm font-medium mb-1">Last Week's Record</h3>
                     <p className="text-[#858585] text-xs">Across {activeTargets.length} active battle{activeTargets.length !== 1 ? 's' : ''}</p>
                   </div>
-                  <button onClick={() => setKillReportDismissed(true)} className="text-[#6a6a6a] hover:text-[#858585] transition-colors shrink-0">
+                  <button onClick={() => setKillReportDismissed(true)} className="text-[#858585] hover:text-[#858585] transition-colors shrink-0">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -554,7 +561,7 @@ export default function Dashboard() {
                   {untouched > 0 && <span className="text-[#858585] text-sm"><span className="text-lg font-medium tabular-nums">{untouched}</span> untouched</span>}
                 </div>
                 {untouched > 0 && (
-                  <p className="text-[#6a6a6a] text-xs mt-2">{untouched} target{untouched > 1 ? 's' : ''} had zero check-ins last week.</p>
+                  <p className="text-[#858585] text-xs mt-2">{untouched} target{untouched > 1 ? 's' : ''} had zero check-ins last week.</p>
                 )}
               </div>
             </section>
@@ -637,7 +644,7 @@ export default function Dashboard() {
             <h3 className="text-[#858585] text-xs uppercase tracking-widest group-hover:text-[#ababab] transition-colors">General Ledger</h3>
             <svg
               width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className={`text-[#6a6a6a] group-hover:text-[#858585] transition-all duration-200 ${killListExpanded ? 'rotate-180' : ''}`}
+              className={`text-[#858585] group-hover:text-[#858585] transition-all duration-200 ${killListExpanded ? 'rotate-180' : ''}`}
             >
               <polyline points="6 9 12 15 18 9" />
             </svg>
@@ -673,7 +680,7 @@ export default function Dashboard() {
                 <div className="oura-card p-8 text-center">
                   <div className="text-4xl mb-3 opacity-30">📊</div>
                   <p className="text-[#858585]">No recent activity</p>
-                  <p className="text-[#6a6a6a] text-sm mt-1">Start using the modules to track progress</p>
+                  <p className="text-[#858585] text-sm mt-1">Start using the modules to track progress</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
                     <button
                       onClick={() => setQuickJournalOpen(true)}

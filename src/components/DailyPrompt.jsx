@@ -138,7 +138,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
         </div>
         
         {/* Refresh hint */}
-        <div className="flex items-center gap-2 text-[#6a6a6a] text-xs">
+        <div className="flex items-center gap-2 text-[#858585] text-xs">
           <AppIcon name="sunrise" size={16} color="#f59e0b" glow={true} glowIntensity={0.3} />
           <span>New prompt daily</span>
         </div>

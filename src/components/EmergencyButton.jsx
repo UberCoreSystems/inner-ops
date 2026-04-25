@@ -8,6 +8,7 @@ import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { useBreathing } from '../hooks/useBreathing';
 import { useOracleModal } from '../hooks/useOracleModal';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 // Quick grounding techniques
 const groundingTechniques = [
@@ -44,6 +45,7 @@ const mantras = [
 
 const EmergencyButton = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const modalRef = useFocusTrap(isOpen);
   const [step, setStep] = useState('main'); // main, breathing, reflection, complete
   const [reflection, setReflection] = useState('');
   const [intensity, setIntensity] = useState(5);
@@ -134,8 +136,8 @@ const EmergencyButton = () => {
 
       {/* Emergency Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fade-in">
-          <div className="bg-oura-card border border-red-500/50 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl shadow-red-500/20">
+        <div role="dialog" aria-modal="true" aria-label="Emergency support" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fade-in">
+          <div ref={modalRef} className="bg-oura-card border border-red-500/50 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl shadow-red-500/20">
             {/* Header */}
             <div className="p-6 border-b border-oura-border">
               <div className="flex justify-between items-start">
@@ -150,9 +152,10 @@ const EmergencyButton = () => {
                 </div>
                 <button
                   onClick={resetAndClose}
+                  aria-label="Close emergency modal"
                   className="text-gray-500 hover:text-white transition-colors text-2xl"
                 >
-                  ×
+                  <span aria-hidden="true">×</span>
                 </button>
               </div>
             </div>
