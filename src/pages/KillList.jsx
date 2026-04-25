@@ -173,6 +173,12 @@ const KillList = () => {
   const [newTarget, setNewTarget] = useState('');
   const [newTargetCategory, setNewTargetCategory] = useState('bad-habit');
   const [newTargetDays, setNewTargetDays] = useState(30);
+  // Cross-module prefill bookkeeping: when a target is initiated from a
+  // Hard Lesson, capture the source lesson ID so the persisted target keeps
+  // a backlink. Cleared after the user confirms (addTarget) or when the
+  // form is reset.
+  const [pendingFromHardLessonId, setPendingFromHardLessonId] = useState(null);
+  const [pendingTargetDescription, setPendingTargetDescription] = useState(null);
   const [autopsyTarget, setAutopsyTarget] = useState(null);
   const [autopsyData, setAutopsyData] = useState({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '', eventDate: '' });
   const [backfillBusy, setBackfillBusy] = useState({});
@@ -274,7 +280,11 @@ const KillList = () => {
     return new Date().toISOString().split('T')[0];
   };
 
-  // Read journal cross-module extraction pre-fill on mount (set by Journal.jsx on confirm)
+  // Cross-module prefill consumer. Sources:
+  //   • Journal cross-module extraction → { targetTitle, suggestedCategory, targetDescription }
+  //   • Hard Lessons bridge / lesson card → { targetTitle, consecutiveDaysRequired?, fromHardLessonId }
+  // Per the cross-module rule, no doc has been written upstream — the user
+  // reviews and submits this form to create the target.
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem('kl_extraction_prefill');
@@ -296,6 +306,12 @@ const KillList = () => {
         const mapped = EXTRACTION_CATEGORY_MAP[data.suggestedCategory];
         if (mapped) setNewTargetCategory(mapped);
       }
+      const daysRaw = parseInt(data.consecutiveDaysRequired, 10);
+      if (Number.isFinite(daysRaw) && daysRaw >= MIN_DAYS_REQUIRED) {
+        setNewTargetDays(daysRaw);
+      }
+      if (data.fromHardLessonId) setPendingFromHardLessonId(data.fromHardLessonId);
+      if (data.targetDescription) setPendingTargetDescription(data.targetDescription);
       setTimeout(() => newTargetInputRef.current?.focus(), 150);
     } catch (err) {
       logger.warn('KillList: failed to parse kl_extraction_prefill from sessionStorage', err?.message);
@@ -405,9 +421,12 @@ const KillList = () => {
 
     try {
       const days = Math.max(MIN_DAYS_REQUIRED, Math.floor(Number(newTargetDays) || 30));
+      const description = (pendingTargetDescription && pendingTargetDescription.trim())
+        ? pendingTargetDescription.trim()
+        : `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label || 'target'}`;
       targetData = {
         title: newTarget.trim(),
-        description: `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label || 'target'}`,
+        description,
         category: newTargetCategory,
         consecutiveDaysRequired: days,
         status: 'active',
@@ -421,7 +440,8 @@ const KillList = () => {
         targetDate: getTodaysDate(),
         createdAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
-        reflectionNotes: ''
+        reflectionNotes: '',
+        ...(pendingFromHardLessonId ? { fromHardLessonId: pendingFromHardLessonId } : {}),
       };
 
       logger.log("📝 Target data to save:", targetData);
@@ -440,6 +460,8 @@ const KillList = () => {
       setNewTarget('');
       setNewTargetCategory('bad-habit');
       setNewTargetDays(30);
+      setPendingFromHardLessonId(null);
+      setPendingTargetDescription(null);
       setNewIntention({ trigger: '', response: '' });
     } catch (error) {
       logger.error('❌ Error adding target:', error);

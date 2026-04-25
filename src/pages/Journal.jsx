@@ -775,50 +775,39 @@ export default function Journal() {
         logger.warn('Oracle returned non-JSON for lesson extraction, using journal content as fallback');
       }
 
-      // Create a pre-filled draft lesson
-      await writeData('hardLessons', {
-        eventCategory: extracted.suggestedCategory || '',
-        eventDescription: extracted.eventDescription || journalEntry.content,
-        myAssumption: extracted.myAssumption || '',
-        signalIgnored: extracted.signalIgnored || '',
-        costs: Array.isArray(extracted.suggestedCosts) ? extracted.suggestedCosts : [],
-        costDescription: extracted.costDescription || '',
-        extractedLesson: extracted.extractedLesson || '',
-        ruleGoingForward: extracted.ruleGoingForward || '',
-        isFinalized: false,
-        isScarStub: false,
-        isOracleExtracted: true,
-        sourceJournalId: journalEntry.id,
-        createdAt: new Date().toISOString(),
-      });
+      // Per the cross-module rule, do not write a draft hardLessons doc here.
+      // Stash the Oracle-extracted fields and navigate so the user reviews
+      // the prefilled intake form and chooses to finalize.
+      try {
+        sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({
+          eventCategory: extracted.suggestedCategory || '',
+          eventDescription: extracted.eventDescription || journalEntry.content,
+          myAssumption: extracted.myAssumption || '',
+          signalIgnored: extracted.signalIgnored || '',
+          costs: Array.isArray(extracted.suggestedCosts) ? extracted.suggestedCosts : [],
+          costDescription: extracted.costDescription || '',
+          extractedLesson: extracted.extractedLesson || '',
+          ruleGoingForward: extracted.ruleGoingForward || '',
+          sourceJournalId: journalEntry.id,
+          isOracleExtracted: true,
+        }));
+      } catch { /* ignore storage errors */ }
 
       ouraToast.success('Oracle extracted a lesson — review and finalize it');
       navigate('/hardlessons');
     } catch (error) {
       logger.error('Error extracting lesson from journal:', error);
-      // Fallback: create a basic draft with just the journal content
+      // Oracle failed — still hand the user to the Hard Lessons intake with
+      // the journal content prefilled so they can author the lesson manually.
       try {
-        await writeData('hardLessons', {
-          eventCategory: '',
+        sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({
           eventDescription: journalEntry.content,
-          myAssumption: '',
-          signalIgnored: '',
-          costs: [],
-          costDescription: '',
-          extractedLesson: '',
-          ruleGoingForward: '',
-          isFinalized: false,
-          isScarStub: false,
-          isOracleFailed: true,
           sourceJournalId: journalEntry.id,
-          createdAt: new Date().toISOString(),
-        });
-        ouraToast.error('Oracle unavailable — draft created from your entry. Fill in the remaining fields manually.');
-        navigate('/hardlessons');
-      } catch (fallbackError) {
-        logger.error('Fallback also failed:', fallbackError);
-        ouraToast.error('Failed to create lesson');
-      }
+          isOracleFailed: true,
+        }));
+      } catch { /* ignore storage errors */ }
+      ouraToast.error('Oracle unavailable — open the form to author the lesson manually.');
+      navigate('/hardlessons');
     } finally {
       setExtracting(null);
     }

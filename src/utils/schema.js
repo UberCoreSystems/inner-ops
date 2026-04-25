@@ -57,7 +57,17 @@ export const BLACK_MIRROR_FIELDS = Object.freeze({
 // User-settings fields.
 export const USER_SETTINGS_FIELDS = Object.freeze({
   IDENTITY_DIRECTION: 'identityDirection',
+  // Rolling 14-entry window of recent daily-prompt IDs — used by the
+  // selector to avoid back-to-back repeats. Appended to only when a NEW
+  // daily pick is committed (once per day), never on every mount.
   RECENTLY_SHOWN_DAILY_PROMPT_IDS: 'recentlyShownDailyPromptIds',
+  // Today's committed daily prompt: the pool ID, the date it was committed
+  // (UTC YYYY-MM-DD), and the timestamp when the user answered it. While
+  // these three fields describe the current day, DailyPrompt replays the
+  // same pick across page loads instead of re-rolling.
+  DAILY_PROMPT_CURRENT_ID: 'dailyPromptCurrentId',
+  DAILY_PROMPT_CURRENT_DATE: 'dailyPromptCurrentDate',
+  DAILY_PROMPT_ANSWERED_AT: 'dailyPromptAnsweredAt',
 });
 
 // Oracle-related fields. The Oracle Cloud Function now returns a structured

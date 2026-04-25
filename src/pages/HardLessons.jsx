@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
@@ -37,6 +37,7 @@ const costCategories = [
 ];
 
 export default function HardLessons() {
+  const navigate = useNavigate();
   // Form state for new lesson
   const [newLesson, setNewLesson] = useState({
     eventCategory: '',
@@ -75,7 +76,6 @@ export default function HardLessons() {
 
   // BER-131: Kill List bridge
   const [bridgePrompt, setBridgePrompt] = useState({ visible: false, ruleText: '', consecutiveDaysRequired: 30, lessonId: null });
-  const [bridgeAdded, setBridgeAdded] = useState(false);
 
   // BER-130: Rules Library + Rule Violation Detection
   const [showRulesLibrary, setShowRulesLibrary] = useState(false);
@@ -104,12 +104,29 @@ export default function HardLessons() {
 
   useEffect(() => {
     loadHardLessons();
-    // BER-131: handle pre-fill from Kill List bridge
+    // Cross-module prefill consumer. Originally added for the Kill List autopsy
+    // bridge (eventDescription only, BER-131); now also receives the rich
+    // Oracle-extracted payload from Journal's "Extract Lesson" flow so the
+    // user lands on a fully prefilled draft and finalizes (or discards) it
+    // themselves rather than having a draft auto-written behind the scenes.
     const prefill = sessionStorage.getItem('hl_bridge_prefill');
     if (prefill) {
       try {
         const data = JSON.parse(prefill);
-        setNewLesson(prev => ({ ...prev, eventDescription: data.eventDescription || '' }));
+        setNewLesson(prev => ({
+          ...prev,
+          ...(data.eventCategory ? { eventCategory: data.eventCategory } : {}),
+          ...(data.eventDescription ? { eventDescription: data.eventDescription } : {}),
+          ...(data.myAssumption ? { myAssumption: data.myAssumption } : {}),
+          ...(data.signalIgnored ? { signalIgnored: data.signalIgnored } : {}),
+          ...(Array.isArray(data.costs) ? { costs: data.costs } : {}),
+          ...(data.costDescription ? { costDescription: data.costDescription } : {}),
+          ...(data.extractedLesson ? { extractedLesson: data.extractedLesson } : {}),
+          ...(data.ruleGoingForward ? { ruleGoingForward: data.ruleGoingForward } : {}),
+          ...(data.sourceJournalId ? { sourceJournalId: data.sourceJournalId } : {}),
+          ...(data.isOracleExtracted ? { isOracleExtracted: true } : {}),
+          ...(data.isOracleFailed ? { isOracleFailed: true } : {}),
+        }));
         setShowForm(true);
         sessionStorage.removeItem('hl_bridge_prefill');
       } catch {}
@@ -323,50 +340,33 @@ export default function HardLessons() {
     setViolationPrompt({ visible: false, matchedRule: null });
   };
 
-  // BER-131: add kill list target from bridge prompt or lesson card
-  const addToKillListFromBridge = async () => {
+  // BER-131: send rule to the Kill List intake form. Per the cross-module
+  // rule, no doc is written here — we stash the prefill and navigate so the
+  // user reviews the target on the Ledger page and chooses to initiate.
+  const addToKillListFromBridge = () => {
     if (!bridgePrompt.ruleText.trim()) return;
     const daysRaw = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
     const days = Number.isFinite(daysRaw) && daysRaw >= 21 ? daysRaw : 30;
     try {
-      await writeData('killTargets', {
-        title: bridgePrompt.ruleText.trim(),
+      sessionStorage.setItem('kl_extraction_prefill', JSON.stringify({
+        targetTitle: bridgePrompt.ruleText.trim(),
         consecutiveDaysRequired: days,
-        status: 'active',
-        streak: 0,
-        longestStreak: 0,
-        totalTrackedDays: 0,
-        checkIns: [],
-        escapeData: [],
-        implementationIntention: null,
         fromHardLessonId: bridgePrompt.lessonId,
-      });
-      setBridgeAdded(true);
-      ouraToast.success('Target added to the Ledger');
-    } catch {
-      ouraToast.error('Failed to add to the Ledger');
-    }
+      }));
+    } catch { /* ignore storage errors */ }
+    setBridgePrompt(prev => ({ ...prev, visible: false }));
+    navigate('/ledger');
   };
 
-  const addToKillListFromLesson = async (lesson) => {
+  const addToKillListFromLesson = (lesson) => {
     if (!lesson.ruleGoingForward?.trim()) return;
     try {
-      await writeData('killTargets', {
-        title: lesson.ruleGoingForward.trim(),
-        consecutiveDaysRequired: 30,
-        status: 'active',
-        streak: 0,
-        longestStreak: 0,
-        totalTrackedDays: 0,
-        checkIns: [],
-        escapeData: [],
-        implementationIntention: null,
+      sessionStorage.setItem('kl_extraction_prefill', JSON.stringify({
+        targetTitle: lesson.ruleGoingForward.trim(),
         fromHardLessonId: lesson.id,
-      });
-      ouraToast.success('Target added to the Ledger');
-    } catch {
-      ouraToast.error('Failed to add to the Ledger');
-    }
+      }));
+    } catch { /* ignore storage errors */ }
+    navigate('/ledger');
   };
 
   const generateCostPatternNarrative = async () => {
@@ -518,7 +518,6 @@ Please help extract the core lesson and rule from this experience.
           const violationCount = lessons.filter(l => l.isRuleViolation && l.violatedRuleId === lessonData.violatedRuleId).length;
           const suggestedDays = violationCount >= 2 ? 60 : 30;
           setBridgePrompt({ visible: true, ruleText: lessonData.ruleGoingForward, consecutiveDaysRequired: suggestedDays, lessonId: editingLesson?.id || null });
-          setBridgeAdded(false);
         }
       }
 
@@ -946,53 +945,44 @@ Please help extract the core lesson and rule from this experience.
       {bridgePrompt.visible && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-8">
-            {!bridgeAdded ? (
-              <>
-                <h3 className="text-white text-lg font-light mb-2">Rule violated. Add it to the Ledger?</h3>
-                <p className="text-[#858585] text-xs uppercase tracking-widest mb-5">A rule in writing that doesn't produce behavioral warfare is decoration.</p>
-                <input
-                  type="text"
-                  value={bridgePrompt.ruleText}
-                  onChange={(e) => setBridgePrompt(prev => ({ ...prev, ruleText: e.target.value }))}
-                  className="w-full p-4 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm mb-4"
-                />
-                <div className="mb-6">
-                  <label className="block text-[#ababab] text-xs uppercase tracking-widest mb-2">Consecutive Days Required</label>
-                  <input
-                    type="number"
-                    min={21}
-                    step={1}
-                    value={bridgePrompt.consecutiveDaysRequired}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === '') { setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: '' })); return; }
-                      const n = parseInt(raw, 10);
-                      setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: Number.isFinite(n) ? n : '' }));
-                    }}
-                    onBlur={() => {
-                      const n = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
-                      if (!Number.isFinite(n) || n < 21) setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: 21 }));
-                    }}
-                    className="w-full p-3 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm tabular-nums"
-                  />
-                  <p className="text-[#858585] text-xs mt-2">
-                    Kill requires {Number.isFinite(parseInt(bridgePrompt.consecutiveDaysRequired, 10)) ? Math.max(21, parseInt(bridgePrompt.consecutiveDaysRequired, 10)) : 21} consecutive days of held execution. Minimum 21.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={addToKillListFromBridge} className="flex-1 px-5 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-xl font-medium transition-colors">Add to Ledger</button>
-                  <button onClick={() => {
-                    if (bridgePrompt.lessonId) sessionStorage.setItem(`bridge_dismissed_${bridgePrompt.lessonId}`, '1');
-                    setBridgePrompt(prev => ({ ...prev, visible: false }));
-                  }} className="px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] hover:text-white rounded-xl font-medium transition-colors">Dismiss</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-white text-lg font-light mb-4">Target added to the Ledger.</p>
-                <button onClick={() => setBridgePrompt(prev => ({ ...prev, visible: false }))} className="px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] hover:text-white rounded-xl font-medium transition-colors">Close</button>
-              </>
-            )}
+            <h3 className="text-white text-lg font-light mb-2">Rule violated. Add it to the Ledger?</h3>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-5">A rule in writing that doesn't produce behavioral warfare is decoration.</p>
+            <input
+              type="text"
+              value={bridgePrompt.ruleText}
+              onChange={(e) => setBridgePrompt(prev => ({ ...prev, ruleText: e.target.value }))}
+              className="w-full p-4 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm mb-4"
+            />
+            <div className="mb-6">
+              <label className="block text-[#ababab] text-xs uppercase tracking-widest mb-2">Consecutive Days Required</label>
+              <input
+                type="number"
+                min={21}
+                step={1}
+                value={bridgePrompt.consecutiveDaysRequired}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') { setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: '' })); return; }
+                  const n = parseInt(raw, 10);
+                  setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: Number.isFinite(n) ? n : '' }));
+                }}
+                onBlur={() => {
+                  const n = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
+                  if (!Number.isFinite(n) || n < 21) setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: 21 }));
+                }}
+                className="w-full p-3 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm tabular-nums"
+              />
+              <p className="text-[#858585] text-xs mt-2">
+                Kill requires {Number.isFinite(parseInt(bridgePrompt.consecutiveDaysRequired, 10)) ? Math.max(21, parseInt(bridgePrompt.consecutiveDaysRequired, 10)) : 21} consecutive days of held execution. Minimum 21.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={addToKillListFromBridge} className="flex-1 px-5 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-xl font-medium transition-colors">Add to Ledger</button>
+              <button onClick={() => {
+                if (bridgePrompt.lessonId) sessionStorage.setItem(`bridge_dismissed_${bridgePrompt.lessonId}`, '1');
+                setBridgePrompt(prev => ({ ...prev, visible: false }));
+              }} className="px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] hover:text-white rounded-xl font-medium transition-colors">Dismiss</button>
+            </div>
           </div>
         </div>
       )}

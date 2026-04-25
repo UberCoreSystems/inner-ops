@@ -232,21 +232,52 @@ export async function readUserSettings() {
 }
 
 /**
- * Append `questionId` to `recentlyShownDailyPromptIds`, capped at
- * RECENT_SHOWN_CAP (rolling 14-entry window). Creates a userSettings doc if
- * none exists yet. Best-effort — write failures are swallowed so the
- * Dashboard rendering never depends on this side effect.
+ * Commit today's daily prompt: writes the prompt ID and today's UTC date as
+ * the new "current" pair, clears any prior answered timestamp, and appends
+ * the ID to the rolling rotation history. Called ONCE per day when a new
+ * pick is selected — not on every page load.
+ *
+ * Best-effort — failures are swallowed so the UI never blocks.
  */
-export async function recordPromptShown(questionId, existingSettings) {
-  if (!questionId) return;
+export async function assignDailyPrompt({ promptId, today, settings: existingSettings } = {}) {
+  if (!promptId || !today) return;
   try {
     const settings = existingSettings || (await readUserSettings());
-    const current = Array.isArray(settings?.[USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS])
+    const history = Array.isArray(settings?.[USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS])
       ? settings[USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS]
       : [];
-    if (current[current.length - 1] === questionId) return; // already at the head
-    const next = [...current.filter((id) => id !== questionId), questionId].slice(-RECENT_SHOWN_CAP);
-    const payload = { [USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS]: next };
+    const nextHistory = history[history.length - 1] === promptId
+      ? history
+      : [...history.filter((id) => id !== promptId), promptId].slice(-RECENT_SHOWN_CAP);
+
+    const payload = {
+      [USER_SETTINGS_FIELDS.DAILY_PROMPT_CURRENT_ID]: promptId,
+      [USER_SETTINGS_FIELDS.DAILY_PROMPT_CURRENT_DATE]: today,
+      [USER_SETTINGS_FIELDS.DAILY_PROMPT_ANSWERED_AT]: null,
+      [USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS]: nextHistory,
+    };
+    if (settings?.id) {
+      await updateData(COLLECTIONS.USER_SETTINGS, settings.id, payload);
+    } else {
+      await writeData(COLLECTIONS.USER_SETTINGS, payload);
+    }
+  } catch {
+    // intentional: never let this block the UI
+  }
+}
+
+/**
+ * Mark today's daily prompt as answered. DailyPrompt then hides itself for
+ * the rest of the day; the next day's mount will roll a new pick.
+ *
+ * Best-effort — failures are swallowed.
+ */
+export async function markDailyPromptAnswered(existingSettings) {
+  try {
+    const settings = existingSettings || (await readUserSettings());
+    const payload = {
+      [USER_SETTINGS_FIELDS.DAILY_PROMPT_ANSWERED_AT]: new Date().toISOString(),
+    };
     if (settings?.id) {
       await updateData(COLLECTIONS.USER_SETTINGS, settings.id, payload);
     } else {

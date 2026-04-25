@@ -5,7 +5,8 @@ import {
   buildOracleQuestionPool,
   pickTodaysOracleQuestion,
   readUserSettings,
-  recordPromptShown,
+  assignDailyPrompt,
+  markDailyPromptAnswered,
   formatRelativeDate,
   todayUtcDateString,
 } from '../utils/oracleQuestionPool.js';
@@ -90,13 +91,18 @@ const getAllPrompts = () => {
 
 // Static fallback — deterministic by calendar day so a new user who has not
 // yet generated Oracle responses still gets a consistent prompt within a day.
+const computeDayOfYear = (date = new Date()) => {
+  return Math.floor((date - new Date(date.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+};
+
 const getTodaysStaticPrompt = () => {
   const allPrompts = getAllPrompts();
-  const today = new Date();
-  const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+  const dayOfYear = computeDayOfYear();
   const index = dayOfYear % allPrompts.length;
-  return allPrompts[index];
+  return { ...allPrompts[index], id: `static/${dayOfYear}` };
 };
+
+const isStaticPromptId = (id) => typeof id === 'string' && id.startsWith('static/');
 
 // Per-source meta for Oracle-sourced prompts. `recovery` is the closest fit
 // for relapse/kill modules' palette; `clarity` for synthesis; `shadowWork`
@@ -119,23 +125,65 @@ const STATIC_CATEGORY_META = {
   recovery: { icon: 'shield', label: 'Recovery', color: '#ef4444' },
 };
 
-const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
+const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSignal = 0 }) {
   const [prompt, setPrompt] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
 
+  // Mount: load today's committed prompt if one exists, otherwise pick fresh
+  // and commit it. The committed pick is replayed identically across page
+  // loads until the date rolls over or the user answers it.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const today = todayUtcDateString();
+      let settings = null;
       try {
-        const [pool, settings] = await Promise.all([
-          buildOracleQuestionPool(),
-          readUserSettings(),
-        ]);
+        settings = await readUserSettings();
+      } catch { /* settings stay null — first-time user */ }
+      if (cancelled) return;
+
+      const storedDate = settings?.[USER_SETTINGS_FIELDS.DAILY_PROMPT_CURRENT_DATE];
+      const storedId = settings?.[USER_SETTINGS_FIELDS.DAILY_PROMPT_CURRENT_ID];
+      const answeredAt = settings?.[USER_SETTINGS_FIELDS.DAILY_PROMPT_ANSWERED_AT];
+
+      // Same-day record: replay or hide.
+      if (storedDate === today && storedId) {
+        if (answeredAt) {
+          setPrompt({ kind: 'answered' });
+          return;
+        }
+        if (isStaticPromptId(storedId)) {
+          const staticPrompt = getTodaysStaticPrompt();
+          setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category, id: storedId });
+          return;
+        }
+        // Oracle ID — look up in the pool. If the source doc was archived or
+        // aged past the lookback window, fall through to a fresh pick.
+        try {
+          const pool = await buildOracleQuestionPool();
+          if (cancelled) return;
+          const found = pool.find((p) => p.id === storedId);
+          if (found) {
+            setPrompt({
+              kind: 'oracle',
+              text: found.question,
+              sourceModule: found.sourceModule,
+              sourceDocId: found.sourceDocId,
+              eventOccurredAt: found.eventOccurredAt,
+              displayLabel: found.displayLabel,
+              id: found.id,
+            });
+            return;
+          }
+        } catch { /* fall through to fresh pick */ }
+      }
+
+      // Fresh pick path (new day, no record, or stored ID no longer in pool).
+      try {
+        const pool = await buildOracleQuestionPool();
         if (cancelled) return;
-
         const recent = settings?.[USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS] || [];
-        const pick = pickTodaysOracleQuestion(pool, recent, todayUtcDateString());
-
+        const pick = pickTodaysOracleQuestion(pool, recent, today);
         if (pick) {
           setPrompt({
             kind: 'oracle',
@@ -146,23 +194,38 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
             displayLabel: pick.displayLabel,
             id: pick.id,
           });
-          // Best-effort: record the shown ID so the rolling window blocks repeats.
-          recordPromptShown(pick.id, settings);
+          assignDailyPrompt({ promptId: pick.id, today, settings });
           return;
         }
-      } catch {
-        // Pool unavailable — fall through to static.
-      }
+      } catch { /* pool unavailable — fall through to static */ }
 
       if (cancelled) return;
       const staticPrompt = getTodaysStaticPrompt();
-      setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category });
+      setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category, id: staticPrompt.id });
+      assignDailyPrompt({ promptId: staticPrompt.id, today, settings });
     })();
 
     return () => { cancelled = true; };
   }, []);
 
-  if (!prompt) return null;
+  // Parent signals "the user just answered this prompt" via answeredSignal.
+  // Initial value is 0 — we ignore the first render so the prompt isn't
+  // marked answered on mount.
+  useEffect(() => {
+    if (answeredSignal === 0) return;
+    if (!prompt || prompt.kind === 'answered') return;
+    let cancelled = false;
+    (async () => {
+      let settings = null;
+      try { settings = await readUserSettings(); } catch { /* swallow */ }
+      if (cancelled) return;
+      await markDailyPromptAnswered(settings);
+      if (!cancelled) setPrompt({ kind: 'answered' });
+    })();
+    return () => { cancelled = true; };
+  }, [answeredSignal]);
+
+  if (!prompt || prompt.kind === 'answered') return null;
 
   const meta = prompt.kind === 'oracle'
     ? (ORACLE_SOURCE_META[prompt.sourceModule] || ORACLE_SOURCE_META.journalEntries)

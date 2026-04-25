@@ -31,6 +31,11 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [quickJournalOpen, setQuickJournalOpen] = useState(false);
+  // Tracks whether the QuickJournalModal was opened by DailyPrompt's
+  // "Journal This" button. A successful save in that case marks today's
+  // reflection as answered (DailyPrompt hides itself for the rest of the day).
+  const [quickJournalFromPrompt, setQuickJournalFromPrompt] = useState(false);
+  const [dailyPromptAnsweredSignal, setDailyPromptAnsweredSignal] = useState(0);
   const [stats, setStats] = useState({
     journalEntries: 0,
     relapseEntries: 0,
@@ -416,7 +421,13 @@ export default function Dashboard() {
 
         {/* Daily Prompt Section */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-          <DailyPrompt onJournalClick={() => setQuickJournalOpen(true)} />
+          <DailyPrompt
+            onJournalClick={() => {
+              setQuickJournalFromPrompt(true);
+              setQuickJournalOpen(true);
+            }}
+            answeredSignal={dailyPromptAnsweredSignal}
+          />
         </section>
 
         {/* Early Warning Widget */}
@@ -718,10 +729,16 @@ export default function Dashboard() {
         {/* Quick Journal Modal */}
         <QuickJournalModal
           isOpen={quickJournalOpen}
-          onClose={() => setQuickJournalOpen(false)}
+          onClose={() => {
+            setQuickJournalOpen(false);
+            setQuickJournalFromPrompt(false);
+          }}
           onSuccess={() => {
             // Refresh data after successful entry
             loadDashboardData();
+            if (quickJournalFromPrompt) {
+              setDailyPromptAnsweredSignal((n) => n + 1);
+            }
           }}
         />
 
