@@ -64,6 +64,7 @@ export default function HardLessons() {
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
   const [pendingOracleWisdom, setPendingOracleWisdom] = useState('');
+  const [pendingOracleClosingQuestion, setPendingOracleClosingQuestion] = useState(null);
   const autoOpenedIds = useRef(new Set());
   const submittingRef = useRef(false);
 
@@ -449,6 +450,7 @@ export default function HardLessons() {
 
     setPendingOracleReaction(null);
     setPendingOracleWisdom('');
+    setPendingOracleClosingQuestion(null);
     openOracleLoading();
 
     try {
@@ -462,8 +464,9 @@ Category: ${eventCategories.find(cat => cat.value === newLesson.eventCategory)?.
 Please help extract the core lesson and rule from this experience.
 `;
 
-      const { text: oracleWisdom } = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
+      const { text: oracleWisdom, closingQuestion } = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
       setPendingOracleWisdom(oracleWisdom);
+      setPendingOracleClosingQuestion(closingQuestion || null);
       openOracleWithContent(oracleWisdom, getCachedTotalEntryCount(), null, newLesson.eventDescription, 'hard_lessons');
 
     } catch (error) {
@@ -487,7 +490,8 @@ Please help extract the core lesson and rule from this experience.
         isRuleViolation: pendingViolation.isRuleViolation,
         violatedRuleId: pendingViolation.violatedRuleId,
         ...(pendingOracleReaction ? { oracleReaction: pendingOracleReaction } : {}),
-        ...(pendingOracleWisdom ? { oracleWisdom: pendingOracleWisdom } : {})
+        ...(pendingOracleWisdom ? { oracleWisdom: pendingOracleWisdom } : {}),
+        ...(pendingOracleClosingQuestion ? { oracleClosingQuestion: pendingOracleClosingQuestion } : {})
       };
 
       if (editingLesson) {
@@ -554,6 +558,7 @@ Please help extract the core lesson and rule from this experience.
     setEditingLesson(null);
     setPendingOracleWisdom('');
     setPendingOracleReaction(null);
+    setPendingOracleClosingQuestion(null);
     setPendingViolation({ isRuleViolation: false, violatedRuleId: null });
     setViolationPrompt({ visible: false, matchedRule: null });
     violationCheckedRef.current = '';

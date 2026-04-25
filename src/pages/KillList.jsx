@@ -995,10 +995,14 @@ const KillList = () => {
     oracleEntryTextRef.current = entryText;
 
     try {
-      const { text: feedback } = await generateAIFeedback('killList', entryText, []);
+      const { text: feedback, closingQuestion } = await generateAIFeedback('killList', entryText, []);
       setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
-      await updateData('confirmedKills', kill.id, { oracleStatement: feedback, oracleRequestedAt: new Date() });
-      setConfirmedKills(prev => prev.map(k => k.id === kill.id ? { ...k, oracleStatement: feedback } : k));
+      await updateData('confirmedKills', kill.id, {
+        oracleStatement: feedback,
+        oracleRequestedAt: new Date(),
+        ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
+      });
+      setConfirmedKills(prev => prev.map(k => k.id === kill.id ? { ...k, oracleStatement: feedback, ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}) } : k));
     } catch {
       setOracleModal({ isOpen: true, content: 'Oracle unavailable.', isLoading: false, entryCount: null });
     } finally {

@@ -57,4 +57,25 @@ export const BLACK_MIRROR_FIELDS = Object.freeze({
 // User-settings fields.
 export const USER_SETTINGS_FIELDS = Object.freeze({
   IDENTITY_DIRECTION: 'identityDirection',
+  RECENTLY_SHOWN_DAILY_PROMPT_IDS: 'recentlyShownDailyPromptIds',
+});
+
+// Oracle-related fields. The Oracle Cloud Function now returns a structured
+// `closingQuestion` extracted from the response prose; persist it on every
+// entry that already saves Oracle feedback so the Dashboard's Today's
+// Reflection rotation can read across modules without re-extracting from
+// prose every page load.
+export const ORACLE_FIELDS = Object.freeze({
+  // Universal field added by this change. Captures the closing question
+  // Claude asks at the end of every Oracle response.
+  CLOSING_QUESTION: 'oracleClosingQuestion',
+  // Existing per-module prose fields (unchanged — listed here so renames
+  // become single-point edits per Finding 12).
+  JOURNAL_PROSE: 'oracleJudgment',
+  LESSON_PROSE: 'oracleWisdom',
+  RELAPSE_PROSE: 'oracleFeedback',
+  KILL_CLOSURE_RESPONSE: 'closureOracleResponse',
+  KILL_ESCAPE_RESPONSE: 'escapeOracleResponse',
+  // Synthesis briefing — already structured and queryable.
+  SYNTHESIS_QUESTION: 'confrontationQuestion',
 });

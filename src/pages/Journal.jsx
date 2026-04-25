@@ -505,7 +505,7 @@ export default function Journal() {
 
       openOracleLoading();
 
-      const { text: feedbackText, metacognitiveDepth } = await generateAIFeedback('journal', inputText, pastEntries);
+      const { text: feedbackText, metacognitiveDepth, closingQuestion } = await generateAIFeedback('journal', inputText, pastEntries);
 
       const newEntry = await writeData('journalEntries', {
         content: entry,
@@ -515,6 +515,7 @@ export default function Journal() {
         entryProximityFlag,
         oracleJudgment: feedbackText,
         ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
+        ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
       });
       setEntries(prev => [newEntry, ...prev]);
       setCurrentEntryId(newEntry.id);

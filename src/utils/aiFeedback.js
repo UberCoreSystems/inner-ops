@@ -616,12 +616,12 @@ export const callLLM = async (promptBundle, generationContext) => {
         : {}),
     });
 
-    const { feedback, metacognitiveDepth = null } = result.data;
+    const { feedback, metacognitiveDepth = null, closingQuestion = null } = result.data;
 
     track('oracle_called', { module: userPrompt.moduleName, tone });
 
     // Claude returned real prose — skip the template formatter entirely
-    return { _rawClaudeResponse: true, rawText: feedback || '', metacognitiveDepth };
+    return { _rawClaudeResponse: true, rawText: feedback || '', metacognitiveDepth, closingQuestion };
   } catch (error) {
     // Cloud Function unavailable (not yet deployed, network issue, rate limit) —
     // fall back to the local template system so the app stays functional.
@@ -1001,13 +1001,21 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
       triggeredCriterion,
     });
 
-    // Real Claude response — return structured object with prose and optional depth
-    if (feedback._rawClaudeResponse) return { text: feedback.rawText, metacognitiveDepth: feedback.metacognitiveDepth || null };
+    // Real Claude response — return structured object with prose, optional depth, and the
+    // server-extracted closing question (or null when the model omitted tags and the heuristic
+    // server-side fallback also failed).
+    if (feedback._rawClaudeResponse) {
+      return {
+        text: feedback.rawText,
+        metacognitiveDepth: feedback.metacognitiveDepth || null,
+        closingQuestion: feedback.closingQuestion || null,
+      };
+    }
 
-    return { text: formatFeedbackAsText(feedback), metacognitiveDepth: null };
+    return { text: formatFeedbackAsText(feedback), metacognitiveDepth: null, closingQuestion: null };
   } catch (error) {
     logger.error('Error generating AI feedback:', error);
     const fallback = buildFallbackFeedback(moduleName, normalizeEntryText(resolvedInput));
-    return { text: formatFeedbackAsText(fallback), metacognitiveDepth: null };
+    return { text: formatFeedbackAsText(fallback), metacognitiveDepth: null, closingQuestion: null };
   }
 };

@@ -628,6 +628,7 @@ Hard rules:
 - Never use: "you've got this", "healing journey", "be kind to yourself", "proud of you", "validate", "sit with", "amazing", "warrior."
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
+- When you close with a question, wrap that single closing question inline in <closing_question>...</closing_question> tags. The tags must surround the question text exactly once. The question still reads as part of your prose; the tags are markers for downstream processing only.
 - ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${normalizedModule === 'journal' ? `
 
 METACOGNITIVE DEPTH CLASSIFICATION (journal entries only):
@@ -682,16 +683,54 @@ function buildUserPrompt(entryText, userContext) {
   return prompt;
 }
 
+const CLOSING_QUESTION_TAG_REGEX = /<closing_question>\s*([\s\S]*?)\s*<\/closing_question>/i;
+
+function extractClosingQuestionFromProse(prose) {
+  if (typeof prose !== "string" || !prose.trim()) return null;
+  const cleaned = prose.replace(/\s+/g, " ").trim();
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+(?=[A-Z"'‘“(])/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (let i = sentences.length - 1; i >= 0; i -= 1) {
+    const candidate = sentences[i].replace(/^[\s"'‘“]+/, "").replace(/[\s"'’”]+$/, "").trim();
+    if (!candidate.endsWith("?")) continue;
+    if (candidate.length < 6) continue;
+    if (/^or\s*[:,]/i.test(candidate)) continue;
+    return candidate;
+  }
+  if (sentences.length === 1 && cleaned.endsWith("?") && cleaned.length >= 6 && cleaned.length < 280) {
+    return cleaned;
+  }
+  return null;
+}
+
 function parseOracleResponse(rawText) {
-  const trimmed = rawText.trim();
+  let trimmed = rawText.trim();
+  let metacognitiveDepth = null;
+
   // Extract DEPTH classification prefix injected for journal entries.
   // Format: "DEPTH:Surface\n\n<prose>" or "DEPTH:Pattern\n<prose>" etc.
-  const match = trimmed.match(/^DEPTH:(Surface|Pattern|Identity)\n\n?/i);
-  if (match) {
-    return {
-      feedback: trimmed.slice(match[0].length).trim(),
-      metacognitiveDepth: match[1],
-    };
+  const depthMatch = trimmed.match(/^DEPTH:(Surface|Pattern|Identity)\n\n?/i);
+  if (depthMatch) {
+    metacognitiveDepth = depthMatch[1];
+    trimmed = trimmed.slice(depthMatch[0].length).trim();
   }
-  return { feedback: trimmed, metacognitiveDepth: null };
+
+  // Extract structured closing question if Claude wrapped it in tags.
+  let closingQuestion = null;
+  const tagMatch = trimmed.match(CLOSING_QUESTION_TAG_REGEX);
+  if (tagMatch) {
+    closingQuestion = (tagMatch[1] || "").trim() || null;
+    // Strip the tags but preserve the inner question text in the prose so
+    // the modal continues to render the full Oracle response unchanged.
+    trimmed = trimmed.replace(CLOSING_QUESTION_TAG_REGEX, (_full, inner) => (inner || "").trim()).trim();
+  }
+
+  // Fall back to heuristic extraction when the model omitted the tags.
+  if (!closingQuestion) {
+    closingQuestion = extractClosingQuestionFromProse(trimmed);
+  }
+
+  return { feedback: trimmed, metacognitiveDepth, closingQuestion };
 }

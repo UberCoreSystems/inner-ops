@@ -54,7 +54,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
       setOracleResponse('');
       setShowOracle(true);
 
-      const { text: feedbackText, metacognitiveDepth } = await generateAIFeedback('journal', inputText, []);
+      const { text: feedbackText, metacognitiveDepth, closingQuestion } = await generateAIFeedback('journal', inputText, []);
 
       await writeData('journalEntries', {
         content: entry,
@@ -65,6 +65,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
         oracleJudgment: feedbackText,
         isQuickEntry: true,
         ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
+        ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
       });
 
       setOracleResponse(feedbackText || 'Oracle unavailable. Entry saved.');

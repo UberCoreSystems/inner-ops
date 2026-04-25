@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AppIcon } from './AppIcons';
+import {
+  buildOracleQuestionPool,
+  pickTodaysOracleQuestion,
+  readUserSettings,
+  recordPromptShown,
+  formatRelativeDate,
+  todayUtcDateString,
+} from '../utils/oracleQuestionPool.js';
+import { USER_SETTINGS_FIELDS } from '../utils/schema.js';
 
-// Curated prompt library organized by category
+// Static prompt library — used only when the Oracle question pool is empty
+// (new users, or before any Oracle responses have been generated). Once the
+// user has entries with Oracle prose, the rotation is driven entirely by
+// past Oracle closing questions.
 const promptLibrary = {
   selfAwareness: [
     "What pattern keeps showing up in your life that you've been ignoring?",
@@ -66,7 +78,6 @@ const promptLibrary = {
   ]
 };
 
-// Get all prompts as a flat array with categories
 const getAllPrompts = () => {
   const allPrompts = [];
   Object.entries(promptLibrary).forEach(([category, prompts]) => {
@@ -77,8 +88,9 @@ const getAllPrompts = () => {
   return allPrompts;
 };
 
-// Get prompt for today based on date (consistent throughout the day)
-const getTodaysPrompt = () => {
+// Static fallback — deterministic by calendar day so a new user who has not
+// yet generated Oracle responses still gets a consistent prompt within a day.
+const getTodaysStaticPrompt = () => {
   const allPrompts = getAllPrompts();
   const today = new Date();
   const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
@@ -86,8 +98,19 @@ const getTodaysPrompt = () => {
   return allPrompts[index];
 };
 
-// Category display info
-const categoryMeta = {
+// Per-source meta for Oracle-sourced prompts. `recovery` is the closest fit
+// for relapse/kill modules' palette; `clarity` for synthesis; `shadowWork`
+// for hard lessons. Journal stays on `selfAwareness`.
+const ORACLE_SOURCE_META = {
+  journalEntries: { icon: 'search', label: 'From Your Journal', color: '#a855f7' },
+  hardLessons: { icon: 'bolt', label: 'From a Hard Lesson', color: '#f59e0b' },
+  relapseEntries: { icon: 'shield', label: 'From a Relapse Log', color: '#ef4444' },
+  killTargets: { icon: 'target', label: 'From a Kill Escape', color: '#ef4444' },
+  confirmedKills: { icon: 'target', label: 'From a Kill Closure', color: '#22c55e' },
+  syntheses: { icon: 'clarity', label: 'From a Synthesis Briefing', color: '#00d4aa' },
+};
+
+const STATIC_CATEGORY_META = {
   selfAwareness: { icon: 'search', label: 'Self-Awareness', color: '#a855f7' },
   actionOriented: { icon: 'bolt', label: 'Take Action', color: '#22c55e' },
   shadowWork: { icon: 'moon', label: 'Shadow Work', color: '#6366f1' },
@@ -97,35 +120,76 @@ const categoryMeta = {
 };
 
 const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
-  const [todaysPrompt, setTodaysPrompt] = useState(null);
+  const [prompt, setPrompt] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
-    setTodaysPrompt(getTodaysPrompt());
+    let cancelled = false;
+    (async () => {
+      try {
+        const [pool, settings] = await Promise.all([
+          buildOracleQuestionPool(),
+          readUserSettings(),
+        ]);
+        if (cancelled) return;
+
+        const recent = settings?.[USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS] || [];
+        const pick = pickTodaysOracleQuestion(pool, recent, todayUtcDateString());
+
+        if (pick) {
+          setPrompt({
+            kind: 'oracle',
+            text: pick.question,
+            sourceModule: pick.sourceModule,
+            sourceDocId: pick.sourceDocId,
+            eventOccurredAt: pick.eventOccurredAt,
+            displayLabel: pick.displayLabel,
+            id: pick.id,
+          });
+          // Best-effort: record the shown ID so the rolling window blocks repeats.
+          recordPromptShown(pick.id, settings);
+          return;
+        }
+      } catch {
+        // Pool unavailable — fall through to static.
+      }
+
+      if (cancelled) return;
+      const staticPrompt = getTodaysStaticPrompt();
+      setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category });
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
-  if (!todaysPrompt) return null;
+  if (!prompt) return null;
 
-  const meta = categoryMeta[todaysPrompt.category] || categoryMeta.selfAwareness;
+  const meta = prompt.kind === 'oracle'
+    ? (ORACLE_SOURCE_META[prompt.sourceModule] || ORACLE_SOURCE_META.journalEntries)
+    : (STATIC_CATEGORY_META[prompt.category] || STATIC_CATEGORY_META.selfAwareness);
+
+  const provenance = prompt.kind === 'oracle'
+    ? `Oracle asked you ${formatRelativeDate(prompt.eventOccurredAt) || 'recently'} after ${prompt.displayLabel}.`
+    : null;
 
   return (
-    <div 
+    <div
       className="oura-card p-6 relative overflow-hidden group transition-all duration-300 hover:border-[#2a2a2a]"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Background glow effect */}
-      <div 
+      <div
         className="absolute inset-0 opacity-5 group-hover:opacity-10 transition-opacity duration-500"
-        style={{ 
-          background: `radial-gradient(circle at top right, ${meta.color}, transparent 70%)` 
+        style={{
+          background: `radial-gradient(circle at top right, ${meta.color}, transparent 70%)`
         }}
       />
-      
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4 relative z-10">
         <div className="flex items-center gap-3">
-          <div 
+          <div
             className="w-10 h-10 rounded-2xl flex items-center justify-center"
             style={{ backgroundColor: `${meta.color}15` }}
           >
@@ -136,7 +200,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
             <p className="text-sm" style={{ color: meta.color }}>{meta.label}</p>
           </div>
         </div>
-        
+
         {/* Refresh hint */}
         <div className="flex items-center gap-2 text-[#858585] text-xs">
           <AppIcon name="sunrise" size={16} color="#f59e0b" glow={true} glowIntensity={0.3} />
@@ -144,10 +208,15 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
         </div>
       </div>
 
+      {/* Provenance line — only when prompt is Oracle-sourced */}
+      {provenance && (
+        <p className="text-[#6a6a6a] text-xs italic mb-3 relative z-10">{provenance}</p>
+      )}
+
       {/* Prompt Text */}
       <blockquote className="relative z-10 mb-6">
         <p className="text-white text-lg md:text-xl font-light leading-relaxed">
-          "{todaysPrompt.text}"
+          "{prompt.text}"
         </p>
       </blockquote>
 
@@ -156,7 +225,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
         <button
           onClick={onJournalClick}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105"
-          style={{ 
+          style={{
             backgroundColor: `${meta.color}20`,
             color: meta.color,
             border: `1px solid ${meta.color}40`
@@ -165,7 +234,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
           <AppIcon name="journal" size={16} color={meta.color} glow={true} glowIntensity={0.4} />
           <span>Journal This</span>
         </button>
-        
+
         <Link
           to="/ledger"
           className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-[#ababab] rounded-xl text-sm font-medium border border-[#2a2a2a] hover:border-[#ef4444]/50 hover:text-[#ef4444] transition-all duration-200 hover:scale-105 group"
@@ -173,7 +242,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
           <AppIcon name="target" size={16} color="currentColor" glow={false} />
           <span>Add to Ledger</span>
         </Link>
-        
+
         <Link
           to="/hardlessons"
           className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-[#ababab] rounded-xl text-sm font-medium border border-[#2a2a2a] hover:border-[#f59e0b]/50 hover:text-[#f59e0b] transition-all duration-200 hover:scale-105 group"
@@ -184,9 +253,9 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
       </div>
 
       {/* Subtle animation element */}
-      <div 
+      <div
         className={`absolute bottom-0 left-0 h-1 transition-all duration-700 ease-out`}
-        style={{ 
+        style={{
           backgroundColor: meta.color,
           width: isHovered ? '100%' : '0%',
           opacity: 0.6

@@ -416,7 +416,7 @@ const RelapseRadar = () => {
       const entryText = `Pattern: ${archetypeLabelForPrompt}, Habits: ${habitLabelsForPrompt}, Substances: ${substanceLabelsForPrompt}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}${proximityNote}`;
       oracleEntryTextRef.current = entryText;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
-      const { text: oracleFeedback } = await generateAIFeedback('relapse', entryText, pastReflections);
+      const { text: oracleFeedback, closingQuestion: oracleClosingQuestion } = await generateAIFeedback('relapse', entryText, pastReflections);
 
       // BER-182: auto-include physiological precursor if Oura signals are below threshold
       const effectivePrecursors = isPhysiologicalAlert
@@ -430,6 +430,7 @@ const RelapseRadar = () => {
         substanceUse,
         reflection,
         oracleFeedback,
+        ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
         precursorConditions: effectivePrecursors,
         precursorContext: precursorContext.trim() || null,
         eventOccurredAt: occurredAt.toISOString(),

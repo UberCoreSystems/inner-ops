@@ -147,11 +147,13 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       const pastTitles = todaysTargets.slice(0, 3).map(t => t.title);
 
       let oracleResponse = '';
+      let oracleClosingQuestion = null;
       try {
         const feedback = await generateAIFeedback('killList', entryText, pastTitles);
         oracleResponse = feedback || (mode === 'kill'
           ? 'Contract closed. Logged to archive.'
           : 'Breach logged. Regroup.');
+        oracleClosingQuestion = feedback?.closingQuestion || null;
       } catch (err) {
         logger.error('Oracle closure response error:', err);
         oracleResponse = mode === 'kill'
@@ -165,10 +167,18 @@ const KillListDashboard = React.memo(function KillListDashboard() {
         const db = await getDb();
         if (mode === 'kill' && confirmedKillId) {
           const killRef = doc(db, 'confirmedKills', confirmedKillId);
-          await updateDoc(killRef, { closureOracleResponse: oracleResponse, lastUpdated: serverTimestamp() });
+          await updateDoc(killRef, {
+            closureOracleResponse: oracleResponse,
+            ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
+            lastUpdated: serverTimestamp(),
+          });
         } else if (mode === 'escape') {
           const targetRef = doc(db, 'killTargets', target.id);
-          await updateDoc(targetRef, { escapeOracleResponse: oracleResponse, lastUpdated: serverTimestamp() });
+          await updateDoc(targetRef, {
+            escapeOracleResponse: oracleResponse,
+            ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
+            lastUpdated: serverTimestamp(),
+          });
         }
       } catch (err) {
         logger.error('Error persisting Oracle closure response:', err);
