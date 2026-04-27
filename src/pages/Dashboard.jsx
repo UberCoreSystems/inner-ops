@@ -35,6 +35,7 @@ export default function Dashboard() {
   // "Journal This" button. A successful save in that case marks today's
   // reflection as answered (DailyPrompt hides itself for the rest of the day).
   const [quickJournalFromPrompt, setQuickJournalFromPrompt] = useState(false);
+  const [quickJournalInitialEntry, setQuickJournalInitialEntry] = useState('');
   const [dailyPromptAnsweredSignal, setDailyPromptAnsweredSignal] = useState(0);
   const [stats, setStats] = useState({
     journalEntries: 0,
@@ -422,7 +423,8 @@ export default function Dashboard() {
         {/* Daily Prompt Section */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <DailyPrompt
-            onJournalClick={() => {
+            onJournalClick={(promptText) => {
+              setQuickJournalInitialEntry(promptText || '');
               setQuickJournalFromPrompt(true);
               setQuickJournalOpen(true);
             }}
@@ -729,9 +731,11 @@ export default function Dashboard() {
         {/* Quick Journal Modal */}
         <QuickJournalModal
           isOpen={quickJournalOpen}
+          initialEntry={quickJournalInitialEntry}
           onClose={() => {
             setQuickJournalOpen(false);
             setQuickJournalFromPrompt(false);
+            setQuickJournalInitialEntry('');
           }}
           onSuccess={() => {
             // Refresh data after successful entry

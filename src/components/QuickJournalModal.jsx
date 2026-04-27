@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { InlineErrorBoundary } from './ErrorBoundary';
+import CrossModuleExtractionPrompts from './CrossModuleExtractionPrompts';
 import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import {
+  classifyAndExtract,
+  stashKillListExtraction,
+  stashRelapseExtraction,
+  stashHardLessonExtraction,
+} from '../utils/crossModuleExtraction';
 
 // Quick capture mirrors the Journal page entry form: mood, intensity, freeform
 // textarea. Trimmed layout for modal context — no category tabs, no rotating
@@ -13,7 +21,8 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 // Oracle feedback pass match Journal.jsx exactly so entries stay consistent
 // across surfaces.
 
-const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClose, onSuccess }) {
+const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClose, onSuccess, initialEntry = '' }) {
+  const navigate = useNavigate();
   const [entry, setEntry] = useState('');
   const [mood, setMood] = useState('focused');
   const [intensity, setIntensity] = useState(3);
@@ -21,18 +30,37 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
   const [showOracle, setShowOracle] = useState(false);
   const [oracleResponse, setOracleResponse] = useState('');
   const [oracleLoading, setOracleLoading] = useState(false);
+  const [extractions, setExtractions] = useState({ killList: null, relapseRadar: null, hardLesson: null });
+  const [savedEntryId, setSavedEntryId] = useState(null);
+  const textareaRef = useRef(null);
 
   const canSubmit = entry.trim().length > 0 && !saving;
 
   useEffect(() => {
     if (isOpen) {
-      setEntry('');
+      // When opened with a prefilled question (from Today's Reflection),
+      // seed the textarea with `<question>\n\n` so the user can write the
+      // answer below it. The cursor is placed at the end in the effect below.
+      setEntry(initialEntry ? `${initialEntry}\n\n` : '');
       setMood('focused');
       setIntensity(3);
       setShowOracle(false);
       setOracleResponse('');
+      setExtractions({ killList: null, relapseRadar: null, hardLesson: null });
+      setSavedEntryId(null);
     }
-  }, [isOpen]);
+  }, [isOpen, initialEntry]);
+
+  // After a prefilled open, focus the textarea and place the cursor at the
+  // end so typing lands directly in the answer position.
+  useEffect(() => {
+    if (!isOpen || !initialEntry) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const len = el.value.length;
+    try { el.setSelectionRange(len, len); } catch { /* old browsers */ }
+  }, [isOpen, initialEntry]);
 
   useEffect(() => {
     const handleEscape = (e) => {
@@ -56,7 +84,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
 
       const { text: feedbackText, metacognitiveDepth, closingQuestion } = await generateAIFeedback('journal', inputText, []);
 
-      await writeData('journalEntries', {
+      const saved = await writeData('journalEntries', {
         content: entry,
         mood,
         intensity,
@@ -67,9 +95,26 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
         ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
         ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
       });
+      if (saved?.id) setSavedEntryId(saved.id);
 
       setOracleResponse(feedbackText || 'Oracle unavailable. Entry saved.');
       ouraToast.success('Journal entry saved');
+
+      // Non-blocking cross-module classification + conditional extraction.
+      // Mirrors the Journal page on-save flow so Quick Entry surfaces the
+      // same Hard Lesson / Ledger / Signal cards when warranted.
+      const entrySnapshot = entry;
+      classifyAndExtract(entrySnapshot)
+        .then((results) => {
+          if (results && (results.killList || results.relapseRadar || results.hardLesson)) {
+            setExtractions({
+              killList: results.killList,
+              relapseRadar: results.relapseRadar,
+              hardLesson: results.hardLesson,
+            });
+          }
+        })
+        .catch((err) => logger.error('[QuickJournal] cross-module extraction failed:', err?.message));
     } catch (error) {
       logger.error('Error saving quick entry:', error);
       setOracleResponse('Oracle unavailable. Entry saved.');
@@ -78,6 +123,35 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
       setOracleLoading(false);
     }
   }, [entry, mood, intensity]);
+
+  const handleDismissKillList = useCallback(() => {
+    setExtractions(prev => ({ ...prev, killList: null }));
+  }, []);
+  const handleDismissRelapse = useCallback(() => {
+    setExtractions(prev => ({ ...prev, relapseRadar: null }));
+  }, []);
+  const handleDismissHardLesson = useCallback(() => {
+    setExtractions(prev => ({ ...prev, hardLesson: null }));
+  }, []);
+
+  const handleConfirmKillList = useCallback((extraction) => {
+    stashKillListExtraction(extraction);
+    setExtractions(prev => ({ ...prev, killList: null }));
+    onClose();
+    navigate('/ledger');
+  }, [navigate, onClose]);
+  const handleConfirmRelapse = useCallback((extraction) => {
+    stashRelapseExtraction(extraction);
+    setExtractions(prev => ({ ...prev, relapseRadar: null }));
+    onClose();
+    navigate('/relapse');
+  }, [navigate, onClose]);
+  const handleConfirmHardLesson = useCallback((extraction) => {
+    stashHardLessonExtraction(extraction, savedEntryId);
+    setExtractions(prev => ({ ...prev, hardLesson: null }));
+    onClose();
+    navigate('/hardlessons');
+  }, [navigate, onClose, savedEntryId]);
 
   const handleDone = useCallback(() => {
     onSuccess?.();
@@ -195,6 +269,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                 </label>
                 <textarea
                   id="quick-entry-input"
+                  ref={textareaRef}
                   value={entry}
                   onChange={(e) => setEntry(e.target.value)}
                   rows={5}
@@ -263,6 +338,16 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                   </p>
                 </div>
               )}
+
+              <CrossModuleExtractionPrompts
+                extractions={extractions}
+                onDismissKillList={handleDismissKillList}
+                onDismissRelapseRadar={handleDismissRelapse}
+                onDismissHardLesson={handleDismissHardLesson}
+                onConfirmKillList={handleConfirmKillList}
+                onConfirmRelapseRadar={handleConfirmRelapse}
+                onConfirmHardLesson={handleConfirmHardLesson}
+              />
 
               <button
                 onClick={handleDone}

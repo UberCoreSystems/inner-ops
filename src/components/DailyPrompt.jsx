@@ -286,7 +286,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSi
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3 relative z-10">
         <button
-          onClick={onJournalClick}
+          onClick={() => onJournalClick?.(prompt.text)}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105"
           style={{
             backgroundColor: `${meta.color}20`,

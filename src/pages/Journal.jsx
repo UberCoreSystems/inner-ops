@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
-import { getBehavioralContext, getCachedTotalEntryCount } from '../utils/getBehavioralContext';
+import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
@@ -15,6 +15,12 @@ import { useOracleModal } from '../hooks/useOracleModal';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
 import CrossModuleExtractionPrompts from '../components/CrossModuleExtractionPrompts';
 import logger from '../utils/logger';
+import {
+  classifyAndExtract,
+  stashKillListExtraction,
+  stashRelapseExtraction,
+  stashHardLessonExtraction,
+} from '../utils/crossModuleExtraction';
 
 // Custom SVG mood icons - Oura-style geometric designs
 const MoodIcons = {
@@ -140,9 +146,6 @@ const IntensityRing = ({ level, selected, onClick }) => {
     </button>
   );
 };
-
-// Pain/failure signals that suggest a journal entry contains a hard lesson
-const PAIN_SIGNALS = /\b(mistake|regret|fail|failed|failure|lost|betrayed|betrayal|trusted|cost me|paid for|learned the hard way|should have|shouldn't have|never again|boundary|violated|ignored|warning|hurt|burned|screwed up|blew it|ruined|wrecked)\b/i;
 
 export default function Journal() {
   const navigate = useNavigate();
@@ -614,113 +617,28 @@ export default function Journal() {
   };
 
   // Cross-module extraction state — Kill List contract + Relapse Radar signal detection
-  const [crossModuleExtractions, setCrossModuleExtractions] = useState({ killList: null, relapseRadar: null });
+  const [crossModuleExtractions, setCrossModuleExtractions] = useState({ killList: null, relapseRadar: null, hardLesson: null });
+  // Per-entry reconsideration cards: { [entryId]: { killList, relapseRadar, hardLesson, loading? } }.
+  // Populated by handleReconsiderEntry; rendered inline below the corresponding past entry.
+  const [entryReconsiderations, setEntryReconsiderations] = useState({});
 
-  // Pass 3 New Finding 14 remediation: per-session dedupe of extraction
-  // calls. Extraction calls are exempt from the daily Oracle rate limit
-  // (intentional, for background traffic), so a double-saved entry would
-  // otherwise burn two Anthropic calls for the same content with no
-  // ceiling. The session-scoped Set keys on a short content hash so two
-  // identical journal entries within the same session only extract once.
-  const extractionDedupeRef = useRef(new Set());
-  const hashEntryText = (text) => {
-    // Cheap deterministic hash — content fingerprint, not crypto.
-    let h = 5381;
-    for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
-    return h.toString(36);
-  };
-
-  // Run Kill List contract + Relapse Radar signal extraction after a journal entry is saved.
-  // Fires in the background — non-blocking. Updates crossModuleExtractions when results arrive.
-  const runCrossModuleExtractions = async (entryText) => {
-    logger.log('[CrossModuleExtraction] start', { entryTextLength: (entryText || '').length, preview: (entryText || '').slice(0, 80) });
-    const fp = hashEntryText(entryText || '');
-    if (extractionDedupeRef.current.has(fp)) {
-      logger.log('[CrossModuleExtraction] SKIP — dedupe (already attempted this session)', { fp });
-      return;
+  // Runs the Oracle classifier first, then conditionally fires only the
+  // extractors the classifier flags as warranted. See
+  // src/utils/crossModuleExtraction.js for the full flow. Returns
+  // `{ killList, relapseRadar, hardLesson, classification }` on success, null
+  // on dedupe-skip or unrecoverable error. Callers decide where to render —
+  // the on-save flow populates the top-of-list state; the per-entry
+  // "Reconsider" flow populates `entryReconsiderations[entry.id]`.
+  const runCrossModuleExtractions = async (entryText, { forceRefresh = false } = {}) => {
+    const results = await classifyAndExtract(entryText, { forceRefresh });
+    if (results && (results.killList || results.relapseRadar || results.hardLesson)) {
+      setCrossModuleExtractions({
+        killList: results.killList,
+        relapseRadar: results.relapseRadar,
+        hardLesson: results.hardLesson,
+      });
     }
-    extractionDedupeRef.current.add(fp);
-    try {
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
-      const functions = getFunctions();
-      const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
-
-      // Fetch behavioral context (cache is warm — generateAIFeedback already called it)
-      const { getAuth } = await import('firebase/auth');
-      const uid = getAuth().currentUser?.uid;
-      logger.log('[CrossModuleExtraction] auth uid present:', !!uid);
-      const behavioralCtx = await getBehavioralContext(uid).catch((err) => {
-        logger.warn('[CrossModuleExtraction] behavioralContext fetch failed:', err?.message);
-        return null;
-      });
-
-      logger.log('[CrossModuleExtraction] firing Oracle CF calls (killListExtraction + relapseDetection)');
-
-      const [killResult, relapseResult] = await Promise.all([
-        oracleFn({
-          entryText,
-          moduleName: 'killListExtraction',
-          userContext: {},
-          tone: 'stoic',
-          behavioralContext: behavioralCtx,
-        }).catch((err) => {
-          logger.error('[CrossModuleExtraction] killListExtraction CF call FAILED:', err?.code, err?.message);
-          return null;
-        }),
-        oracleFn({
-          entryText,
-          moduleName: 'relapseDetection',
-          userContext: {},
-          tone: 'stoic',
-          behavioralContext: behavioralCtx,
-        }).catch((err) => {
-          logger.error('[CrossModuleExtraction] relapseDetection CF call FAILED:', err?.code, err?.message);
-          return null;
-        }),
-      ]);
-
-      logger.log('[CrossModuleExtraction] killListExtraction raw response:', {
-        hasData: !!killResult?.data,
-        feedbackPreview: (killResult?.data?.feedback || '').slice(0, 200),
-      });
-      logger.log('[CrossModuleExtraction] relapseDetection raw response:', {
-        hasData: !!relapseResult?.data,
-        feedbackPreview: (relapseResult?.data?.feedback || '').slice(0, 200),
-      });
-
-      const parseExtraction = (result, label) => {
-        if (!result?.data?.feedback) {
-          logger.log(`[CrossModuleExtraction] ${label}: no data.feedback on response`);
-          return null;
-        }
-        const raw = result.data.feedback.trim();
-        if (raw === 'null' || raw === '') {
-          logger.log(`[CrossModuleExtraction] ${label}: Oracle returned null (no signal detected)`);
-          return null;
-        }
-        try {
-          const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-          const parsed = JSON.parse(cleaned);
-          logger.log(`[CrossModuleExtraction] ${label}: parsed OK`, parsed);
-          return parsed;
-        } catch (err) {
-          logger.warn(`[CrossModuleExtraction] ${label}: JSON parse FAILED`, { raw: raw.slice(0, 200), err: err?.message });
-          return null;
-        }
-      };
-
-      const killExtraction = parseExtraction(killResult, 'killListExtraction');
-      const relapseExtraction = parseExtraction(relapseResult, 'relapseDetection');
-
-      if (killExtraction || relapseExtraction) {
-        logger.log('[CrossModuleExtraction] SURFACING card', { hasKill: !!killExtraction, hasRelapse: !!relapseExtraction });
-        setCrossModuleExtractions({ killList: killExtraction, relapseRadar: relapseExtraction });
-      } else {
-        logger.log('[CrossModuleExtraction] No card surfaced — both extractions returned null');
-      }
-    } catch (err) {
-      logger.error('[CrossModuleExtraction] unexpected error in extraction flow:', err?.message, err);
-    }
+    return results;
   };
 
   const handleDismissKillListExtraction = () => {
@@ -732,85 +650,89 @@ export default function Journal() {
   };
 
   const handleConfirmKillListExtraction = (extraction) => {
-    try {
-      sessionStorage.setItem('kl_extraction_prefill', JSON.stringify(extraction));
-    } catch { /* ignore storage errors */ }
+    stashKillListExtraction(extraction);
     setCrossModuleExtractions(prev => ({ ...prev, killList: null }));
     navigate('/ledger');
   };
 
   const handleConfirmRelapseExtraction = (extraction) => {
-    try {
-      sessionStorage.setItem('relapse_extraction_prefill', JSON.stringify(extraction));
-    } catch { /* ignore storage errors */ }
+    stashRelapseExtraction(extraction);
     setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
     navigate('/relapse');
   };
 
-  // Extract hard lesson from journal entry — Oracle analyzes, then navigates with pre-filled data
-  const [extracting, setExtracting] = useState(null); // entry ID being extracted
-  const extractLessonFromEntry = async (journalEntry) => {
-    setExtracting(journalEntry.id);
+  // Hard Lesson card — top-of-list (just-saved entry) handlers.
+  const handleDismissHardLessonExtraction = () => {
+    setCrossModuleExtractions(prev => ({ ...prev, hardLesson: null }));
+  };
+
+  const handleConfirmHardLessonExtraction = (extraction) => {
+    stashHardLessonExtraction(extraction, currentEntryId);
+    setCrossModuleExtractions(prev => ({ ...prev, hardLesson: null }));
+    navigate('/hardlessons');
+  };
+
+  // Per-entry "Reconsider this entry" — re-runs all three Oracle classifications
+  // on demand for any past entry. Replaces the always-on per-entry button.
+  const updateReconsidered = (entryId, partial) => {
+    setEntryReconsiderations(prev => ({
+      ...prev,
+      [entryId]: { ...(prev[entryId] || {}), ...partial },
+    }));
+  };
+
+  const handleReconsiderEntry = async (entry) => {
+    if (!entry?.id || !entry?.content) return;
+    const existing = entryReconsiderations[entry.id];
+    if (existing?.loading) return;
+    updateReconsidered(entry.id, { loading: true });
     try {
-      // Ask Oracle to extract structured lesson fields from journal content
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
-      const functions = getFunctions();
-      const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
-
-      const result = await oracleFn({
-        entryText: journalEntry.content,
-        moduleName: 'lessonExtraction',
-        userContext: {},
-        tone: 'stoic',
-      });
-
-      // Parse the structured JSON from Oracle
-      let extracted = {};
-      try {
-        const raw = (result.data.feedback || '').trim();
-        // Strip markdown code blocks if present
-        const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-        extracted = JSON.parse(cleaned);
-      } catch {
-        logger.warn('Oracle returned non-JSON for lesson extraction, using journal content as fallback');
+      const results = await runCrossModuleExtractions(entry.content, { forceRefresh: true });
+      if (results) {
+        const anySignal = !!(results.killList || results.relapseRadar || results.hardLesson);
+        if (anySignal) {
+          updateReconsidered(entry.id, {
+            killList: results.killList,
+            relapseRadar: results.relapseRadar,
+            hardLesson: results.hardLesson,
+            loading: false,
+          });
+        } else {
+          updateReconsidered(entry.id, { killList: null, relapseRadar: null, hardLesson: null, loading: false });
+          ouraToast.info('Oracle found nothing further to investigate in this entry.');
+        }
+      } else {
+        updateReconsidered(entry.id, { loading: false });
+        ouraToast.error('Oracle was unavailable. Try again shortly.');
       }
-
-      // Per the cross-module rule, do not write a draft hardLessons doc here.
-      // Stash the Oracle-extracted fields and navigate so the user reviews
-      // the prefilled intake form and chooses to finalize.
-      try {
-        sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({
-          eventCategory: extracted.suggestedCategory || '',
-          eventDescription: extracted.eventDescription || journalEntry.content,
-          myAssumption: extracted.myAssumption || '',
-          signalIgnored: extracted.signalIgnored || '',
-          costs: Array.isArray(extracted.suggestedCosts) ? extracted.suggestedCosts : [],
-          costDescription: extracted.costDescription || '',
-          extractedLesson: extracted.extractedLesson || '',
-          ruleGoingForward: extracted.ruleGoingForward || '',
-          sourceJournalId: journalEntry.id,
-          isOracleExtracted: true,
-        }));
-      } catch { /* ignore storage errors */ }
-
-      ouraToast.success('Oracle extracted a lesson — review and finalize it');
-      navigate('/hardlessons');
-    } catch (error) {
-      logger.error('Error extracting lesson from journal:', error);
-      // Oracle failed — still hand the user to the Hard Lessons intake with
-      // the journal content prefilled so they can author the lesson manually.
-      try {
-        sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({
-          eventDescription: journalEntry.content,
-          sourceJournalId: journalEntry.id,
-          isOracleFailed: true,
-        }));
-      } catch { /* ignore storage errors */ }
-      ouraToast.error('Oracle unavailable — open the form to author the lesson manually.');
-      navigate('/hardlessons');
-    } finally {
-      setExtracting(null);
+    } catch (err) {
+      logger.error('Error reconsidering entry:', err);
+      updateReconsidered(entry.id, { loading: false });
+      ouraToast.error('Oracle was unavailable. Try again shortly.');
     }
+  };
+
+  // Per-entry confirm/dismiss handlers — they parameterize the slot and entry
+  // so the inline cards can clear their own state independently of the
+  // top-of-list extractions.
+  const makeReconsideredDismiss = (entryId, slot) => () => updateReconsidered(entryId, { [slot]: null });
+
+  const makeReconsideredConfirmKillList = (entryId) => (extraction) => {
+    stashKillListExtraction(extraction);
+    updateReconsidered(entryId, { killList: null });
+    navigate('/ledger');
+  };
+
+  const makeReconsideredConfirmRelapse = (entryId) => (extraction) => {
+    stashRelapseExtraction(extraction);
+    updateReconsidered(entryId, { relapseRadar: null });
+    navigate('/relapse');
+  };
+
+  const makeReconsideredConfirmHardLesson = (entryId) => (extraction) => {
+    stashHardLessonExtraction(extraction, entryId);
+    updateReconsidered(entryId, { hardLesson: null });
+    navigate('/hardlessons');
   };
 
   return (
@@ -1176,13 +1098,15 @@ export default function Journal() {
           </div>
         </section>
 
-        {/* Cross-module extraction prompts — Kill List / Relapse Radar signals from most recent entry */}
+        {/* Cross-module suggestions for the most recent entry — Oracle classifies on save. */}
         <CrossModuleExtractionPrompts
           extractions={crossModuleExtractions}
           onDismissKillList={handleDismissKillListExtraction}
           onDismissRelapseRadar={handleDismissRelapseExtraction}
+          onDismissHardLesson={handleDismissHardLessonExtraction}
           onConfirmKillList={handleConfirmKillListExtraction}
           onConfirmRelapseRadar={handleConfirmRelapseExtraction}
+          onConfirmHardLesson={handleConfirmHardLessonExtraction}
         />
 
         {/* Previous Entries */}
@@ -1396,37 +1320,44 @@ export default function Journal() {
                               </div>
                             )}
 
-                            {/* Extract Lesson bridge — primary trigger for entries with pain/failure signals */}
-                            {PAIN_SIGNALS.test(entry.content || '') ? (
-                              <button
-                                onClick={() => extractLessonFromEntry(entry)}
-                                disabled={extracting === entry.id}
-                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#b45309] hover:text-[#d97706] disabled:text-[#858585] transition-colors w-full"
-                              >
-                                {extracting === entry.id ? (
-                                  <>
-                                    <span className="inline-block w-3 h-3 border border-[#b45309] border-t-transparent rounded-full animate-spin" />
-                                    <span>Oracle is extracting the lesson...</span>
-                                  </>
-                                ) : (
-                                  <span>This sounds like it cost you something. Extract the lesson.</span>
-                                )}
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => extractLessonFromEntry(entry)}
-                                disabled={extracting === entry.id}
-                                className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#ababab] hover:text-white disabled:text-[#858585] transition-colors w-full"
-                              >
-                                {extracting === entry.id ? (
-                                  <>
-                                    <span className="inline-block w-3 h-3 border border-[#8a8a8a] border-t-transparent rounded-full animate-spin" />
-                                    <span>Extracting lesson...</span>
-                                  </>
-                                ) : (
-                                  <span>Extract hard lesson</span>
-                                )}
-                              </button>
+                            {/* Reconsider this entry — re-runs all three Oracle classifications
+                                (Ledger / Signal / Hard Lessons) and surfaces whichever cards apply.
+                                Replaces the always-on "Extract Lesson" button with a content-aware,
+                                on-demand action. */}
+                            {(() => {
+                              const reconsidered = entryReconsiderations[entry.id];
+                              const isLoading = !!reconsidered?.loading;
+                              return (
+                                <button
+                                  onClick={() => handleReconsiderEntry(entry)}
+                                  disabled={isLoading}
+                                  className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#ababab] hover:text-white disabled:text-[#858585] transition-colors w-full"
+                                >
+                                  {isLoading ? (
+                                    <>
+                                      <span className="inline-block w-3 h-3 border border-[#8a8a8a] border-t-transparent rounded-full animate-spin" />
+                                      <span>Oracle is reconsidering this entry...</span>
+                                    </>
+                                  ) : (
+                                    <span>Reconsider this entry</span>
+                                  )}
+                                </button>
+                              );
+                            })()}
+
+                            {/* Inline cross-module suggestions surfaced by "Reconsider this entry". */}
+                            {entryReconsiderations[entry.id] && !entryReconsiderations[entry.id].loading && (
+                              <div className="mt-3">
+                                <CrossModuleExtractionPrompts
+                                  extractions={entryReconsiderations[entry.id]}
+                                  onDismissKillList={makeReconsideredDismiss(entry.id, 'killList')}
+                                  onDismissRelapseRadar={makeReconsideredDismiss(entry.id, 'relapseRadar')}
+                                  onDismissHardLesson={makeReconsideredDismiss(entry.id, 'hardLesson')}
+                                  onConfirmKillList={makeReconsideredConfirmKillList(entry.id)}
+                                  onConfirmRelapseRadar={makeReconsideredConfirmRelapse(entry.id)}
+                                  onConfirmHardLesson={makeReconsideredConfirmHardLesson(entry.id)}
+                                />
+                              </div>
                             )}
                           </div>
                         )}

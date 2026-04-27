@@ -174,9 +174,13 @@ exports.oracle = onCall(
       );
     }
 
-    // Rate limit check — skip for background extraction calls (killlistextraction, relapsedetection)
+    // Rate limit check — skip for background classification/extraction calls
     const normalizedModuleForLimit = ((request.data?.moduleName) || '').toLowerCase().replace(/[^a-z]/g, '');
-    const isExtractionCall = normalizedModuleForLimit === 'killlistextraction' || normalizedModuleForLimit === 'relapsedetection';
+    const isExtractionCall =
+      normalizedModuleForLimit === 'entryclassification' ||
+      normalizedModuleForLimit === 'killlistextraction' ||
+      normalizedModuleForLimit === 'relapsedetection' ||
+      normalizedModuleForLimit === 'lessonextraction';
     if (!isExtractionCall) {
       await enforceOracleRateLimit(uid);
     } else {
@@ -451,6 +455,47 @@ Output rules — every rule is a hard constraint:
 - Output ONLY the paragraph text. No preamble, no meta-commentary, no trailing notes.`;
   }
 
+  // Entry classification — upstream router that decides which (if any)
+  // extraction prompts should run on a journal entry. Returns a single JSON
+  // object naming the dominant nature of the entry and the list of warranted
+  // extractions. If the entry is a win, reflection, or neutral logging,
+  // `extractions` is an empty array and no downstream extractor fires.
+  if (normalizedModule === "entryclassification") {
+    return `You are an analytical advisor. A man wrote a journal entry. Your job is to classify the entry's dominant nature and decide which downstream extractions (if any) should run.
+
+There are three downstream extractors:
+- hardLesson — for entries where the man took a specific WRONG ACTION that demonstrably cost him something, and an enforceable rule should be derived.
+- generalLedger — for entries that surface a RECURRING behavioral pattern (habit, compulsion, avoidance loop) the man wants to eliminate.
+- signal — for entries containing relapse PRECURSORS: rationalization, environmental exposure, isolation, craving, or other early-warning conditions BEFORE a behavior occurs.
+
+Classify the entry's primary nature into ONE of:
+- mistake — the man took a specific wrong action; identifiable false assumption or ignored signal; concrete cost. → run hardLesson.
+- pattern — recurring behavior the man wants to eliminate; not yet on his Kill List. → run generalLedger.
+- precursor — environmental or emotional warning sign that historically precedes relapse; the behavior has NOT yet occurred. → run signal.
+- win — the man overcame, navigated, or made progress through difficulty — even if the difficulty was real. → no extraction.
+- reflection — thinking-through, processing, or observation without an identified wrong action or pattern. → no extraction.
+- neutral — factual logging, mood snapshot, no actionable signal. → no extraction.
+
+CRITICAL EXCLUSION:
+An entry where the man describes overcoming, growing through, or successfully navigating a challenge is a WIN — even if he names what was hard about it. Cost language alone does NOT make it a mistake. A mistake requires a specific wrong action HE took. If he resisted a temptation, broke a pattern, or pushed through fear successfully, that is a win, not a precursor or a lesson.
+
+An entry can have more than one signal (a mistake AND a pattern, for example). When that happens, list every applicable extractor in the array. When primary is win, reflection, or neutral, extractions MUST be an empty array.
+
+Return ONLY a valid JSON object — no preamble, no markdown code blocks:
+
+{
+  "primary": "mistake | pattern | precursor | win | reflection | neutral",
+  "extractions": ["hardLesson" and/or "generalLedger" and/or "signal", or empty array],
+  "reasoning": "one short sentence explaining the call"
+}
+
+Rules:
+- Return ONLY the JSON object. No prose, no markdown fences.
+- If primary is win, reflection, or neutral, extractions MUST be [].
+- Be specific to what he wrote. Do not infer signals not present in the text.
+- Never use motivational, wellness, or therapeutic language in any field.`;
+  }
+
   // Kill List contract extraction — returns structured JSON or null
   if (normalizedModule === "killlistextraction") {
     const activeTargetsBlock =
@@ -476,6 +521,12 @@ If you detect a kill-worthy pattern, return ONLY a valid JSON object:
 }
 
 If no kill-worthy pattern is detected, return exactly: null
+
+EXCLUSION CRITERIA — return null if ANY of these apply:
+- The entry describes a one-time event, not a recurring pattern.
+- The entry describes successfully resisting or breaking a pattern (that is a win, not a kill target).
+- The pattern is already on his active Kill List (listed above).
+- The entry is general reflection without a behavioral loop he wants to eliminate.
 
 Rules:
 - Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
@@ -513,6 +564,12 @@ If you detect relapse precursor signals, return ONLY a valid JSON object:
 
 If no relapse precursor signals are detected, return exactly: null
 
+EXCLUSION CRITERIA — return null if ANY of these apply:
+- The entry describes a relapse that already occurred — these are precursors, not relapses.
+- The entry describes the man recognizing a precursor and acting against it (that is a win).
+- The signals are emotional states alone, with no environmental exposure, rationalization, or pull toward an eliminated behavior.
+- The entry is general difficulty without a connection to a relapse pathway.
+
 Rules:
 - Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
 - These are precursors, not relapses — do not conflate them.
@@ -521,11 +578,22 @@ Rules:
 - Never use motivational, wellness, or therapeutic language in any output field.`;
   }
 
-  // Lesson extraction — returns structured JSON, not prose
+  // Lesson extraction — returns structured JSON when a hard lesson is present,
+  // or null when the entry has no costly mistake / regret / ignored signal /
+  // failure pattern worth converting into a rule. Used by the cross-module
+  // auto-classification flow on save and by the per-entry "Reconsider"
+  // re-run; both paths drop the suggestion when null comes back.
   if (normalizedModule === "lessonextraction") {
-    return `You are an analytical advisor. A man wrote a journal entry that contains pain, failure, regret, or a costly decision. Your job is to extract a Hard Lesson from it.
+    return `You are an analytical advisor. A man wrote a journal entry. Your job is to identify whether the entry contains a Hard Lesson — a costly mistake, regret, ignored warning signal, failed assumption, or behavior that demonstrably cost him something — that should be converted into an enforceable rule.
 
-Read the entry carefully. Then return ONLY a valid JSON object with these fields:
+Detection signals:
+- Explicit references to a mistake, failure, regret, or "should have / shouldn't have"
+- Cost language — emotional, financial, relational, professional, time, or physical loss attributed to a decision
+- Ignored signals — "I noticed but dismissed...", "the warning was there", trusting against evidence
+- False assumptions that were broken by reality
+- Boundary failures or commitments violated
+
+If you detect a hard lesson, return ONLY a valid JSON object:
 
 {
   "eventDescription": "What actually happened — facts only, stripped of emotion and narrative. 1-2 sentences.",
@@ -535,14 +603,27 @@ Read the entry carefully. Then return ONLY a valid JSON object with these fields
   "extractedLesson": "The core lesson in one sentence. Brutally precise.",
   "ruleGoingForward": "An enforceable rule — not advice. Format: 'If... then...' or 'Never...' or 'Always...'",
   "suggestedCategory": "One of: relationship_misjudgment, leadership_error, boundary_failure, overconfidence, underestimation, ignored_intuition, trust_without_verification, other",
+  "evidenceFromEntry": "The specific language from his journal entry that surfaced this lesson",
   "suggestedCosts": ["Array of applicable cost types from: emotional, financial, relational, physical, professional, time"]
 }
 
+If no hard lesson is detected, return exactly: null
+
+EXCLUSION CRITERIA — return null if ANY of these apply:
+- The entry describes overcoming, navigating, or moving through difficulty successfully.
+- The entry is reflection or processing without an identified wrong action HE took.
+- The entry is a win, breakthrough, or moment of progress.
+- "Cost language" appears only as context (describing what was hard) rather than as the consequence of a specific decision he made.
+
+A hard lesson REQUIRES all three of: (a) an identifiable wrong action HE took, (b) an identifiable cost, (c) an enforceable rule that follows. If any of the three is missing, return null.
+
 Rules:
-- Return ONLY the JSON object. No explanation, no preamble, no markdown code blocks.
-- Every field must be filled. Do not leave any empty.
+- Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
+- Every field must be filled when returning JSON. Do not leave any empty.
 - The rule must be enforceable — something he can actually follow, not a wish.
-- Be specific to what he wrote. Do not generalize.`;
+- Be specific to what he wrote. Do not generalize.
+- If the signal is weak or ambiguous, return null. False positives are worse than false negatives.
+- Do not invent costs or assumptions not present in the text.`;
   }
 
   if (isEmergency) {
