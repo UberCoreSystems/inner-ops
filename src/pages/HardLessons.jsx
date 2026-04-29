@@ -281,12 +281,20 @@ export default function HardLessons() {
   const finalizedRules = useMemo(() => {
     const base = lessons
       .filter(l => l.isFinalized && l.ruleGoingForward?.trim())
-      .map(l => ({
-        id: l.id,
-        rule: l.ruleGoingForward,
-        lesson: l,
-        violationCount: lessons.filter(x => x.isRuleViolation && x.violatedRuleId === l.id).length,
-      }))
+      .map(l => {
+        // Combine two violation sources: (1) legacy — separate lesson docs
+        // tagged isRuleViolation pointing at this rule via violatedRuleId,
+        // (2) direct — entries in this rule's own violations[] array,
+        // populated by the "Rule broken" button + Weekly Rule Review.
+        const legacyCount = lessons.filter(x => x.isRuleViolation && x.violatedRuleId === l.id).length;
+        const directCount = Array.isArray(l.violations) ? l.violations.length : 0;
+        return {
+          id: l.id,
+          rule: l.ruleGoingForward,
+          lesson: l,
+          violationCount: legacyCount + directCount,
+        };
+      })
       .sort((a, b) => new Date(b.lesson.finalizedAt || b.lesson.createdAt) - new Date(a.lesson.finalizedAt || a.lesson.createdAt));
 
     const q = librarySearch.trim().toLowerCase();
@@ -339,6 +347,82 @@ export default function HardLessons() {
     }
     setViolationPrompt({ visible: false, matchedRule: null });
   };
+
+  // Inline post-tap note panel — open after a successful "Rule broken" write
+  // so the user can optionally add context for the violation just logged.
+  // The violation is already committed to Firestore at this point; saving a
+  // note is an enrichment, walking away is fine.
+  const [ruleNotePanel, setRuleNotePanel] = useState({ ruleId: null, note: '', violationDate: null });
+  const ruleBreakingRef = useRef(new Set()); // synchronous guard against rapid double-taps
+
+  // Direct violation logger — fires when the user taps "Rule broken" on a
+  // finalized rule card. Writes to the rule's own document via violations[]
+  // (the shape the Mirror tile / clarityScore counter already reads).
+  // Daily dedupe: at most one violation per rule per UTC day.
+  const markRuleBroken = useCallback(async (rule) => {
+    if (!rule?.id) return;
+    if (ruleBreakingRef.current.has(rule.id)) return; // re-entry guard
+    ruleBreakingRef.current.add(rule.id);
+    try {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const existing = Array.isArray(rule.violations) ? rule.violations : [];
+      const alreadyToday = existing.some(v => {
+        const d = v?.date || v?.timestamp;
+        if (!d) return false;
+        return new Date(d).toISOString().slice(0, 10) === todayKey;
+      });
+      if (alreadyToday) {
+        ouraToast.info('Already logged a violation for this rule today');
+        return;
+      }
+      const nowIso = new Date().toISOString();
+      const violations = [...existing, { date: nowIso, source: 'direct' }];
+      await updateData('hardLessons', rule.id, {
+        violations,
+        lastViolatedAt: nowIso,
+      });
+      await loadHardLessons();
+      ouraToast.success('Rule broken — logged');
+      setRuleNotePanel({ ruleId: rule.id, note: '', violationDate: nowIso });
+    } catch (err) {
+      logger.error('markRuleBroken failed:', err?.message);
+      if (redirectIfAuthLost(err)) return;
+      ouraToast.error('Failed to log violation');
+    } finally {
+      ruleBreakingRef.current.delete(rule.id);
+    }
+  }, []);
+
+  // Attach the optional note to the violation entry just written. We match
+  // by the ISO date stamp captured in ruleNotePanel.violationDate.
+  const saveRuleBreakingNote = useCallback(async () => {
+    const { ruleId, note, violationDate } = ruleNotePanel;
+    if (!ruleId || !violationDate || !note.trim()) {
+      setRuleNotePanel({ ruleId: null, note: '', violationDate: null });
+      return;
+    }
+    try {
+      const rule = lessons.find(l => l.id === ruleId);
+      if (!rule) return;
+      const violations = (Array.isArray(rule.violations) ? rule.violations : []).map(v => {
+        const d = v?.date || v?.timestamp;
+        if (d === violationDate) return { ...v, note: note.trim() };
+        return v;
+      });
+      await updateData('hardLessons', ruleId, { violations });
+      await loadHardLessons();
+      ouraToast.success('Context saved');
+    } catch (err) {
+      logger.error('saveRuleBreakingNote failed:', err?.message);
+      ouraToast.error('Failed to save context');
+    } finally {
+      setRuleNotePanel({ ruleId: null, note: '', violationDate: null });
+    }
+  }, [ruleNotePanel, lessons]);
+
+  const dismissRuleBreakingNote = useCallback(() => {
+    setRuleNotePanel({ ruleId: null, note: '', violationDate: null });
+  }, []);
 
   // BER-131: send rule to the Kill List intake form. Per the cross-module
   // rule, no doc is written here — we stash the prefill and navigate so the
@@ -1073,6 +1157,7 @@ Please help extract the core lesson and rule from this experience.
               {finalizedRules.map(({ id, rule, lesson, violationCount }) => {
                 const category = eventCategories.find(c => c.value === lesson.eventCategory);
                 const lessonCosts = costCategories.filter(c => lesson.costs?.includes(c.value));
+                const noteOpen = ruleNotePanel.ruleId === id;
                 return (
                   <div key={id} className={`oura-card p-5 ${violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
                     <div className="flex items-start justify-between gap-4">
@@ -1092,6 +1177,49 @@ Please help extract the core lesson and rule from this experience.
                         </div>
                       )}
                     </div>
+
+                    {/* Direct violation logger. Single-tap commits the
+                        violation to violations[] + lastViolatedAt; the note
+                        panel below is an optional add-on. */}
+                    <div className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center justify-end">
+                      <button
+                        onClick={() => markRuleBroken(lesson)}
+                        disabled={noteOpen}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Rule broken
+                      </button>
+                    </div>
+
+                    {noteOpen && (
+                      <div className="mt-3 p-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl">
+                        <div className="text-[#858585] text-[10px] uppercase tracking-widest mb-2">
+                          Logged at {new Date(ruleNotePanel.violationDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Add context?
+                        </div>
+                        <textarea
+                          value={ruleNotePanel.note}
+                          onChange={(e) => setRuleNotePanel(prev => ({ ...prev, note: e.target.value }))}
+                          rows={2}
+                          placeholder="What broke it? Optional."
+                          className="w-full p-2 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#555555]"
+                        />
+                        <div className="flex justify-end gap-2 mt-2">
+                          <button
+                            onClick={dismissRuleBreakingNote}
+                            className="px-3 py-1.5 text-xs text-[#858585] hover:text-[#ababab] transition-colors"
+                          >
+                            Skip
+                          </button>
+                          <button
+                            onClick={saveRuleBreakingNote}
+                            disabled={!ruleNotePanel.note.trim()}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Save context
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

@@ -15,6 +15,7 @@ import logger from '../utils/logger';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import ouraToast from '../utils/toast';
+import { KillTargetSummary } from './KillTargetCard';
 
 const KillListDashboard = React.memo(function KillListDashboard() {
   // Use all active targets (not just today's)
@@ -317,31 +318,6 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'killed': return 'text-[#858585] bg-transparent border-[#2a2a2a]';
-      case 'escaped': return 'text-[#b45309] bg-transparent border-[#b45309]/40';
-      case 'active': return 'text-white bg-transparent border-[#2a2a2a]';
-      default: return 'text-[#858585] bg-transparent border-[#2a2a2a]';
-    }
-  };
-
-  // Read-time shim for legacy tier docs — mirrors KillList.jsx mapping.
-  const MIN_DAYS_REQUIRED = 21;
-  const LEGACY_DIFFICULTY_TO_DAYS = { surface: 21, deep: 30, core: 60 };
-  const LEGACY_PRIORITY_TO_DAYS = { high: 60, medium: 30, low: 21 };
-  const getConsecutiveDaysRequired = (target) => {
-    const raw = Number(target?.consecutiveDaysRequired);
-    if (Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED) return Math.floor(raw);
-    if (target?.difficulty && LEGACY_DIFFICULTY_TO_DAYS[target.difficulty]) {
-      return LEGACY_DIFFICULTY_TO_DAYS[target.difficulty];
-    }
-    if (target?.priority && LEGACY_PRIORITY_TO_DAYS[target.priority]) {
-      return LEGACY_PRIORITY_TO_DAYS[target.priority];
-    }
-    return 30;
-  };
-
   if (initialLoad && loading) {
     return (
       <div className="oura-card p-8">
@@ -444,24 +420,18 @@ const KillListDashboard = React.memo(function KillListDashboard() {
         <div className="space-y-4">
           {todaysTargets.map((target) => (
           <div key={target.id} className="bg-[#0a0a0a] rounded-2xl p-5 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="font-medium text-white">{target.title}</h3>
-                  <span className={`px-2 py-0.5 text-xs font-light rounded-full border ${getStatusColor(target.status || 'active')}`}>
-                    {(target.status || 'active').toUpperCase()}
-                  </span>
+            {/* Shared summary block — same component the module page renders
+                so the Dashboard surface and /ledger surface visually match. */}
+            <div className="mb-4">
+              <KillTargetSummary target={target} />
+              {target.description && (
+                <p className="text-[#ababab] text-sm mt-3 font-light">{target.description}</p>
+              )}
+              {target.completedAt && (
+                <div className="text-xs text-[#858585] mt-2">
+                  Completed: {target.completedAt.toLocaleTimeString()}
                 </div>
-                <p className="text-[#ababab] text-sm mb-3 font-light">{target.description}</p>
-                <p className="text-[#858585] text-xs mb-2">
-                  Kill requires {getConsecutiveDaysRequired(target)} consecutive days of held execution.
-                </p>
-                {target.completedAt && (
-                  <div className="text-xs text-[#858585]">
-                    Completed: {target.completedAt.toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Status Toggle Buttons */}

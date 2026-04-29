@@ -15,6 +15,8 @@ import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
 import KillListBackfillCard from '../components/KillListBackfillCard';
+import { KillTargetSummary } from '../components/KillTargetCard';
+import { categories as CATEGORIES } from '../utils/killListCategories';
 
 // Stable icon definitions to avoid recreating objects on every render
 const CATEGORY_ICONS = {
@@ -158,16 +160,6 @@ const computeMissedDates = (target) => {
   return dates;
 };
 
-const CATEGORIES = [
-  { value: 'bad-habit', label: 'Bad Habit', color: 'text-[#ababab]', bgColor: 'bg-[#1a1a1a]' },
-  { value: 'negative-thought', label: 'Negative Thought', color: 'text-[#ababab]', bgColor: 'bg-[#1a1a1a]' },
-  { value: 'addiction', label: 'Addiction', color: 'text-[#ababab]', bgColor: 'bg-[#1a1a1a]' },
-  { value: 'toxic-behavior', label: 'Toxic Behavior', color: 'text-[#ababab]', bgColor: 'bg-[#1a1a1a]' },
-  { value: 'fear', label: 'Fear/Anxiety', color: 'text-[#ababab]', bgColor: 'bg-[#1a1a1a]' },
-  { value: 'procrastination', label: 'Procrastination', color: 'text-[#ababab]', bgColor: 'bg-[#1a1a1a]' },
-  { value: 'other', label: 'Other', color: 'text-[#ababab]', bgColor: 'bg-[#1a1a1a]' }
-];
-
 const KillList = () => {
   const [targets, setTargets] = useState([]);
   const [newTarget, setNewTarget] = useState('');
@@ -212,7 +204,6 @@ const KillList = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const targetsRef = useRef([]);
-  const skipNextSnapshot = useRef(false);
   const addingTargetRef = useRef(false);
   const newTargetInputRef = useRef(null);
   
@@ -333,10 +324,6 @@ const KillList = () => {
 
     subscribeToUserData('killTargets', (data) => {
       if (!mounted) return;
-      if (skipNextSnapshot.current) {
-        skipNextSnapshot.current = false;
-        return;
-      }
       logger.log(`📋 KillList: Received ${data.length} kill targets from snapshot`);
       setTargets(data);
       setLoading(false);
@@ -405,16 +392,40 @@ const KillList = () => {
   }, [user]);
 
   const addTarget = async () => {
-    if (!newTarget.trim() || submitting) return;
+    // Synchronous ref guard FIRST — before any other check or React state
+    // read. setSubmitting is async (takes effect on next render), so a rapid
+    // double-click can both pass the `submitting` check before the button is
+    // visually disabled. The ref is set immediately and blocks reentry.
     if (addingTargetRef.current) return;
+    addingTargetRef.current = true;
+
+    if (!newTarget.trim() || submitting) {
+      addingTargetRef.current = false;
+      return;
+    }
     if (newIntention.trigger.trim().length < 20 || newIntention.response.trim().length < 20) {
       ouraToast.warning('Implementation intention required — both fields need at least 20 characters');
+      addingTargetRef.current = false;
       return;
     }
 
-    addingTargetRef.current = true;
+    // Cross-session duplicate guard — refuse if an active target with the
+    // same title already exists. Catches the common retry pattern where a
+    // slow first write causes the user to refresh and resubmit; the
+    // background write then completes and the resubmit creates a second copy.
+    const trimmedTitle = newTarget.trim();
+    const titleKey = trimmedTitle.toLowerCase();
+    const existingActive = targetsRef.current.find(
+      (t) => t.status === 'active' && (t.title || '').trim().toLowerCase() === titleKey
+    );
+    if (existingActive) {
+      ouraToast.warning('A target with this title already exists in the Ledger');
+      addingTargetRef.current = false;
+      return;
+    }
+
     setSubmitting(true);
-    logger.log("🎯 Adding new kill target:", newTarget.trim());
+    logger.log("🎯 Adding new kill target:", trimmedTitle);
 
     let savedTarget = null;
     let targetData = null;
@@ -425,7 +436,7 @@ const KillList = () => {
         ? pendingTargetDescription.trim()
         : `Eliminate this ${categories.find(c => c.value === newTargetCategory)?.label || 'target'}`;
       targetData = {
-        title: newTarget.trim(),
+        title: trimmedTitle,
         description,
         category: newTargetCategory,
         consecutiveDaysRequired: days,
@@ -446,14 +457,12 @@ const KillList = () => {
 
       logger.log("📝 Target data to save:", targetData);
 
-      // Write to Firestore
+      // Write to Firestore. The real-time listener delivers the new doc —
+      // no optimistic local update here. Eliminates the prior race where the
+      // listener fired with the new doc included, then the post-write
+      // optimistic prepend doubled the entry in local state.
       savedTarget = await writeData('killTargets', targetData);
       logger.log('✅ Kill target saved successfully:', savedTarget.id);
-
-      // Update local state immediately for better UX; suppress the concurrent
-      // real-time snapshot to prevent it from overwriting the optimistic state.
-      skipNextSnapshot.current = true;
-      setTargets(prev => [savedTarget, ...prev]);
 
       ouraToast.success('Target added to the Ledger');
 
@@ -468,8 +477,8 @@ const KillList = () => {
       if (redirectIfAuthLost(error)) return;
       ouraToast.error('Failed to save kill target');
     } finally {
-      // IMPORTANT: release the submit guard as soon as the write settles —
-      // Oracle generation runs after this and must not gate the button.
+      // Release both guards as soon as the write settles — Oracle generation
+      // below runs detached and must not gate the button.
       setSubmitting(false);
       addingTargetRef.current = false;
     }
@@ -1113,13 +1122,11 @@ const KillList = () => {
     return { total, completed, active, escaped, completionRate, avgStreakToKill, categoryDist };
   }, [targets, confirmedKills]);
 
-  const getStreakColor = () => '#ef4444';
-
   const renderTargetItem = useCallback((target, index) => {
-    const category = categories.find(c => c.value === target.category) || categories[0];
+    // Title, status, "Kill requires" copy, progress bar, and 3-metric row
+    // are rendered by <KillTargetSummary />. Module-only state derived here
+    // is consumed by the sections below the summary.
     const streak = target.streak || 0;
-    const threshold = getConsecutiveDaysRequired(target);
-    const daysActive = Math.floor((Date.now() - new Date(target.createdAt).getTime()) / 86400000);
     const checkedInToday = target.lastCheckIn === todayKey();
     const latestEscape = target.escapeData?.length ? target.escapeData[target.escapeData.length - 1] : null;
     const missedDates = target.status === 'active' ? computeMissedDates(target) : [];
@@ -1149,29 +1156,7 @@ const KillList = () => {
                 <button onClick={cancelEdit} className="px-3 py-2 bg-[#1a1a1a] text-[#858585] rounded-xl text-xs">Cancel</button>
               </div>
             ) : (
-              <>
-                <h3 className={`font-medium ${target.status === 'killed' ? 'line-through text-[#858585]' : 'text-white'}`}>
-                  {target.title}
-                </h3>
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span className="text-xs text-[#858585] uppercase tracking-wider">
-                    {category.label}
-                  </span>
-                  <span className="text-[#858585] text-xs">·</span>
-                  <span className={`text-xs uppercase tracking-wider ${
-                    target.status === 'killed' ? 'text-[#858585]' :
-                    target.status === 'escaped' ? 'text-[#b45309]' :
-                    'text-white'
-                  }`}>
-                    {target.status}
-                  </span>
-                  <span className="text-[#858585] text-xs">·</span>
-                  <span className="text-[#858585] text-xs">Day {daysActive} · {new Date(target.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: new Date(target.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })}</span>
-                </div>
-                <p className="text-[#858585] text-xs mt-2">
-                  Kill requires {threshold} consecutive days of held execution.
-                </p>
-              </>
+              <KillTargetSummary target={target} />
             )}
           </div>
 
@@ -1207,43 +1192,8 @@ const KillList = () => {
 
         {editingTarget !== target.id && (
           <div className="space-y-3">
-            {/* Streak progress bar */}
-            <div className="flex items-center gap-3">
-              <div className="flex-1 bg-[#1a1a1a] rounded-full h-2 overflow-hidden">
-                <div
-                  className="h-2 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(100, (streak / threshold) * 100)}%`,
-                    backgroundColor: getStreakColor(streak, target),
-                  }}
-                />
-              </div>
-              <span className="text-xs text-[#858585] shrink-0 tabular-nums">{streak} / {threshold}d</span>
-            </div>
-
-            {/* 3-metric row: Current Streak · Behavioral Record · Longest Run */}
-            <div className="flex items-start justify-between">
-              <div className="flex gap-5">
-                <div>
-                  <span className="text-2xl font-light tabular-nums text-white">
-                    {streak}
-                  </span>
-                  <div className="text-[#858585] text-xs mt-0.5">Current Streak</div>
-                </div>
-                <div>
-                  <span className="text-2xl font-light tabular-nums text-[#ababab]">
-                    {target.totalTrackedDays || 0}
-                  </span>
-                  <div className="text-[#858585] text-xs mt-0.5">Behavioral Record</div>
-                </div>
-                <div>
-                  <span className="text-2xl font-light tabular-nums text-[#858585]">
-                    {target.longestStreak || 0}
-                  </span>
-                  <div className="text-[#858585] text-xs mt-0.5">Longest Run</div>
-                </div>
-              </div>
-            </div>
+            {/* Streak progress bar + 3-metric row are rendered above by
+                <KillTargetSummary />. Module-only sections continue below. */}
 
             {/* Implementation intention — collapsed by default */}
             {target.implementationIntention?.trigger && (

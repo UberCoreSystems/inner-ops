@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
@@ -25,6 +25,7 @@ import {
   resolveSubstanceLabel,
   formatDriftSignalText,
 } from '../utils/relapseTaxonomy';
+import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
 
 // UXR-002 Spec 4: archetype IDs, habit IDs, and substance options live in
 // src/utils/relapseTaxonomy.js. See that file for the rationale (self-
@@ -47,8 +48,16 @@ const PRECURSOR_CONDITIONS = [
 ];
 
 const RelapseRadar = () => {
+  const navigate = useNavigate();
   const mountedRef = useRef(true);
   const [step, setStep] = useState(1);
+  // Distinguishes a precursor signal (the module's primary use) from an actual
+  // relapse event. Default 'signal'. When the user explicitly marks an entry
+  // as 'relapse', the form still saves to relapseEntries (so drift detection
+  // and archetype counts continue to work) AND bridges to Hard Lessons via the
+  // existing sessionStorage prefill mechanism so the user can capture the
+  // assumption / cost / rule there.
+  const [entryType, setEntryType] = useState(RELAPSE_ENTRY_TYPES.SIGNAL);
   const [selectedSelf, setSelectedSelf] = useState('');
   const [selectedHabits, setSelectedHabits] = useState([]);
   const [substanceUse, setSubstanceUse] = useState([]);
@@ -229,9 +238,15 @@ const RelapseRadar = () => {
       .map(([id, count]) => ({ id, label: resolveArchetypeLabel(id), count }));
   }, [relapseEntries]);
 
+  // Counts ONLY entries flagged as actual relapses. Precursor signals do not
+  // reset this counter — that was the source of the "1 day since last relapse"
+  // mislabel where every check-in was treated as a relapse event.
   const daysSinceLastRelapse = useMemo(() => {
-    if (relapseEntries.length === 0) return null;
-    const sorted = [...relapseEntries].sort((a, b) => {
+    const actualRelapses = relapseEntries.filter(
+      e => e.entryType === RELAPSE_ENTRY_TYPES.RELAPSE
+    );
+    if (actualRelapses.length === 0) return null;
+    const sorted = [...actualRelapses].sort((a, b) => {
       const aTime = a.createdAt?.toDate?.()?.getTime() ?? a.timestamp ?? 0;
       const bTime = b.createdAt?.toDate?.()?.getTime() ?? b.timestamp ?? 0;
       return bTime - aTime;
@@ -425,6 +440,7 @@ const RelapseRadar = () => {
 
       // Save the entry before revealing reactions so currentEntryId is set
       const entry = {
+        entryType,
         selectedSelf,
         selectedHabits,
         substanceUse,
@@ -456,7 +472,26 @@ const RelapseRadar = () => {
       // Show Oracle feedback in modal
       openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());
 
-      ouraToast.success('Relapse check-in logged');
+      const isRelapseEvent = entryType === RELAPSE_ENTRY_TYPES.RELAPSE;
+      ouraToast.success(isRelapseEvent ? 'Relapse logged' : 'Signal logged');
+
+      // Bridge to Hard Lessons when this was an actual relapse event so the
+      // assumption / cost / rule capture happens in the right module. Stash
+      // a prefill payload in sessionStorage under the same key the cross-
+      // module extraction flow uses, then navigate after the user dismisses
+      // the Oracle modal (delayed so they can read the feedback first).
+      if (isRelapseEvent) {
+        try {
+          sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({
+            eventDescription: reflection || '',
+            costDescription: '',
+            extractedLesson: '',
+            ruleGoingForward: '',
+            sourceRelapseEntryId: savedEntry.id,
+            isOracleExtracted: false,
+          }));
+        } catch { /* ignore storage errors */ }
+      }
 
       // BER-133: check for archetype-kill-list correlation on new entry
       const submittedArchetype = selectedSelf;
@@ -479,6 +514,7 @@ const RelapseRadar = () => {
       }
 
       // Clear form
+      setEntryType(RELAPSE_ENTRY_TYPES.SIGNAL);
       setSelectedSelf('');
       setSelectedHabits([]);
       setSubstanceUse([]);
@@ -488,6 +524,12 @@ const RelapseRadar = () => {
       setEventOccurredAt(new Date().toISOString().slice(0, 16));
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
+
+      // After the user has had a chance to see the Oracle feedback, navigate
+      // to Hard Lessons to complete the rule extraction for an actual relapse.
+      if (isRelapseEvent) {
+        setTimeout(() => navigate('/hardlessons'), 3500);
+      }
 
     } catch (error) {
       logger.error("Error generating Oracle feedback:", error);
@@ -555,16 +597,33 @@ const RelapseRadar = () => {
           </div>
         )}
 
-        {/* Days since last relapse + archetype frequency — step 2 only */}
-        {step === 2 && daysSinceLastRelapse !== null && (
+        {/* Days since last actual relapse + total check-ins — step 2 only.
+            daysSinceLastRelapse is null until at least one entry is flagged
+            entryType: 'relapse'. Total count includes all entries (signals
+            and relapses). */}
+        {step === 2 && relapseEntries.length > 0 && (
           <div className="mb-6 flex items-center gap-3 oura-card p-4">
-            <div className={`text-4xl font-light tabular-nums ${daysSinceLastRelapse === 0 ? 'text-red-400' : daysSinceLastRelapse < 3 ? 'text-oura-amber' : 'text-oura-cyan'}`}>
-              {daysSinceLastRelapse}
-            </div>
-            <div>
-              <div className="text-white text-sm font-light">day{daysSinceLastRelapse !== 1 ? 's' : ''} since last relapse</div>
-              <div className="text-gray-500 text-xs">{relapseEntries.length} total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
-            </div>
+            {daysSinceLastRelapse !== null ? (
+              <>
+                <div className={`text-4xl font-light tabular-nums ${daysSinceLastRelapse === 0 ? 'text-red-400' : daysSinceLastRelapse < 3 ? 'text-oura-amber' : 'text-oura-cyan'}`}>
+                  {daysSinceLastRelapse}
+                </div>
+                <div>
+                  <div className="text-white text-sm font-light">day{daysSinceLastRelapse !== 1 ? 's' : ''} since last relapse</div>
+                  <div className="text-gray-500 text-xs">{relapseEntries.length} total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-4xl font-light tabular-nums text-oura-cyan">
+                  {relapseEntries.length}
+                </div>
+                <div>
+                  <div className="text-white text-sm font-light">total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
+                  <div className="text-gray-500 text-xs">No relapse logged yet — these are precursor signals</div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -608,6 +667,39 @@ const RelapseRadar = () => {
             )}
           </div>
         )}
+
+        {/* Entry-type toggle — distinguishes a precursor signal (the module's
+            primary use) from an actual relapse event. Visible at every step so
+            the user can correct the framing at any point before submit. */}
+        <div className="mb-5">
+          <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">What are you logging?</div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setEntryType(RELAPSE_ENTRY_TYPES.SIGNAL)}
+              className={`p-3 rounded-xl text-left transition-all duration-200 border ${
+                entryType === RELAPSE_ENTRY_TYPES.SIGNAL
+                  ? 'bg-oura-blue/15 border-oura-blue text-white'
+                  : 'bg-oura-card border-oura-border text-gray-400 hover:bg-oura-darker'
+              }`}
+            >
+              <div className="text-sm font-medium">Signal</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">A precursor — conditions or patterns before relapse</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE)}
+              className={`p-3 rounded-xl text-left transition-all duration-200 border ${
+                entryType === RELAPSE_ENTRY_TYPES.RELAPSE
+                  ? 'bg-red-500/15 border-red-500 text-white'
+                  : 'bg-oura-card border-oura-border text-gray-400 hover:bg-oura-darker'
+              }`}
+            >
+              <div className="text-sm font-medium">Actual relapse</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">A relapse occurred — bridges to Hard Lessons after submit</div>
+            </button>
+          </div>
+        </div>
 
         <div className="w-full bg-oura-border rounded-full h-2">
           <div
@@ -795,7 +887,9 @@ const RelapseRadar = () => {
             <textarea
               value={reflection}
               onChange={(e) => setReflection(e.target.value)}
-              placeholder="What led to this? What can you learn? How will you recover?"
+              placeholder={entryType === RELAPSE_ENTRY_TYPES.RELAPSE
+                ? 'What led to this? What can you learn? How will you recover?'
+                : 'What did you notice? What conditions are stacking up?'}
               className="w-full h-32 p-4 pr-14 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-blue focus:outline-none resize-none transition-all duration-200"
             />
             <div className="absolute right-2 top-2">
@@ -822,7 +916,11 @@ const RelapseRadar = () => {
 
       {submitSuccess && (
         <div className="mb-6 oura-card border-l-4 border-oura-cyan p-4 animate-fade-in-up">
-          <p className="text-gray-300 text-sm">✅ Relapse entry submitted successfully! Resetting form...</p>
+          <p className="text-gray-300 text-sm">
+            {entryType === RELAPSE_ENTRY_TYPES.RELAPSE
+              ? 'Relapse logged. Opening Hard Lessons to capture the rule...'
+              : 'Signal logged. Resetting form...'}
+          </p>
         </div>
       )}
 
@@ -1049,8 +1147,8 @@ const RelapseRadar = () => {
           <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center text-2xl">
             🧭
           </div>
-          <h3 className="text-lg font-light text-white mb-2">No relapse entries logged</h3>
-          <p className="text-gray-500 text-sm">Log a check-in above. Patterns only become visible once you track them.</p>
+          <h3 className="text-lg font-light text-white mb-2">No check-ins logged</h3>
+          <p className="text-gray-500 text-sm">Log a signal above. Patterns only become visible once you track them.</p>
         </div>
       ))}
 

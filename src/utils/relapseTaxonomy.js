@@ -1,20 +1,16 @@
 /**
- * relapseTaxonomy — UXR-002 Spec 4
+ * relapseTaxonomy — recovery-tradition vocabulary for Signal Module patterns.
  *
- * Behavioral-descriptor labels for the Relapse Radar archetype and habit
- * taxonomy. Separates stable IDs (what is persisted on
- * relapseEntries.selectedSelf / .selectedHabits) from mutable display labels.
+ * Labels are drawn from CBT cognitive distortions, AA character defects, and
+ * NA precursor language so the categories are immediately recognizable to
+ * anyone with recovery exposure. Internal IDs are preserved (still the
+ * original identity-noun strings) so historical entries and drift-detection
+ * archetype counts continue to work without a data migration. The resolver
+ * functions translate ID → display label at render time.
  *
- * Why this split exists: identity-noun labels like "The Victim" / "The Addict"
- * rehearse a negative self-view every time the user selects one. Per
- * self-verification theory (Swann), negative self-views are self-reinforcing
- * when labels match. The module names the event (Responsibility abdication,
- * Compulsive return), not the actor.
- *
- * Backward compatibility: archetype and habit IDs are the original display
- * strings. Historical entries continue to match without migration; the
- * resolver functions simply translate the ID to the behavioral-descriptor
- * label at render time. Drift detection continues to receive IDs.
+ * Habit labels intentionally mirror the IDs verbatim — plain English instead
+ * of jargon — because the original IDs are already clear behavioral
+ * descriptions ("Excessive social media scrolling", "Isolation").
  */
 
 export const ARCHETYPE_IDS = [
@@ -29,14 +25,14 @@ export const ARCHETYPE_IDS = [
 ];
 
 export const ARCHETYPE_LABELS = {
-  'The Addict': 'Compulsive return',
-  'The Victim': 'Responsibility abdication',
-  'The Procrastinator': 'Avoidance drift',
-  'The Pessimist': 'Foreclosure reflex',
-  'The Perfectionist': 'Standard-inflation freeze',
-  'The People-Pleaser': 'Approval-contingent action',
-  'The Imposter': 'Signal-suppression mode',
-  'The Self-Saboteur': 'Self-undermining action',
+  'The Addict': 'Craving / Urge',
+  'The Victim': 'Blaming',
+  'The Procrastinator': 'Avoidance',
+  'The Pessimist': 'Catastrophizing',
+  'The Perfectionist': 'Perfectionism',
+  'The People-Pleaser': 'People-pleasing',
+  'The Imposter': 'Denial / Minimizing',
+  'The Self-Saboteur': 'Self-sabotage',
 };
 
 export function resolveArchetypeLabel(value) {
@@ -54,15 +50,16 @@ export const HABIT_IDS = [
   'Avoiding responsibilities',
 ];
 
+// Habit labels mirror their IDs — plain English already; no re-jargoning.
 export const HABIT_LABELS = {
-  'Excessive social media scrolling': 'Scroll-state compulsion',
-  'Binge eating': 'Consumption dysregulation',
-  'Procrastination': 'Task-avoidance loop',
-  'Negative self-talk': 'Internal prosecution',
-  'Isolation': 'Withdrawal pattern',
-  'Overthinking': 'Rumination loop',
-  'Comparing myself to others': 'External-referent fixation',
-  'Avoiding responsibilities': 'Obligation evasion',
+  'Excessive social media scrolling': 'Excessive social media scrolling',
+  'Binge eating': 'Binge eating',
+  'Procrastination': 'Procrastination',
+  'Negative self-talk': 'Negative self-talk',
+  'Isolation': 'Isolation',
+  'Overthinking': 'Overthinking',
+  'Comparing myself to others': 'Comparing myself to others',
+  'Avoiding responsibilities': 'Avoiding responsibilities',
 };
 
 export function resolveHabitLabel(value) {

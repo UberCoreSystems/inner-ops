@@ -7,22 +7,41 @@ function MirrorStack({ killTargets = [], hardLessons = [], signalReport }) {
   const violatedInWindow = signalReport?.ruleIntegrity?.violatedInWindow ?? 0;
   const priorViolated = signalReport?.ruleIntegrity?.priorViolatedInWindow;
 
-  const activeTargets = (killTargets || []).filter(t => t?.status === 'active');
+  const allTargets = killTargets || [];
+  const activeTargets = allTargets.filter(t => t?.status === 'active');
   const activeCount = activeTargets.length;
 
   const weekAgoMs = Date.now() - 7 * 86400000;
+  const isWithinWeek = (dateLike) => {
+    if (!dateLike) return false;
+    const ts = dateLike?.toDate ? dateLike.toDate().getTime() : new Date(dateLike).getTime();
+    return Number.isFinite(ts) && ts > weekAgoMs;
+  };
+
+  // Held / untouched are state-of-the-contract metrics — only meaningful for
+  // active targets. A target the user is still trying to hold is either being
+  // checked in (held) or being neglected (untouched).
   let held = 0;
-  let escaped = 0;
   let untouched = 0;
   activeTargets.forEach(t => {
-    const recent = (t.checkIns || []).filter(c => {
-      const ts = new Date(c.date).getTime();
-      return Number.isFinite(ts) && ts > weekAgoMs;
-    });
+    const recent = (t.checkIns || []).filter(c => isWithinWeek(c.date));
     if (recent.length === 0) untouched += 1;
-    else if (recent.some(c => !c.held)) escaped += 1;
-    else held += 1;
+    else if (recent.every(c => c.held)) held += 1;
+    // active targets with a recent held=false check-in are counted under
+    // `escaped` below (the autopsy may or may not be submitted yet).
   });
+
+  // Escaped count: any target (active OR escaped status) with a recent escape
+  // signal in the past 7 days. Reads from escapeData[].date — the canonical
+  // record set when the autopsy is submitted — and falls back to a
+  // checkIns[].held === false entry on still-active targets to capture the
+  // window between "It got me" being clicked and the autopsy form being
+  // submitted. Counts unique targets (a target with both signals counts once).
+  const escaped = allTargets.filter(t => {
+    const recentAutopsy = (t.escapeData || []).some(e => isWithinWeek(e.date));
+    if (recentAutopsy) return true;
+    return (t.checkIns || []).some(c => isWithinWeek(c.date) && c.held === false);
+  }).length;
 
   const driftCount = (signalReport?.driftSignals || []).length;
   const priorDrift = signalReport?.priorDriftSignalCount;

@@ -9,14 +9,15 @@ import { readUserData, writeData } from '../utils/firebaseUtils';
 import { authService } from '../utils/authService';
 import { composeSignalReport, getBehavioralRecordDensity } from '../utils/clarityScore';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
+import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
 import SignalReport from '../components/SignalReport';
 import BehavioralRecordDensity from '../components/BehavioralRecordDensity';
 import MorningBrief from '../components/MorningBrief';
 import KillListDashboard from '../components/KillListDashboard';
 import QuickJournalModal from '../components/QuickJournalModal';
 import DailyPrompt from '../components/DailyPrompt';
-import ActiveTargetCommandBoard from '../components/ActiveTargetCommandBoard';
 import MirrorStack from '../components/MirrorStack';
+import WeeklyRuleReview from '../components/WeeklyRuleReview';
 import PatternConfrontationCard from '../components/PatternConfrontationCard';
 import { ScoreCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
@@ -212,19 +213,19 @@ export default function Dashboard() {
         hardLessons: hardLessons.length
       });
 
-      // Calculate realistic streak days based on actual data
-      let streakDays = 0;
-      if (relapseEntries.length > 0) {
-        const lastRelapse = new Date(relapseEntries[0].createdAt);
+      // Days since last ACTUAL relapse — entries flagged entryType: 'relapse'
+      // only. Precursor signals do not count (they are early-warning logs,
+      // not relapse events). Null when no actual relapse has ever been
+      // logged, which prevents the early-warning tile from claiming "Recent
+      // relapse within 72 hours" for users who have never relapsed.
+      let streakDays = null;
+      const actualRelapses = relapseEntries.filter(
+        e => e.entryType === RELAPSE_ENTRY_TYPES.RELAPSE
+      );
+      if (actualRelapses.length > 0) {
+        const lastRelapse = new Date(actualRelapses[0].createdAt);
         const today = new Date();
-        streakDays = Math.floor((today - lastRelapse) / (1000 * 60 * 60 * 24));
-      } else {
-        // If no relapses, calculate days since first journal entry or 0
-        if (journalEntries.length > 0) {
-          const firstEntry = new Date(journalEntries[journalEntries.length - 1].createdAt);
-          const today = new Date();
-          streakDays = Math.floor((today - firstEntry) / (1000 * 60 * 60 * 24));
-        }
+        streakDays = Math.max(0, Math.floor((today - lastRelapse) / (1000 * 60 * 60 * 24)));
       }
 
       // Set stats to show ALL-TIME counts (not just recent activity)
@@ -233,7 +234,7 @@ export default function Dashboard() {
         journalEntries: journalEntries.length,  // All-time total
         journalEntriesTotal: journalEntries.length,
         relapseEntries: relapseEntries.length,
-        streakDays: Math.max(0, streakDays),
+        streakDays,
         killTargets: killTargets.length,  // All-time total
         killTargetsTotal: killTargets.length,
         hardLessons: hardLessons.length,  // All-time total
@@ -260,7 +261,7 @@ export default function Dashboard() {
           journalEntries: journalEntries.length,
           relapseEntries: relapseEntries.length,
           killTargets: killTargets.length,
-          streakDays: Math.max(0, streakDays)
+          streakDays
         },
         recentEntries: allEntries.length
       });
@@ -315,7 +316,7 @@ export default function Dashboard() {
           if (daysSinceRelapse !== null && daysSinceRelapse < 3) { level = 'high'; signals.push('Recent relapse within 72 hours'); }
           if (last5negative >= 3) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Predominantly negative mood over last 5 entries'); }
           if (daysSinceJournal >= 5) { level = level === 'high' ? 'high' : 'elevated'; signals.push(`No journal entry in ${daysSinceJournal} days`); }
-          if (negativeCount >= 2 && daysSinceRelapse < 14) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Negative mood pattern following recent relapse'); }
+          if (negativeCount >= 2 && daysSinceRelapse !== null && daysSinceRelapse < 14) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Negative mood pattern following recent relapse'); }
 
           if (level !== 'clear' && recentJournal.length >= 3) {
             setEarlyWarning({ level, signals, moodDots, daysSinceRelapse, daysSinceJournal });
@@ -408,8 +409,10 @@ export default function Dashboard() {
           signalReport={signalReport}
         />
 
-        {/* Active Target Command Board — top-of-fold priority stack (up to 3) */}
-        <ActiveTargetCommandBoard killTargets={rawUserData?.killTargets || []} />
+        {/* Weekly Rule Review — once-per-ISO-week sweep over finalized rules.
+            Self-gating: returns null when there are no rules, when the user
+            has already reviewed this week, or while data is loading. */}
+        <WeeklyRuleReview />
 
         {/* Morning Brief — operator-cadence daily readout, Firestore-cached. */}
         {user?.uid && <MorningBrief userId={user.uid} />}

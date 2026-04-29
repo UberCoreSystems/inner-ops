@@ -88,14 +88,13 @@ const withinOffsetWindow = (value, windowDays, offsetDays) => {
  * from the same period where Oracle feedback was generated but the user took
  * no follow-up action on it (`oracleDismissed === true`).
  *
- * NOTE (instrumentation gap): writes from Journal, Kill List, Hard Lessons,
- * Relapse Radar, and Black Mirror currently persist `oracleFeedback` text on
- * the entry when Oracle is called, but there is no explicit `oracleEngaged`
- * or `oracleDismissed` boolean attached on follow-up/continue. Until those
- * flags are added to the entry writes, this reader returns a placeholder with
- * `percentage: null` so the UI can render a "not yet instrumented" line
- * rather than a misleading number. TODO: add `oracleEngaged: boolean` on
- * follow-up writes across all five modules, then tighten this reader.
+ * Pattern Confrontation Card writes to the `confrontations` collection on
+ * every confront tap (oracleEngaged: true) and on every manual dismiss
+ * (oracleDismissed: true), so the metric now reflects the Dashboard's
+ * Confront flow. Other modules (Journal, Kill List, Hard Lessons, Relapse,
+ * Black Mirror) still rely on legacy `oracleFeedback` presence; their write
+ * paths can later add explicit `oracleEngaged` / `oracleDismissed` flags for
+ * tighter accounting, but they're already covered by the fallback.
  *
  * @param {string} userId — kept for signature parity; reads are already
  *   user-scoped through readUserData.
@@ -112,12 +111,13 @@ export async function getConfrontationRate(userId, windowDays = 14, deps = {}) {
   const readUserData = deps.readUserData || (await loadDefaults()).defaultReadUserData;
   const compareToPrior = deps.compareToPrior === true;
   try {
-    const [journal, killTargets, hardLessons, relapse, blackMirror] = await Promise.all([
+    const [journal, killTargets, hardLessons, relapse, blackMirror, confrontations] = await Promise.all([
       readUserData('journalEntries'),
       readUserData('killTargets'),
       readUserData('hardLessons'),
       readUserData('relapseEntries'),
       readUserData('blackMirrorEntries'),
+      readUserData('confrontations'),
     ]);
 
     const all = [
@@ -126,6 +126,7 @@ export async function getConfrontationRate(userId, windowDays = 14, deps = {}) {
       ...(hardLessons || []),
       ...(relapse || []),
       ...(blackMirror || []),
+      ...(confrontations || []),
     ];
 
     // Reduce a set of entries to { engagedCount, dismissedCount, percentage }.

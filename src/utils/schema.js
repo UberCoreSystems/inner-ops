@@ -17,6 +17,7 @@ export const COLLECTIONS = Object.freeze({
   RELAPSE_ENTRIES: 'relapseEntries',
   USER_SETTINGS: 'userSettings',
   SYNTHESES: 'syntheses',
+  CONFRONTATIONS: 'confrontations',
 });
 
 // Relapse-entry fields consumed cross-module.
@@ -25,6 +26,14 @@ export const RELAPSE_FIELDS = Object.freeze({
   PRECURSORS: 'precursorConditions',    // array of detected precursor strings
   CONTEXT_SHIFT: 'precursorContext',    // non-empty string indicates routine disruption
   REFLECTION: 'reflection',             // free-form user text
+  ENTRY_TYPE: 'entryType',              // 'signal' (precursor) | 'relapse' (actual relapse event)
+});
+
+// Allowed values for RELAPSE_FIELDS.ENTRY_TYPE. Entries written before this
+// field existed are interpreted as RELAPSE_ENTRY_TYPES.SIGNAL by readers.
+export const RELAPSE_ENTRY_TYPES = Object.freeze({
+  SIGNAL: 'signal',
+  RELAPSE: 'relapse',
 });
 
 // Kill-target fields consumed cross-module.
@@ -41,6 +50,12 @@ export const HARD_LESSON_FIELDS = Object.freeze({
   IS_FINALIZED: 'isFinalized',
   RULE: 'ruleGoingForward',
   LESSON: 'extractedLesson',
+  // Per-rule violation log. Each entry: { date: ISO, note?: string, source: 'direct' | 'weekly_review' }.
+  // Written by the in-the-moment "Rule broken" button on the Hard Lessons
+  // page and by the weekly rule review on the Dashboard. Read by the Mirror
+  // tile / Pattern Confrontation card via getRuleIntegrityStatus.
+  VIOLATIONS: 'violations',
+  LAST_VIOLATED_AT: 'lastViolatedAt',
 });
 
 // Journal-entry fields consumed cross-module.
@@ -52,6 +67,22 @@ export const JOURNAL_FIELDS = Object.freeze({
 // Black Mirror entry fields.
 export const BLACK_MIRROR_FIELDS = Object.freeze({
   INDEX: 'blackMirrorIndex',
+});
+
+// Pattern-confrontation fields. Each doc in COLLECTIONS.CONFRONTATIONS
+// represents one Confront tap on the Dashboard's PatternConfrontationCard.
+// Powers the inline archive, the 24h dedupe, and the Confrontation Rate
+// metric in clarityScore.
+export const CONFRONTATION_FIELDS = Object.freeze({
+  CREATED_AT: 'createdAt',          // ISO string at write time
+  SIGNAL_KEY: 'signalKey',           // matches PatternConfrontationCard.signalKey for dedupe
+  SIGNAL_TYPE: 'signalType',         // 'drift' | 'rule_violation'
+  SIGNAL_SNAPSHOT: 'signalSnapshot', // captured signal payload at time of confrontation
+  PROMPT: 'prompt',                  // entry text sent to the Oracle
+  ORACLE_RESPONSE: 'oracleResponse', // Oracle's response prose
+  REACTION: 'reaction',              // null | 'landed' | 'disagree' | 'sit_with' | 'missed'
+  FOLLOW_UP_RESPONSE: 'followUpResponse', // optional Oracle follow-up text from "Go deeper"
+  ORACLE_ENGAGED: 'oracleEngaged',   // always true on these docs; explicit for the engagement reader
 });
 
 // User-settings fields.
@@ -68,6 +99,10 @@ export const USER_SETTINGS_FIELDS = Object.freeze({
   DAILY_PROMPT_CURRENT_ID: 'dailyPromptCurrentId',
   DAILY_PROMPT_CURRENT_DATE: 'dailyPromptCurrentDate',
   DAILY_PROMPT_ANSWERED_AT: 'dailyPromptAnsweredAt',
+  // ISO-week stamp ("YYYY-Www") of the most recently submitted weekly rule
+  // review. The WeeklyRuleReview card on the Dashboard hides until the
+  // current ISO week differs from this value.
+  LAST_WEEKLY_RULE_REVIEW_WEEK: 'lastWeeklyRuleReviewWeek',
 });
 
 // Oracle-related fields. The Oracle Cloud Function now returns a structured
