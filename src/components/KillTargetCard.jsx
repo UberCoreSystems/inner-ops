@@ -31,6 +31,19 @@ function getConsecutiveDaysRequired(target) {
   return Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED ? raw : MIN_DAYS_REQUIRED;
 }
 
+// Days since the target's most recent escape — used in the paused-state copy.
+// Reads from escapeData[].date (canonical, written when autopsy submits) and
+// falls back to escapedAt for safety.
+function daysSinceEscape(target) {
+  const escapes = target?.escapeData || [];
+  const latestDateStr = escapes.length > 0 ? escapes[escapes.length - 1]?.date : null;
+  const ts = latestDateStr
+    ? new Date(latestDateStr).getTime()
+    : (target?.escapedAt?.toDate?.()?.getTime?.() ?? null);
+  if (!Number.isFinite(ts)) return null;
+  return Math.max(0, Math.floor((Date.now() - ts) / 86400000));
+}
+
 export function KillTargetSummary({ target }) {
   if (!target) return null;
   const category = categories.find((c) => c.value === target.category) || categories[0];
@@ -44,6 +57,8 @@ export function KillTargetSummary({ target }) {
     day: 'numeric',
     year: showYear ? 'numeric' : undefined,
   });
+  const isEscaped = target.status === 'escaped';
+  const escapeDays = isEscaped ? daysSinceEscape(target) : null;
 
   return (
     <>
@@ -55,7 +70,7 @@ export function KillTargetSummary({ target }) {
         <span className="text-[#858585] text-xs">·</span>
         <span className={`text-xs uppercase tracking-wider ${
           target.status === 'killed' ? 'text-[#858585]' :
-          target.status === 'escaped' ? 'text-[#b45309]' :
+          isEscaped ? 'text-[#b45309]' :
           'text-white'
         }`}>
           {target.status}
@@ -63,31 +78,50 @@ export function KillTargetSummary({ target }) {
         <span className="text-[#858585] text-xs">·</span>
         <span className="text-[#858585] text-xs">Day {daysActive} · {dateLabel}</span>
       </div>
-      <p className="text-[#858585] text-xs mt-2">
-        Kill requires {threshold} consecutive days of held execution.
-      </p>
+      {isEscaped ? (
+        <p className="text-[#b45309] text-xs mt-2">
+          Contract paused after escape
+          {escapeDays !== null && (
+            <span className="text-[#858585]">
+              {' · '}
+              {escapeDays === 0 ? 'today' : `${escapeDays} day${escapeDays === 1 ? '' : 's'} ago`}
+            </span>
+          )}
+        </p>
+      ) : (
+        <p className="text-[#858585] text-xs mt-2">
+          Kill requires {threshold} consecutive days of held execution.
+        </p>
+      )}
 
-      {/* Streak progress bar */}
-      <div className="flex items-center gap-3 mt-4">
-        <div className="flex-1 bg-[#1a1a1a] rounded-full h-2 overflow-hidden">
-          <div
-            className="h-2 rounded-full transition-all duration-500"
-            style={{
-              width: `${Math.min(100, (streak / threshold) * 100)}%`,
-              backgroundColor: '#ef4444',
-            }}
-          />
+      {/* Streak progress bar — hidden on escaped cards (the contract is paused;
+          the bar implies ongoing active progress and is misleading). */}
+      {!isEscaped && (
+        <div className="flex items-center gap-3 mt-4">
+          <div className="flex-1 bg-[#1a1a1a] rounded-full h-2 overflow-hidden">
+            <div
+              className="h-2 rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(100, (streak / threshold) * 100)}%`,
+                backgroundColor: '#ef4444',
+              }}
+            />
+          </div>
+          <span className="text-xs text-[#858585] shrink-0 tabular-nums">{streak} / {threshold}d</span>
         </div>
-        <span className="text-xs text-[#858585] shrink-0 tabular-nums">{streak} / {threshold}d</span>
-      </div>
+      )}
 
-      {/* 3-metric row */}
+      {/* Metric row. On escaped cards, Current Streak is suppressed (always 0
+          while paused — noise). Behavioral Record + Longest Run remain as
+          historical signal of what was held before the breach. */}
       <div className="flex items-start justify-between mt-3">
         <div className="flex gap-5">
-          <div>
-            <span className="text-2xl font-light tabular-nums text-white">{streak}</span>
-            <div className="text-[#858585] text-xs mt-0.5">Current Streak</div>
-          </div>
+          {!isEscaped && (
+            <div>
+              <span className="text-2xl font-light tabular-nums text-white">{streak}</span>
+              <div className="text-[#858585] text-xs mt-0.5">Current Streak</div>
+            </div>
+          )}
           <div>
             <span className="text-2xl font-light tabular-nums text-[#ababab]">
               {target.totalTrackedDays || 0}

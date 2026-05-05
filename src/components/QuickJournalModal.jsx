@@ -62,6 +62,15 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
     try { el.setSelectionRange(len, len); } catch { /* old browsers */ }
   }, [isOpen, initialEntry]);
 
+  // Auto-grow the textarea so longer entries stay visible while the user
+  // writes. Reset to 'auto' first so the height shrinks when content does.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [entry, isOpen]);
+
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape' && isOpen) onClose();
@@ -273,7 +282,8 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                   value={entry}
                   onChange={(e) => setEntry(e.target.value)}
                   rows={5}
-                  className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none resize-none transition-colors text-sm placeholder-[#555555]"
+                  style={{ minHeight: '8rem', maxHeight: '60vh' }}
+                  className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none resize-none transition-colors text-sm placeholder-[#555555] overflow-y-auto"
                   placeholder="Write freely. One sentence or ten."
                   autoFocus
                 />

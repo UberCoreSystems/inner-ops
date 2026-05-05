@@ -12,16 +12,17 @@ import logger from '../utils/logger';
  * PatternConfrontationCard — surfaces the top drift signal or rule violation
  * and lets the user confront it via the Oracle. Each confrontation writes a
  * document to COLLECTIONS.CONFRONTATIONS that powers:
- *   • the 24h dedupe gate (replaces sessionStorage-based dismissal),
+ *   • the signal-key dedupe gate (once a signal is confronted or dismissed,
+ *     it stays hidden until a NEW signal with a different key appears),
  *   • the OracleModal reaction capture (onReaction patches the same doc),
  *   • the inline ConfrontationHistoryPanel below the card,
  *   • the Confrontation Rate metric in clarityScore.js.
  *
- * The dedupe is per-`signalKey` — confronting the addict-archetype signal
- * does not silence a separate rule-violation signal.
+ * Dedupe is purely signalKey-based — no time window. Resurfacing is driven
+ * by the underlying drift detection: a different archetype, condition,
+ * targetId, or signal type produces a different signalKey, which the dedupe
+ * does not match against past confrontations, so the new signal appears.
  */
-
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 function buildSignalKey(activeSignal, violatedInWindow) {
   if (activeSignal) {
@@ -72,15 +73,16 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
     return () => { cancelled = true; };
   }, []);
 
-  const dismissedRecently = (() => {
+  // Signal-key-based dedupe: once a signalKey appears in past confrontations
+  // (whether the user fully confronted or just dismissed via the × button),
+  // hide the card for that signalKey indefinitely. A NEW signal with a
+  // different key — different archetype, condition, target, or signal type —
+  // will produce its own signalKey and re-surface the card. No time window.
+  const alreadyConfronted = (() => {
     if (!signalKey) return false;
-    const cutoff = Date.now() - TWENTY_FOUR_HOURS_MS;
-    return confrontations.some((c) => {
-      if (c?.[CONFRONTATION_FIELDS.SIGNAL_KEY] !== signalKey) return false;
-      const created = c?.[CONFRONTATION_FIELDS.CREATED_AT];
-      const ts = created ? new Date(created).getTime() : 0;
-      return Number.isFinite(ts) && ts >= cutoff;
-    });
+    return confrontations.some(
+      (c) => c?.[CONFRONTATION_FIELDS.SIGNAL_KEY] === signalKey
+    );
   })();
 
   // The local dismissal flag is synchronous — covers the gap between a
@@ -93,18 +95,18 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
   const localDismissed = localDismissedKey && localDismissedKey === signalKey;
   const cardHidden = !activeSignal && violatedInWindow === 0
     || localDismissed
-    || dismissedRecently;
+    || alreadyConfronted;
 
   const violatedRule = !activeSignal && violatedInWindow > 0
     ? (hardLessons || []).filter((l) => l?.isRuleViolation)[0]
     : null;
 
   const handleDismiss = () => {
-    // Manual dismiss without confronting still hides the card for 24h —
-    // write a confrontation doc with no Oracle response so the dedupe
-    // honors it. Tagged with reaction:'missed' so the engagement reader
-    // doesn't count this as a real engagement, AND so the archive shows
-    // the user dismissed without engaging.
+    // Manual dismiss without confronting still hides the card until a
+    // different signal appears — write a confrontation doc with no Oracle
+    // response so the dedupe honors it. Tagged with reaction:'missed' so
+    // the engagement reader doesn't count this as a real engagement, AND
+    // so the archive shows the user dismissed without engaging.
     const nowIso = new Date().toISOString();
     const payload = {
       [CONFRONTATION_FIELDS.CREATED_AT]: nowIso,
@@ -172,9 +174,9 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
       const saved = await writeData(COLLECTIONS.CONFRONTATIONS, payload);
       if (saved?.id) {
         setActiveDocId(saved.id);
-        // Adding the new doc to local state is what feeds the dedupe gate
-        // on the NEXT render after the modal closes — the card hides for 24h
-        // because dismissedRecently picks up this entry. Do NOT also set
+        // Adding the new doc to local state feeds the signalKey dedupe gate
+        // on the next render after the modal closes — the card hides for
+        // this signalKey until a different signal appears. Do NOT also set
         // localDismissedKey here; that would re-render and hide the modal
         // mid-conversation.
         setConfrontations((prev) => [{ ...payload, id: saved.id }, ...prev]);
@@ -242,7 +244,7 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
               <button
                 onClick={handleDismiss}
                 className="text-[#858585] hover:text-[#858585] transition-colors shrink-0"
-                aria-label="Dismiss for 24 hours"
+                aria-label="Dismiss until a new signal appears"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M18 6L6 18M6 6l12 12" />

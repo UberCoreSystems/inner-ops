@@ -402,10 +402,11 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Mirror Stack — declared vs. observed */}
+        {/* Mirror Stack — declared vs. observed vs. direction */}
         <MirrorStack
           killTargets={rawUserData?.killTargets || []}
           hardLessons={rawUserData?.hardLessons || []}
+          relapseEntries={rawUserData?.relapseEntries || []}
           signalReport={signalReport}
         />
 

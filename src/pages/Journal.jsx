@@ -164,6 +164,7 @@ export default function Journal() {
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry the modal is for
   const submittingRef = useRef(false);
+  const entryTextareaRef = useRef(null);
   const [view, setView] = useState('active');
   const [archivedEntries, setArchivedEntries] = useState([]);
   
@@ -171,6 +172,16 @@ export default function Journal() {
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
   const [promptVisible, setPromptVisible] = useState(true);
   const [isTextareaFocused, setIsTextareaFocused] = useState(false);
+
+  // Auto-grow the entry textarea so longer entries don't get visually clipped
+  // inside a fixed scrollable box. Reset to 'auto' first so the height shrinks
+  // when content shrinks (deletion, reset, edit-load).
+  useEffect(() => {
+    const el = entryTextareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [entry]);
 
   // Entry editing state
   const [editingEntryId, setEditingEntryId] = useState(null);
@@ -1043,12 +1054,14 @@ export default function Journal() {
                 <div className="relative">
                   <textarea
                     id="journal-entry-input"
+                    ref={entryTextareaRef}
                     value={entry}
                     onChange={(e) => setEntry(e.target.value)}
                     onFocus={() => setIsTextareaFocused(true)}
                     onBlur={() => setIsTextareaFocused(false)}
                     rows={6}
-                    className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none resize-none transition-colors"
+                    style={{ minHeight: '11rem' }}
+                    className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none resize-none transition-colors overflow-hidden"
                     placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
                     required
                   />

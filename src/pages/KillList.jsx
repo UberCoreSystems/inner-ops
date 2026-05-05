@@ -105,6 +105,9 @@ function aggregateAutopsyPatterns(escapeData) {
 const LEGACY_DIFFICULTY_TO_DAYS = { surface: 21, deep: 30, core: 60 };
 const LEGACY_PRIORITY_TO_DAYS = { high: 60, medium: 30, low: 21 };
 const MIN_DAYS_REQUIRED = 21;
+// A kill-target title is a short noun-phrase, not a rule statement. Cap
+// keeps Mirror and other surfaces that quote the title in prose readable.
+const TITLE_MAX_LENGTH = 60;
 const getConsecutiveDaysRequired = (target) => {
   const raw = Number(target?.consecutiveDaysRequired);
   if (Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED) return Math.floor(raw);
@@ -191,6 +194,10 @@ const KillList = () => {
   });
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
+  // Inline-threshold edit state for the "Reactivate with new threshold" CTA
+  // on escaped cards. Only one row's input is open at a time.
+  const [thresholdEditingId, setThresholdEditingId] = useState(null);
+  const [thresholdEditValue, setThresholdEditValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -400,6 +407,14 @@ const KillList = () => {
     addingTargetRef.current = true;
 
     if (!newTarget.trim() || submitting) {
+      addingTargetRef.current = false;
+      return;
+    }
+    // Title length cap. A target is a short noun-phrase ("Doomscrolling",
+    // "Late-night work"), not a rule statement. Long titles bloat Mirror
+    // and other surfaces that surface the title in prose.
+    if (newTarget.trim().length > TITLE_MAX_LENGTH) {
+      ouraToast.warning(`Target title must be ${TITLE_MAX_LENGTH} characters or fewer`);
       addingTargetRef.current = false;
       return;
     }
@@ -898,24 +913,39 @@ const KillList = () => {
     }
   }, []);
 
-  const reactivateTarget = useCallback(async (targetId) => {
+  const reactivateTarget = useCallback(async (targetId, opts = {}) => {
     try {
       logger.log("🎯 KillList: Reactivating escaped target:", targetId);
-      
+
+      // Reset the streak and seed lastCheckIn to today so the Reconcile-Gap
+      // card does not immediately re-fire on a freshly-reactivated target.
+      // computeMissedDates reads lastCheckIn; if it's stale (pointing to the
+      // pre-escape window), the gap detector flags every day since as missed.
+      const today = todayKey();
       const targetUpdate = {
         status: 'active',
+        streak: 0,
+        lastCheckIn: today,
         reactivatedAt: new Date(),
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       };
+      // Optional new threshold (Reactivate with new threshold flow).
+      if (Number.isFinite(opts.newThreshold) && opts.newThreshold >= MIN_DAYS_REQUIRED) {
+        targetUpdate.consecutiveDaysRequired = Math.floor(opts.newThreshold);
+      }
 
       await updateData('killTargets', targetId, targetUpdate);
       logger.log("✅ KillList: Target reactivated successfully");
-      
-      ouraToast.success('Target reactivated');
+
+      ouraToast.success(
+        opts.newThreshold
+          ? `Reactivated with ${targetUpdate.consecutiveDaysRequired}-day threshold`
+          : 'Target reactivated'
+      );
 
       // Update local state immediately
-      setTargets(prev => prev.map(target => 
-        target.id === targetId 
+      setTargets(prev => prev.map(target =>
+        target.id === targetId
           ? { ...target, ...targetUpdate }
           : target
       ));
@@ -925,6 +955,39 @@ const KillList = () => {
     }
   }, []);
 
+  // Re-contract: archive the current escaped target, then prefill the
+  // new-target form so the user can name a fresh contract informed by what
+  // the autopsy revealed. Same category and threshold are preserved as
+  // sensible defaults; the autopsy's prevention text seeds the description.
+  const recontractTarget = useCallback(async (target) => {
+    if (!target) return;
+    const escapes = target.escapeData || [];
+    const latest = escapes.length > 0 ? escapes[escapes.length - 1] : null;
+
+    // Prefill synchronously so the form is ready by the time the user looks.
+    setNewTarget('');
+    setNewTargetCategory(target.category || 'bad-habit');
+    const days = parseInt(target.consecutiveDaysRequired, 10);
+    if (Number.isFinite(days) && days >= MIN_DAYS_REQUIRED) {
+      setNewTargetDays(days);
+    }
+    if (latest?.prevention) {
+      setPendingTargetDescription(latest.prevention);
+    }
+
+    // Archive the old contract. deleteTarget is the archive op (calls
+    // archiveEntry under the hood — verified at line 866).
+    await deleteTarget(target.id);
+
+    // Bring the form into view and focus it.
+    setTimeout(() => {
+      newTargetInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      newTargetInputRef.current?.focus();
+    }, 250);
+
+    ouraToast.success('Old contract archived. Re-contract below.');
+  }, [deleteTarget]);
+
   const startEditing = useCallback((target) => {
     setEditingTarget(target.id);
     setEditValue(target.title);
@@ -932,6 +995,10 @@ const KillList = () => {
 
   const saveEdit = useCallback(async () => {
     if (!editValue.trim()) return;
+    if (editValue.trim().length > TITLE_MAX_LENGTH) {
+      ouraToast.warning(`Target title must be ${TITLE_MAX_LENGTH} characters or fewer`);
+      return;
+    }
 
     try {
       logger.log("✏️ KillList: Saving edit for target:", editingTarget);
@@ -1151,7 +1218,7 @@ const KillList = () => {
           <div className="flex-1 min-w-0">
             {editingTarget === target.id ? (
               <div className="flex gap-2 mb-2">
-                <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} className="flex-1 bg-[#0a0a0a] text-white p-2 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm" autoFocus />
+                <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} maxLength={TITLE_MAX_LENGTH} className="flex-1 bg-[#0a0a0a] text-white p-2 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm" autoFocus />
                 <button onClick={saveEdit} className="px-3 py-2 bg-transparent text-white border border-[#2a2a2a] rounded-xl text-xs hover:border-white hover:bg-[#1a1a1a] transition-colors">Save</button>
                 <button onClick={cancelEdit} className="px-3 py-2 bg-[#1a1a1a] text-[#858585] rounded-xl text-xs">Cancel</button>
               </div>
@@ -1170,21 +1237,18 @@ const KillList = () => {
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
                 </button>
-                {target.status === 'escaped' && (
-                  <button onClick={() => reactivateTarget(target.id)} aria-label="Reactivate contract" title="Reactivate" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
+                {/* Reactivate / Archive icon buttons are replaced by the
+                    explicit decision CTA row below the autopsy when status
+                    is 'escaped'. Hide here to avoid duplicate controls. */}
+                {target.status !== 'escaped' && (
+                  <button onClick={() => deleteTarget(target.id)} aria-label="Archive contract" title="Archive" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 12a9 9 0 1 0 3-6.7" />
-                      <polyline points="3 4 3 10 9 10" />
+                      <rect x="3" y="4" width="18" height="4" rx="1" />
+                      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+                      <line x1="10" y1="12" x2="14" y2="12" />
                     </svg>
                   </button>
                 )}
-                <button onClick={() => deleteTarget(target.id)} aria-label="Archive contract" title="Archive" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="4" rx="1" />
-                    <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
-                    <line x1="10" y1="12" x2="14" y2="12" />
-                  </svg>
-                </button>
               </>
             )}
           </div>
@@ -1290,41 +1354,116 @@ const KillList = () => {
               </div>
             )}
 
-            {/* Escaped — show latest autopsy or lightweight breach entry */}
+            {/* Escaped — promoted as the primary card body. The autopsy is
+                the substance of an escaped contract; explicit decision CTAs
+                live directly below so the user is never left in limbo. */}
             {target.status === 'escaped' && (
-              <div className="p-3 bg-[#0a0a0a] border-l-2 border-[#b45309] border-t border-r border-b border-[#1a1a1a] rounded-xl space-y-2">
-                <span className="text-[#b45309] text-xs font-medium uppercase tracking-widest">Escaped</span>
-                {latestEscape && (
-                  <div className="text-[#858585] text-xs space-y-1">
-                    <p><span className="text-[#ababab]">What happened:</span> {latestEscape.context}</p>
-                    <p><span className="text-[#ababab]">Told myself:</span> {latestEscape.rationalization}</p>
-                    {latestEscape.prevention && <p><span className="text-[#ababab]">Would have stopped it:</span> {latestEscape.prevention}</p>}
-                  </div>
-                )}
-                {target.escapeClosureNote && (
-                  <div className="pt-2 border-t border-[#1a1a1a] space-y-2">
-                    <div>
-                      <div className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">What caught you</div>
-                      <p className="text-[#d1d1d1] text-xs leading-relaxed">{target.escapeClosureNote}</p>
+              <>
+                <div className="p-4 bg-[#0a0a0a] border-l-4 border-[#b45309] border-t border-r border-b border-[#1a1a1a] rounded-xl space-y-3">
+                  <p className="text-[#b45309] text-xs font-medium uppercase tracking-widest">Escape Autopsy</p>
+                  {latestEscape && (
+                    <div className="text-[#d1d1d1] text-sm space-y-2 leading-relaxed">
+                      <p><span className="text-[#858585] text-xs uppercase tracking-wider mr-1">What happened:</span>{latestEscape.context}</p>
+                      <p><span className="text-[#858585] text-xs uppercase tracking-wider mr-1">Told myself:</span>{latestEscape.rationalization}</p>
+                      {latestEscape.prevention && (
+                        <p><span className="text-[#858585] text-xs uppercase tracking-wider mr-1">Would have stopped it:</span>{latestEscape.prevention}</p>
+                      )}
                     </div>
-                    {Array.isArray(target.escapeClosureTags) && target.escapeClosureTags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {target.escapeClosureTags.map(t => (
-                          <span key={t} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">
-                            {t.replace(/_/g, ' ')}
-                          </span>
-                        ))}
+                  )}
+                  {target.escapeClosureNote && (
+                    <div className="pt-2 border-t border-[#1a1a1a] space-y-2">
+                      <div>
+                        <div className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">What caught you</div>
+                        <p className="text-[#d1d1d1] text-xs leading-relaxed">{target.escapeClosureNote}</p>
                       </div>
-                    )}
-                    {target.escapeOracleResponse && (
-                      <div className="mt-2 pt-2 border-t border-[#a855f7]/20">
-                        <div className="text-[#a855f7] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
-                        <p className="text-[#ababab] text-xs italic leading-relaxed">{target.escapeOracleResponse}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                      {Array.isArray(target.escapeClosureTags) && target.escapeClosureTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {target.escapeClosureTags.map(t => (
+                            <span key={t} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">
+                              {t.replace(/_/g, ' ')}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {target.escapeOracleResponse && (
+                        <div className="mt-2 pt-2 border-t border-[#a855f7]/20">
+                          <div className="text-[#a855f7] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
+                          <p className="text-[#ababab] text-xs italic leading-relaxed">{target.escapeOracleResponse}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Decision CTA row — required to leave the escaped state. */}
+                <div className="border-t border-[#1a1a1a] pt-3">
+                  <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-2">Decide</p>
+                  {thresholdEditingId === target.id ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[#858585] text-xs">New threshold (days, min {MIN_DAYS_REQUIRED}):</span>
+                      <input
+                        type="number"
+                        min={MIN_DAYS_REQUIRED}
+                        value={thresholdEditValue}
+                        onChange={(e) => setThresholdEditValue(e.target.value)}
+                        className="w-20 bg-[#0a0a0a] text-white p-1.5 rounded-lg border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm tabular-nums"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => {
+                          const n = parseInt(thresholdEditValue, 10);
+                          if (!Number.isFinite(n) || n < MIN_DAYS_REQUIRED) {
+                            ouraToast.warning(`Minimum threshold is ${MIN_DAYS_REQUIRED} days`);
+                            return;
+                          }
+                          reactivateTarget(target.id, { newThreshold: n });
+                          setThresholdEditingId(null);
+                          setThresholdEditValue('');
+                        }}
+                        className="px-3 py-1.5 bg-white text-black text-xs font-medium rounded-lg hover:bg-[#d1d1d1] transition-colors"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => { setThresholdEditingId(null); setThresholdEditValue(''); }}
+                        className="px-3 py-1.5 bg-[#1a1a1a] text-[#858585] text-xs rounded-lg hover:bg-[#2a2a2a] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => reactivateTarget(target.id)}
+                        className="px-3 py-2 bg-transparent text-white border border-[#2a2a2a] rounded-xl text-xs hover:border-white hover:bg-[#1a1a1a] transition-colors"
+                      >
+                        Reactivate
+                      </button>
+                      <button
+                        onClick={() => {
+                          setThresholdEditingId(target.id);
+                          setThresholdEditValue(String(target.consecutiveDaysRequired || MIN_DAYS_REQUIRED));
+                        }}
+                        className="px-3 py-2 bg-transparent text-white border border-[#2a2a2a] rounded-xl text-xs hover:border-white hover:bg-[#1a1a1a] transition-colors"
+                      >
+                        Reactivate with new threshold
+                      </button>
+                      <button
+                        onClick={() => recontractTarget(target)}
+                        className="px-3 py-2 bg-transparent text-[#a855f7] border border-[#a855f7]/30 rounded-xl text-xs hover:bg-[#a855f7]/10 transition-colors"
+                      >
+                        Re-contract
+                      </button>
+                      <button
+                        onClick={() => deleteTarget(target.id)}
+                        className="px-3 py-2 bg-transparent text-[#858585] border border-[#1a1a1a] rounded-xl text-xs hover:border-[#2a2a2a] hover:text-[#ababab] transition-colors"
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             {/* Escape count */}
@@ -1394,9 +1533,10 @@ const KillList = () => {
       </div>
       </React.Fragment>
     );
-    }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, dailyCheckIn, categories, categoryIcons,
+    }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, recontractTarget, dailyCheckIn, categories, categoryIcons,
       reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote, showIntention, setShowIntention, setReviseTarget, setReviseIntention,
-      showAutopsyPattern, setShowAutopsyPattern, backfillBusy, backfillDismissed, handleBackfillAllHeld, handleBackfillLogEscape, handleBackfillLogEach, handleBackfillDismiss]);
+      showAutopsyPattern, setShowAutopsyPattern, backfillBusy, backfillDismissed, handleBackfillAllHeld, handleBackfillLogEscape, handleBackfillLogEach, handleBackfillDismiss,
+      thresholdEditingId, thresholdEditValue]);
 
   return (
     <div className="min-h-screen bg-black">
@@ -1572,6 +1712,7 @@ const KillList = () => {
                   value={newTarget}
                   onChange={(e) => setNewTarget(e.target.value)}
                   placeholder="What negative pattern will you eliminate?"
+                  maxLength={TITLE_MAX_LENGTH}
                   className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors"
                   onKeyPress={(e) => e.key === 'Enter' && addTarget()}
                 />
