@@ -1,21 +1,19 @@
 {
-  "name": "react-javascript",
+  "name": "inner-ops",
   "version": "1.0.0",
   "type": "module",
-  "description": "React TypeScript on Replit, using Vite bundler",
+  "description": "Inner Ops — a system for turning self-awareness into self-command. React 18 + Vite + Firebase.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js src/utils/dailyBrief.test.js src/utils/oracleQuestionExtractor.test.js",
+    "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js src/utils/dailyBrief.test.js src/utils/oracleQuestionExtractor.test.js src/utils/dateUtils.test.js src/utils/detectDriftSignals.test.js src/utils/getBehavioralContext.test.js src/utils/generateSynthesisBriefing.test.js",
     "lint": "eslint . --ext .js,.jsx --report-unused-disable-directives --max-warnings 0"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/react": "18.3.23",
-    "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "4.3.4",
     "eslint": "8.57.1",
     "eslint-plugin-react": "7.37.5",
@@ -23,24 +21,17 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "terser": "5.46.0",
-    "typescript": "5.6.3",
     "vite": "5.4.21"
   },
   "dependencies": {
-    "@firebase/auth": "1.10.6",
-    "@headlessui/react": "2.2.4",
-    "@heroicons/react": "2.2.0",
     "@sentry/react": "10.45.0",
     "autoprefixer": "10.4.20",
-    "axios": "1.9.0",
-    "file-saver": "2.0.5",
     "firebase": "11.8.1",
     "postcss": "8.4.47",
     "posthog-js": "1.364.1",
     "react-hot-toast": "2.6.0",
     "react-refresh": "0.17.0",
     "react-router-dom": "7.6.1",
-    "react-speech-recognition": "4.0.1",
     "tailwindcss": "3.4.13"
   }
 }

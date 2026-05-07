@@ -23,21 +23,26 @@ import {
   USER_SETTINGS_FIELDS,
 } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
+import { getEntryTimestamp as getTimestamp } from './dateUtils.js';
 
 const contextCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const now = () => Date.now();
 
-const getTimestamp = (entry) =>
-  entry?.createdAt?.toDate?.()?.getTime() ?? entry?.timestamp ?? 0;
-
-export async function getBehavioralContext(userId) {
+export async function getBehavioralContext(userId, deps = {}) {
   if (!userId) return buildEmpty();
 
+  // Tests inject `deps.readUserData` to drive readers with in-memory fixtures.
+  // Production callers omit it and pay for the Firebase reader.
+  const reader = deps.readUserData || readUserData;
+  const useCache = deps.useCache !== false;
+
   const cacheKey = `behavioral_ctx_${userId}`;
-  const cached = contextCache.get(cacheKey);
-  if (cached && now() - cached.at < CACHE_TTL) return cached.value;
+  if (useCache) {
+    const cached = contextCache.get(cacheKey);
+    if (cached && now() - cached.at < CACHE_TTL) return cached.value;
+  }
 
   try {
     // Finding 6 remediation: per-collection errors are logged (not silently
@@ -45,7 +50,7 @@ export async function getBehavioralContext(userId) {
     // can detect partial context and warn the user or retry.
     const missingCollections = [];
     const loadCollection = (name) =>
-      readUserData(name).catch((err) => {
+      reader(name).catch((err) => {
         logger.warn('behavioral context fetch failed', { collection: name, err: err?.message });
         missingCollections.push(name);
         return [];
@@ -153,7 +158,7 @@ export async function getBehavioralContext(userId) {
       missingCollections, // Finding 6: surface partial-load state to consumers
     };
 
-    contextCache.set(cacheKey, { at: now(), value });
+    if (useCache) contextCache.set(cacheKey, { at: now(), value });
     return value;
   } catch (err) {
     logger.warn('behavioral context build failed', err?.message);

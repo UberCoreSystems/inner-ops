@@ -13,8 +13,9 @@
  *   getAnalyticsReport()       → { data, patterns, insights }
  */
 
-import { readUserData } from './firebaseUtils';
-import logger from './logger';
+import { readUserData } from './firebaseUtils.js';
+import logger from './logger.js';
+import { parseDate } from './dateUtils.js';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -107,12 +108,6 @@ const normalizeRelapseEntry = (entry) => ({
 });
 
 // ─── DATE UTILITIES ───────────────────────────────────────────────────────────
-
-const parseDate = (createdAt) => {
-  if (!createdAt) return null;
-  const d = new Date(createdAt);
-  return isNaN(d.getTime()) ? null : d;
-};
 
 const getTimeWindow = (date) => {
   const h = date.getHours();

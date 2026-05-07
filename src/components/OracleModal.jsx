@@ -52,9 +52,8 @@ const OracleModal = ({
   isOpen,
   onClose,
   feedback,
-  loading,
   content,
-  isLoading: isLoadingProp,
+  isLoading = false,
   target = null,
   moduleName = '',
   context = '',
@@ -211,7 +210,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   };
 
   const currentFeedback = displayFeedback || feedback || content || oracleFeedback;
-  const isCurrentlyLoading = loading || isLoadingProp || isGenerating;
+  const isCurrentlyLoading = isLoading || isGenerating;
   const canRegen = !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
   const canFollowUp = !!entryText && !followUpUsed && !followUpLoading && !isCurrentlyLoading && !!currentFeedback;
 

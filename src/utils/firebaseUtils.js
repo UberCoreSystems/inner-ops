@@ -302,7 +302,6 @@ export const writeUserData = async (collectionName, dataArray) => {
 };
 
 
-// Pass 3 New Finding 6 remediation: admin/migration/duplicate helpers
-// previously in this file have been moved to ./firebaseAdmin.js so they
-// no longer ship in the production bundle by default. Dashboard.jsx
-// dynamically imports them inside an `import.meta.env.DEV` branch.
+// Admin/migration/duplicate helpers previously in this file have been
+// moved to scripts/firebaseAdmin.js so they no longer ship in the
+// production bundle and can only be invoked via direct script run.

@@ -163,9 +163,8 @@ export default function Dashboard() {
     }
 
     // Dev-mode debug surface (window.debugDashboard, admin helpers,
-    // legacy localStorage migration tools) removed. The
-    // src/utils/firebaseAdmin.js module remains in the repo for one-off
-    // recovery work but is no longer mounted on window.
+    // legacy localStorage migration tools) removed. Admin recovery
+    // helpers now live at scripts/firebaseAdmin.js (out of the app bundle).
   }, []); // Only run once on mount
 
   const loadDashboardData = useCallback(async (currentUser = user) => {
@@ -751,7 +750,7 @@ export default function Dashboard() {
         />
 
         {/* Debug panel and window.debugDashboard surface removed.
-            firebaseAdmin.js remains in the repo for one-off recovery work. */}
+            Admin recovery helpers live at scripts/firebaseAdmin.js. */}
       </div>
       </div>
     </div>

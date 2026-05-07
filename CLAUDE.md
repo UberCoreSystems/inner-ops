@@ -24,9 +24,9 @@ It is **not** a habit tracker, wellness app, or motivational tool. Enforce this 
 
 ## Stack
 
-- React 18 + Vite, JavaScript (not TypeScript despite the devDep)
+- React 18 + Vite, JavaScript
 - Firebase Auth + Firestore (real-time listeners, no Redux)
-- Tailwind CSS + Framer Motion
+- Tailwind CSS (animations via Tailwind utilities and CSS keyframes — no animation library)
 - Sentry (error tracking), PostHog (analytics)
 - Claude API via Firebase Cloud Function proxy — **never expose API keys client-side**
 
@@ -35,7 +35,7 @@ It is **not** a habit tracker, wellness app, or motivational tool. Enforce this 
 | Module | Page | Key Utils |
 |--------|------|-----------|
 | **Journaling** | `src/pages/Journal.jsx` | `aiFeedback.js` |
-| **Kill List** | `src/pages/KillList.jsx` | `useKillTargets.js` (hook removed — logic in component) |
+| **Kill List** | `src/pages/KillList.jsx` | `useKillTargets.js` (used by `KillListDashboard.jsx`) |
 | **Hard Lessons** | `src/pages/HardLessons.jsx` | Lesson extraction via Oracle cloud function |
 | **Relapse Radar** | `src/pages/Relapse.jsx` → `RelapseRadar.jsx` | `detectDriftSignals.js`, `detectEvasionMarkers.js` |
 | **Synthesis** | `src/pages/SynthesisBriefing.jsx` | `generateSynthesisBriefing.js`, `getBehavioralContext.js` |
@@ -67,7 +67,7 @@ Synthesis and Oracle both read across all modules via `readUserData`. Key data f
 
 - `npm run dev` — Vite dev server
 - `npm run build` — production build
-- `npm test` — runs node:test on `aiFeedback.test.js` and `clarityScore.test.js`
+- `npm test` — runs node:test on `aiFeedback.test.js`, `clarityScore.test.js`, `dailyBrief.test.js`, `oracleQuestionExtractor.test.js`, `dateUtils.test.js`, `detectDriftSignals.test.js`, `getBehavioralContext.test.js`, and `generateSynthesisBriefing.test.js`
 
 ## Agent Pipeline (Paperclip)
 
@@ -100,8 +100,8 @@ UI · UX · AI quality · feature completeness — **equal weight.**
 
 ## Pre-Deploy Checklist
 
-- [ ] Remove or feature-flag Black Mirror from Navbar and App.jsx routes
-- [ ] Add Firebase Hosting config to `firebase.json` (currently only `firestore` and `functions` configured)
+- [x] Remove or feature-flag Black Mirror from Navbar and App.jsx routes — gated by `VITE_ENABLE_BLACK_MIRROR` env var (default off)
+- [x] Add Firebase Hosting config to `firebase.json`
 - [ ] Verify `.env` / environment variables are set for production Firebase project
 - [ ] Run `npm run build` and confirm clean production build
 - [ ] Deploy Firestore rules (`firestore.rules`)

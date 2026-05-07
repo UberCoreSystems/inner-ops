@@ -12,8 +12,8 @@
  * @param {number} streakThreshold - consecutive periods required to trigger signal (default: DRIFT_STREAK_THRESHOLD)
  * @returns {{ signals: Array<DriftSignal>, skippedCount: number }}
  */
-import logger from './logger';
-import { RELAPSE_FIELDS, KILL_TARGET_FIELDS } from './schema';
+import logger from './logger.js';
+import { RELAPSE_FIELDS, KILL_TARGET_FIELDS } from './schema.js';
 
 // Finding 22 remediation: magic threshold promoted to a named constant.
 // Three consecutive calendar days of the same archetype / precursor state is

@@ -38,10 +38,6 @@ export default defineConfig({
           
           // UI libraries
           if (id.includes('node_modules/react-hot-toast')) return 'ui-toast';
-          if (id.includes('node_modules/framer-motion')) return 'ui-motion';
-          
-          // AI/OpenAI
-          if (id.includes('node_modules/openai')) return 'ai-openai';
         }
       }
     },

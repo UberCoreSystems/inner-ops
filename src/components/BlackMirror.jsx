@@ -878,7 +878,7 @@ const BlackMirror = () => {
         isOpen={showOracleModal}
         onClose={() => { setShowOracleModal(false); setCurrentEntryId(null); }}
         feedback={aiFeedback}
-        loading={loadingFeedback}
+        isLoading={loadingFeedback}
         onReaction={handleOracleReaction}
         entryText={oracleEntryTextRef.current}
         entryModuleName="Black Mirror"

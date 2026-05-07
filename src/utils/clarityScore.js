@@ -6,6 +6,9 @@
  * three behavioral signals from Firestore and composes them into a prose-ready
  * structured report.
  *
+ * Specification: see /SCORING.md at the repo root for the canonical signal
+ * definitions, window sizes, and what is intentionally NOT measured.
+ *
  * Readers:
  *   - getConfrontationRate      — did the user engage with Oracle feedback,
  *                                 or dismiss it, over the recent window?
@@ -31,6 +34,7 @@
  */
 
 import logger from './logger.js';
+import { MS_PER_DAY, toMs } from './dateUtils.js';
 
 // Firestore/detector imports are resolved lazily so tests that inject a fake
 // `readUserData`/`detectDriftSignals` never pull the Firebase SDK (or any
@@ -48,17 +52,6 @@ const loadDefaults = async () => {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-// Normalize createdAt / updatedAt / ISO string / Firestore Timestamp to ms.
-const toMs = (value) => {
-  if (!value) return 0;
-  if (value?.toDate) return value.toDate().getTime();
-  const d = new Date(value);
-  const t = d.getTime();
-  return Number.isFinite(t) ? t : 0;
-};
 
 const withinWindow = (value, windowDays) => {
   const ms = toMs(value);

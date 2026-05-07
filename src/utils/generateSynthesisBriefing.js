@@ -16,9 +16,10 @@
  * @param {string} cadence - 'weekly' | 'biweekly'
  * @returns {Promise<{status:'ok',briefing:object}|{status:'locked',nextEligibleAt:string,remainingDays:number}>}
  */
-import { readUserData, writeData } from './firebaseUtils';
+import { readUserData, writeData } from './firebaseUtils.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import logger from './logger';
+import logger from './logger.js';
+import { getEntryTimestamp as getTimestamp } from './dateUtils.js';
 import {
   COLLECTIONS,
   RELAPSE_FIELDS,
@@ -26,24 +27,27 @@ import {
   HARD_LESSON_FIELDS,
   BLACK_MIRROR_FIELDS,
   USER_SETTINGS_FIELDS,
-} from './schema';
-import { resolveArchetypeLabel } from './relapseTaxonomy';
+} from './schema.js';
+import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
-
-const getTimestamp = (entry) =>
-  entry?.createdAt?.toDate?.()?.getTime() ?? entry?.timestamp ?? 0;
 
 export async function generateSynthesisBriefing(userId, cadence = 'weekly', options = {}) {
   if (!userId) throw new Error('userId required');
 
   const cadenceDays = CADENCE_DAYS[cadence] ?? 7;
 
+  // Tests inject `options.readUserData` / `options.writeData` to drive
+  // readers/writers with in-memory fixtures, mirroring the pattern in
+  // dailyBrief.js and clarityScore.js. Production callers omit them.
+  const reader = options.readUserData || readUserData;
+  const writer = options.writeData || writeData;
+
   // --- Cadence check ---
   // Auto-generate path enforces the cadence so users don't drown in briefings.
   // Manual on-demand path passes { bypassCadence: true } to skip this gate —
   // Oracle CF's 20/day rate limit is the effective cap.
-  const syntheses = await readUserData(COLLECTIONS.SYNTHESES).catch(() => []);
+  const syntheses = await reader(COLLECTIONS.SYNTHESES).catch(() => []);
   const sorted = (syntheses || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
   const lastBriefing = sorted[0];
 
@@ -63,12 +67,12 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
 
   // --- Pull data from all 5 modules + user settings ---
   const [relapseEntries, killTargets, hardLessons, blackMirrorEntries, journalEntries, userSettings] = await Promise.all([
-    readUserData(COLLECTIONS.RELAPSE_ENTRIES).catch(() => []),
-    readUserData(COLLECTIONS.KILL_TARGETS).catch(() => []),
-    readUserData(COLLECTIONS.HARD_LESSONS).catch(() => []),
-    readUserData(COLLECTIONS.BLACK_MIRROR_ENTRIES).catch(() => []),
-    readUserData(COLLECTIONS.JOURNAL_ENTRIES).catch(() => []),
-    readUserData(COLLECTIONS.USER_SETTINGS).catch(() => []),
+    reader(COLLECTIONS.RELAPSE_ENTRIES).catch(() => []),
+    reader(COLLECTIONS.KILL_TARGETS).catch(() => []),
+    reader(COLLECTIONS.HARD_LESSONS).catch(() => []),
+    reader(COLLECTIONS.BLACK_MIRROR_ENTRIES).catch(() => []),
+    reader(COLLECTIONS.JOURNAL_ENTRIES).catch(() => []),
+    reader(COLLECTIONS.USER_SETTINGS).catch(() => []),
   ]);
 
   // BER-137: identity direction
@@ -178,7 +182,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     },
   };
 
-  await writeData(COLLECTIONS.SYNTHESES, briefing);
+  await writer(COLLECTIONS.SYNTHESES, briefing);
   return { status: 'ok', briefing };
 }
 

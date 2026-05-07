@@ -25,6 +25,7 @@
  */
 
 import logger from './logger.js';
+import { MS_PER_DAY, toMs } from './dateUtils.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -109,17 +110,9 @@ export async function buildSourceContext(userId, deps = {}) {
   const getActiveDriftSignalsFn = deps.getActiveDriftSignals || loadedDefaults.getActiveDriftSignals;
   const readUserData = deps.readUserData || loadedDefaults.readUserData;
 
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
   const now = Date.now();
   const window14 = 14 * MS_PER_DAY;
   const window7 = 7 * MS_PER_DAY;
-
-  const toMs = (v) => {
-    if (!v) return 0;
-    if (v?.toDate) return v.toDate().getTime();
-    const t = new Date(v).getTime();
-    return Number.isFinite(t) ? t : 0;
-  };
 
   // Each source is wrapped so a single failure doesn't nuke the brief.
   const behavioralContext = await getBehavioralContextFn(userId).catch((err) => {

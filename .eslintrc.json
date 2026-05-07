@@ -25,10 +25,10 @@
   ],
   "ignorePatterns": [
     "dist",
-    "dist-check",
     "build",
     "node_modules",
     "functions/node_modules",
+    "scripts",
     "**/*.min.js"
   ],
   "rules": {

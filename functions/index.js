@@ -7,20 +7,15 @@ const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 
-// Rate limiting: max Oracle calls per user per day
-const DAILY_LIMIT = 20;
-
-// BER-167: Oracle trust calibration — behavioral record density threshold
-// Below this count the Oracle uses a discrepancy-pointing frame instead of
-// archetype/pattern confrontation. Trigger is entry count, not calendar time.
-const TRUST_THRESHOLD = 21;
-
-// Input hard caps — reject oversize payloads before touching the LLM.
-const MAX_ENTRY_TEXT_CHARS = 20000;
-const MAX_USER_RESPONSE_CHARS = 8000;
-const MAX_FEEDBACK_CHARS = 8000;
-const MAX_REACTANCE_SUMMARY_CHARS = 500;
-const MAX_REACTANCE_QUESTION_CHARS = 300;
+const {
+  DAILY_LIMIT,
+  TRUST_THRESHOLD,
+  MAX_ENTRY_TEXT_CHARS,
+  MAX_USER_RESPONSE_CHARS,
+  MAX_FEEDBACK_CHARS,
+  MAX_REACTANCE_SUMMARY_CHARS,
+  MAX_REACTANCE_QUESTION_CHARS,
+} = require("./config");
 
 // Lazy-initialize the admin app so the module is importable from tests
 // without side effects.

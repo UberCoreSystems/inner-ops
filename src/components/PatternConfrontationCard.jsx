@@ -270,7 +270,6 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
         onClose={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
         feedback={modalState.content}
         content={modalState.content}
-        loading={modalState.isLoading}
         isLoading={modalState.isLoading}
         moduleName="oracle"
         entryText={modalState.isOpen ? headline : ''}
