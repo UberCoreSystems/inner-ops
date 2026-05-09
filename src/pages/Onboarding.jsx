@@ -6,6 +6,8 @@ import { track } from '../utils/analytics';
 import logger from '../utils/logger';
 import ouraToast from '../utils/toast';
 import { RELAPSE_ARCHETYPES, saveConfrontationCriteria } from '../utils/confrontationCriteria';
+import BriefingScreen from '../components/onboarding/BriefingScreen';
+import { parseLines, PERSONAL_CONTEXT_LIMITS } from '../utils/personalContext';
 
 const DRIVERS = [
   { value: 'addiction', label: 'Breaking an addiction or compulsive pattern' },
@@ -36,15 +38,40 @@ export default function Onboarding() {
   const [criterionThreshold, setCriterionThreshold] = useState(2);
   const [criterionQuestion, setCriterionQuestion] = useState('');
 
-  const TOTAL_STEPS = 6; // 0=welcome, 1=driver, 2=style, 3=focus, 4=kill target, 5=confrontation criteria
+  // Personal context (steps 6–9). All optional. Stored on userProfiles to
+  // power journal-staleness banner copy enrichment and v1.1 personalized
+  // Daily Prompt rotation.
+  const [activeSituationsText, setActiveSituationsText] = useState('');
+  const [keyPeopleText, setKeyPeopleText] = useState('');
+  const [knownTriggersText, setKnownTriggersText] = useState('');
+  const [operatingContext, setOperatingContext] = useState('');
+
+  // 0=briefing, 1=driver, 2=style, 3=focus, 4=kill target, 5=confrontation,
+  // 6=active situations, 7=key people, 8=known triggers, 9=operating context
+  const TOTAL_STEPS = 10;
 
   const canAdvance = () => {
     if (step === 1) return !!driver;
     if (step === 2) return !!feedbackStyle;
     if (step === 3) return focusStatement.trim().length >= 8;
-    if (step === 4) return true; // kill target is optional
-    if (step === 5) return true; // confrontation criteria is optional
-    return true;
+    return true; // remaining steps are optional
+  };
+
+  // Persist the completed/skipped flag and exit. Called from the briefing
+  // step's Skip and from any "Skip remaining" affordance. Best-effort —
+  // failures here log but do not block the navigate, since the user
+  // explicitly asked to leave.
+  const handleSkipOnboarding = async () => {
+    try {
+      await saveUserProfile({
+        onboardingCompletedAt: new Date().toISOString(),
+        onboardingSkipped: true,
+      });
+      track('onboarding_skipped', { atStep: step });
+    } catch (err) {
+      logger.warn('Failed to mark onboarding skipped:', err);
+    }
+    navigate('/dashboard');
   };
 
   // Pass 3 New Finding 2 remediation: per-step progress markers stored in
@@ -66,12 +93,21 @@ export default function Onboarding() {
     try {
       const progress = readProgress();
 
+      const activeSituations = parseLines(activeSituationsText, PERSONAL_CONTEXT_LIMITS.ACTIVE_SITUATIONS);
+      const keyPeople = parseLines(keyPeopleText, PERSONAL_CONTEXT_LIMITS.KEY_PEOPLE);
+      const knownTriggers = parseLines(knownTriggersText, PERSONAL_CONTEXT_LIMITS.KNOWN_TRIGGERS);
+
       if (!progress.profileSaved) {
         await saveUserProfile({
           primaryDriver: driver,
           feedbackStyle,
           focusStatement: focusStatement.trim(),
+          activeSituations,
+          keyPeople,
+          knownTriggers,
+          operatingContext: operatingContext.trim(),
           onboardingCompletedAt: new Date().toISOString(),
+          onboardingSkipped: false,
         });
         writeProgress({ profileSaved: true });
       }
@@ -109,8 +145,17 @@ export default function Onboarding() {
         writeProgress({ criterionSaved: true });
       }
 
-      track('onboarding_completed', { primaryDriver: driver, feedbackStyle, hasKillTarget: !!killTarget.trim(), hasConfrontationCriterion: !!(criterionArchetype && criterionQuestion.trim()) });
-      // All three writes succeeded — clear the resume marker.
+      track('onboarding_completed', {
+        primaryDriver: driver,
+        feedbackStyle,
+        hasKillTarget: !!killTarget.trim(),
+        hasConfrontationCriterion: !!(criterionArchetype && criterionQuestion.trim()),
+        activeSituationsCount: activeSituations.length,
+        keyPeopleCount: keyPeople.length,
+        knownTriggersCount: knownTriggers.length,
+        hasOperatingContext: !!operatingContext.trim(),
+      });
+      // All writes succeeded — clear the resume marker.
       try { sessionStorage.removeItem(progressKey); } catch { /* noop */ }
       navigate('/dashboard');
     } catch (err) {
@@ -129,6 +174,22 @@ export default function Onboarding() {
     }
   };
 
+  // Step 0 (briefing) renders the standalone BriefingScreen so the same copy
+  // is shown both here and from Settings → Replay briefing.
+  if (step === 0) {
+    return (
+      <BriefingScreen
+        onContinue={() => setStep(1)}
+        onSkip={handleSkipOnboarding}
+        primaryLabel="Continue"
+        secondaryLabel="Skip"
+        showProgress
+        stepIndex={0}
+        totalSteps={TOTAL_STEPS}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4 py-12">
       <div className="max-w-xl w-full">
@@ -142,27 +203,6 @@ export default function Onboarding() {
             />
           ))}
         </div>
-
-        {/* Step 0: Welcome */}
-        {step === 0 && (
-          <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Inner Operations</p>
-            <h1 className="text-4xl font-light text-white mb-6 leading-tight">
-              This is your inner command center.
-            </h1>
-            <p className="text-[#ababab] text-lg leading-relaxed mb-4">
-              Every module — your journal, kill list, hard lessons, relapse tracking — feeds an AI advisor called the Oracle.
-            </p>
-            <p className="text-[#ababab] text-lg leading-relaxed mb-4">
-              The Oracle reads what you actually write and responds to it directly. No generic advice. No comfort. The more honest you are, the more useful it becomes.
-            </p>
-            <p className="text-[#858585] text-sm leading-relaxed mb-2">
-              <span className="text-[#ababab] font-medium">Where to start:</span> Ledger first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. The Signal when you slip. Black Mirror when attention drifts.
-            </p>
-            <p className="text-[#858585] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
-            <p className="text-[#858585] text-sm mt-6">Three questions before you start. Takes 90 seconds.</p>
-          </div>
-        )}
 
         {/* Step 1: Primary driver */}
         {step === 1 && (
@@ -305,23 +345,90 @@ export default function Onboarding() {
           </div>
         )}
 
+        {/* Step 6: Active situations */}
+        {step === 6 && (
+          <div className="animate-fade-in-up">
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 1 of 4</p>
+            <h2 className="text-2xl font-light text-white mb-3">What are you currently navigating?</h2>
+            <p className="text-[#858585] text-sm mb-8">
+              The situations consuming your attention right now. The Oracle and the journal prompt you when you go quiet will reference these by name. One per line. Up to three.
+            </p>
+            <textarea
+              value={activeSituationsText}
+              onChange={(e) => setActiveSituationsText(e.target.value)}
+              placeholder={'e.g.\nCareer transition — uncertain runway\nRebuilding after the breakup\nFinancial reset'}
+              rows={5}
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+            />
+            <p className="text-[#858585] text-xs mt-2">Skip by leaving blank.</p>
+          </div>
+        )}
+
+        {/* Step 7: Key people */}
+        {step === 7 && (
+          <div className="animate-fade-in-up">
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 2 of 4</p>
+            <h2 className="text-2xl font-light text-white mb-3">Who matters in this moment?</h2>
+            <p className="text-[#858585] text-sm mb-8">
+              The people whose presence — or absence — is shaping your operating state. Use initials, not full names. Format: <span className="text-[#ababab]">Initials — role — current state</span>. One per line. Up to five.
+            </p>
+            <textarea
+              value={keyPeopleText}
+              onChange={(e) => setKeyPeopleText(e.target.value)}
+              placeholder={'e.g.\nM. — partner — rebuilding trust after Q4\nR. — old friend — drifting; need to address\nDad — parent — health declining'}
+              rows={6}
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+            />
+            <p className="text-[#858585] text-xs mt-2">Stays on your profile only. Skip by leaving blank.</p>
+          </div>
+        )}
+
+        {/* Step 8: Known triggers */}
+        {step === 8 && (
+          <div className="animate-fade-in-up">
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 3 of 4</p>
+            <h2 className="text-2xl font-light text-white mb-3">Where do you historically fail?</h2>
+            <p className="text-[#858585] text-sm mb-8">
+              The times, places, or states that consistently precede failure. Naming them now sharpens drift detection later. One per line. Up to five.
+            </p>
+            <textarea
+              value={knownTriggersText}
+              onChange={(e) => setKnownTriggersText(e.target.value)}
+              placeholder={'e.g.\nAlone after 11pm\nAfter conflict with R.\nWhen finances are tight\nLong unstructured weekends'}
+              rows={6}
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+            />
+            <p className="text-[#858585] text-xs mt-2">Skip by leaving blank.</p>
+          </div>
+        )}
+
+        {/* Step 9: Operating context */}
+        {step === 9 && (
+          <div className="animate-fade-in-up">
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 4 of 4</p>
+            <h2 className="text-2xl font-light text-white mb-3">Anything else the system should know?</h2>
+            <p className="text-[#858585] text-sm mb-8">
+              Constraints, history, current state — anything that would help the Oracle give you sharper feedback. Free-form.
+            </p>
+            <textarea
+              value={operatingContext}
+              onChange={(e) => setOperatingContext(e.target.value)}
+              placeholder="e.g. Recovering from injury, no caffeine for the next 90 days. Sober 18 months. Single parent — limited solitude. Don't soften when I'm rationalizing."
+              rows={6}
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+            />
+            <p className="text-[#858585] text-xs mt-2">Skip by leaving blank.</p>
+          </div>
+        )}
+
         {/* Navigation */}
         <div className="flex justify-between items-center mt-12">
-          {step > 0 ? (
-            <button
-              onClick={() => setStep(step - 1)}
-              className="text-[#858585] hover:text-white transition-colors text-sm"
-            >
-              Back
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-[#858585] hover:text-[#858585] transition-colors text-sm"
-            >
-              Skip
-            </button>
-          )}
+          <button
+            onClick={() => setStep(step - 1)}
+            className="text-[#858585] hover:text-white transition-colors text-sm"
+          >
+            Back
+          </button>
 
           <button
             onClick={handleNext}

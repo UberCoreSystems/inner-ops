@@ -65,6 +65,12 @@ const Icons = {
       <circle cx="12" cy="8" r="4" />
       <path d="M4 20c0-4 4-6 8-6s8 2 8 6" opacity="0.7" />
     </svg>
+  ),
+  settings: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
   )
 };
 
@@ -149,6 +155,17 @@ export default function Navbar({ onLogout, user }) {
 
             {/* User Info and Logout */}
             <div className="flex items-center space-x-2 md:space-x-4">
+              <Link
+                to="/settings"
+                aria-label="Settings"
+                className={`text-sm font-light flex items-center justify-center px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 border ${
+                  location.pathname === '/settings'
+                    ? 'bg-oura-card text-white border-oura-border'
+                    : 'text-gray-400 border-transparent hover:text-white hover:border-gray-500 hover:bg-oura-card'
+                }`}
+              >
+                <span className="opacity-80">{Icons.settings}</span>
+              </Link>
               <Link
                 to="/profile"
                 className={`text-sm font-light flex items-center space-x-2 px-3 md:px-4 py-2 rounded-xl cursor-pointer transition-all duration-200 border ${

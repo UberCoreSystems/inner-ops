@@ -1109,6 +1109,11 @@ const RelapseRadar = () => {
               <p className="text-gray-300 text-sm">
                 {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No entries to show yet.'}
               </p>
+              {!searchQuery.trim() && (
+                <p className="text-[#858585] text-xs mt-2 max-w-md mx-auto leading-relaxed">
+                  Log a signal when you see drift; log a relapse when it lands. The Radar surfaces patterns before they become another failure.
+                </p>
+              )}
               {searchQuery.trim() && (
                 <button
                   onClick={() => { setSearchInput(''); setSearchQuery(''); }}

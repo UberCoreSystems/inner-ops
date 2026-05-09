@@ -159,6 +159,9 @@ export default function SynthesisBriefing() {
           <div className="oura-card p-12 text-center">
             <p className="text-[#858585] text-sm mb-2">No briefings generated yet.</p>
             <p className="text-[#858585] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
+            <p className="text-[#858585] text-xs mt-3 max-w-md mx-auto leading-relaxed">
+              Synthesis reads across modules. Convergence detection sharpens once you have entries in at least two — the journal plus one of Kill List, Hard Lessons, or the Signal.
+            </p>
           </div>
         )}
 

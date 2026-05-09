@@ -200,6 +200,22 @@ service cloud.firestore {
       allow list: if ownerListAllowed();
     }
 
+    // User profile — onboarding completion, primary driver, feedback style,
+    // confrontation criteria, identity context for Oracle, plus the personal-
+    // context fields (activeSituations, keyPeople, knownTriggers,
+    // operatingContext) added in BER-onboarding/engagement.
+    //
+    // Doc-id pattern: the document key IS the user's uid. Authorization is
+    // therefore by path parameter, not by a userId field on the data —
+    // saveUserProfile() (src/utils/userProfile.js) writes via setDoc with no
+    // userId field, so the data-userId-based helpers don't apply here.
+    match /userProfiles/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
+      // Profile docs are never enumerated — clients always read by uid.
+      allow list: if false;
+    }
+
     // Morning Brief — one document per user per calendar day.
     // Document id format: `{userId}_{YYYY-MM-DD}`. Clients read/write their
     // own briefs; never enumerate across users.

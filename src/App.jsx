@@ -16,6 +16,8 @@ import Navbar from './components/Navbar';
 import AuthForm from './components/AuthForm';
 import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
+import OnboardingGate from './components/OnboardingGate';
+import BannerStack from './components/banner/BannerStack';
 
 // Finding 5 remediation: Black Mirror is deferred (post-v1). The route is
 // gated behind an env flag so it can be re-enabled without a code change.
@@ -34,6 +36,7 @@ const Profile = React.lazy(() => import('./pages/Profile'));
 const Onboarding = React.lazy(() => import('./pages/Onboarding'));
 const HardLessons = React.lazy(() => import('./pages/HardLessons'));
 const SynthesisBriefing = React.lazy(() => import('./pages/SynthesisBriefing'));
+const Settings = React.lazy(() => import('./pages/Settings'));
 const OuraCallback = React.lazy(() => import('./pages/OuraCallback'));
 
 // Fallback loader
@@ -158,6 +161,10 @@ function App() {
           {user && <EmergencyButton />}
         </InlineErrorBoundary>
         <SynthesisGuard latestSynthesisIsNew={latestSynthesisIsNew}>
+        <OnboardingGate user={user}>
+        <InlineErrorBoundary name="BannerStack">
+          {user && <BannerStack user={user} />}
+        </InlineErrorBoundary>
         <Routes>
           <Route
             path="/auth"
@@ -230,8 +237,8 @@ function App() {
               </InlineErrorBoundary>
             } 
           />
-          <Route 
-            path="/profile" 
+          <Route
+            path="/profile"
             element={
               <InlineErrorBoundary name="Profile">
                 {user ? (
@@ -240,7 +247,19 @@ function App() {
                   </Suspense>
                 ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
-            } 
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <InlineErrorBoundary name="Settings">
+                {user ? (
+                  <Suspense fallback={<PageLoader />}>
+                    <Settings />
+                  </Suspense>
+                ) : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            }
           />
           <Route 
             path="/ledger"
@@ -300,6 +319,7 @@ function App() {
           {/* Catch-all: unmapped URLs go home (or to auth if signed-out). */}
           <Route path="*" element={<Navigate to={user ? '/dashboard' : '/auth'} replace />} />
         </Routes>
+        </OnboardingGate>
         </SynthesisGuard>
       </div>
     </Router>

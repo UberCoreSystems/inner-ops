@@ -103,6 +103,47 @@ export const USER_SETTINGS_FIELDS = Object.freeze({
   // review. The WeeklyRuleReview card on the Dashboard hides until the
   // current ISO week differs from this value.
   LAST_WEEKLY_RULE_REVIEW_WEEK: 'lastWeeklyRuleReviewWeek',
+  // Engagement banner system.
+  // notificationPreferences: { [triggerId]: { enabled: boolean } }
+  // bannerDismissals: { [triggerId]: ISO timestamp } — last-dismissed; the
+  // trigger evaluator re-fires only when the underlying condition re-asserts.
+  NOTIFICATION_PREFERENCES: 'notificationPreferences',
+  BANNER_DISMISSALS: 'bannerDismissals',
+});
+
+// User-profile fields. Lives on userProfiles/{uid}, written by Onboarding,
+// Profile, and Settings. Read by Oracle for context.
+export const USER_PROFILE_FIELDS = Object.freeze({
+  // Onboarding state — written by Onboarding wizard on completion or skip.
+  ONBOARDING_COMPLETED_AT: 'onboardingCompletedAt',
+  ONBOARDING_SKIPPED: 'onboardingSkipped',
+  // Personal context (Section 2.5 of the onboarding/engagement plan). All
+  // optional. Drives banner copy enrichment (pre-deploy) and personalized
+  // Daily Prompt rotation (v1.1).
+  ACTIVE_SITUATIONS: 'activeSituations',     // string[] (up to 3 short statements)
+  KEY_PEOPLE: 'keyPeople',                   // string[] (one per line — "Initials — role — current state"; up to 5)
+  KNOWN_TRIGGERS: 'knownTriggers',           // string[] (up to 5 short statements)
+  OPERATING_CONTEXT: 'operatingContext',     // string (single paragraph)
+});
+
+// Engagement-trigger registry. Keys are stable IDs persisted in
+// notificationPreferences and bannerDismissals. Adding a trigger here
+// requires a corresponding evaluator in src/utils/engagementTriggers/.
+export const ENGAGEMENT_TRIGGERS = Object.freeze({
+  JOURNAL_STALENESS: 'journalStaleness',
+  KILL_LIST_CHECK_IN: 'killListCheckIn',
+  SYNTHESIS_READY: 'synthesisReady',
+  IDENTITY_DIRECTION_REVIEW: 'identityDirectionReview',
+});
+
+// Default notification preferences for new accounts. Journal-staleness is
+// the only trigger ON by default — journaling is the input layer; other
+// modules are recap or user-owned action that does not warrant push.
+export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
+  [ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS]: { enabled: true },
+  [ENGAGEMENT_TRIGGERS.KILL_LIST_CHECK_IN]: { enabled: false },
+  [ENGAGEMENT_TRIGGERS.SYNTHESIS_READY]: { enabled: false },
+  [ENGAGEMENT_TRIGGERS.IDENTITY_DIRECTION_REVIEW]: { enabled: false },
 });
 
 // Oracle-related fields. The Oracle Cloud Function now returns a structured
