@@ -227,6 +227,10 @@ const KillList = () => {
   // Implementation intentions (BER-126)
   const [newIntention, setNewIntention] = useState({ trigger: '', response: '' });
 
+  // Tracks whether the user has tried to submit the Add Kill Contract form so
+  // per-field error cues only appear after a real attempt, not while typing.
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
   // BER-134: track expanded autopsy pattern panels per target
   const [showAutopsyPattern, setShowAutopsyPattern] = useState({});
 
@@ -405,6 +409,7 @@ const KillList = () => {
     // visually disabled. The ref is set immediately and blocks reentry.
     if (addingTargetRef.current) return;
     addingTargetRef.current = true;
+    setAttemptedSubmit(true);
 
     if (!newTarget.trim() || submitting) {
       addingTargetRef.current = false;
@@ -487,6 +492,7 @@ const KillList = () => {
       setPendingFromHardLessonId(null);
       setPendingTargetDescription(null);
       setNewIntention({ trigger: '', response: '' });
+      setAttemptedSubmit(false);
     } catch (error) {
       logger.error('❌ Error adding target:', error);
       if (redirectIfAuthLost(error)) return;
@@ -1231,7 +1237,7 @@ const KillList = () => {
           <div className="flex gap-1.5 shrink-0 ml-3">
             {editingTarget !== target.id && (
               <>
-                <button onClick={() => startEditing(target)} aria-label="Edit contract" title="Edit" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
+                <button onClick={() => startEditing(target)} aria-label="Edit contract" title="Edit" className="w-7 h-7 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -1241,7 +1247,7 @@ const KillList = () => {
                     explicit decision CTA row below the autopsy when status
                     is 'escaped'. Hide here to avoid duplicate controls. */}
                 {target.status !== 'escaped' && (
-                  <button onClick={() => deleteTarget(target.id)} aria-label="Archive contract" title="Archive" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
+                  <button onClick={() => deleteTarget(target.id)} aria-label="Archive contract" title="Archive" className="w-7 h-7 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-lg text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="4" width="18" height="4" rx="1" />
                       <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
@@ -1550,7 +1556,7 @@ const KillList = () => {
             <div className="w-10 h-10 rounded-2xl bg-[#ef4444]/10 border border-[#ef4444]/20 flex items-center justify-center shrink-0">
               <AppIcon name="target" size={22} color="#ef4444" glow={false} />
             </div>
-            <h1 className="text-3xl font-bold text-white">General Ledger</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">General Ledger</h1>
           </div>
           <div className="border-l-4 border-[#ef4444] pl-4 py-1">
             <p className="text-[#ababab]">Name what needs to die. Hold the contract.</p>
@@ -1699,8 +1705,12 @@ const KillList = () => {
         {/* Add New Target */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <div className="oura-card p-6">
-            <h2 className="text-white font-semibold mb-6 text-lg">Add New Kill Contract</h2>
+            <h2 className="text-white font-semibold mb-3 text-lg">Add New Kill Contract</h2>
+            <p className="text-[#858585] text-sm leading-relaxed mb-6">
+              A Kill Contract is a pre-decided behavior. You name the pattern, you name the trigger that activates it, you name the response that competes with it. The decision is made now so it cannot be remade in the moment when it would fail.
+            </p>
             <div className="space-y-6">
+              <div className="text-[#858585] text-xs uppercase tracking-widest">1 · What you're killing</div>
               {/* Target Name Input */}
               <div>
                 <label className="block text-[#ababab] text-sm uppercase tracking-wider mb-3">
@@ -1716,6 +1726,9 @@ const KillList = () => {
                   className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors"
                   onKeyPress={(e) => e.key === 'Enter' && addTarget()}
                 />
+                {attemptedSubmit && !newTarget.trim() && (
+                  <p className="text-[#b45309] text-xs mt-2">Required. Name the pattern in concrete terms.</p>
+                )}
               </div>
 
               {/* Category Dropdown */}
@@ -1767,16 +1780,21 @@ const KillList = () => {
                   className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors tabular-nums"
                 />
                 <p className="text-[#858585] text-xs mt-2">
-                  Kill requires {Number.isFinite(parseInt(newTargetDays, 10)) ? Math.max(MIN_DAYS_REQUIRED, parseInt(newTargetDays, 10)) : MIN_DAYS_REQUIRED} consecutive days of held execution. Minimum {MIN_DAYS_REQUIRED}.
+                  The contract requires {Number.isFinite(parseInt(newTargetDays, 10)) ? Math.max(MIN_DAYS_REQUIRED, parseInt(newTargetDays, 10)) : MIN_DAYS_REQUIRED} consecutive days of held execution before the pattern is considered killed. Minimum {MIN_DAYS_REQUIRED}.
                 </p>
               </div>
 
               {/* Implementation Intention — required */}
               <div className="border-t border-[#1a1a1a] pt-6">
+                <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">2 · The implementation intention</div>
                 <label className="block text-[#ababab] text-sm uppercase tracking-wider mb-1">
                   When This Happens, I Will Do This Instead
                 </label>
-                <p className="text-[#858585] text-xs mb-4">Pre-decide your response to the trigger. Both fields required (min 20 chars).</p>
+                <p className="text-[#858585] text-xs mb-4">Pre-commit to the response now. In the moment of the trigger, you should not be deciding — you should be executing.</p>
+                <div className="bg-[#0a0a0a] border-l-2 border-[#ef4444]/40 px-4 py-3 rounded-r-xl text-[#ababab] text-sm mb-5">
+                  <span className="text-[#858585] text-xs uppercase tracking-widest mr-2">Example.</span>
+                  <em className="not-italic text-[#d1d1d1]">When I feel the urge to scroll my phone in bed after 10pm, I will leave the phone in the kitchen and read paper for 20 minutes.</em>
+                </div>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[#858585] text-xs uppercase tracking-widest mb-2">
@@ -1789,9 +1807,17 @@ const KillList = () => {
                       placeholder="I feel the urge to [X] after [context]..."
                       className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
                     />
-                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.trigger.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>
-                      {newIntention.trigger.trim().length}/20
+                    <div className="flex justify-between items-start gap-3 mt-1">
+                      <p className="text-[#858585] text-xs leading-relaxed flex-1">
+                        Name the condition. Time of day, place, internal state, what just happened. Specific enough that you'll recognize it the instant it begins.
+                      </p>
+                      <div className={`text-xs tabular-nums shrink-0 ${newIntention.trigger.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>
+                        {newIntention.trigger.trim().length}/20
+                      </div>
                     </div>
+                    {attemptedSubmit && newIntention.trigger.trim().length < 20 && (
+                      <p className="text-[#b45309] text-xs mt-1">Trigger needs more specificity. Aim for time, place, or internal state.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[#858585] text-xs uppercase tracking-widest mb-2">
@@ -1804,9 +1830,17 @@ const KillList = () => {
                       placeholder="I will immediately [specific action] for at least [duration]..."
                       className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
                     />
-                    <div className={`text-xs mt-1 text-right tabular-nums ${newIntention.response.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>
-                      {newIntention.response.trim().length}/20
+                    <div className="flex justify-between items-start gap-3 mt-1">
+                      <p className="text-[#858585] text-xs leading-relaxed flex-1">
+                        Name the action, not the goal. It should be executable in under 60 seconds and require no further decisions.
+                      </p>
+                      <div className={`text-xs tabular-nums shrink-0 ${newIntention.response.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>
+                        {newIntention.response.trim().length}/20
+                      </div>
                     </div>
+                    {attemptedSubmit && newIntention.response.trim().length < 20 && (
+                      <p className="text-[#b45309] text-xs mt-1">Response needs more specificity. Name the competing action and its duration.</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2055,15 +2089,15 @@ const KillList = () => {
         {/* Revise Implementation Intention Modal */}
         {reviseTarget && (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6 max-h-[calc(100dvh-2rem)] flex flex-col">
+              <div className="flex items-center justify-between mb-4 shrink-0">
                 <h3 className="text-white font-medium">Revise Intention: {reviseTarget.title}</h3>
-                <button onClick={() => { setReviseTarget(null); setReviseIntention({ trigger: '', response: '' }); }} className="text-[#858585] hover:text-white transition-colors">
+                <button onClick={() => { setReviseTarget(null); setReviseIntention({ trigger: '', response: '' }); }} aria-label="Close" className="w-7 h-7 max-sm:w-11 max-sm:h-11 flex items-center justify-center text-[#858585] hover:text-white transition-colors">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
-              <p className="text-[#858585] text-sm mb-5">The plan failed. Revise the trigger or the competing behavior — not the standard.</p>
-              <div className="space-y-4">
+              <p className="text-[#858585] text-sm mb-5 shrink-0">The plan failed. Revise the trigger or the competing behavior — not the standard.</p>
+              <div className="space-y-4 flex-1 overflow-y-auto">
                 <div>
                   <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">When [triggering condition]</label>
                   <textarea value={reviseIntention.trigger} onChange={(e) => setReviseIntention(prev => ({ ...prev, trigger: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm" />
@@ -2075,7 +2109,7 @@ const KillList = () => {
                   <div className={`text-xs mt-1 text-right tabular-nums ${reviseIntention.response.trim().length < 20 ? 'text-[#b45309]/70' : 'text-[#858585]'}`}>{reviseIntention.response.trim().length}/20</div>
                 </div>
               </div>
-              <div className="flex gap-3 mt-6">
+              <div className="flex gap-3 mt-6 shrink-0">
                 <button onClick={saveRevisedIntention} disabled={reviseIntention.trigger.trim().length < 20 || reviseIntention.response.trim().length < 20} className="flex-1 py-3 bg-white hover:bg-[#d1d1d1] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-xl font-medium text-sm transition-all">
                   Save Revised Intention
                 </button>
@@ -2090,21 +2124,21 @@ const KillList = () => {
         {/* Escape Autopsy Modal */}
         {autopsyTarget && (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6 max-h-[calc(100dvh-2rem)] flex flex-col">
+              <div className="flex items-center justify-between mb-4 shrink-0">
                 <h3 className="text-white font-medium">Escape Autopsy: {autopsyTarget.title}</h3>
-                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '', eventDate: '' }); }} className="text-[#858585] hover:text-white transition-colors">
+                <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '', eventDate: '' }); }} aria-label="Close" className="w-7 h-7 max-sm:w-11 max-sm:h-11 flex items-center justify-center text-[#858585] hover:text-white transition-colors">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
-              <p className="text-[#858585] text-sm mb-5">Streak was {autopsyTarget.streak || 0} days. Capture what happened so the pattern becomes visible.</p>
+              <p className="text-[#858585] text-sm mb-5 shrink-0">Streak was {autopsyTarget.streak || 0} days. Capture what happened so the pattern becomes visible.</p>
               {autopsyData.eventDate && autopsyData.eventDate !== todayKey() && (
-                <div className="mb-5 p-3 bg-[#0a0a0a] border-l-2 border-[#b45309] border-t border-r border-b border-[#1a1a1a] rounded-xl">
+                <div className="mb-5 p-3 bg-[#0a0a0a] border-l-2 border-[#b45309] border-t border-r border-b border-[#1a1a1a] rounded-xl shrink-0">
                   <p className="text-[#b45309] text-[10px] uppercase tracking-widest mb-1">Backfilled escape</p>
                   <p className="text-[#ababab] text-xs">Logging for {new Date(`${autopsyData.eventDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}.</p>
                 </div>
               )}
-              <div className="space-y-4">
+              <div className="space-y-4 flex-1 overflow-y-auto">
                 {/* Implementation intention check — only shown if target has one */}
                 {autopsyTarget.implementationIntention?.trigger && (
                   <>
@@ -2154,7 +2188,7 @@ const KillList = () => {
                   <input type="text" value={autopsyData.prevention} onChange={(e) => setAutopsyData(prev => ({ ...prev, prevention: e.target.value }))} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#555555]" placeholder="One thing that would have changed the outcome..." />
                 </div>
               </div>
-              <div className="flex gap-3 mt-6">
+              <div className="flex gap-3 mt-6 shrink-0">
                 <button onClick={submitAutopsy} disabled={!autopsyData.context.trim() || !autopsyData.rationalization.trim()} className="flex-1 py-3 bg-[#b45309] hover:bg-[#92400e] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-xl font-medium text-sm transition-all">
                   Record Autopsy
                 </button>

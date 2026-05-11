@@ -107,11 +107,11 @@ export default function SynthesisBriefing() {
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-[100dvh] bg-black">
       <div className="max-w-3xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="mb-10">
-          <h1 className="text-4xl font-light text-white tracking-tight mb-3">Synthesis Briefing</h1>
+          <h1 className="text-2xl sm:text-4xl font-light text-white tracking-tight mb-3">Synthesis Briefing</h1>
           <p className="text-[#858585] text-sm leading-relaxed">
             Cross-module behavioral intelligence. What your own data reveals across domains.
           </p>
@@ -184,7 +184,7 @@ export default function SynthesisBriefing() {
             {/* Section 1: Convergence Point */}
             <div className="mb-8">
               <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
-              <p className="text-[#d1d1d1] text-base leading-relaxed">{displayBriefing.convergencePoint}</p>
+              <p className="text-[#d1d1d1] text-base leading-relaxed break-words">{displayBriefing.convergencePoint}</p>
             </div>
 
             {/* Section 2: Violated Rules */}
@@ -218,7 +218,7 @@ export default function SynthesisBriefing() {
             {/* Section 4: Confrontation Question */}
             <div className="border-t border-[#1a1a1a] pt-8">
               <div className="text-[#858585] text-xs uppercase tracking-widest mb-5">Confrontation Question</div>
-              <p className="text-white text-xl font-light leading-relaxed">
+              <p className="text-white text-lg sm:text-xl font-light leading-relaxed break-words">
                 {displayBriefing.confrontationQuestion}
               </p>
             </div>

@@ -14,14 +14,16 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@vitejs/plugin-react": "4.3.4",
+    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "8.57.1",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "4.6.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "sharp": "^0.33.5",
     "terser": "5.46.0",
-    "vite": "5.4.21"
+    "vite": "5.4.21",
+    "vite-plugin-pwa": "^0.20.5"
   },
   "dependencies": {
     "@sentry/react": "10.45.0",

@@ -152,7 +152,7 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-900 text-white pb-16 md:pb-0">
+      <div className="min-h-[100dvh] bg-gray-900 text-white pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         <Toaster {...toasterConfig} />
         <InlineErrorBoundary name="Navbar">
           {user && <Navbar onLogout={handleLogout} user={user} />}

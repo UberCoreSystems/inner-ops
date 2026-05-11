@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#111827"/>
+  <g fill="#ffffff" font-family="Helvetica, Arial, sans-serif" font-weight="700" letter-spacing="-8">
+    <text x="256" y="316" font-size="240" text-anchor="middle">IO</text>
+  </g>
+  <rect x="64" y="416" width="384" height="6" fill="#ffffff"/>
+</svg>

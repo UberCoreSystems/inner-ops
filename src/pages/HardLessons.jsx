@@ -730,7 +730,7 @@ Please help extract the core lesson and rule from this experience.
             <div className="w-10 h-10 rounded-2xl bg-[#f59e0b]/10 border border-[#f59e0b]/20 flex items-center justify-center shrink-0">
               <AppIcon name="hardLessons" size={22} color="#f59e0b" glow={false} />
             </div>
-            <h1 className="text-4xl font-bold text-white">Hard Lessons</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold text-white">Hard Lessons</h1>
           </div>
           <p className="text-[#ababab] text-lg mb-4">
             Forensic extraction of irreversible signal from irreversible pain
@@ -744,17 +744,17 @@ Please help extract the core lesson and rule from this experience.
         </div>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-3 gap-4 mb-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className="oura-card p-6 text-center">
-            <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Total Lessons</div>
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <div className="oura-card p-3 sm:p-6 text-center">
+            <div className="text-[#858585] text-[10px] sm:text-xs uppercase tracking-widest mb-2">Total Lessons</div>
             <div className="oura-score text-white">{lessons.length}</div>
           </div>
-          <div className="oura-card p-6 text-center">
-            <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Finalized</div>
+          <div className="oura-card p-3 sm:p-6 text-center">
+            <div className="text-[#858585] text-[10px] sm:text-xs uppercase tracking-widest mb-2">Finalized</div>
             <div className="oura-score text-[#22c55e]">{lessons.filter(l => l.isFinalized).length}</div>
           </div>
-          <div className="oura-card p-6 text-center">
-            <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Draft</div>
+          <div className="oura-card p-3 sm:p-6 text-center">
+            <div className="text-[#858585] text-[10px] sm:text-xs uppercase tracking-widest mb-2">Draft</div>
             <div className="oura-score text-[#f59e0b]">{lessons.filter(l => !l.isFinalized).length}</div>
           </div>
         </div>
@@ -989,7 +989,7 @@ Please help extract the core lesson and rule from this experience.
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 pt-6 border-t border-[#1a1a1a]">
+            <div className="flex flex-wrap gap-3 pt-6 border-t border-[#1a1a1a] max-sm:sticky max-sm:bottom-16 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:z-10 max-sm:pb-3">
               <button
                 onClick={() => submitLesson(false)}
                 disabled={loading}
@@ -1346,7 +1346,7 @@ Please help extract the core lesson and rule from this experience.
                             </button>
                             <button
                               onClick={() => deleteLesson(lesson.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
+                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
                             >
                               🗑️
                             </button>
@@ -1377,7 +1377,7 @@ Please help extract the core lesson and rule from this experience.
                             </button>
                             <button
                               onClick={() => deleteLesson(lesson.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
+                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
                             >
                               🗑️
                             </button>
@@ -1417,7 +1417,7 @@ Please help extract the core lesson and rule from this experience.
                           {!lesson.isFinalized && (
                             <button
                               onClick={() => editLesson(lesson)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors"
+                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors"
                             >
                               ✏️
                             </button>
@@ -1425,7 +1425,7 @@ Please help extract the core lesson and rule from this experience.
                           {!lesson.isFinalized && (
                             <button
                               onClick={() => deleteLesson(lesson.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
+                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
                             >
                               🗑️
                             </button>

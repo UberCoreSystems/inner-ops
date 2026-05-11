@@ -198,7 +198,7 @@ export default function Navbar({ onLogout, user }) {
       </nav>
 
       {/* Mobile bottom nav bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-oura-border">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black border-t border-oura-border pb-[env(safe-area-inset-bottom)]">
         <div className={mobileGridClass}>
           {navItems.map(item => {
             const isActive = location.pathname === item.path;

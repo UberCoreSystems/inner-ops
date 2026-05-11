@@ -803,7 +803,7 @@ export default function Journal() {
                   return d;
                 });
                 return (
-                  <div className="grid grid-cols-10 gap-1.5">
+                  <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
                     {days.map((day) => {
                       const k = toLocalKey(day);
                       const e = entryMap[k];
@@ -1089,7 +1089,7 @@ export default function Journal() {
                 </div>
               )}
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 max-sm:sticky max-sm:bottom-16 max-sm:z-10 max-sm:bg-black/90 max-sm:backdrop-blur-sm max-sm:py-3">
                 <button
                   type="submit"
                   disabled={loading || !entry.trim()}

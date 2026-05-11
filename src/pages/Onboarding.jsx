@@ -187,17 +187,22 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-4 py-12">
+    <div className="min-h-[100dvh] bg-black flex items-stretch sm:items-center justify-center px-4 max-sm:py-6 sm:py-12">
       <div className="max-w-xl w-full">
 
         {/* Progress bar */}
-        <div className="flex gap-1.5 mb-10">
-          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-            <div
-              key={i}
-              className={`h-0.5 flex-1 rounded-full transition-all duration-500 ${i <= step ? 'bg-white' : 'bg-[#1a1a1a]'}`}
-            />
-          ))}
+        <div className="flex flex-col gap-1.5 mb-6 sm:mb-10 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:py-3 max-sm:-mx-4 max-sm:px-4">
+          <div className="flex gap-1.5">
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+              <div
+                key={i}
+                className={`h-0.5 flex-1 rounded-full transition-all duration-500 ${i <= step ? 'bg-white' : 'bg-[#1a1a1a]'}`}
+              />
+            ))}
+          </div>
+          <div className="sm:hidden text-[#858585] text-[10px] uppercase tracking-widest text-center">
+            Step {step + 1} of {TOTAL_STEPS}
+          </div>
         </div>
 
         {/* Step 1: Primary driver */}
@@ -399,10 +404,10 @@ export default function Onboarding() {
         )}
 
         {/* Navigation */}
-        <div className="flex justify-between items-center mt-12">
+        <div className="flex justify-between items-center mt-12 max-sm:mt-8 max-sm:sticky max-sm:bottom-16 max-sm:z-10 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:-mx-4 max-sm:px-4 max-sm:py-3">
           <button
             onClick={() => setStep(step - 1)}
-            className="text-[#858585] hover:text-white transition-colors text-sm"
+            className="text-[#858585] hover:text-white transition-colors text-sm min-h-11 inline-flex items-center"
           >
             Back
           </button>
@@ -410,7 +415,7 @@ export default function Onboarding() {
           <button
             onClick={handleNext}
             disabled={!canAdvance() || saving}
-            className="px-8 py-3 bg-white text-black font-medium rounded-2xl disabled:opacity-20 hover:bg-gray-100 transition-all duration-200 text-sm"
+            className="px-8 py-3 bg-white text-black font-medium rounded-2xl disabled:opacity-20 hover:bg-gray-100 transition-all duration-200 text-sm min-h-11"
           >
             {saving ? 'Saving...' : step === TOTAL_STEPS - 1 ? 'Enter' : 'Continue'}
           </button>

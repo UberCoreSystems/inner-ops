@@ -125,7 +125,7 @@ const EmergencyButton = () => {
       {/* Floating Emergency Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-24 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-red-800 text-white shadow-lg hover:shadow-red-500/50 hover:scale-110 transition-all duration-300 flex items-center justify-center group animate-pulse hover:animate-none"
+        className="fixed right-6 z-50 bottom-6 max-sm:bottom-[calc(5rem+env(safe-area-inset-bottom))] w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-red-800 text-white shadow-lg hover:shadow-red-500/50 hover:scale-110 transition-all duration-300 flex items-center justify-center group animate-pulse hover:animate-none"
         title="I'm Struggling"
       >
         <span className="text-xl">🆘</span>
