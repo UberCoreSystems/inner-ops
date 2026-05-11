@@ -587,6 +587,15 @@ export const callLLM = async (promptBundle, generationContext) => {
       ...(profile?.primaryDriver && { primaryDriver: profile.primaryDriver }),
       ...(profile?.feedbackStyle && { feedbackStyle: profile.feedbackStyle }),
       ...(profile?.focusStatement && { focusStatement: profile.focusStatement }),
+      // Personal context (added with onboarding/engagement layer). Forwarded
+      // only when populated — Oracle Cloud Function renders these into the
+      // system prompt so feedback can reference the user's actual situation.
+      ...(Array.isArray(profile?.activeSituations) && profile.activeSituations.length
+        && { activeSituations: profile.activeSituations }),
+      ...(Array.isArray(profile?.knownTriggers) && profile.knownTriggers.length
+        && { knownTriggers: profile.knownTriggers }),
+      ...(typeof profile?.operatingContext === 'string' && profile.operatingContext.trim()
+        && { operatingContext: profile.operatingContext.trim() }),
     };
 
     // BER-200: Oracle Reactance Architecture — request the server-side

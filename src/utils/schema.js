@@ -121,7 +121,6 @@ export const USER_PROFILE_FIELDS = Object.freeze({
   // optional. Drives banner copy enrichment (pre-deploy) and personalized
   // Daily Prompt rotation (v1.1).
   ACTIVE_SITUATIONS: 'activeSituations',     // string[] (up to 3 short statements)
-  KEY_PEOPLE: 'keyPeople',                   // string[] (one per line — "Initials — role — current state"; up to 5)
   KNOWN_TRIGGERS: 'knownTriggers',           // string[] (up to 5 short statements)
   OPERATING_CONTEXT: 'operatingContext',     // string (single paragraph)
 });

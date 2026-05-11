@@ -20,7 +20,6 @@ export default function Settings() {
 
   // Personal context state — bound to textareas as raw text, parsed on save.
   const [activeSituationsText, setActiveSituationsText] = useState('');
-  const [keyPeopleText, setKeyPeopleText] = useState('');
   const [knownTriggersText, setKnownTriggersText] = useState('');
   const [operatingContext, setOperatingContext] = useState('');
   const [savingContext, setSavingContext] = useState(false);
@@ -28,7 +27,6 @@ export default function Settings() {
   // Track loaded baseline so the Save button can detect dirty state.
   const [contextBaseline, setContextBaseline] = useState({
     activeSituationsText: '',
-    keyPeopleText: '',
     knownTriggersText: '',
     operatingContext: '',
   });
@@ -57,16 +55,13 @@ export default function Settings() {
 
         if (profile) {
           const a = linesToText(profile.activeSituations);
-          const k = linesToText(profile.keyPeople);
           const t = linesToText(profile.knownTriggers);
           const o = profile.operatingContext || '';
           setActiveSituationsText(a);
-          setKeyPeopleText(k);
           setKnownTriggersText(t);
           setOperatingContext(o);
           setContextBaseline({
             activeSituationsText: a,
-            keyPeopleText: k,
             knownTriggersText: t,
             operatingContext: o,
           });
@@ -85,12 +80,10 @@ export default function Settings() {
   const contextDirty = useMemo(
     () =>
       activeSituationsText !== contextBaseline.activeSituationsText ||
-      keyPeopleText !== contextBaseline.keyPeopleText ||
       knownTriggersText !== contextBaseline.knownTriggersText ||
       operatingContext !== contextBaseline.operatingContext,
     [
       activeSituationsText,
-      keyPeopleText,
       knownTriggersText,
       operatingContext,
       contextBaseline,
@@ -129,24 +122,20 @@ export default function Settings() {
     setSavingContext(true);
     try {
       const activeSituations = parseLines(activeSituationsText, PERSONAL_CONTEXT_LIMITS.ACTIVE_SITUATIONS);
-      const keyPeople = parseLines(keyPeopleText, PERSONAL_CONTEXT_LIMITS.KEY_PEOPLE);
       const knownTriggers = parseLines(knownTriggersText, PERSONAL_CONTEXT_LIMITS.KNOWN_TRIGGERS);
       await saveUserProfile({
         activeSituations,
-        keyPeople,
         knownTriggers,
         operatingContext: operatingContext.trim(),
       });
       setContextBaseline({
         activeSituationsText: linesToText(activeSituations),
-        keyPeopleText: linesToText(keyPeople),
         knownTriggersText: linesToText(knownTriggers),
         operatingContext: operatingContext.trim(),
       });
       // Reflect parsed/trimmed values back into the textareas so the user
       // sees what was actually persisted (no trailing blank lines, etc.).
       setActiveSituationsText(linesToText(activeSituations));
-      setKeyPeopleText(linesToText(keyPeople));
       setKnownTriggersText(linesToText(knownTriggers));
       setOperatingContext(operatingContext.trim());
       ouraToast.success('Personal context saved.');
@@ -229,15 +218,6 @@ export default function Settings() {
             onChange={setActiveSituationsText}
             placeholder={'Career transition\nRebuilding after the breakup'}
             rows={4}
-          />
-
-          <ContextField
-            label="Who matters in this moment"
-            hint="Initials — role — current state. One per line. Up to five. Stays on your profile only."
-            value={keyPeopleText}
-            onChange={setKeyPeopleText}
-            placeholder={'M. — partner — rebuilding trust\nDad — parent — health declining'}
-            rows={5}
           />
 
           <ContextField

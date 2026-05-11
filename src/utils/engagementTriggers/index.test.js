@@ -14,6 +14,7 @@ describe('evaluateAllTriggers', () => {
       userProfile: {},
       notificationPreferences: {},
       bannerDismissals: {},
+      now: NOW,
     });
     assert.equal(result.length, 1);
     assert.equal(result[0].triggerId, ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS);
@@ -21,10 +22,11 @@ describe('evaluateAllTriggers', () => {
 
   it('returns an empty array when no trigger conditions hold', () => {
     const result = evaluateAllTriggers({
-      journalEntries: [{ createdAt: new Date().toISOString() }],
+      journalEntries: [{ createdAt: new Date(NOW - HOURS).toISOString() }],
       userProfile: {},
       notificationPreferences: { [ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS]: { enabled: true } },
       bannerDismissals: {},
+      now: NOW,
     });
     assert.deepEqual(result, []);
   });
@@ -42,6 +44,7 @@ describe('evaluateAllTriggers', () => {
         userProfile: {},
         notificationPreferences: {},
         bannerDismissals: {},
+        now: NOW,
       });
       // The bad trigger contributed nothing; journalStaleness still fired.
       assert.ok(result.find((p) => p.triggerId === ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS));
@@ -112,6 +115,7 @@ describe('TRIGGERS registry', () => {
       userProfile: {},
       notificationPreferences: { [ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS]: { enabled: true } },
       bannerDismissals: {},
+      now: NOW,
     });
     assert.deepEqual(result, []);
   });

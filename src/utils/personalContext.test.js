@@ -69,7 +69,10 @@ describe('linesToText', () => {
 describe('PERSONAL_CONTEXT_LIMITS', () => {
   it('matches the limits documented in USER_PROFILE_FIELDS', () => {
     assert.equal(PERSONAL_CONTEXT_LIMITS.ACTIVE_SITUATIONS, 3);
-    assert.equal(PERSONAL_CONTEXT_LIMITS.KEY_PEOPLE, 5);
     assert.equal(PERSONAL_CONTEXT_LIMITS.KNOWN_TRIGGERS, 5);
+  });
+
+  it('does not expose a KEY_PEOPLE limit (field removed 2026-05-10)', () => {
+    assert.equal(PERSONAL_CONTEXT_LIMITS.KEY_PEOPLE, undefined);
   });
 });

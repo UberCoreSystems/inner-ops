@@ -746,6 +746,20 @@ function buildUserPrompt(entryText, userContext) {
   if (userContext?.feedbackStyle && STYLE_INSTRUCTIONS[userContext.feedbackStyle]) {
     context.push(`Feedback preference: ${STYLE_INSTRUCTIONS[userContext.feedbackStyle]}`);
   }
+  // Personal-context fields captured in onboarding (and editable from
+  // Settings). Forwarded only when the client populated them. The Oracle
+  // should USE these — name the named situations, recognize the named
+  // triggers — but only when the entry actually intersects with them.
+  // Do not force-fit context that has nothing to do with what he wrote.
+  if (Array.isArray(userContext?.activeSituations) && userContext.activeSituations.length) {
+    context.push(`What he's currently navigating: ${userContext.activeSituations.join('; ')}`);
+  }
+  if (Array.isArray(userContext?.knownTriggers) && userContext.knownTriggers.length) {
+    context.push(`Times/states where he historically fails: ${userContext.knownTriggers.join('; ')}`);
+  }
+  if (typeof userContext?.operatingContext === 'string' && userContext.operatingContext.trim()) {
+    context.push(`Additional context he provided: ${userContext.operatingContext.trim()}`);
+  }
   if (userContext?.recentEntries?.length) {
     const summaries = userContext.recentEntries.slice(0, 2).join(' / ');
     context.push(`Recent entry themes (context only — do not reference directly): ${summaries}`);

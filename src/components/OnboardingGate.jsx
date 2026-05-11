@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { getUserProfile } from '../utils/userProfile';
+import { subscribeUserProfile } from '../utils/userProfile';
 import { isExemptPath } from '../utils/routeGating';
 import logger from '../utils/logger';
 
@@ -19,34 +19,52 @@ const PageLoader = () => (
  * userProfiles, which is written either when the wizard finishes or when
  * the user explicitly skips from the briefing screen.
  *
- * Routes excluded from gating: /auth, /onboarding, /oura/callback. Anything
- * else triggers a redirect when the profile flag is missing.
+ * Uses a realtime subscription on the user's profile doc so the wizard's
+ * write propagates immediately — without it, the gate's cached state
+ * would still read "needs onboarding" the moment the wizard navigates to
+ * /dashboard, redirecting the user straight back to /onboarding.
+ *
+ * Routes excluded from gating: /auth, /onboarding, /oura/callback.
  */
 export default function OnboardingGate({ user, children }) {
   const location = useLocation();
   // null = checking, true = needs onboarding, false = completed
   const [needsOnboarding, setNeedsOnboarding] = useState(null);
+  const unsubRef = useRef(null);
 
   useEffect(() => {
     if (!user) {
       setNeedsOnboarding(null);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const profile = await getUserProfile();
-        if (cancelled) return;
-        setNeedsOnboarding(!profile?.onboardingCompletedAt);
-      } catch (err) {
-        logger.warn('Onboarding-status check failed:', err);
-        if (cancelled) return;
-        // Fail open — better to land the user on Dashboard than to trap them
-        // in a loader if Firestore reads are flaking.
-        setNeedsOnboarding(false);
+
+    let active = true;
+
+    subscribeUserProfile((profile) => {
+      if (!active) return;
+      setNeedsOnboarding(!profile?.onboardingCompletedAt);
+    })
+      .then((unsub) => {
+        if (!active) {
+          try { unsub(); } catch { /* noop */ }
+          return;
+        }
+        unsubRef.current = unsub;
+      })
+      .catch((err) => {
+        logger.warn('Onboarding-status subscribe failed:', err);
+        // Fail open — better to land the user on Dashboard than to trap
+        // them in a loader if Firestore is flaking.
+        if (active) setNeedsOnboarding(false);
+      });
+
+    return () => {
+      active = false;
+      if (unsubRef.current) {
+        try { unsubRef.current(); } catch { /* noop */ }
+        unsubRef.current = null;
       }
-    })();
-    return () => { cancelled = true; };
+    };
   }, [user?.uid]);
 
   // Not authenticated — let downstream routes handle the /auth redirect.

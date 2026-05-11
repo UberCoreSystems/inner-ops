@@ -38,17 +38,16 @@ export default function Onboarding() {
   const [criterionThreshold, setCriterionThreshold] = useState(2);
   const [criterionQuestion, setCriterionQuestion] = useState('');
 
-  // Personal context (steps 6–9). All optional. Stored on userProfiles to
-  // power journal-staleness banner copy enrichment and v1.1 personalized
-  // Daily Prompt rotation.
+  // Personal context (steps 6–8). All optional. Stored on userProfiles and
+  // forwarded to the Oracle on every call so feedback can reference the
+  // user's actual operating context.
   const [activeSituationsText, setActiveSituationsText] = useState('');
-  const [keyPeopleText, setKeyPeopleText] = useState('');
   const [knownTriggersText, setKnownTriggersText] = useState('');
   const [operatingContext, setOperatingContext] = useState('');
 
   // 0=briefing, 1=driver, 2=style, 3=focus, 4=kill target, 5=confrontation,
-  // 6=active situations, 7=key people, 8=known triggers, 9=operating context
-  const TOTAL_STEPS = 10;
+  // 6=active situations, 7=known triggers, 8=operating context
+  const TOTAL_STEPS = 9;
 
   const canAdvance = () => {
     if (step === 1) return !!driver;
@@ -94,7 +93,6 @@ export default function Onboarding() {
       const progress = readProgress();
 
       const activeSituations = parseLines(activeSituationsText, PERSONAL_CONTEXT_LIMITS.ACTIVE_SITUATIONS);
-      const keyPeople = parseLines(keyPeopleText, PERSONAL_CONTEXT_LIMITS.KEY_PEOPLE);
       const knownTriggers = parseLines(knownTriggersText, PERSONAL_CONTEXT_LIMITS.KNOWN_TRIGGERS);
 
       if (!progress.profileSaved) {
@@ -103,7 +101,6 @@ export default function Onboarding() {
           feedbackStyle,
           focusStatement: focusStatement.trim(),
           activeSituations,
-          keyPeople,
           knownTriggers,
           operatingContext: operatingContext.trim(),
           onboardingCompletedAt: new Date().toISOString(),
@@ -151,7 +148,6 @@ export default function Onboarding() {
         hasKillTarget: !!killTarget.trim(),
         hasConfrontationCriterion: !!(criterionArchetype && criterionQuestion.trim()),
         activeSituationsCount: activeSituations.length,
-        keyPeopleCount: keyPeople.length,
         knownTriggersCount: knownTriggers.length,
         hasOperatingContext: !!operatingContext.trim(),
       });
@@ -348,7 +344,7 @@ export default function Onboarding() {
         {/* Step 6: Active situations */}
         {step === 6 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 1 of 4</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 1 of 3</p>
             <h2 className="text-2xl font-light text-white mb-3">What are you currently navigating?</h2>
             <p className="text-[#858585] text-sm mb-8">
               The situations consuming your attention right now. The Oracle and the journal prompt you when you go quiet will reference these by name. One per line. Up to three.
@@ -364,29 +360,10 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* Step 7: Key people */}
+        {/* Step 7: Known triggers */}
         {step === 7 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 2 of 4</p>
-            <h2 className="text-2xl font-light text-white mb-3">Who matters in this moment?</h2>
-            <p className="text-[#858585] text-sm mb-8">
-              The people whose presence — or absence — is shaping your operating state. Use initials, not full names. Format: <span className="text-[#ababab]">Initials — role — current state</span>. One per line. Up to five.
-            </p>
-            <textarea
-              value={keyPeopleText}
-              onChange={(e) => setKeyPeopleText(e.target.value)}
-              placeholder={'e.g.\nM. — partner — rebuilding trust after Q4\nR. — old friend — drifting; need to address\nDad — parent — health declining'}
-              rows={6}
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
-            />
-            <p className="text-[#858585] text-xs mt-2">Stays on your profile only. Skip by leaving blank.</p>
-          </div>
-        )}
-
-        {/* Step 8: Known triggers */}
-        {step === 8 && (
-          <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 3 of 4</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 2 of 3</p>
             <h2 className="text-2xl font-light text-white mb-3">Where do you historically fail?</h2>
             <p className="text-[#858585] text-sm mb-8">
               The times, places, or states that consistently precede failure. Naming them now sharpens drift detection later. One per line. Up to five.
@@ -402,10 +379,10 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* Step 9: Operating context */}
-        {step === 9 && (
+        {/* Step 8: Operating context */}
+        {step === 8 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 4 of 4</p>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 3 of 3</p>
             <h2 className="text-2xl font-light text-white mb-3">Anything else the system should know?</h2>
             <p className="text-[#858585] text-sm mb-8">
               Constraints, history, current state — anything that would help the Oracle give you sharper feedback. Free-form.

@@ -1,10 +1,10 @@
 /**
  * Helpers for the personal-context fields stored on userProfiles.
  *
- * Data shape (string[] for everything except operatingContext):
- *   activeSituations, keyPeople, knownTriggers — array of trimmed,
- *     non-empty short statements, capped at the limits stated in
- *     USER_PROFILE_FIELDS comments (3 / 5 / 5).
+ * Data shape:
+ *   activeSituations, knownTriggers — string[] of trimmed, non-empty short
+ *     statements, capped at the limits stated in USER_PROFILE_FIELDS
+ *     comments (3 / 5).
  *   operatingContext — single trimmed string.
  *
  * The wizard and Settings page both bind textareas as raw multi-line text
@@ -36,6 +36,5 @@ export const linesToText = (arr) =>
 
 export const PERSONAL_CONTEXT_LIMITS = Object.freeze({
   ACTIVE_SITUATIONS: 3,
-  KEY_PEOPLE: 5,
   KNOWN_TRIGGERS: 5,
 });
