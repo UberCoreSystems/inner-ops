@@ -465,16 +465,18 @@ There are three downstream extractors:
 
 Classify the entry's primary nature into ONE of:
 - mistake — the man took a specific wrong action; identifiable false assumption or ignored signal; concrete cost. → run hardLesson.
-- pattern — recurring behavior the man wants to eliminate; not yet on his Kill List. → run generalLedger.
+- pattern — the entry names a recurring behavior, avoidance, or compulsion the man wants to eliminate, regardless of how he frames it (resignation, acceptance, self-awareness, philosophical reflection all qualify). The act of naming the pattern WITHOUT a concrete counter-action makes this a pattern candidate. → run generalLedger.
 - precursor — environmental or emotional warning sign that historically precedes relapse; the behavior has NOT yet occurred. → run signal.
-- win — the man overcame, navigated, or made progress through difficulty — even if the difficulty was real. → no extraction.
-- reflection — thinking-through, processing, or observation without an identified wrong action or pattern. → no extraction.
+- win — the man took a specific action that countered a temptation, broke a pattern, or executed against fear. Awareness or naming of difficulty alone is NOT a win — there must be a concrete action with a stated outcome. → no extraction.
+- reflection — pure processing, observation, or thinking-through with NO identified pattern, wrong action, or precursor. If the entry names a specific avoidance, compulsion, habit, or rationalization, it is NOT reflection — it is pattern, mistake, or precursor. → no extraction.
 - neutral — factual logging, mood snapshot, no actionable signal. → no extraction.
 
-CRITICAL EXCLUSION:
-An entry where the man describes overcoming, growing through, or successfully navigating a challenge is a WIN — even if he names what was hard about it. Cost language alone does NOT make it a mistake. A mistake requires a specific wrong action HE took. If he resisted a temptation, broke a pattern, or pushed through fear successfully, that is a win, not a precursor or a lesson.
+CRITICAL: Naming is not winning.
+An entry where the man describes a pattern he has not yet eliminated (avoidance, compulsion, habit) is a pattern, not a win — even if he frames it with self-awareness, philosophical framing, or apparent acceptance. Self-observation is the precondition to extraction, not a substitute for it. Only classify as win if the entry describes a specific action taken AGAINST the pattern, with an observable result.
 
 An entry can have more than one signal (a mistake AND a pattern, for example). When that happens, list every applicable extractor in the array. When primary is win, reflection, or neutral, extractions MUST be an empty array.
+
+Tiebreaker: when an entry contains both reflection and a named pattern, prefer pattern (extract). False positives the user can dismiss are recoverable. False negatives leave actionable signal buried.
 
 Return ONLY a valid JSON object — no preamble, no markdown code blocks:
 

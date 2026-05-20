@@ -13,10 +13,11 @@ import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
-import CrossModuleExtractionPrompts from '../components/CrossModuleExtractionPrompts';
+import { parseDate } from '../utils/dateUtils';
 import logger from '../utils/logger';
 import {
   classifyAndExtract,
+  buildClassificationPayload,
   stashKillListExtraction,
   stashRelapseExtraction,
   stashHardLessonExtraction,
@@ -498,6 +499,9 @@ export default function Journal() {
           prev.map(e => e.id === editingEntryId ? { ...e, content: entry, mood, intensity } : e)
         );
         ouraToast.success('Journal entry updated');
+        // Re-classify the edited entry — the content may have moved between buckets.
+        // `forceRefresh: true` bypasses the per-session dedupe for this exact text.
+        classifyAndPersist(editingEntryId, entry, { forceRefresh: true });
         cancelEdit();
         return;
       }
@@ -538,9 +542,9 @@ export default function Journal() {
 
       ouraToast.success('Journal entry saved');
 
-      // Capture entry text before resetting form — extraction runs in background after save
+      // Capture entry text before resetting form — classification runs in background after save
       const savedEntryText = entry;
-      setCrossModuleExtractions({ killList: null, relapseRadar: null });
+      const savedEntryId = newEntry.id;
 
       setEntry('');
       setMood(moodOptions[0].value);
@@ -548,8 +552,9 @@ export default function Journal() {
       setEventOccurredAt(new Date().toISOString().slice(0, 16));
       setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
 
-      // Fire cross-module signal extraction — non-blocking
-      runCrossModuleExtractions(savedEntryText);
+      // Auto-classify into one of: General Ledger, Hard Lesson, Signal, or nothing.
+      // Persist the result on the entry doc so the badge survives reloads.
+      classifyAndPersist(savedEntryId, savedEntryText);
 
     } catch (error) {
       logger.error("Error saving journal entry:", error);
@@ -627,124 +632,85 @@ export default function Journal() {
     }
   };
 
-  // Cross-module extraction state — Kill List contract + Relapse Radar signal detection
-  const [crossModuleExtractions, setCrossModuleExtractions] = useState({ killList: null, relapseRadar: null, hardLesson: null });
-  // Per-entry reconsideration cards: { [entryId]: { killList, relapseRadar, hardLesson, loading? } }.
-  // Populated by handleReconsiderEntry; rendered inline below the corresponding past entry.
-  const [entryReconsiderations, setEntryReconsiderations] = useState({});
-
-  // Runs the Oracle classifier first, then conditionally fires only the
-  // extractors the classifier flags as warranted. See
-  // src/utils/crossModuleExtraction.js for the full flow. Returns
-  // `{ killList, relapseRadar, hardLesson, classification }` on success, null
-  // on dedupe-skip or unrecoverable error. Callers decide where to render —
-  // the on-save flow populates the top-of-list state; the per-entry
-  // "Reconsider" flow populates `entryReconsiderations[entry.id]`.
-  const runCrossModuleExtractions = async (entryText, { forceRefresh = false } = {}) => {
-    const results = await classifyAndExtract(entryText, { forceRefresh });
-    if (results && (results.killList || results.relapseRadar || results.hardLesson)) {
-      setCrossModuleExtractions({
-        killList: results.killList,
-        relapseRadar: results.relapseRadar,
-        hardLesson: results.hardLesson,
-      });
-    }
-    return results;
-  };
-
-  const handleDismissKillListExtraction = () => {
-    setCrossModuleExtractions(prev => ({ ...prev, killList: null }));
-  };
-
-  const handleDismissRelapseExtraction = () => {
-    setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
-  };
-
-  const handleConfirmKillListExtraction = (extraction) => {
-    stashKillListExtraction(extraction);
-    setCrossModuleExtractions(prev => ({ ...prev, killList: null }));
-    navigate('/ledger');
-  };
-
-  const handleConfirmRelapseExtraction = (extraction) => {
-    stashRelapseExtraction(extraction);
-    setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
-    navigate('/relapse');
-  };
-
-  // Hard Lesson card — top-of-list (just-saved entry) handlers.
-  const handleDismissHardLessonExtraction = () => {
-    setCrossModuleExtractions(prev => ({ ...prev, hardLesson: null }));
-  };
-
-  const handleConfirmHardLessonExtraction = (extraction) => {
-    stashHardLessonExtraction(extraction, currentEntryId);
-    setCrossModuleExtractions(prev => ({ ...prev, hardLesson: null }));
-    navigate('/hardlessons');
-  };
-
-  // Per-entry "Reconsider this entry" — re-runs all three Oracle classifications
-  // on demand for any past entry. Replaces the always-on per-entry button.
-  const updateReconsidered = (entryId, partial) => {
-    setEntryReconsiderations(prev => ({
-      ...prev,
-      [entryId]: { ...(prev[entryId] || {}), ...partial },
-    }));
-  };
-
-  const handleReconsiderEntry = async (entry) => {
-    if (!entry?.id || !entry?.content) return;
-    const existing = entryReconsiderations[entry.id];
-    if (existing?.loading) return;
-    updateReconsidered(entry.id, { loading: true });
+  // Auto-classify a journal entry, persist the result on the entry doc, and
+  // mirror it into local React state so the badge appears immediately. Runs
+  // detached from the save UX — failures are silent and retried by the
+  // backfill effect on next Journal mount.
+  const classifyAndPersist = async (entryId, entryText, { forceRefresh = false } = {}) => {
+    if (!entryId || !entryText) return;
     try {
-      const results = await runCrossModuleExtractions(entry.content, { forceRefresh: true });
-      if (results) {
-        const anySignal = !!(results.killList || results.relapseRadar || results.hardLesson);
-        if (anySignal) {
-          updateReconsidered(entry.id, {
-            killList: results.killList,
-            relapseRadar: results.relapseRadar,
-            hardLesson: results.hardLesson,
-            loading: false,
-          });
-        } else {
-          updateReconsidered(entry.id, { killList: null, relapseRadar: null, hardLesson: null, loading: false });
-          ouraToast.info('Oracle found nothing further to investigate in this entry.');
-        }
-      } else {
-        updateReconsidered(entry.id, { loading: false });
-        ouraToast.error('Oracle was unavailable. Try again shortly.');
+      const results = await classifyAndExtract(entryText, { forceRefresh });
+      const classification = buildClassificationPayload(results);
+      try {
+        await updateData('journalEntries', entryId, { classification });
+      } catch (writeErr) {
+        logger.warn('Failed to persist classification on entry', { entryId, err: writeErr?.message });
+        return;
       }
+      setEntries(prev => prev.map(e => (e.id === entryId ? { ...e, classification } : e)));
     } catch (err) {
-      logger.error('Error reconsidering entry:', err);
-      updateReconsidered(entry.id, { loading: false });
-      ouraToast.error('Oracle was unavailable. Try again shortly.');
+      logger.error('classifyAndPersist unexpected error', err);
     }
   };
 
-  // Per-entry confirm/dismiss handlers — they parameterize the slot and entry
-  // so the inline cards can clear their own state independently of the
-  // top-of-list extractions.
-  const makeReconsideredDismiss = (entryId, slot) => () => updateReconsidered(entryId, { [slot]: null });
-
-  const makeReconsideredConfirmKillList = (entryId) => (extraction) => {
-    stashKillListExtraction(extraction);
-    updateReconsidered(entryId, { killList: null });
-    navigate('/ledger');
+  // Single-tap "land" handler. Stashes the Oracle's extraction payload under
+  // the destination module's prefill key, then navigates. Target modules
+  // hydrate their forms from these keys on mount.
+  const handleLandBadge = (entry, badgeKey) => {
+    const prefills = entry?.classification?.prefills || {};
+    if (badgeKey === 'killList' && prefills.killList) {
+      stashKillListExtraction(prefills.killList);
+      navigate('/ledger');
+    } else if (badgeKey === 'hardLesson' && prefills.hardLesson) {
+      stashHardLessonExtraction(prefills.hardLesson, entry.id);
+      navigate('/hardlessons');
+    } else if (badgeKey === 'relapseRadar' && prefills.relapseRadar) {
+      stashRelapseExtraction(prefills.relapseRadar);
+      navigate('/relapse');
+    }
   };
 
-  const makeReconsideredConfirmRelapse = (entryId) => (extraction) => {
-    stashRelapseExtraction(extraction);
-    updateReconsidered(entryId, { relapseRadar: null });
-    navigate('/relapse');
+  // Map an extractions[] string to the badge identity key + label + dot color.
+  // Anything not in this map is ignored at render time.
+  const BADGE_CONFIG = {
+    generalledger: { key: 'killList',     label: 'General Ledger', dot: '#ef4444' },
+    hardlesson:    { key: 'hardLesson',   label: 'Hard Lesson',    dot: '#f59e0b' },
+    signal:        { key: 'relapseRadar', label: 'Signal',         dot: '#4da6ff' },
   };
 
-  const makeReconsideredConfirmHardLesson = (entryId) => (extraction) => {
-    stashHardLessonExtraction(extraction, entryId);
-    updateReconsidered(entryId, { hardLesson: null });
-    navigate('/hardlessons');
-  };
+  // Silent backfill — runs once per page load. Picks up to 5 recent entries
+  // (last 14 days) that are missing a classification or have one marked
+  // `status: 'failed'` and re-runs the classifier serially. No toasts, no UI.
+  const backfillRanRef = useRef(false);
+  useEffect(() => {
+    if (backfillRanRef.current) return;
+    if (loading || entries.length === 0) return;
+    backfillRanRef.current = true;
+
+    const fourteenDaysAgoMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const candidates = entries.filter((e) => {
+      const tsMs =
+        (e.createdAt?.toDate ? e.createdAt.toDate().getTime() : new Date(e.createdAt || 0).getTime())
+        || e.timestamp
+        || 0;
+      if (tsMs < fourteenDaysAgoMs) return false;
+      const status = e.classification?.status;
+      return !status || status === 'failed';
+    }).slice(0, 5);
+
+    if (candidates.length === 0) return;
+
+    (async () => {
+      for (const e of candidates) {
+        if (!e.id || !e.content) continue;
+        try {
+          await classifyAndPersist(e.id, e.content, { forceRefresh: true });
+        } catch (err) {
+          logger.warn('backfill classify failed for entry', { id: e.id, err: err?.message });
+        }
+      }
+    })();
+  }, [entries, loading]);
 
   return (
     <div className="min-h-screen bg-black">
@@ -1111,17 +1077,6 @@ export default function Journal() {
           </div>
         </section>
 
-        {/* Cross-module suggestions for the most recent entry — Oracle classifies on save. */}
-        <CrossModuleExtractionPrompts
-          extractions={crossModuleExtractions}
-          onDismissKillList={handleDismissKillListExtraction}
-          onDismissRelapseRadar={handleDismissRelapseExtraction}
-          onDismissHardLesson={handleDismissHardLessonExtraction}
-          onConfirmKillList={handleConfirmKillListExtraction}
-          onConfirmRelapseRadar={handleConfirmRelapseExtraction}
-          onConfirmHardLesson={handleConfirmHardLessonExtraction}
-        />
-
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -1254,16 +1209,12 @@ export default function Journal() {
                           )}
                           <div className="flex items-center space-x-2">
                             <span className="text-xs text-[#858585]">
-                              {entry.timestamp?.toDate ?
-                                entry.timestamp.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
-                                entry.createdAt?.toDate ?
-                                  entry.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
-                                  entry.timestamp ?
-                                    new Date(entry.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
-                                    entry.createdAt ?
-                                      new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) :
-                                      'Unknown date'
-                              }
+                              {(() => {
+                                const d = parseDate(entry.timestamp) || parseDate(entry.createdAt);
+                                return d
+                                  ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                  : 'Unknown date';
+                              })()}
                             </span>
                             <button
                               onClick={() => startEditEntry(entry)}
@@ -1333,45 +1284,57 @@ export default function Journal() {
                               </div>
                             )}
 
-                            {/* Reconsider this entry — re-runs all three Oracle classifications
-                                (Ledger / Signal / Hard Lessons) and surfaces whichever cards apply.
-                                Replaces the always-on "Extract Lesson" button with a content-aware,
-                                on-demand action. */}
+                            {/* Auto-classification badge row.
+                                Oracle decides on save whether this entry maps to General Ledger,
+                                Hard Lesson, Signal, or nothing. One tap on a badge lands the entry
+                                in its target module with the Oracle's extracted fields prefilled. */}
                             {(() => {
-                              const reconsidered = entryReconsiderations[entry.id];
-                              const isLoading = !!reconsidered?.loading;
+                              const c = entry.classification;
+                              if (!c || c.status !== 'extracted') {
+                                return c?.reasoning ? (
+                                  <p className="text-[#6a6a6a] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
+                                    Oracle: {c.reasoning}
+                                  </p>
+                                ) : null;
+                              }
+                              const badges = (c.extractions || [])
+                                .map((e) => BADGE_CONFIG[String(e || '').toLowerCase()])
+                                .filter(Boolean)
+                                .filter((cfg) => c.prefills?.[cfg.key]);
+                              if (badges.length === 0) {
+                                return c.reasoning ? (
+                                  <p className="text-[#6a6a6a] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
+                                    Oracle: {c.reasoning}
+                                  </p>
+                                ) : null;
+                              }
                               return (
-                                <button
-                                  onClick={() => handleReconsiderEntry(entry)}
-                                  disabled={isLoading}
-                                  className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center gap-2 text-xs text-[#ababab] hover:text-white disabled:text-[#858585] transition-colors w-full"
-                                >
-                                  {isLoading ? (
-                                    <>
-                                      <span className="inline-block w-3 h-3 border border-[#8a8a8a] border-t-transparent rounded-full animate-spin" />
-                                      <span>Oracle is reconsidering this entry...</span>
-                                    </>
-                                  ) : (
-                                    <span>Reconsider this entry</span>
+                                <div className="mt-4 pt-3 border-t border-[#1a1a1a]">
+                                  <div className="flex flex-wrap gap-2">
+                                    {badges.map((cfg) => (
+                                      <button
+                                        key={cfg.key}
+                                        onClick={() => handleLandBadge(entry, cfg.key)}
+                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border border-[#1a1a1a] bg-[#0a0a0a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] transition-colors"
+                                        title={`Land this entry in ${cfg.label}`}
+                                      >
+                                        <span
+                                          className="inline-block w-2 h-2 rounded-full"
+                                          style={{ backgroundColor: cfg.dot }}
+                                        />
+                                        <span>{cfg.label}</span>
+                                        <span className="text-[#6a6a6a]">— tap to land</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {c.reasoning && (
+                                    <p className="text-[#6a6a6a] text-xs italic mt-2 leading-relaxed">
+                                      Oracle: {c.reasoning}
+                                    </p>
                                   )}
-                                </button>
+                                </div>
                               );
                             })()}
-
-                            {/* Inline cross-module suggestions surfaced by "Reconsider this entry". */}
-                            {entryReconsiderations[entry.id] && !entryReconsiderations[entry.id].loading && (
-                              <div className="mt-3">
-                                <CrossModuleExtractionPrompts
-                                  extractions={entryReconsiderations[entry.id]}
-                                  onDismissKillList={makeReconsideredDismiss(entry.id, 'killList')}
-                                  onDismissRelapseRadar={makeReconsideredDismiss(entry.id, 'relapseRadar')}
-                                  onDismissHardLesson={makeReconsideredDismiss(entry.id, 'hardLesson')}
-                                  onConfirmKillList={makeReconsideredConfirmKillList(entry.id)}
-                                  onConfirmRelapseRadar={makeReconsideredConfirmRelapse(entry.id)}
-                                  onConfirmHardLesson={makeReconsideredConfirmHardLesson(entry.id)}
-                                />
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>

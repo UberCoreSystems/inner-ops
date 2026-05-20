@@ -49,11 +49,15 @@ const EXTRACTOR_MAP = {
  * not surface false-positive Hard Lesson / Ledger / Signal cards.
  *
  * Returns one of:
- *   - null — dedupe-skipped without forceRefresh, or unrecoverable error
- *   - { killList, relapseRadar, hardLesson, classification } — populated for
- *     each extractor that ran, null for those skipped or that returned no
- *     signal. `classification` is the raw classifier payload (or null) for
- *     debugging / surfacing.
+ *   - null — dedupe-skipped without forceRefresh (caller treats as no-op).
+ *   - { status, killList, relapseRadar, hardLesson, classification } where
+ *     `status` is one of:
+ *       'extracted' — classifier ran, at least one extractor produced a result.
+ *       'empty'     — classifier ran successfully, returned a valid empty
+ *                     extractions array.
+ *       'failed'    — classifier returned null, malformed JSON, threw, or the
+ *                     outer flow caught an unexpected error.
+ *     `classification` is the raw classifier payload (may be null on failure).
  */
 export async function classifyAndExtract(entryText, { tone = 'stoic', forceRefresh = false } = {}) {
   logger.log('[CrossModuleExtraction] start', {
@@ -98,19 +102,17 @@ export async function classifyAndExtract(entryText, { tone = 'stoic', forceRefre
     const classifyResult = await buildCall('entryClassification');
     const classification = parseExtraction(classifyResult, 'entryClassification');
 
-    // Decide which extractors to run. If the classifier fails or returns
-    // malformed data, run nothing — the user's complaint was that everything
-    // surfaces a Hard Lesson card; defaulting to silence on uncertainty is
-    // the safer failure mode and the tightened per-extractor prompts already
-    // self-reject benign entries on the rare path where the classifier is
-    // wrong.
+    // Decide which extractors to run. A null/malformed classifier response is
+    // a FAILURE, not an empty result — surfaced to the caller so the UI can
+    // distinguish "Oracle saw nothing" from "Oracle never ran."
+    const classifierOk = !!(classification && Array.isArray(classification.extractions));
     let toRun = [];
-    if (classification && Array.isArray(classification.extractions)) {
+    if (classifierOk) {
       toRun = classification.extractions
         .map((e) => String(e || '').toLowerCase())
         .filter((e) => Object.prototype.hasOwnProperty.call(EXTRACTOR_MAP, e));
     } else {
-      logger.warn('[CrossModuleExtraction] classifier failed or unparseable — defaulting to no extraction');
+      logger.warn('[CrossModuleExtraction] classifier failed or unparseable — returning status=failed');
     }
 
     logger.log('[CrossModuleExtraction] classification', {
@@ -119,8 +121,12 @@ export async function classifyAndExtract(entryText, { tone = 'stoic', forceRefre
       reasoning: classification?.reasoning || null,
     });
 
+    if (!classifierOk) {
+      return { status: 'failed', ...EMPTY_RESULTS, classification };
+    }
+
     if (toRun.length === 0) {
-      return { ...EMPTY_RESULTS, classification };
+      return { status: 'empty', ...EMPTY_RESULTS, classification };
     }
 
     // Step 2 — run only the warranted extractors in parallel
@@ -139,11 +145,57 @@ export async function classifyAndExtract(entryText, { tone = 'stoic', forceRefre
       hasHardLesson: !!results.hardLesson,
     });
 
-    return { ...results, classification };
+    const anySignal = !!(results.killList || results.relapseRadar || results.hardLesson);
+    return {
+      status: anySignal ? 'extracted' : 'empty',
+      ...results,
+      classification,
+    };
   } catch (err) {
     logger.error('[CrossModuleExtraction] unexpected error in extraction flow:', err?.message, err);
-    return null;
+    return { status: 'failed', ...EMPTY_RESULTS, classification: null };
   }
+}
+
+/**
+ * Normalize a `classifyAndExtract` result into a Firestore-friendly payload
+ * suitable for persisting on a journal entry document. Strips out `null`
+ * prefill slots so the stored object only carries actionable data.
+ *
+ *   { status, primary, extractions, reasoning, classifiedAt, prefills }
+ *
+ * `prefills` is keyed by the badge identity used by the UI:
+ *   killList, hardLesson, relapseRadar
+ *
+ * Returns a `{ status: 'failed' }` shell for null / unrecognized input so the
+ * caller can write a failure marker and let the backfill retry later.
+ */
+export function buildClassificationPayload(results) {
+  const classifiedAt = new Date().toISOString();
+  if (!results || typeof results !== 'object') {
+    return { status: 'failed', classifiedAt };
+  }
+
+  const base = {
+    status: results.status || 'failed',
+    primary: results.classification?.primary || null,
+    extractions: Array.isArray(results.classification?.extractions)
+      ? results.classification.extractions
+      : [],
+    reasoning: results.classification?.reasoning || null,
+    classifiedAt,
+  };
+
+  if (results.status !== 'extracted') {
+    return base;
+  }
+
+  const prefills = {};
+  if (results.killList)     prefills.killList     = results.killList;
+  if (results.hardLesson)   prefills.hardLesson   = results.hardLesson;
+  if (results.relapseRadar) prefills.relapseRadar = results.relapseRadar;
+
+  return Object.keys(prefills).length > 0 ? { ...base, prefills } : base;
 }
 
 // Confirm-handler helpers — shared by Journal page and Quick Entry modal.
