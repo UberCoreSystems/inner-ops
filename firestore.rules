@@ -184,9 +184,12 @@ service cloud.firestore {
       allow list: if ownerListAllowed();
     }
 
-    // BER-247: Synthesis briefings — CF creates via Admin SDK (bypasses rules).
-    // Client reads briefings and updates isNew/readAt on open (SynthesisBriefing.jsx:72).
+    // Synthesis briefings — created client-side by generateSynthesisBriefing.js
+    // (the rules comment previously claimed CF/Admin-SDK creation, but the
+    // actual writer is client-side writeData). Client reads briefings and
+    // updates isNew/readAt on open (SynthesisBriefing.jsx:72).
     match /syntheses/{docId} {
+      allow create: if createsOwnDocument();
       allow get: if isOwner(resource.data.userId);
       allow update: if updatesOwnDocument();
       allow list: if ownerListAllowed();
