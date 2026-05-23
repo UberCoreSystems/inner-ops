@@ -13,6 +13,7 @@ import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
+import CrossModuleExtractionPrompts from '../components/CrossModuleExtractionPrompts';
 import { parseDate } from '../utils/dateUtils';
 import logger from '../utils/logger';
 import {
@@ -164,6 +165,13 @@ export default function Journal() {
   const [aiInsights, setAiInsights] = useState({ reflections: [], isGenerating: false, lastUpdated: null });
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null); // Track which entry the modal is for
+  // Top-of-list classification card: surfaces Oracle's interpretation of the
+  // just-saved entry as a Hard Lesson, General Ledger contract, or Signal.
+  // Cleared by dismiss or confirm. `classifiedEntryId` threads the source
+  // journal entry id into stashHardLessonExtraction so HardLessons knows the
+  // origin.
+  const [crossModuleExtractions, setCrossModuleExtractions] = useState({ killList: null, relapseRadar: null, hardLesson: null });
+  const [classifiedEntryId, setClassifiedEntryId] = useState(null);
   const submittingRef = useRef(false);
   const entryTextareaRef = useRef(null);
   const [view, setView] = useState('active');
@@ -501,7 +509,7 @@ export default function Journal() {
         ouraToast.success('Journal entry updated');
         // Re-classify the edited entry — the content may have moved between buckets.
         // `forceRefresh: true` bypasses the per-session dedupe for this exact text.
-        classifyAndPersist(editingEntryId, entry, { forceRefresh: true });
+        classifyAndPersist(editingEntryId, entry, { forceRefresh: true, surfaceTopOfList: true });
         cancelEdit();
         return;
       }
@@ -535,8 +543,13 @@ export default function Journal() {
         ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
         ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
       });
-      setEntries(prev => [newEntry, ...prev]);
-      setCurrentEntryId(newEntry.id);
+      // writeData returns timestamp as an unresolved serverTimestamp() sentinel,
+      // which the date renderer can't parse. Give the in-memory copy a real
+      // Date so the header shows the date immediately; the persisted doc keeps
+      // the authoritative server timestamp, read normally on reload.
+      const localEntry = { ...newEntry, timestamp: new Date() };
+      setEntries(prev => [localEntry, ...prev]);
+      setCurrentEntryId(localEntry.id);
 
       openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth, inputText, 'journal');
 
@@ -553,8 +566,9 @@ export default function Journal() {
       setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
 
       // Auto-classify into one of: General Ledger, Hard Lesson, Signal, or nothing.
-      // Persist the result on the entry doc so the badge survives reloads.
-      classifyAndPersist(savedEntryId, savedEntryText);
+      // Persist the result on the entry doc; `surfaceTopOfList: true` also
+      // pops the prompt card above the entries list for confirm/dismiss.
+      classifyAndPersist(savedEntryId, savedEntryText, { surfaceTopOfList: true });
 
     } catch (error) {
       logger.error("Error saving journal entry:", error);
@@ -633,10 +647,12 @@ export default function Journal() {
   };
 
   // Auto-classify a journal entry, persist the result on the entry doc, and
-  // mirror it into local React state so the badge appears immediately. Runs
-  // detached from the save UX — failures are silent and retried by the
-  // backfill effect on next Journal mount.
-  const classifyAndPersist = async (entryId, entryText, { forceRefresh = false } = {}) => {
+  // mirror it into local React state. Runs detached from the save UX —
+  // failures are silent and retried by the backfill effect on next mount.
+  // When called with `surfaceTopOfList: true` (save + edit flows), also
+  // populates the top-of-list prompt card. Backfill leaves the flag off so
+  // old entries don't pop a fresh card on every page mount.
+  const classifyAndPersist = async (entryId, entryText, { forceRefresh = false, surfaceTopOfList = false } = {}) => {
     if (!entryId || !entryText) return;
     try {
       const results = await classifyAndExtract(entryText, { forceRefresh });
@@ -648,34 +664,44 @@ export default function Journal() {
         return;
       }
       setEntries(prev => prev.map(e => (e.id === entryId ? { ...e, classification } : e)));
+
+      if (surfaceTopOfList && results && (results.killList || results.relapseRadar || results.hardLesson)) {
+        setClassifiedEntryId(entryId);
+        setCrossModuleExtractions({
+          killList:     results.killList     || null,
+          relapseRadar: results.relapseRadar || null,
+          hardLesson:   results.hardLesson   || null,
+        });
+      }
     } catch (err) {
       logger.error('classifyAndPersist unexpected error', err);
     }
   };
 
-  // Single-tap "land" handler. Stashes the Oracle's extraction payload under
-  // the destination module's prefill key, then navigates. Target modules
-  // hydrate their forms from these keys on mount.
-  const handleLandBadge = (entry, badgeKey) => {
-    const prefills = entry?.classification?.prefills || {};
-    if (badgeKey === 'killList' && prefills.killList) {
-      stashKillListExtraction(prefills.killList);
-      navigate('/ledger');
-    } else if (badgeKey === 'hardLesson' && prefills.hardLesson) {
-      stashHardLessonExtraction(prefills.hardLesson, entry.id);
-      navigate('/hardlessons');
-    } else if (badgeKey === 'relapseRadar' && prefills.relapseRadar) {
-      stashRelapseExtraction(prefills.relapseRadar);
-      navigate('/relapse');
-    }
+  // Dismiss / confirm handlers for the top-of-list CrossModuleExtractionPrompts.
+  // Dismiss clears just the relevant slot. Confirm stashes the extraction under
+  // the destination module's prefill sessionStorage key and navigates there;
+  // the target page consumer hydrates its form on mount.
+  const handleDismissKillList     = () => setCrossModuleExtractions(prev => ({ ...prev, killList:     null }));
+  const handleDismissRelapseRadar = () => setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
+  const handleDismissHardLesson   = () => setCrossModuleExtractions(prev => ({ ...prev, hardLesson:   null }));
+
+  const handleConfirmKillList = (extraction) => {
+    stashKillListExtraction(extraction);
+    setCrossModuleExtractions(prev => ({ ...prev, killList: null }));
+    navigate('/ledger');
   };
 
-  // Map an extractions[] string to the badge identity key + label + dot color.
-  // Anything not in this map is ignored at render time.
-  const BADGE_CONFIG = {
-    generalledger: { key: 'killList',     label: 'General Ledger', dot: '#ef4444' },
-    hardlesson:    { key: 'hardLesson',   label: 'Hard Lesson',    dot: '#f59e0b' },
-    signal:        { key: 'relapseRadar', label: 'Signal',         dot: '#4da6ff' },
+  const handleConfirmRelapseRadar = (extraction) => {
+    stashRelapseExtraction(extraction);
+    setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
+    navigate('/relapse');
+  };
+
+  const handleConfirmHardLesson = (extraction) => {
+    stashHardLessonExtraction(extraction, classifiedEntryId);
+    setCrossModuleExtractions(prev => ({ ...prev, hardLesson: null }));
+    navigate('/hardlessons');
   };
 
   // Silent backfill — runs once per page load. Picks up to 5 recent entries
@@ -1077,6 +1103,19 @@ export default function Journal() {
           </div>
         </section>
 
+        {/* Oracle interpretation of the just-saved entry — surfaces as a Hard
+            Lesson, General Ledger contract, or Signal precursor with confirm/
+            dismiss. Returns null when all slots are empty. */}
+        <CrossModuleExtractionPrompts
+          extractions={crossModuleExtractions}
+          onDismissKillList={handleDismissKillList}
+          onDismissRelapseRadar={handleDismissRelapseRadar}
+          onDismissHardLesson={handleDismissHardLesson}
+          onConfirmKillList={handleConfirmKillList}
+          onConfirmRelapseRadar={handleConfirmRelapseRadar}
+          onConfirmHardLesson={handleConfirmHardLesson}
+        />
+
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -1284,57 +1323,14 @@ export default function Journal() {
                               </div>
                             )}
 
-                            {/* Auto-classification badge row.
-                                Oracle decides on save whether this entry maps to General Ledger,
-                                Hard Lesson, Signal, or nothing. One tap on a badge lands the entry
-                                in its target module with the Oracle's extracted fields prefilled. */}
-                            {(() => {
-                              const c = entry.classification;
-                              if (!c || c.status !== 'extracted') {
-                                return c?.reasoning ? (
-                                  <p className="text-[#6a6a6a] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
-                                    Oracle: {c.reasoning}
-                                  </p>
-                                ) : null;
-                              }
-                              const badges = (c.extractions || [])
-                                .map((e) => BADGE_CONFIG[String(e || '').toLowerCase()])
-                                .filter(Boolean)
-                                .filter((cfg) => c.prefills?.[cfg.key]);
-                              if (badges.length === 0) {
-                                return c.reasoning ? (
-                                  <p className="text-[#6a6a6a] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
-                                    Oracle: {c.reasoning}
-                                  </p>
-                                ) : null;
-                              }
-                              return (
-                                <div className="mt-4 pt-3 border-t border-[#1a1a1a]">
-                                  <div className="flex flex-wrap gap-2">
-                                    {badges.map((cfg) => (
-                                      <button
-                                        key={cfg.key}
-                                        onClick={() => handleLandBadge(entry, cfg.key)}
-                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border border-[#1a1a1a] bg-[#0a0a0a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] transition-colors"
-                                        title={`Land this entry in ${cfg.label}`}
-                                      >
-                                        <span
-                                          className="inline-block w-2 h-2 rounded-full"
-                                          style={{ backgroundColor: cfg.dot }}
-                                        />
-                                        <span>{cfg.label}</span>
-                                        <span className="text-[#6a6a6a]">— tap to land</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                  {c.reasoning && (
-                                    <p className="text-[#6a6a6a] text-xs italic mt-2 leading-relaxed">
-                                      Oracle: {c.reasoning}
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })()}
+                            {/* Quiet Oracle attribution — the interactive
+                                interpretation card lives at the top of the
+                                entries list and dismisses after one use. */}
+                            {entry.classification?.reasoning && (
+                              <p className="text-[#6a6a6a] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
+                                Oracle: {entry.classification.reasoning}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>

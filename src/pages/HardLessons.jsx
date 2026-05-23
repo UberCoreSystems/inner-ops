@@ -4,6 +4,7 @@ import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { extractHardLessonDirect } from '../utils/crossModuleExtraction';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
@@ -529,8 +530,17 @@ export default function HardLessons() {
     setPendingOracleReaction(reactionId);
   };
 
+  // Button is single-purpose: call lessonExtraction, populate empty fields,
+  // auto-save the draft when editing an existing doc (scar stub or draft),
+  // and surface a synthesized wisdom string in the Oracle modal for reaction.
+  // Gated on eventDescription length only — full validation is reserved for
+  // Save Draft / Finalize Lesson.
   const seekOracleExtraction = async () => {
-    if (!validateLesson()) return;
+    const description = newLesson.eventDescription?.trim() || '';
+    if (description.length < 30) {
+      ouraToast.warning('Add more detail to the event description before asking Oracle to extract.');
+      return;
+    }
 
     setPendingOracleReaction(null);
     setPendingOracleWisdom('');
@@ -538,24 +548,59 @@ export default function HardLessons() {
     openOracleLoading();
 
     try {
-      const extractionPrompt = `
-Event: ${newLesson.eventDescription}
-My Assumption: ${newLesson.myAssumption}
-Signal Ignored: ${newLesson.signalIgnored}
-Cost: ${newLesson.costDescription}
-Category: ${eventCategories.find(cat => cat.value === newLesson.eventCategory)?.label}
+      const extraction = await extractHardLessonDirect(description, { tone: 'stoic' });
 
-Please help extract the core lesson and rule from this experience.
-`;
+      if (!extraction) {
+        closeOracle();
+        ouraToast.warning("Oracle couldn't extract a lesson — add more detail about what happened and what it cost you.");
+        return;
+      }
 
-      const { text: oracleWisdom, closingQuestion } = await generateAIFeedback('hardLessons', extractionPrompt, lessons.slice(-3));
-      setPendingOracleWisdom(oracleWisdom);
-      setPendingOracleClosingQuestion(closingQuestion || null);
-      openOracleWithContent(oracleWisdom, getCachedTotalEntryCount(), null, newLesson.eventDescription, 'hard_lessons');
+      const merged = {
+        eventCategory:    newLesson.eventCategory    || extraction.suggestedCategory || '',
+        myAssumption:     newLesson.myAssumption     || extraction.myAssumption || '',
+        signalIgnored:    newLesson.signalIgnored    || extraction.signalIgnored || '',
+        costs:            newLesson.costs.length     ? newLesson.costs : (Array.isArray(extraction.suggestedCosts) ? extraction.suggestedCosts : []),
+        costDescription:  newLesson.costDescription  || extraction.costDescription || '',
+        extractedLesson:  newLesson.extractedLesson  || extraction.extractedLesson || '',
+        ruleGoingForward: newLesson.ruleGoingForward || extraction.ruleGoingForward || '',
+      };
 
+      setNewLesson(prev => ({
+        ...prev,
+        ...merged,
+        isOracleExtracted: true,
+      }));
+
+      if (editingLesson) {
+        try {
+          await updateData('hardLessons', editingLesson.id, {
+            ...merged,
+            isOracleExtracted: true,
+            isScarStub: false,
+          });
+          await loadHardLessons();
+        } catch (writeErr) {
+          if (redirectIfAuthLost(writeErr)) return;
+          logger.error('Failed to auto-save Oracle extraction:', writeErr);
+          ouraToast.error('Oracle extracted but the draft could not be saved. Click Save Draft to retry.');
+        }
+      }
+
+      const wisdom = [
+        extraction.signalIgnored   ? `Signal ignored: ${extraction.signalIgnored}` : null,
+        extraction.costDescription ? `Cost: ${extraction.costDescription}` : null,
+        '─',
+        extraction.extractedLesson ? `Lesson: ${extraction.extractedLesson}` : null,
+        extraction.ruleGoingForward? `Rule: ${extraction.ruleGoingForward}` : null,
+      ].filter(Boolean).join('\n');
+
+      setPendingOracleWisdom(wisdom);
+      openOracleWithContent(wisdom, getCachedTotalEntryCount(), null, description, 'hard_lessons');
     } catch (error) {
       logger.error('Error seeking Oracle extraction:', error);
-      openOracleWithContent('Oracle unavailable. Extract your own lesson from the data.');
+      closeOracle();
+      ouraToast.error('Oracle unavailable. Try again in a moment.');
     }
   };
 
@@ -1008,7 +1053,7 @@ Please help extract the core lesson and rule from this experience.
 
               <button
                 onClick={seekOracleExtraction}
-                disabled={loading}
+                disabled={loading || (newLesson.eventDescription?.trim().length ?? 0) < 30}
                 className="px-6 py-3 bg-[#a855f7] hover:bg-[#9333ea] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
               >
                 🔮 Ask Oracle to Extract Lesson & Rule

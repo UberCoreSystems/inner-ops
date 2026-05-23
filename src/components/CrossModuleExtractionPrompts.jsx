@@ -37,7 +37,7 @@ export default function CrossModuleExtractionPrompts({
             <div>
               <p className="text-[#ef4444] text-xs uppercase tracking-widest mb-1">General Ledger</p>
               <p className="text-white text-sm font-medium">
-                This sounds like something that may need attention. Add to the General Ledger.
+                This sounds like it needs some attention. Add to the General Ledger.
               </p>
             </div>
             <button
@@ -97,7 +97,7 @@ export default function CrossModuleExtractionPrompts({
                 )}
               </div>
               <p className="text-white text-sm font-medium">
-                This sounds like it may lead to negative consequences. Add to The Signal.
+                This sounds like it has led or may lead to something bad. Assign a Signal.
               </p>
             </div>
             <button
@@ -135,7 +135,7 @@ export default function CrossModuleExtractionPrompts({
               onClick={() => onConfirmRelapseRadar(relapseRadar)}
               className="px-4 py-1.5 bg-[#4da6ff]/20 hover:bg-[#4da6ff]/30 text-[#4da6ff] text-xs font-medium rounded-lg transition-colors"
             >
-              Log Radar Entry
+              Assign Signal
             </button>
             <button
               onClick={onDismissRelapseRadar}

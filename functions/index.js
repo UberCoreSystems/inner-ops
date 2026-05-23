@@ -17,14 +17,14 @@ const {
   MAX_REACTANCE_QUESTION_CHARS,
 } = require("./config");
 
-// Lazy-initialize the admin app so the module is importable from tests
-// without side effects.
-let adminInitialized = false;
-function ensureAdmin() {
-  if (!adminInitialized && getApps().length === 0) {
-    initializeApp();
-  }
-  adminInitialized = true;
+// Initialize the admin app at module load. The prior lazy guard checked
+// `getApps().length === 0`, but the v2 Cloud Functions runtime can register
+// non-default apps before our code runs, so that condition would skip
+// initializeApp() and leave the [DEFAULT] app missing — which then crashed
+// getFirestore() with `app/no-app`. Check for the default app specifically
+// and initialize it idempotently.
+if (!getApps().some((a) => a.name === '[DEFAULT]')) {
+  initializeApp();
 }
 
 function utcDayString(date = new Date()) {
@@ -46,7 +46,6 @@ function utcDayString(date = new Date()) {
  * @throws HttpsError('resource-exhausted') when limit is reached.
  */
 async function enforceOracleRateLimit(uid) {
-  ensureAdmin();
   const db = getFirestore();
   const ref = db.collection("users").doc(uid).collection("_rateLimits").doc("oracle");
   const today = utcDayString();
@@ -465,10 +464,10 @@ There are three downstream extractors:
 
 Classify the entry's primary nature into ONE of:
 - mistake — the man took a specific wrong action; identifiable false assumption or ignored signal; concrete cost. → run hardLesson.
-- pattern — the entry names a recurring behavior, avoidance, or compulsion the man wants to eliminate, regardless of how he frames it (resignation, acceptance, self-awareness, philosophical reflection all qualify). The act of naming the pattern WITHOUT a concrete counter-action makes this a pattern candidate. → run generalLedger.
+- pattern — the entry names a specific behavior, character flaw, recurring judgment, avoidance, compulsion, or tendency the man exhibits in himself. The act of naming it as his own is sufficient evidence — explicit "I want to eliminate this" framing is NOT required. Examples that qualify: jealousy, envy, judging others, selfishness, anger, avoidance, compulsive scrolling, rationalization, defensiveness. Self-awareness framing, philosophical reflection, partial-progress claims ("I've gotten better at catching it"), or attempting to defuse the question with introspection do NOT downgrade this — naming is enough. → run generalLedger.
 - precursor — environmental or emotional warning sign that historically precedes relapse; the behavior has NOT yet occurred. → run signal.
 - win — the man took a specific action that countered a temptation, broke a pattern, or executed against fear. Awareness or naming of difficulty alone is NOT a win — there must be a concrete action with a stated outcome. → no extraction.
-- reflection — pure processing, observation, or thinking-through with NO identified pattern, wrong action, or precursor. If the entry names a specific avoidance, compulsion, habit, or rationalization, it is NOT reflection — it is pattern, mistake, or precursor. → no extraction.
+- reflection — pure processing or thinking-through with NO specific named behavior, pattern, mistake, or precursor. If the entry names ANY specific behavior the man exhibits in himself — even framed as self-aware acceptance — it is pattern, not reflection. → no extraction.
 - neutral — factual logging, mood snapshot, no actionable signal. → no extraction.
 
 CRITICAL: Naming is not winning.

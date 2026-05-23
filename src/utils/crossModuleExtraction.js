@@ -198,6 +198,49 @@ export function buildClassificationPayload(results) {
   return Object.keys(prefills).length > 0 ? { ...base, prefills } : base;
 }
 
+/**
+ * Direct Hard-Lesson extractor used by the in-page "Ask Oracle to Extract Lesson
+ * & Rule" button on the HardLessons form. Skips the classifier step (we already
+ * know the user is on a Hard Lesson) and skips the session dedupe (an explicit
+ * button click must always re-run). Returns the parsed `hardLesson` object on
+ * success, or `null` when the description is too sparse or the Oracle response
+ * is unparseable / empty.
+ */
+export async function extractHardLessonDirect(text, { tone = 'stoic' } = {}) {
+  const trimmed = String(text || '').trim();
+  if (trimmed.length < 30) return null;
+
+  try {
+    const { getFunctions, httpsCallable } = await import('firebase/functions');
+    const functions = getFunctions();
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+
+    const { getAuth } = await import('firebase/auth');
+    const uid = getAuth().currentUser?.uid;
+
+    const behavioralContext = await getBehavioralContext(uid).catch((err) => {
+      logger.warn('[extractHardLessonDirect] behavioralContext fetch failed:', err?.message);
+      return null;
+    });
+
+    const result = await oracleFn({
+      entryText: trimmed,
+      moduleName: 'lessonExtraction',
+      userContext: {},
+      tone,
+      behavioralContext,
+    }).catch((err) => {
+      logger.error('[extractHardLessonDirect] CF call FAILED:', err?.code, err?.message);
+      return null;
+    });
+
+    return parseExtraction(result, 'lessonExtraction');
+  } catch (err) {
+    logger.error('[extractHardLessonDirect] unexpected error:', err?.message, err);
+    return null;
+  }
+}
+
 // Confirm-handler helpers — shared by Journal page and Quick Entry modal.
 // Each stashes a prefill payload under the destination module's expected
 // sessionStorage key. The caller is responsible for navigation.
