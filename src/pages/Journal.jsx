@@ -172,6 +172,14 @@ export default function Journal() {
   // origin.
   const [crossModuleExtractions, setCrossModuleExtractions] = useState({ killList: null, relapseRadar: null, hardLesson: null });
   const [classifiedEntryId, setClassifiedEntryId] = useState(null);
+  // Visible status for the just-saved entry's classification pass. Surfaces a
+  // pending row while the Oracle runs, an "empty" row when classifier ran but
+  // found no signal, and a "failed" row with a retry button when the CF call
+  // errored. 'extracted' state is rendered as the existing colored cards.
+  // 'idle' renders nothing.
+  const [classifierStatus, setClassifierStatus] = useState('idle');
+  // Source text + entry id for the retry button when classification failed.
+  const [lastClassifiedText, setLastClassifiedText] = useState('');
   const submittingRef = useRef(false);
   const entryTextareaRef = useRef(null);
   const [view, setView] = useState('active');
@@ -509,6 +517,9 @@ export default function Journal() {
         ouraToast.success('Journal entry updated');
         // Re-classify the edited entry — the content may have moved between buckets.
         // `forceRefresh: true` bypasses the per-session dedupe for this exact text.
+        setClassifierStatus('pending');
+        setLastClassifiedText(entry);
+        setClassifiedEntryId(editingEntryId);
         classifyAndPersist(editingEntryId, entry, { forceRefresh: true, surfaceTopOfList: true });
         cancelEdit();
         return;
@@ -568,6 +579,9 @@ export default function Journal() {
       // Auto-classify into one of: General Ledger, Hard Lesson, Signal, or nothing.
       // Persist the result on the entry doc; `surfaceTopOfList: true` also
       // pops the prompt card above the entries list for confirm/dismiss.
+      setClassifierStatus('pending');
+      setLastClassifiedText(savedEntryText);
+      setClassifiedEntryId(savedEntryId);
       classifyAndPersist(savedEntryId, savedEntryText, { surfaceTopOfList: true });
 
     } catch (error) {
@@ -661,20 +675,30 @@ export default function Journal() {
         await updateData('journalEntries', entryId, { classification });
       } catch (writeErr) {
         logger.warn('Failed to persist classification on entry', { entryId, err: writeErr?.message });
+        if (surfaceTopOfList) setClassifierStatus('failed');
         return;
       }
       setEntries(prev => prev.map(e => (e.id === entryId ? { ...e, classification } : e)));
 
-      if (surfaceTopOfList && results && (results.killList || results.relapseRadar || results.hardLesson)) {
-        setClassifiedEntryId(entryId);
-        setCrossModuleExtractions({
-          killList:     results.killList     || null,
-          relapseRadar: results.relapseRadar || null,
-          hardLesson:   results.hardLesson   || null,
-        });
+      if (surfaceTopOfList) {
+        const hasExtraction = !!(results && (results.killList || results.relapseRadar || results.hardLesson));
+        if (hasExtraction) {
+          setClassifiedEntryId(entryId);
+          setCrossModuleExtractions({
+            killList:     results.killList     || null,
+            relapseRadar: results.relapseRadar || null,
+            hardLesson:   results.hardLesson   || null,
+          });
+          setClassifierStatus('extracted');
+        } else if (!results || results.status === 'failed') {
+          setClassifierStatus('failed');
+        } else {
+          setClassifierStatus('empty');
+        }
       }
     } catch (err) {
       logger.error('classifyAndPersist unexpected error', err);
+      if (surfaceTopOfList) setClassifierStatus('failed');
     }
   };
 
@@ -685,6 +709,15 @@ export default function Journal() {
   const handleDismissKillList     = () => setCrossModuleExtractions(prev => ({ ...prev, killList:     null }));
   const handleDismissRelapseRadar = () => setCrossModuleExtractions(prev => ({ ...prev, relapseRadar: null }));
   const handleDismissHardLesson   = () => setCrossModuleExtractions(prev => ({ ...prev, hardLesson:   null }));
+
+  // Dismiss the non-card status surfaces (empty / failed). Pending dismisses
+  // itself once the in-flight classification resolves.
+  const handleDismissClassifierStatus = () => setClassifierStatus('idle');
+  const handleRetryClassification = () => {
+    if (!classifiedEntryId || !lastClassifiedText) return;
+    setClassifierStatus('pending');
+    classifyAndPersist(classifiedEntryId, lastClassifiedText, { forceRefresh: true, surfaceTopOfList: true });
+  };
 
   const handleConfirmKillList = (extraction) => {
     stashKillListExtraction(extraction);
@@ -1102,6 +1135,52 @@ export default function Journal() {
             </form>
           </div>
         </section>
+
+        {/* Classifier status row — visible while the Oracle classifier is in
+            flight, when it completed without a signal, or when it failed. The
+            colored cards below take over once at least one extraction
+            populates. Never silent. */}
+        {classifierStatus === 'pending' && (
+          <div className="mb-8 text-[#858585] text-xs uppercase tracking-widest animate-fade-in">
+            Classifying entry…
+          </div>
+        )}
+        {classifierStatus === 'empty' && (
+          <div className="mb-8 border border-[#1a1a1a] rounded-2xl p-4 flex items-start justify-between gap-3 animate-fade-in-up">
+            <p className="text-[#858585] text-sm">
+              Entry logged — no pattern, lesson, or signal detected.
+            </p>
+            <button
+              onClick={handleDismissClassifierStatus}
+              className="text-[#858585] hover:text-[#ababab] transition-colors text-xs flex-shrink-0 mt-0.5"
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        {classifierStatus === 'failed' && (
+          <div className="mb-8 border border-[#1a1a1a] rounded-2xl p-4 animate-fade-in-up">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <p className="text-[#858585] text-sm">
+                Classification didn't complete.
+              </p>
+              <button
+                onClick={handleDismissClassifierStatus}
+                className="text-[#858585] hover:text-[#ababab] transition-colors text-xs flex-shrink-0 mt-0.5"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+            <button
+              onClick={handleRetryClassification}
+              className="px-4 py-1.5 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] text-xs font-medium rounded-lg transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Oracle interpretation of the just-saved entry — surfaces as a Hard
             Lesson, General Ledger contract, or Signal precursor with confirm/

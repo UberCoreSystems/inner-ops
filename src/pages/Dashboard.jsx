@@ -367,7 +367,7 @@ export default function Dashboard() {
       <div className={`fade-pane ${showShell ? 'hidden' : 'visible'}`}>
         <div className="min-h-screen bg-black animate-fade-in">
           <div className="max-w-6xl mx-auto px-4 py-8">
-            
+
             {/* Oura-style Header */}
             {/* NOTE (Morning Brief integration): the "Good morning, <name>" greeting
                 below is the kind of cozy UX Inner Ops rejects now that the

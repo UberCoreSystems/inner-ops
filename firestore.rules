@@ -48,10 +48,18 @@ service cloud.firestore {
 
     // Standard owner-gated rule applied to every per-user top-level
     // collection. `list` is satisfiable only when the query constrains by
-    // userId. `limit <= 1000` is a defense-in-depth guard.
+    // userId — the `resource.data.userId == request.auth.uid` check forces
+    // the client to include the `where("userId","==",auth.uid)` filter,
+    // otherwise the query is rejected.
+    //
+    // A `request.query.limit <= 1000` guard was previously included as
+    // "defense in depth", but no client query sets a `.limit()`, so
+    // `request.query.limit` was unset and CEL evaluated the comparison
+    // to false — denying every list. The userId filter is the real
+    // scoping mechanism; per-user collections on this app are bounded
+    // by user behavior, not by a rule-level cap.
     function ownerListAllowed() {
       return isSignedIn() &&
-        request.query.limit <= 1000 &&
         resource.data.userId == request.auth.uid;
     }
 
