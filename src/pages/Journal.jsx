@@ -184,7 +184,11 @@ export default function Journal() {
   const entryTextareaRef = useRef(null);
   const [view, setView] = useState('active');
   const [archivedEntries, setArchivedEntries] = useState([]);
-  
+  // Per-card expand/collapse state for long entry content + Oracle text.
+  // Keys: `${entry.id}_content`, `${entry.id}_oracle`, `${entry.id}_content_archive`.
+  const [expandedJournalSections, setExpandedJournalSections] = useState({});
+  const toggleJournalExpand = (key) => setExpandedJournalSections(prev => ({ ...prev, [key]: !prev[key] }));
+
   // State for rotating prompts
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
   const [promptVisible, setPromptVisible] = useState(true);
@@ -1141,8 +1145,19 @@ export default function Journal() {
             colored cards below take over once at least one extraction
             populates. Never silent. */}
         {classifierStatus === 'pending' && (
-          <div className="mb-8 text-[#858585] text-xs uppercase tracking-widest animate-fade-in">
-            Classifying entry…
+          <div className="mb-8 border border-[#1a1a1a] rounded-2xl p-4 animate-fade-in-up">
+            <div className="flex items-center gap-3 mb-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a855f7] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#a855f7]"></span>
+              </span>
+              <p className="text-white text-sm font-medium">
+                Reading entry for patterns, lessons, and signals…
+              </p>
+            </div>
+            <p className="text-[#858585] text-xs leading-relaxed pl-5">
+              A suggestion may appear here in a moment.
+            </p>
           </div>
         )}
         {classifierStatus === 'empty' && (
@@ -1274,7 +1289,20 @@ export default function Journal() {
                         </button>
                       </div>
                     </div>
-                    <p className="text-[#d1d1d1] leading-relaxed text-sm">{entry.content}</p>
+                    <div>
+                      <p className={`text-[#d1d1d1] leading-relaxed text-sm whitespace-pre-wrap ${expandedJournalSections[`${entry.id}_content_archive`] ? '' : 'line-clamp-3'}`}>
+                        {entry.content}
+                      </p>
+                      {entry.content && entry.content.length > 220 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleJournalExpand(`${entry.id}_content_archive`)}
+                          className="text-[#858585] hover:text-[#ababab] text-xs mt-1.5 transition-colors"
+                        >
+                          {expandedJournalSections[`${entry.id}_content_archive`] ? '▲ Show less' : '▼ Show more'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1359,7 +1387,20 @@ export default function Journal() {
                             </button>
                           </div>
                         </div>
-                        <p className="text-[#d1d1d1] leading-relaxed mb-4">{entry.content}</p>
+                        <div className="mb-4">
+                          <p className={`text-[#d1d1d1] leading-relaxed whitespace-pre-wrap ${expandedJournalSections[`${entry.id}_content`] ? '' : 'line-clamp-3'}`}>
+                            {entry.content}
+                          </p>
+                          {entry.content && entry.content.length > 220 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleJournalExpand(`${entry.id}_content`)}
+                              className="text-[#858585] hover:text-[#ababab] text-xs mt-1.5 transition-colors"
+                            >
+                              {expandedJournalSections[`${entry.id}_content`] ? '▲ Show less' : '▼ Show more'}
+                            </button>
+                          )}
+                        </div>
 
                         {entry.oracleJudgment && (
                           <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#1a1a1a] border-l-2 border-l-[#a855f7] rounded-2xl">
@@ -1379,9 +1420,26 @@ export default function Journal() {
                                 </span>
                               )}
                             </div>
-                            <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
-                              {typeof entry.oracleJudgment === 'string' ? entry.oracleJudgment : JSON.stringify(entry.oracleJudgment)}
-                            </div>
+                            {(() => {
+                              const oracleText = typeof entry.oracleJudgment === 'string' ? entry.oracleJudgment : JSON.stringify(entry.oracleJudgment);
+                              const oracleExpanded = expandedJournalSections[`${entry.id}_oracle`];
+                              return (
+                                <>
+                                  <div className={`text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line ${oracleExpanded ? '' : 'line-clamp-3'}`}>
+                                    {oracleText}
+                                  </div>
+                                  {oracleText.length > 220 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleJournalExpand(`${entry.id}_oracle`)}
+                                      className="text-[#858585] hover:text-[#ababab] text-xs mt-1.5 transition-colors"
+                                    >
+                                      {oracleExpanded ? '▲ Show less' : '▼ Show more'}
+                                    </button>
+                                  )}
+                                </>
+                              );
+                            })()}
 
                             {/* Legacy: show old follow-up data if present */}
                             {entry.userResponse && typeof entry.userResponse === 'string' && (

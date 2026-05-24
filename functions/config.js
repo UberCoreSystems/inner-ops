@@ -14,9 +14,6 @@ const intFromEnv = (name, fallback) => {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 };
 
-// Rate limiting: max Oracle calls per user per day.
-exports.DAILY_LIMIT = intFromEnv("ORACLE_DAILY_LIMIT", 20);
-
 // BER-167: Oracle trust calibration — behavioral record density threshold.
 // Below this count the Oracle uses a discrepancy-pointing frame instead of
 // archetype/pattern confrontation. Trigger is entry count, not calendar time.

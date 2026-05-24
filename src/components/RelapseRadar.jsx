@@ -47,6 +47,23 @@ const PRECURSOR_CONDITIONS = [
   'None of the above',
 ];
 
+// Post-Signal grounding tools. Same content as EmergencyButton's panel so the
+// two surfaces stay coherent — keeping a local copy here avoids importing a
+// component for its constants.
+const GROUNDING_TECHNIQUES = [
+  { name: '5-4-3-2-1 Grounding', icon: '👁️', description: 'Name 5 things you see, 4 you hear, 3 you feel, 2 you smell, 1 you taste' },
+  { name: 'Box Breathing', icon: '🫁', description: 'Breathe in 4 sec → Hold 4 sec → Out 4 sec → Hold 4 sec' },
+  { name: 'Cold Water Reset', icon: '💧', description: 'Splash cold water on your face or hold ice cubes' },
+  { name: 'Physical Movement', icon: '🏃', description: '10 jumping jacks, walk around the block, or stretch' },
+];
+const SIGNAL_MANTRAS = [
+  'This feeling is temporary. I am not my urges.',
+  'Urge ≠ action. 90 seconds and it passes.',
+  'This is a craving, not a command. Wait it out.',
+  'The craving will pass whether I act on it or not.',
+  'Act against the urge once. Make it a pattern.',
+];
+
 const RelapseRadar = () => {
   const navigate = useNavigate();
   const mountedRef = useRef(true);
@@ -89,6 +106,15 @@ const RelapseRadar = () => {
 
   const [view, setView] = useState('active');
   const [archivedEntries, setArchivedEntries] = useState([]);
+  const [expandedSections, setExpandedSections] = useState({});
+  const toggleExpand = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // Post-save action surface — replaces the prior 3s success banner.
+  //   'signal'  → inline grounding tools + resolved/slipped checkpoint
+  //   'relapse' → forced "Extract the lesson" CTA (no auto-redirect)
+  //   null      → form is active, no panel
+  const [postSaveAction, setPostSaveAction] = useState(null);
+  const [postSaveMantra, setPostSaveMantra] = useState('');
 
   // BER-182: Oura Ring biometric precursor data
   const {
@@ -522,13 +548,16 @@ const RelapseRadar = () => {
       setSelectedPrecursors([]);
       setPrecursorContext('');
       setEventOccurredAt(new Date().toISOString().slice(0, 16));
-      setSubmitSuccess(true);
-      setTimeout(() => setSubmitSuccess(false), 3000);
 
-      // After the user has had a chance to see the Oracle feedback, navigate
-      // to Hard Lessons to complete the rule extraction for an actual relapse.
+      // Post-save action surface. Replaces the prior 3s banner + 3.5s auto-
+      // navigate. Signal entries get inline grounding tools and a two-button
+      // resolution checkpoint; Relapse entries get a deliberate, non-skippable
+      // Extract-the-lesson CTA (no auto-redirect).
       if (isRelapseEvent) {
-        setTimeout(() => navigate('/hardlessons'), 3500);
+        setPostSaveAction('relapse');
+      } else {
+        setPostSaveAction('signal');
+        setPostSaveMantra(SIGNAL_MANTRAS[Math.floor(Math.random() * SIGNAL_MANTRAS.length)]);
       }
 
     } catch (error) {
@@ -539,6 +568,32 @@ const RelapseRadar = () => {
       setLoading(false);
       submittingRef.current = false;
     }
+  };
+
+  // Post-Signal checkpoint: user confirms the precursor passed.
+  const handleConditionsResolved = () => {
+    setPostSaveAction(null);
+    setStep(1);
+    ouraToast.success('Conditions resolved. Logged.');
+  };
+
+  // Post-Signal checkpoint: user is reporting a slip. Flip the entry type to
+  // RELAPSE and reset the form. The user re-describes the slip fresh; the
+  // already-saved Signal entry stays as-is in history (a real precursor record).
+  const handleSlipped = () => {
+    setPostSaveAction(null);
+    setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE);
+    setStep(1);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Post-Relapse forced pass-through: user taps to commit to the rebuild step.
+  // sessionStorage hl_bridge_prefill was already stashed in submitRelapseEntry.
+  const handleExtractLesson = () => {
+    setPostSaveAction(null);
+    navigate('/hardlessons');
   };
 
   const nextStep = () => {
@@ -914,13 +969,68 @@ const RelapseRadar = () => {
         </div>
       )}
 
-      {submitSuccess && (
-        <div className="mb-6 oura-card border-l-4 border-oura-cyan p-4 animate-fade-in-up">
-          <p className="text-gray-300 text-sm">
-            {entryType === RELAPSE_ENTRY_TYPES.RELAPSE
-              ? 'Relapse logged. Opening Hard Lessons to capture the rule...'
-              : 'Signal logged. Resetting form...'}
+      {postSaveAction === 'signal' && (
+        <div className="mb-6 space-y-4 animate-fade-in-up">
+          <div className="oura-card border-l-4 border-oura-cyan p-4">
+            <h3 className="text-gray-100 text-base font-medium mb-1">Signal logged. The window is open.</h3>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              Use one of these now. Then mark how it resolved.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {GROUNDING_TECHNIQUES.map((t) => (
+              <div key={t.name} className="oura-card p-4 border border-oura-border">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl flex-shrink-0" aria-hidden="true">{t.icon}</span>
+                  <div className="min-w-0">
+                    <h4 className="text-gray-100 text-sm font-medium mb-1">{t.name}</h4>
+                    <p className="text-gray-400 text-xs leading-relaxed">{t.description}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {postSaveMantra && (
+            <div className="oura-card p-4 border border-oura-purple/20">
+              <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">A reminder</p>
+              <p className="text-gray-200 text-sm italic leading-relaxed">"{postSaveMantra}"</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <button
+              type="button"
+              onClick={handleConditionsResolved}
+              className="px-5 py-3 rounded-2xl bg-oura-card border border-oura-cyan/40 text-oura-cyan hover:bg-oura-cyan/10 transition-colors font-medium"
+            >
+              Conditions resolved
+            </button>
+            <button
+              type="button"
+              onClick={handleSlipped}
+              className="px-5 py-3 rounded-2xl bg-oura-card border border-[#b45309]/40 text-[#b45309] hover:bg-[#b45309]/10 transition-colors font-medium"
+            >
+              I slipped
+            </button>
+          </div>
+        </div>
+      )}
+
+      {postSaveAction === 'relapse' && (
+        <div className="mb-6 oura-card border-l-4 border-[#b45309] p-5 animate-fade-in-up">
+          <h3 className="text-gray-100 text-base font-medium mb-2">A target escaped. The lesson is now the work.</h3>
+          <p className="text-gray-400 text-sm leading-relaxed mb-4">
+            Extract the rule before the moment fades. This is non-optional.
           </p>
+          <button
+            type="button"
+            onClick={handleExtractLesson}
+            className="px-5 py-3 rounded-2xl bg-[#b45309] text-white hover:bg-[#a14808] transition-colors font-medium"
+          >
+            Extract the lesson →
+          </button>
         </div>
       )}
 
@@ -956,14 +1066,14 @@ const RelapseRadar = () => {
       <div className="flex justify-between mt-8 gap-4">
         <button
           onClick={prevStep}
-          disabled={step === 1 || submitSuccess}
+          disabled={step === 1 || submitSuccess || postSaveAction !== null}
           className="px-6 py-3 bg-oura-card text-white rounded-2xl disabled:opacity-30 hover:bg-oura-darker transition-all duration-200 border border-oura-border"
         >
           Previous
         </button>
         <button
           onClick={nextStep}
-          disabled={loading || submitSuccess || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf)}
+          disabled={loading || submitSuccess || postSaveAction !== null || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf)}
           className="px-6 py-3 bg-oura-blue text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-blue-400 transition-all duration-200"
         >
           {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 5 ? 'Submit' : 'Next')}
@@ -1036,7 +1146,22 @@ const RelapseRadar = () => {
                       <div className="text-gray-500 text-xs mt-1">
                         Archived {entry.archivedAt ? new Date(entry.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                       </div>
-                      {entry.reflection && <p className="text-gray-400 text-sm mt-3 leading-relaxed">{entry.reflection.substring(0, 180)}{entry.reflection.length > 180 ? '…' : ''}</p>}
+                      {entry.reflection && (
+                        <div className="mt-3">
+                          <p className={`text-gray-400 text-sm leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_reflection_archive`] ? '' : 'line-clamp-3'}`}>
+                            {entry.reflection}
+                          </p>
+                          {entry.reflection.length > 220 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(`${entry.id}_reflection_archive`)}
+                              className="text-gray-500 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+                            >
+                              {expandedSections[`${entry.id}_reflection_archive`] ? '▲ Show less' : '▼ Show more'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
@@ -1082,9 +1207,22 @@ const RelapseRadar = () => {
                       </svg>
                     </button>
                   </div>
-                  <div className="text-gray-400 text-sm mt-3 leading-relaxed">
-                    {entry.reflection?.substring(0, 100)}...
-                  </div>
+                  {entry.reflection && (
+                    <div className="mt-3">
+                      <p className={`text-gray-400 text-sm leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_reflection`] ? '' : 'line-clamp-3'}`}>
+                        {entry.reflection}
+                      </p>
+                      {entry.reflection.length > 220 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(`${entry.id}_reflection`)}
+                          className="text-gray-500 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+                        >
+                          {expandedSections[`${entry.id}_reflection`] ? '▲ Show less' : '▼ Show more'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {entry.precursorConditions?.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {entry.precursorConditions.map(c => (
@@ -1095,9 +1233,18 @@ const RelapseRadar = () => {
                   {entry.oracleFeedback && (
                     <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
                       <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
-                      <div className="text-gray-300 text-xs leading-relaxed">
-                        {entry.oracleFeedback.substring(0, 150)}...
-                      </div>
+                      <p className={`text-gray-300 text-xs leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_oracle`] ? '' : 'line-clamp-3'}`}>
+                        {entry.oracleFeedback}
+                      </p>
+                      {entry.oracleFeedback.length > 220 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(`${entry.id}_oracle`)}
+                          className="text-gray-500 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+                        >
+                          {expandedSections[`${entry.id}_oracle`] ? '▲ Show less' : '▼ Show more'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

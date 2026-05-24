@@ -1,14 +1,12 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp, getApps } = require("firebase-admin/app");
-const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const AnthropicSDK = require("@anthropic-ai/sdk");
 const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 
 const {
-  DAILY_LIMIT,
   TRUST_THRESHOLD,
   MAX_ENTRY_TEXT_CHARS,
   MAX_USER_RESPONSE_CHARS,
@@ -25,54 +23,6 @@ const {
 // and initialize it idempotently.
 if (!getApps().some((a) => a.name === '[DEFAULT]')) {
   initializeApp();
-}
-
-function utcDayString(date = new Date()) {
-  return date.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
-}
-
-/**
- * Firestore-backed rate limiter.
- *
- * Counters live at users/{uid}/_rateLimits/oracle with fields:
- *   - date: YYYY-MM-DD (UTC)
- *   - count: daily call count
- *   - updatedAt: server timestamp
- *
- * A transaction atomically rolls the counter over when the stored date
- * differs from today and increments in place otherwise. Limit is evaluated
- * before increment so the N+1th call is rejected.
- *
- * @throws HttpsError('resource-exhausted') when limit is reached.
- */
-async function enforceOracleRateLimit(uid) {
-  const db = getFirestore();
-  const ref = db.collection("users").doc(uid).collection("_rateLimits").doc("oracle");
-  const today = utcDayString();
-
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const data = snap.exists ? snap.data() : null;
-    const sameDay = data && data.date === today;
-    const current = sameDay ? (data.count || 0) : 0;
-
-    if (current >= DAILY_LIMIT) {
-      throw new HttpsError(
-        "resource-exhausted",
-        `You've reached the daily Oracle limit (${DAILY_LIMIT} calls). Come back tomorrow.`
-      );
-    }
-
-    tx.set(
-      ref,
-      {
-        date: today,
-        count: current + 1,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-  });
 }
 
 /**
@@ -168,27 +118,7 @@ exports.oracle = onCall(
       );
     }
 
-    // Rate limit check — skip for background classification/extraction calls
     const normalizedModuleForLimit = ((request.data?.moduleName) || '').toLowerCase().replace(/[^a-z]/g, '');
-    const isExtractionCall =
-      normalizedModuleForLimit === 'entryclassification' ||
-      normalizedModuleForLimit === 'killlistextraction' ||
-      normalizedModuleForLimit === 'relapsedetection' ||
-      normalizedModuleForLimit === 'lessonextraction';
-    if (!isExtractionCall) {
-      await enforceOracleRateLimit(uid);
-    } else {
-      // Pass 2 Finding 13 remediation: log the exemption so cost auditing
-      // can distinguish exempt extraction traffic from rate-limited normal
-      // traffic, and so an alert can fire if extraction-call volume is
-      // anomalous for a single user.
-      logOracleCall({
-        fn: "oracle",
-        uid,
-        module: normalizedModuleForLimit,
-        rateLimitExempt: true,
-      });
-    }
 
     const {
       entryText,
@@ -278,8 +208,6 @@ exports.oracleFollowUp = onCall(
     }
 
     const uid = request.auth.uid;
-
-    await enforceOracleRateLimit(uid);
 
     const { originalEntry, userResponse, initialFeedback } = request.data;
 
@@ -498,37 +426,28 @@ Rules:
       Array.isArray(behavioralContext?.activeKillTargets) && behavioralContext.activeKillTargets.length > 0
         ? `\n\nActive Kill List targets already being tracked (do NOT suggest these — they are already in the system):\n${behavioralContext.activeKillTargets.map((t) => `- "${t.title}"`).join("\n")}`
         : "";
-    return `You are an analytical advisor. A man wrote a journal entry. Your job is to identify whether the entry contains a behavioral pattern that should be on his Kill List — a specific habit, compulsion, avoidance pattern, or destructive behavior he wants to eliminate.
+    return `An upstream classifier has already determined that this journal entry contains a behavioral pattern worth surfacing on his Kill List. Your job is to STRUCTURE that pattern into a Kill List target — do not re-decide whether it qualifies. Extract what is there; the user will dismiss the card if it does not resonate.
 
-Detection signals:
-- Statements of being "done with" or "over" a behavior
-- Repeated references to the same destructive pattern
-- Language indicating a habit or compulsion he recognizes but hasn't formally targeted
-- Self-identified bad habits, time sinks, or behavioral loops
-- Expressions of frustration with a recurring behavior${activeTargetsBlock}
+Use the entry's language to fill these fields:
+- A recurring habit, compulsion, avoidance, or behavioral loop he named.
+- Self-identified bad habits, time sinks, or destructive patterns.
+- Expressions of frustration with a recurring behavior.${activeTargetsBlock}
 
-If you detect a kill-worthy pattern, return ONLY a valid JSON object:
+Return ONLY a valid JSON object:
 
 {
   "targetTitle": "Short name for the kill target — specific and behavioral, not vague",
-  "targetDescription": "What the behavior is and why it needs to be eliminated — derived from what they wrote",
-  "evidenceFromEntry": "The specific language from their journal entry that surfaced this",
+  "targetDescription": "What the behavior is and why it needs to be eliminated — derived from what he wrote",
+  "evidenceFromEntry": "The specific language from his journal entry that surfaced this",
   "suggestedCategory": "One of: addiction, compulsion, avoidance, time_sink, relationship_pattern, digital, emotional_pattern, other"
 }
 
-If no kill-worthy pattern is detected, return exactly: null
-
-EXCLUSION CRITERIA — return null if ANY of these apply:
-- The entry describes a one-time event, not a recurring pattern.
-- The entry describes successfully resisting or breaking a pattern (that is a win, not a kill target).
-- The pattern is already on his active Kill List (listed above).
-- The entry is general reflection without a behavioral loop he wants to eliminate.
+Return exactly \`null\` ONLY if the entry contains no behavioral content you can use to fill these fields (e.g., a pure mood snapshot with no described behavior), OR if the pattern is already on his active Kill List shown above. Do NOT return null because the signal feels weak — the classifier already made the gating call.
 
 Rules:
-- Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
-- Be specific to what he wrote. Do not generalize or invent patterns not present in the text.
+- Return ONLY the JSON object or null. No preamble, no markdown fences.
+- Be specific to what he wrote. Do not invent patterns not present in the text.
 - Do not suggest a pattern that matches an active Kill List target listed above.
-- If the signal is weak or ambiguous, return null. False positives are worse than false negatives.
 - Never use motivational, wellness, or therapeutic language in any output field.`;
   }
 
@@ -538,39 +457,47 @@ Rules:
       Array.isArray(behavioralContext?.activeKillTargets) && behavioralContext.activeKillTargets.length > 0
         ? `\n\nActive Kill List targets (use these to populate relatedKillTarget if relevant):\n${behavioralContext.activeKillTargets.map((t) => `- "${t.title}"`).join("\n")}`
         : "";
-    return `You are an analytical advisor. A man wrote a journal entry. Your job is to identify whether the entry contains behavioral precursors — patterns that historically precede relapse. These are NOT relapses themselves. They are early warning signals the user may not recognize in the moment.
+    return `An upstream classifier has already determined that this journal entry contains a behavioral precursor — an early-warning signal that historically precedes relapse. The relapse has NOT happened yet; that absence is the entire point of this module. Your job is to STRUCTURE the precursor into a Signal entry. Do not re-decide whether it qualifies.
 
-Detection signals:
-- Rationalization language ("just this once", "I deserve", "it's not that bad")
-- Environmental exposure descriptions (being in triggering contexts)
-- Emotional states known to precede relapse (isolation, boredom, emotional flooding, numbness)
+"Behavioral content" for THIS extractor explicitly includes pre-consummation signals:
+- Rationalization ("just this once", "I deserve", "it's not that bad")
+- Environmental positioning (proximity to triggers, checking, lingering near)
+- Emotional states that precede relapse (isolation, boredom, emotional flooding, numbness)
 - Minimization of past commitments or rules
-- References to cravings, urges, or pull toward eliminated behaviors
-- Descriptions of breaking routine, sleep disruption, or increased stress without coping${activeTargetsBlock}
+- Cravings, urges, pull toward eliminated behaviors
+- Routine breaking, sleep disruption, stress without coping
 
-If you detect relapse precursor signals, return ONLY a valid JSON object:
+The ABSENCE of a consummated act is NOT a reason to return null. If you can populate \`precursorConditions\` with at least one specific item from the list above based on what he wrote, you have enough.${activeTargetsBlock}
+
+ANCHOR EXAMPLE
+Entry: "Worked from home alone all day. Skipped the gym, skipped lunch with Marcus, ate standing over the sink. By 4pm I noticed I was checking the wine fridge every time I walked past it — not opening it, just checking. Told myself I deserved a glass for getting through the quarterly numbers. The exact rationalization I used the week before I broke the streak last year. Nothing happened. But the conditions are stacking: isolation, no anchor activities, the 'I earned it' voice. I'm watching it."
+
+Correct output:
+{
+  "signalSummary": "Pre-relapse conditions stacking: isolation, abandoned anchor activities, checking behavior toward eliminated behavior, and a rationalization previously tied to a streak break.",
+  "precursorConditions": ["isolation", "routine_disruption", "environmental_exposure", "rationalization"],
+  "evidenceFromEntry": "checking the wine fridge every time I walked past it... Told myself I deserved a glass... The exact rationalization I used the week before I broke the streak last year.",
+  "relatedKillTarget": null,
+  "urgency": "high"
+}
+
+OUTPUT SCHEMA
+Return ONLY a valid JSON object with this shape:
 
 {
   "signalSummary": "One-sentence description of the detected precursor pattern",
-  "precursorConditions": ["Array of specific conditions detected from: rationalization, isolation, environmental_exposure, emotional_flooding, routine_disruption, craving, minimization, stress_without_coping, boredom, numbness"],
-  "evidenceFromEntry": "The specific language from their journal entry that surfaced this",
-  "relatedKillTarget": "Title of any active Kill List target this may connect to, or null",
+  "precursorConditions": ["Array from: rationalization, isolation, environmental_exposure, emotional_flooding, routine_disruption, craving, minimization, stress_without_coping, boredom, numbness"],
+  "evidenceFromEntry": "The specific language from his entry that surfaced this",
+  "relatedKillTarget": "Title of any active Kill List target this connects to, or null",
   "urgency": "low | medium | high — based on signal density and language intensity"
 }
 
-If no relapse precursor signals are detected, return exactly: null
-
-EXCLUSION CRITERIA — return null if ANY of these apply:
-- The entry describes a relapse that already occurred — these are precursors, not relapses.
-- The entry describes the man recognizing a precursor and acting against it (that is a win).
-- The signals are emotional states alone, with no environmental exposure, rationalization, or pull toward an eliminated behavior.
-- The entry is general difficulty without a connection to a relapse pathway.
+Return exactly \`null\` ONLY if the entry describes a relapse that ALREADY happened (a consummated act of the eliminated behavior). Do NOT return null because no behavior has occurred yet — that is precisely when this extractor should fire.
 
 Rules:
-- Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
+- Return ONLY the JSON object or null. No preamble, no markdown fences.
 - These are precursors, not relapses — do not conflate them.
 - Be specific to what he wrote. Do not invent signals not present in the text.
-- If the signal is weak or ambiguous, return null. False positives are worse than false negatives.
 - Never use motivational, wellness, or therapeutic language in any output field.`;
   }
 
@@ -580,16 +507,16 @@ Rules:
   // auto-classification flow on save and by the per-entry "Reconsider"
   // re-run; both paths drop the suggestion when null comes back.
   if (normalizedModule === "lessonextraction") {
-    return `You are an analytical advisor. A man wrote a journal entry. Your job is to identify whether the entry contains a Hard Lesson — a costly mistake, regret, ignored warning signal, failed assumption, or behavior that demonstrably cost him something — that should be converted into an enforceable rule.
+    return `An upstream classifier has already determined that this journal entry contains a Hard Lesson — a costly mistake, regret, ignored signal, failed assumption, or behavior that cost him something. Your job is to STRUCTURE that lesson into an enforceable rule — do not re-decide whether it qualifies. Extract what is there; the user will dismiss the card if it does not resonate.
 
-Detection signals:
-- Explicit references to a mistake, failure, regret, or "should have / shouldn't have"
-- Cost language — emotional, financial, relational, professional, time, or physical loss attributed to a decision
+Use the entry's language to fill these fields. Relevant signal types:
+- Mistake, failure, regret, or "should have / shouldn't have"
+- Cost — emotional, financial, relational, professional, time, or physical loss tied to a decision
 - Ignored signals — "I noticed but dismissed...", "the warning was there", trusting against evidence
-- False assumptions that were broken by reality
+- False assumptions broken by reality
 - Boundary failures or commitments violated
 
-If you detect a hard lesson, return ONLY a valid JSON object:
+Return ONLY a valid JSON object:
 
 {
   "eventDescription": "What actually happened — facts only, stripped of emotion and narrative. 1-2 sentences.",
@@ -603,23 +530,14 @@ If you detect a hard lesson, return ONLY a valid JSON object:
   "suggestedCosts": ["Array of applicable cost types from: emotional, financial, relational, physical, professional, time"]
 }
 
-If no hard lesson is detected, return exactly: null
-
-EXCLUSION CRITERIA — return null if ANY of these apply:
-- The entry describes overcoming, navigating, or moving through difficulty successfully.
-- The entry is reflection or processing without an identified wrong action HE took.
-- The entry is a win, breakthrough, or moment of progress.
-- "Cost language" appears only as context (describing what was hard) rather than as the consequence of a specific decision he made.
-
-A hard lesson REQUIRES all three of: (a) an identifiable wrong action HE took, (b) an identifiable cost, (c) an enforceable rule that follows. If any of the three is missing, return null.
+Return exactly \`null\` ONLY if the entry contains no described action, decision, or cost you can use to fill these fields. Do NOT return null because the signal feels weak — the classifier already made the gating call. If a particular field cannot be inferred from the text, fill it with your best read of what the entry implies; do not leave fields empty.
 
 Rules:
-- Return ONLY the JSON object or null. No explanation, no preamble, no markdown code blocks.
-- Every field must be filled when returning JSON. Do not leave any empty.
+- Return ONLY the JSON object or null. No preamble, no markdown fences.
+- Every field must be filled when returning JSON.
 - The rule must be enforceable — something he can actually follow, not a wish.
-- Be specific to what he wrote. Do not generalize.
-- If the signal is weak or ambiguous, return null. False positives are worse than false negatives.
-- Do not invent costs or assumptions not present in the text.`;
+- Be specific to what he wrote. Do not invent costs or assumptions not present in the text.
+- Never use motivational, wellness, or therapeutic language in any output field.`;
   }
 
   if (isEmergency) {
