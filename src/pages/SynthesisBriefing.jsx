@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
-import { readUserData, updateData } from '../utils/firebaseUtils';
+import { readUserData, updateData, deleteData } from '../utils/firebaseUtils';
 import { generateSynthesisBriefing } from '../utils/generateSynthesisBriefing';
+import { COLLECTIONS, KILL_TARGET_FIELDS, HARD_LESSON_FIELDS } from '../utils/schema';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+
+// Cap stored briefings per user. Anything older than the cap gets pruned
+// after a successful Generate Now so the archive can't grow unbounded.
+const MAX_STORED_BRIEFINGS = 24;
 
 const CADENCE_OPTIONS = [
   { value: 'weekly', label: 'Weekly' },
@@ -31,6 +36,10 @@ export default function SynthesisBriefing() {
   const [generating, setGenerating] = useState(false);
   const [cadence, setCadence] = useState('weekly');
   const [selectedArchive, setSelectedArchive] = useState(null);
+  // hasCrossModuleData gates the Generate Now button. Synthesis is a
+  // cross-module read; with only journal entries the briefing has nothing
+  // to converge on and produces boilerplate.
+  const [hasCrossModuleData, setHasCrossModuleData] = useState(true);
 
   useEffect(() => {
     let unsubscribe;
@@ -61,7 +70,39 @@ export default function SynthesisBriefing() {
     } finally {
       setInitialLoading(false);
     }
+
+    // Determine whether the user has any cross-module signal for synthesis.
+    // The Generate Now button is disabled when all three are empty — a
+    // journal-only user gets boilerplate convergence and a generic question.
+    try {
+      const [killTargets, hardLessons, relapseEntries] = await Promise.all([
+        readUserData(COLLECTIONS.KILL_TARGETS).catch(() => []),
+        readUserData(COLLECTIONS.HARD_LESSONS).catch(() => []),
+        readUserData(COLLECTIONS.RELAPSE_ENTRIES).catch(() => []),
+      ]);
+      const hasActiveTarget = (killTargets || []).some(t => t[KILL_TARGET_FIELDS.STATUS] === 'active');
+      const hasFinalizedRule = (hardLessons || []).some(l => l[HARD_LESSON_FIELDS.IS_FINALIZED]);
+      const hasRelapseEntry = (relapseEntries || []).length > 0;
+      setHasCrossModuleData(hasActiveTarget || hasFinalizedRule || hasRelapseEntry);
+    } catch (err) {
+      logger.warn('cross-module data check failed:', err?.message);
+      // Fail open — don't lock the user out on a transient read error.
+      setHasCrossModuleData(true);
+    }
   };
+
+  const pruneToCap = useCallback(async () => {
+    try {
+      const data = await readUserData('syntheses');
+      const sorted = (data || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
+      const toDelete = sorted.slice(MAX_STORED_BRIEFINGS).filter(b => b.id);
+      if (toDelete.length === 0) return;
+      await Promise.all(toDelete.map(b => deleteData('syntheses', b.id)));
+      logger.log(`pruned ${toDelete.length} briefing(s) over cap of ${MAX_STORED_BRIEFINGS}`);
+    } catch (err) {
+      logger.warn('prune-to-cap failed:', err?.message);
+    }
+  }, []);
 
   // Mark latest briefing as read when the page is opened
   useEffect(() => {
@@ -76,15 +117,25 @@ export default function SynthesisBriefing() {
 
   const handleGenerate = async () => {
     if (!userId || generating) return;
+    if (!hasCrossModuleData) {
+      ouraToast.info('Add a Kill Target, Hard Lesson, or Relapse entry first.');
+      return;
+    }
     setGenerating(true);
     try {
-      // Manual on-demand trigger bypasses the cadence gate — Oracle CF's
-      // 20/day rate limit is the effective cap. The auto-generate hook still
-      // honors cadence via its default path.
+      // Manual on-demand trigger bypasses the cadence gate. The generator
+      // still enforces a 1-hour write-cooldown — repeat clicks within the
+      // hour return the existing briefing (result.reused === true) instead
+      // of piling up duplicates.
       const result = await generateSynthesisBriefing(userId, cadence, { bypassCadence: true });
       if (result?.status === 'ok' && result.briefing) {
-        setBriefings(prev => [result.briefing, ...prev]);
-        ouraToast.info('Briefing generated');
+        // Re-read from Firestore so local state matches what's actually
+        // stored (including doc ids) instead of stacking a local copy.
+        await loadBriefings();
+        if (!result.reused) await pruneToCap();
+        ouraToast.info(result.reused ? 'Latest briefing is under an hour old — showing it.' : 'Briefing generated');
+      } else if (result?.status === 'locked') {
+        ouraToast.info(`Next briefing eligible in ${result.remainingDays} day(s).`);
       }
     } catch (err) {
       logger.error('Synthesis generation failed:', err);
@@ -94,9 +145,52 @@ export default function SynthesisBriefing() {
     }
   };
 
+  const handleDeleteBriefing = useCallback(async (briefingId) => {
+    if (!briefingId) return;
+    try {
+      await deleteData('syntheses', briefingId);
+      setBriefings(prev => prev.filter(b => b.id !== briefingId));
+      setSelectedArchive(prev => (prev?.id === briefingId ? null : prev));
+      ouraToast.info('Briefing deleted');
+    } catch (err) {
+      logger.error('Failed to delete briefing:', err);
+      ouraToast.error('Delete failed');
+    }
+  }, []);
+
+  const handleCleanupOldBriefings = useCallback(async () => {
+    const sorted = [...briefings].sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
+    const toDelete = sorted.slice(1).filter(b => b.id);
+    if (toDelete.length === 0) {
+      ouraToast.info('Nothing to clean up.');
+      return;
+    }
+    if (!window.confirm(`Delete ${toDelete.length} older briefing${toDelete.length === 1 ? '' : 's'}? The latest will be kept.`)) return;
+    try {
+      await Promise.all(toDelete.map(b => deleteData('syntheses', b.id)));
+      await loadBriefings();
+      ouraToast.info(`Deleted ${toDelete.length} briefing${toDelete.length === 1 ? '' : 's'}.`);
+    } catch (err) {
+      logger.error('Cleanup failed:', err);
+      ouraToast.error('Cleanup failed');
+    }
+  }, [briefings]);
+
   const latestBriefing = briefings[0] || null;
   const archiveBriefings = briefings.slice(1);
   const displayBriefing = selectedArchive || latestBriefing;
+
+  // "Sparse" briefing: no cross-module signal — every section will be generic.
+  // Detect from _meta so we can explain WHY the content reads as boilerplate.
+  const meta = displayBriefing?._meta || {};
+  const isSparseBriefing = displayBriefing && (
+    !meta.dominantArchetype &&
+    !meta.recentRelapseCount &&
+    !meta.activeTargetCount &&
+    !meta.highEscapeTargetCount &&
+    !meta.finalizedRuleCount &&
+    (!displayBriefing.violatedRules || displayBriefing.violatedRules.length === 0)
+  );
 
   if (initialLoading) {
     return (
@@ -122,12 +216,17 @@ export default function SynthesisBriefing() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-[#ababab] text-sm mb-1">Run a briefing on-the-spot.</p>
-              <p className="text-[#858585] text-xs">The cadence below governs the automatic weekly/biweekly generation.</p>
+              <p className="text-[#858585] text-xs">
+                {hasCrossModuleData
+                  ? 'The cadence below governs the automatic weekly/biweekly generation.'
+                  : 'Synthesis needs cross-module data. Add a Kill Target, Hard Lesson, or Relapse entry first.'}
+              </p>
             </div>
             <button
               onClick={handleGenerate}
-              disabled={generating}
-              className="px-6 py-2.5 bg-[#a855f7] hover:bg-[#9333ea] hover:shadow-lg hover:shadow-[#a855f7]/20 disabled:bg-[#1a1a1a] disabled:text-[#858585] disabled:shadow-none text-white rounded-xl font-medium transition-all text-sm flex items-center gap-2"
+              disabled={generating || !hasCrossModuleData}
+              title={!hasCrossModuleData ? 'Add a Kill Target, Hard Lesson, or Relapse entry first' : undefined}
+              className="px-6 py-2.5 bg-[#a855f7] hover:bg-[#9333ea] hover:shadow-lg hover:shadow-[#a855f7]/20 disabled:bg-[#1a1a1a] disabled:text-[#858585] disabled:shadow-none disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all text-sm flex items-center gap-2"
             >
               {generating ? (
                 <>
@@ -175,11 +274,30 @@ export default function SynthesisBriefing() {
               </div>
             )}
 
-            <div className="text-[#858585] text-xs mb-6">
-              {new Date(displayBriefing.generatedAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-              {' · '}
-              {displayBriefing.cadencePeriod}
+            <div className="flex items-center justify-between gap-3 mb-6">
+              <div className="text-[#858585] text-xs">
+                {new Date(displayBriefing.generatedAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                {' · '}
+                {displayBriefing.cadencePeriod}
+              </div>
+              {displayBriefing.id && (
+                <button
+                  onClick={() => handleDeleteBriefing(displayBriefing.id)}
+                  className="text-[#858585] text-xs hover:text-[#ef4444] transition-colors"
+                  title="Delete this briefing"
+                >
+                  Delete
+                </button>
+              )}
             </div>
+
+            {isSparseBriefing && (
+              <div className="mb-6 border border-[#1a1a1a] bg-[#0a0a0a] rounded-xl px-4 py-3">
+                <p className="text-[#ababab] text-sm leading-relaxed">
+                  This briefing reads generic because there's no cross-module signal yet — no recent relapse entries, no active Kill List targets, no finalized Hard Lessons. Add data in two or more modules and the next briefing will surface real convergence.
+                </p>
+              </div>
+            )}
 
             {/* Section 1: Convergence Point */}
             <div className="mb-8">
@@ -228,21 +346,43 @@ export default function SynthesisBriefing() {
         {/* Archive */}
         {archiveBriefings.length > 0 && (
           <div className="mt-10">
-            <div className="text-[#858585] text-xs uppercase tracking-widest mb-4">Previous Briefings</div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[#858585] text-xs uppercase tracking-widest">Previous Briefings ({archiveBriefings.length})</div>
+              <button
+                onClick={handleCleanupOldBriefings}
+                className="text-xs px-3 py-1.5 rounded-lg border border-[#1a1a1a] text-[#858585] hover:text-[#ef4444] hover:border-[#ef4444]/40 transition-colors"
+                title="Delete every briefing except the latest"
+              >
+                Delete all but latest
+              </button>
+            </div>
             <div className="space-y-2">
-              {archiveBriefings.map((b, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setSelectedArchive(b)}
-                  className={`w-full text-left px-5 py-4 rounded-xl border transition-colors ${selectedArchive === b ? 'border-[#f59e0b]/40 bg-[#f59e0b]/5' : 'border-[#1a1a1a] hover:border-[#2a2a2a] bg-[#0a0a0a]'}`}
+              {archiveBriefings.map((b) => (
+                <div
+                  key={b.id || b.generatedAt}
+                  className={`w-full flex items-center justify-between px-5 py-4 rounded-xl border transition-colors ${selectedArchive === b ? 'border-[#f59e0b]/40 bg-[#f59e0b]/5' : 'border-[#1a1a1a] hover:border-[#2a2a2a] bg-[#0a0a0a]'}`}
                 >
-                  <div className="text-[#ababab] text-sm">
-                    {new Date(b.generatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </div>
-                  <div className={`text-xs mt-1 ${SIGNAL_DELTA_COLORS[b.signalDelta] || 'text-[#858585]'}`}>
-                    {SIGNAL_DELTA_LABELS[b.signalDelta] || b.signalDelta}
-                  </div>
-                </button>
+                  <button
+                    onClick={() => setSelectedArchive(b)}
+                    className="text-left flex-1"
+                  >
+                    <div className="text-[#ababab] text-sm">
+                      {new Date(b.generatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                    <div className={`text-xs mt-1 ${SIGNAL_DELTA_COLORS[b.signalDelta] || 'text-[#858585]'}`}>
+                      {SIGNAL_DELTA_LABELS[b.signalDelta] || b.signalDelta}
+                    </div>
+                  </button>
+                  {b.id && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteBriefing(b.id); }}
+                      className="ml-3 text-[#858585] text-xs hover:text-[#ef4444] transition-colors px-2"
+                      title="Delete this briefing"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>

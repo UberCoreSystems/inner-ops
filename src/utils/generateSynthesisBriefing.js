@@ -32,6 +32,12 @@ import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
 
+// Hard write-cooldown — defeats "Generate now" spamming. Manual generations
+// pass bypassCadence:true to skip the weekly/biweekly gate, but a click-storm
+// must NEVER pile up duplicate docs. If a briefing was written within
+// MIN_WRITE_INTERVAL_MS, return that one instead of writing again.
+const MIN_WRITE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
 export async function generateSynthesisBriefing(userId, cadence = 'weekly', options = {}) {
   if (!userId) throw new Error('userId required');
 
@@ -62,6 +68,17 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
         nextEligibleAt: nextEligibleAt.toISOString(),
         remainingDays: Math.max(0, Math.ceil(cadenceDays - daysSinceLast)),
       };
+    }
+  }
+
+  // Hard write-cooldown — even with bypassCadence:true, refuse to write a new
+  // doc if one was created in the last MIN_WRITE_INTERVAL_MS. Return the
+  // existing briefing as the "ok" result so the UI shows it without piling up
+  // duplicates from a click-storm.
+  if (lastBriefing?.generatedAt) {
+    const msSinceLast = Date.now() - new Date(lastBriefing.generatedAt).getTime();
+    if (msSinceLast >= 0 && msSinceLast < MIN_WRITE_INTERVAL_MS) {
+      return { status: 'ok', briefing: lastBriefing, reused: true };
     }
   }
 
@@ -182,8 +199,10 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     },
   };
 
-  await writer(COLLECTIONS.SYNTHESES, briefing);
-  return { status: 'ok', briefing };
+  // Capture the doc id so the page can target it for read-marking and delete.
+  const written = await writer(COLLECTIONS.SYNTHESES, briefing);
+  const briefingWithId = written?.id ? { ...briefing, id: written.id } : briefing;
+  return { status: 'ok', briefing: briefingWithId };
 }
 
 function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violatedRules, finalizedRules, recentRelapseCount, signalDelta }) {
