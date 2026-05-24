@@ -1,12 +1,14 @@
 // Authentication System for Inner Ops
 // Provides email/password authentication for persistent user identity
 
-import { 
-  createUserWithEmailAndPassword, 
+import {
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  updateProfile 
+  updateProfile,
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import logger from './logger';
 import { getCachedAuth, getAuth } from '../firebase';
@@ -19,21 +21,48 @@ export const authService = {
       const auth = getCachedAuth() || await getAuth();
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
+
       // Update display name if provided
       if (displayName) {
         await updateProfile(user, { displayName });
         logger.log(`✅ Display name set to: ${displayName}`);
       }
-      
+
+      // Fire-and-forget verification email. We intentionally do NOT gate
+      // features on emailVerified for v1 — the email is informational only.
+      // A failure here must not block registration.
+      try {
+        await sendEmailVerification(user);
+        logger.log("✉️  Verification email sent to:", user.email);
+      } catch (verifyErr) {
+        logger.warn("Verification email send failed:", verifyErr?.code || verifyErr?.message);
+      }
+
       logger.log("✅ User registered successfully:", user.uid);
-      
-      return { 
-        user, 
-        isNewUser: true 
+
+      return {
+        user,
+        isNewUser: true
       };
     } catch (error) {
       logger.error("❌ Registration failed:", error);
+      throw this.handleAuthError(error);
+    }
+  },
+
+  // Send password reset email. Routes errors through handleAuthError for the
+  // same friendly messages the sign-in form uses. Does NOT reveal whether
+  // the account exists — Firebase returns success even if the email is
+  // unregistered (correct anti-enumeration behavior).
+  async resetPassword(email) {
+    try {
+      logger.log("🔐 Sending password reset email...");
+      const auth = getCachedAuth() || await getAuth();
+      await sendPasswordResetEmail(auth, email);
+      logger.log("✅ Password reset email dispatched");
+      return { sent: true };
+    } catch (error) {
+      logger.error("❌ Password reset failed:", error);
       throw this.handleAuthError(error);
     }
   },

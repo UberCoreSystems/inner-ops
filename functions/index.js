@@ -15,6 +15,8 @@ const {
   MAX_REACTANCE_QUESTION_CHARS,
 } = require("./config");
 
+const { checkAndIncrementOracleLimit } = require("./rateLimit");
+
 // Initialize the admin app at module load. The prior lazy guard checked
 // `getApps().length === 0`, but the v2 Cloud Functions runtime can register
 // non-default apps before our code runs, so that condition would skip
@@ -118,6 +120,13 @@ exports.oracle = onCall(
       );
     }
 
+    // Per-user daily Oracle cap (shared pool with oracleFollowUp). Increments
+    // before payload validation so abusive clients can't farm slot-free
+    // 400-class errors, and before the Anthropic call so failed calls still
+    // consume a slot (counts attempts, not successes). Throws HttpsError
+    // 'resource-exhausted' on cap-hit; the outer try below re-throws cleanly.
+    await checkAndIncrementOracleLimit(uid);
+
     const normalizedModuleForLimit = ((request.data?.moduleName) || '').toLowerCase().replace(/[^a-z]/g, '');
 
     const {
@@ -174,12 +183,15 @@ exports.oracle = onCall(
     } catch (error) {
       // Re-surface known HttpsError instances (e.g. from rate limiter).
       if (error instanceof HttpsError) throw error;
-      console.error("Claude API error:", error.message);
+      // Never log raw error.message — Anthropic SDK errors can echo failing
+      // request bodies. Log shape only: name + status.
+      console.error("Claude API error:", { name: error.name, status: error.status });
       logOracleCall({
         fn: "oracle",
         uid,
         module: normalizedModuleForLimit || "unknown",
-        error: error.message,
+        error: error.name,
+        errorStatus: error.status ?? null,
         latencyMs: Date.now() - startedAt,
       });
       throw new HttpsError("internal", "The Oracle is unavailable. Try again shortly.");
@@ -208,6 +220,9 @@ exports.oracleFollowUp = onCall(
     }
 
     const uid = request.auth.uid;
+
+    // Shares the same per-user daily cap as `oracle` — same counter doc.
+    await checkAndIncrementOracleLimit(uid);
 
     const { originalEntry, userResponse, initialFeedback } = request.data;
 
@@ -267,11 +282,13 @@ Continue the conversation. Match your posture to what they actually said.`,
       return { followUp: message.content[0]?.text || "" };
     } catch (error) {
       if (error instanceof HttpsError) throw error;
-      console.error("Claude follow-up error:", error.message);
+      // Never log raw error.message — see oracle catch above.
+      console.error("Claude follow-up error:", { name: error.name, status: error.status });
       logOracleCall({
         fn: "oracleFollowUp",
         uid,
-        error: error.message,
+        error: error.name,
+        errorStatus: error.status ?? null,
         latencyMs: Date.now() - startedAt,
       });
       throw new HttpsError("internal", "Follow-up unavailable.");

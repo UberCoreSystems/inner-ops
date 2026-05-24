@@ -96,8 +96,19 @@ const getCachedDb = () => {
   return db;
 };
 
+// Dev-only auth bypass helpers. Each guards with `if (!DEV) throw`. Vite
+// resolves `import.meta.env.DEV` to a literal `false` at build time and
+// Terser dead-code-eliminates the rest of the function body — branches die
+// at build time, no runtime cost in prod.
+const assertDevOnly = (name) => {
+  if (!import.meta.env.DEV) {
+    throw new Error(`${name} is a dev-only helper and was invoked in production`);
+  }
+};
+
 // Enable anonymous authentication for testing
 export const enableAnonymousAuth = async () => {
+  assertDevOnly('enableAnonymousAuth');
   try {
     const { auth: authInstance, signInAnonymously } = await initializeAuth();
     if (!authInstance.currentUser) {
@@ -108,17 +119,18 @@ export const enableAnonymousAuth = async () => {
     return authInstance.currentUser;
   } catch (error) {
     logger.error("❌ Anonymous auth failed:", error);
-    
+
     if (error.code === 'auth/admin-restricted-operation') {
       logger.error("🚫 Anonymous authentication is disabled in Firebase Console");
     }
-    
+
     throw error;
   }
 };
 
 // Create a mock user for testing when auth is disabled
 export const createMockUser = () => {
+  assertDevOnly('createMockUser');
   const mockUser = {
     uid: 'mock-user-' + Date.now(),
     isAnonymous: true,
@@ -132,6 +144,7 @@ export const createMockUser = () => {
 
 // Enable development mode (bypass auth for testing)
 export const enableDevMode = () => {
+  assertDevOnly('enableDevMode');
   logger.log("🚧 DEVELOPMENT MODE: Bypassing authentication for testing");
   logger.warn("⚠️ This should NEVER be used in production!");
   return createMockUser();
@@ -139,11 +152,12 @@ export const enableDevMode = () => {
 
 // Helper to get current user or create mock user for testing
 export const getCurrentUserOrMock = async () => {
+  assertDevOnly('getCurrentUserOrMock');
   const { auth: authInstance } = await initializeAuth();
   if (authInstance.currentUser) {
     return authInstance.currentUser;
   }
-  
+
   logger.warn("🚧 No authenticated user found, using mock user for testing");
   return createMockUser();
 };

@@ -78,6 +78,15 @@ service cloud.firestore {
       match /_rateLimits/{docId} {
         allow read, write: if false;
       }
+
+      // Third-party integration tokens (e.g. Oura OAuth). Currently no
+      // server-side writer is wired up; this `deny` is defense in depth so
+      // that even if a stale client renders the Connect Oura button the
+      // OAuth token cannot be persisted client-side. Move to Admin-SDK-only
+      // writes when Oura is moved out of post-launch deferred scope.
+      match /integrations/{docId} {
+        allow read, write: if false;
+      }
     }
 
     // ─── Top-level user-data collections ───────────────────────────────

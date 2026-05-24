@@ -24,6 +24,13 @@ import BannerStack from './components/banner/BannerStack';
 // Default: off. Beta deploys must not ship with VITE_ENABLE_BLACK_MIRROR=true.
 const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
 
+// Oura Ring is also deferred (post-v1). Same env-flag pattern as Black Mirror.
+// When false: the /oura/callback route is not mounted and the Oura UI in
+// RelapseRadar is hidden. The OAuth token-storage path is still missing a
+// Firestore rule (defense-in-depth `deny` lives in firestore.rules) so even
+// if a stale client renders the connect button, no token can be persisted.
+const OURA_ENABLED = import.meta.env.VITE_ENABLE_OURA === 'true';
+
 // Lazy-loaded pages (code splitting)
 const BlackMirror = BLACK_MIRROR_ENABLED
   ? React.lazy(() => import('./components/BlackMirror'))
@@ -37,7 +44,9 @@ const Onboarding = React.lazy(() => import('./pages/Onboarding'));
 const HardLessons = React.lazy(() => import('./pages/HardLessons'));
 const SynthesisBriefing = React.lazy(() => import('./pages/SynthesisBriefing'));
 const Settings = React.lazy(() => import('./pages/Settings'));
-const OuraCallback = React.lazy(() => import('./pages/OuraCallback'));
+const OuraCallback = OURA_ENABLED
+  ? React.lazy(() => import('./pages/OuraCallback'))
+  : null;
 
 // Fallback loader
 const PageLoader = () => (
@@ -86,8 +95,9 @@ function App() {
         // This will check if user is already logged in
         const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
           if (firebaseUser) {
-            logger.log("🔐 Existing user found:", firebaseUser.uid, firebaseUser.email);
-            identify(firebaseUser.uid, { email: firebaseUser.email });
+            logger.log("🔐 Existing user found:", firebaseUser.uid);
+            // Do not send email to PostHog — uid is the only PII forwarded.
+            identify(firebaseUser.uid, {});
           } else {
             logger.log("🔐 No authenticated user - waiting for login");
           }
@@ -301,16 +311,18 @@ function App() {
             }
           />
 
-          <Route
-            path="/oura/callback"
-            element={
-              <InlineErrorBoundary name="OuraCallback">
-                <Suspense fallback={<PageLoader />}>
-                  <OuraCallback />
-                </Suspense>
-              </InlineErrorBoundary>
-            }
-          />
+          {OURA_ENABLED && (
+            <Route
+              path="/oura/callback"
+              element={
+                <InlineErrorBoundary name="OuraCallback">
+                  <Suspense fallback={<PageLoader />}>
+                    <OuraCallback />
+                  </Suspense>
+                </InlineErrorBoundary>
+              }
+            />
+          )}
 
           {/* Default Routes */}
           <Route path="/login" element={<Navigate to="/auth" />} />

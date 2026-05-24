@@ -54,7 +54,10 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,
+        // Surgical instead of drop_console:true so console.error survives in
+        // production — logger.error() must actually emit so handled errors
+        // reach the browser console and Sentry's console-breadcrumb capture.
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.warn'],
         drop_debugger: true,
         unused: true,
         dead_code: true,

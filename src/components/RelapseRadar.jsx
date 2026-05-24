@@ -16,6 +16,10 @@ import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { useOuraData } from '../hooks/useOuraData';
+
+// Oura is post-v1; gated by VITE_ENABLE_OURA. When false, the panel and
+// "Connect Oura Ring" button below are hidden. Mirrors App.jsx OURA_ENABLED.
+const OURA_ENABLED = import.meta.env.VITE_ENABLE_OURA === 'true';
 import {
   ARCHETYPE_IDS,
   HABIT_IDS,
@@ -784,7 +788,7 @@ const RelapseRadar = () => {
             ))}
           </div>
           {/* BER-182: Physiological precursor — Oura Ring */}
-          {ouraConnected && ouraBiometrics && !ouraLoading && (
+          {OURA_ENABLED && ouraConnected && ouraBiometrics && !ouraLoading && (
             <div className={`p-4 rounded-2xl border ${isPhysiologicalAlert ? 'border-red-500 bg-red-500/10' : 'border-oura-border bg-oura-card'}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs text-gray-500 uppercase tracking-widest">Physiological — Oura</span>
@@ -831,7 +835,7 @@ const RelapseRadar = () => {
               )}
             </div>
           )}
-          {!ouraConnected && !ouraLoading && (
+          {OURA_ENABLED && !ouraConnected && !ouraLoading && (
             <div className="p-4 rounded-2xl border border-oura-border bg-oura-card">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-600 uppercase tracking-widest">Physiological</span>

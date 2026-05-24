@@ -188,7 +188,11 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     signalDelta,
     signalDeltaNote,
     confrontationQuestion,
-    _meta: {
+    // Renamed from `_meta` to `meta` so the Vite terser `mangle.properties:
+    // /^_/` config (vite.config.js) doesn't rewrite the key on the way into
+    // Firestore — leading-underscore properties get mangled in prod, which
+    // silently corrupts the stored field name.
+    meta: {
       recentRelapseCount,
       dominantArchetype,
       journalEntriesPerWeek,

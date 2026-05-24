@@ -48,6 +48,28 @@ export default function AuthForm({ onAuthSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [focusedField, setFocusedField] = useState(null);
+  const [resetting, setResetting] = useState(false);
+
+  const handleForgotPassword = async () => {
+    const email = (formData.email || '').trim();
+    if (!email) {
+      setError('Enter your email above first, then tap "Forgot password?"');
+      return;
+    }
+    setError('');
+    setResetting(true);
+    try {
+      await authService.resetPassword(email);
+      ouraToast.success('Reset email sent — check your inbox.');
+    } catch (err) {
+      logger.error('Password reset error:', err);
+      const msg = err?.message || 'Could not send reset email';
+      setError(msg);
+      ouraToast.error(msg);
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -199,9 +221,21 @@ export default function AuthForm({ onAuthSuccess }) {
 
             {/* Password */}
             <div className="space-y-2">
-              <label htmlFor="password" className="block text-xs font-medium text-[#858585] uppercase tracking-wider">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="block text-xs font-medium text-[#858585] uppercase tracking-wider">
+                  Password
+                </label>
+                {isSignIn && (
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={resetting}
+                    className="text-xs text-[#858585] hover:text-[#00d4aa] focus:outline-none focus:text-[#00d4aa] transition-colors disabled:opacity-50"
+                  >
+                    {resetting ? 'Sending…' : 'Forgot password?'}
+                  </button>
+                )}
+              </div>
               <div className={`relative transition-all duration-300 ${focusedField === 'password' ? 'transform scale-[1.01]' : ''}`}>
                 <input
                   id="password"

@@ -181,8 +181,8 @@ export default function SynthesisBriefing() {
   const displayBriefing = selectedArchive || latestBriefing;
 
   // "Sparse" briefing: no cross-module signal — every section will be generic.
-  // Detect from _meta so we can explain WHY the content reads as boilerplate.
-  const meta = displayBriefing?._meta || {};
+  // Detect from meta so we can explain WHY the content reads as boilerplate.
+  const meta = displayBriefing?.meta || {};
   const isSparseBriefing = displayBriefing && (
     !meta.dominantArchetype &&
     !meta.recentRelapseCount &&

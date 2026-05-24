@@ -114,6 +114,6 @@ describe('generateSynthesisBriefing — briefing payload shape', () => {
     assert.equal(written.collection, COLLECTIONS.SYNTHESES);
     assert.ok(written.doc.generatedAt, 'briefing has generatedAt');
     assert.ok(typeof written.doc.confrontationQuestion === 'string');
-    assert.equal(result.briefing._meta?.identityDirection, 'become-direct');
+    assert.equal(result.briefing.meta?.identityDirection, 'become-direct');
   });
 });
