@@ -10,11 +10,12 @@
  * Finding 13 remediation: returns a discriminated union —
  *   { status: 'ok', briefing } on success
  *   { status: 'locked', nextEligibleAt, remainingDays } when cadence blocks
+ *   { status: 'insufficient-data' } when no cross-module signal exists yet
  * Throws only for genuinely exceptional failures (missing userId, write error).
  *
  * @param {string} userId
  * @param {string} cadence - 'weekly' | 'biweekly'
- * @returns {Promise<{status:'ok',briefing:object}|{status:'locked',nextEligibleAt:string,remainingDays:number}>}
+ * @returns {Promise<{status:'ok',briefing:object}|{status:'locked',nextEligibleAt:string,remainingDays:number}|{status:'insufficient-data'}>}
  */
 import { readUserData, writeData } from './firebaseUtils.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -91,6 +92,19 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     reader(COLLECTIONS.JOURNAL_ENTRIES).catch(() => []),
     reader(COLLECTIONS.USER_SETTINGS).catch(() => []),
   ]);
+
+  // Cold-start gate: synthesis is a cross-module read. With no active target,
+  // no finalized rule, and no relapse entry, convergence has nothing to land on
+  // and the briefing reads generic. Mirrors the manual-path `hasCrossModuleData`
+  // check in SynthesisBriefing.jsx so auto and manual paths agree on the bar.
+  // Returning before generateConfrontationQuestion also avoids a billed Oracle
+  // call for users with no signal.
+  const hasActiveTarget = (killTargets || []).some(t => t[KILL_TARGET_FIELDS.STATUS] === 'active');
+  const hasFinalizedRule = (hardLessons || []).some(l => l[HARD_LESSON_FIELDS.IS_FINALIZED]);
+  const hasRelapseEntry = (relapseEntries || []).length > 0;
+  if (!hasActiveTarget && !hasFinalizedRule && !hasRelapseEntry) {
+    return { status: 'insufficient-data' };
+  }
 
   // BER-137: identity direction
   const identityDirection = (userSettings || [])[0]?.[USER_SETTINGS_FIELDS.IDENTITY_DIRECTION] || null;

@@ -6,28 +6,38 @@ import logger from '../utils/logger';
 import ouraToast from '../utils/toast';
 
 /**
- * WeeklyRuleReview — once-per-week retrospective sweep over every finalized
+ * WeeklyRuleReview — Sunday-anchored retrospective sweep over every finalized
  * Hard Lessons rule. Renders on the Dashboard. Each rule gets a Held / Broke
  * it toggle. Submit writes a violations[] entry on every "Broke it" rule.
  *
  * Held selections write nothing — absence of a violation IS the held state.
- * Both Submit and Dismiss stamp `userSettings.lastWeeklyRuleReviewWeek` to
- * the current ISO week so the card hides for the rest of the week.
+ * Both Submit and Skip stamp `userSettings.lastReviewedSunday` to the
+ * current Sunday's YYYY-MM-DD (local date) so the card hides for the rest
+ * of the week.
+ *
+ * Visibility window: Sun-Wed (Sunday anchor + 3-day carryover). The card is
+ * hidden Thu/Fri/Sat regardless of interaction state — if you missed the
+ * weekend and didn't catch up by Wednesday, the week skips entirely.
  *
  * Returns null when:
+ *   • today is Thu/Fri/Sat (outside the Sun-Wed render window)
  *   • there are no finalized rules to review
- *   • the user has already submitted or dismissed this ISO week's review
+ *   • the user has already submitted or skipped this Sunday's review
  *   • the data fetch is in flight (avoids a content flash)
  */
 
-function isoWeekKey(date = new Date()) {
-  // ISO 8601 week number — Mon=1..Sun=7. Week 1 contains the first Thursday.
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7; // map Sunday from 0 → 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // shift to the week's Thursday
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+const RENDER_WINDOW_END_DAY = 3; // Wed. (Sun=0, Mon=1, Tue=2, Wed=3)
+
+function currentSundayString(date = new Date()) {
+  // YYYY-MM-DD (LOCAL date) of the Sunday at the start of today's week.
+  // If today IS Sunday, returns today's date.
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export default function WeeklyRuleReview() {
@@ -38,7 +48,9 @@ export default function WeeklyRuleReview() {
   const [submitting, setSubmitting] = useState(false);
   const [submittedThisSession, setSubmittedThisSession] = useState(false);
 
-  const currentWeek = useMemo(() => isoWeekKey(new Date()), []);
+  const today = useMemo(() => new Date(), []);
+  const currentSunday = useMemo(() => currentSundayString(today), [today]);
+  const inRenderWindow = today.getDay() <= RENDER_WINDOW_END_DAY;
 
   useEffect(() => {
     let cancelled = false;
@@ -64,13 +76,13 @@ export default function WeeklyRuleReview() {
     return () => { cancelled = true; };
   }, []);
 
-  const lastReviewedWeek = settings?.[USER_SETTINGS_FIELDS.LAST_WEEKLY_RULE_REVIEW_WEEK] || null;
-  const alreadyDoneThisWeek = lastReviewedWeek === currentWeek || submittedThisSession;
+  const lastReviewedSunday = settings?.[USER_SETTINGS_FIELDS.LAST_REVIEWED_SUNDAY] || null;
+  const alreadyDoneThisSundayWindow = lastReviewedSunday === currentSunday || submittedThisSession;
 
-  const stampReviewedWeek = async () => {
+  const stampReviewedSunday = async () => {
     try {
       const payload = {
-        [USER_SETTINGS_FIELDS.LAST_WEEKLY_RULE_REVIEW_WEEK]: currentWeek,
+        [USER_SETTINGS_FIELDS.LAST_REVIEWED_SUNDAY]: currentSunday,
       };
       if (settings?.id) {
         await updateData(COLLECTIONS.USER_SETTINGS, settings.id, payload);
@@ -78,13 +90,13 @@ export default function WeeklyRuleReview() {
         await writeData(COLLECTIONS.USER_SETTINGS, payload);
       }
     } catch (err) {
-      logger.warn('WeeklyRuleReview: failed to stamp lastWeeklyRuleReviewWeek', err?.message);
+      logger.warn('WeeklyRuleReview: failed to stamp lastReviewedSunday', err?.message);
     }
   };
 
   const handleDismiss = async () => {
     setSubmittedThisSession(true);
-    await stampReviewedWeek();
+    await stampReviewedSunday();
   };
 
   const handleSubmit = async () => {
@@ -109,7 +121,7 @@ export default function WeeklyRuleReview() {
           logger.error('WeeklyRuleReview: violation write failed', { ruleId: rule.id, err: err?.message });
         }
       }
-      await stampReviewedWeek();
+      await stampReviewedSunday();
       setSubmittedThisSession(true);
       if (broken.length > 0) {
         ouraToast.success(`${broken.length} violation${broken.length === 1 ? '' : 's'} logged`);
@@ -122,8 +134,9 @@ export default function WeeklyRuleReview() {
   };
 
   if (loading) return null;
+  if (!inRenderWindow) return null;
   if (rules.length === 0) return null;
-  if (alreadyDoneThisWeek) return null;
+  if (alreadyDoneThisSundayWindow) return null;
 
   const allMarked = rules.every((r) => marks[r.id] === 'held' || marks[r.id] === 'broke');
   const brokenCount = rules.filter((r) => marks[r.id] === 'broke').length;

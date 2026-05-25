@@ -100,9 +100,15 @@ export const USER_SETTINGS_FIELDS = Object.freeze({
   DAILY_PROMPT_CURRENT_DATE: 'dailyPromptCurrentDate',
   DAILY_PROMPT_ANSWERED_AT: 'dailyPromptAnsweredAt',
   // ISO-week stamp ("YYYY-Www") of the most recently submitted weekly rule
-  // review. The WeeklyRuleReview card on the Dashboard hides until the
-  // current ISO week differs from this value.
+  // review. Vestigial — kept for historical data on existing user docs but
+  // no longer read by any active code. The Sunday-anchored model below
+  // superseded it.
   LAST_WEEKLY_RULE_REVIEW_WEEK: 'lastWeeklyRuleReviewWeek',
+  // YYYY-MM-DD (local date) of the Sunday whose weekly rule review the user
+  // most recently submitted or skipped. WeeklyRuleReview renders on Sun-Wed
+  // and hides for the rest of the week once this stamp matches the current
+  // Sunday anchor.
+  LAST_REVIEWED_SUNDAY: 'lastReviewedSunday',
   // Engagement banner system.
   // notificationPreferences: { [triggerId]: { enabled: boolean } }
   // bannerDismissals: { [triggerId]: ISO timestamp } — last-dismissed; the

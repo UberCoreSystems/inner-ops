@@ -66,6 +66,32 @@ const CATEGORY_ICONS = {
   ),
 };
 
+// Implementation-intention examples shown above the When/I-Will fields when
+// creating a Kill Contract. Order is irrelevant — a random index is chosen
+// on mount and the user can cycle to the next one with the ↻ button. Keep
+// every example in the same shape: "When [specific behavioral trigger with
+// concrete context], I will [specific physical action with duration or
+// quantity]." Operator/stoic tone — no wellness or motivational framing.
+// Covers the 7 Kill List categories.
+const IMPLEMENTATION_INTENTION_EXAMPLES = [
+  // Bad Habit
+  "When I feel the urge to scroll my phone in bed after 10pm, I will leave the phone in the kitchen and read paper for 20 minutes.",
+  // Negative Thought
+  "When I catch myself rehearsing the story that I'm not good enough, I will write the sentence verbatim on paper and read it back out loud once.",
+  // Addiction
+  "When I drive past the liquor store and feel the pull to stop, I will call the next person on my accountability list before any decision.",
+  // Toxic Behavior
+  "When someone says something that triggers the urge to escalate, I will leave the room for 10 minutes before I respond at all.",
+  // Fear / Anxiety
+  "When my chest tightens before sending a hard message, I will send it within 60 seconds and close the app immediately.",
+  // Procrastination
+  "When I sit down to work and feel pulled to organize my desk first, I will set a 25-minute timer and begin the first task in the queue.",
+  // Other — compulsive checking
+  "When I reach for my phone to check email without intending to, I will set it face-down 6 feet away for 30 minutes.",
+  // Other — overeating
+  "When I open the fridge after 9pm without being hungry, I will close it and drink one full glass of water before deciding again.",
+];
+
 // BER-134: Autopsy pattern aggregation for targets with 3+ escapes
 const STOP_WORDS = new Set(['i','the','a','an','was','it','in','to','of','and','my','me','at','just','this','that','when','if','is','not','but','had','did','would','could','were','felt','feel','so','do','be','have','by','from','what','they','we','he','she','then','about','on','with','very','really']);
 
@@ -226,6 +252,17 @@ const KillList = () => {
 
   // Implementation intentions (BER-126)
   const [newIntention, setNewIntention] = useState({ trigger: '', response: '' });
+
+  // Rotating example index for the implementation-intention guidance box.
+  // Lazy-init picks a random example on mount so each fresh page visit
+  // shows something different; the ↻ button next to the EXAMPLE. label
+  // cycles to the next entry in IMPLEMENTATION_INTENTION_EXAMPLES.
+  const [exampleIdx, setExampleIdx] = useState(
+    () => Math.floor(Math.random() * IMPLEMENTATION_INTENTION_EXAMPLES.length)
+  );
+  const cycleExample = useCallback(() => {
+    setExampleIdx((prev) => (prev + 1) % IMPLEMENTATION_INTENTION_EXAMPLES.length);
+  }, []);
 
   // Tracks whether the user has tried to submit the Add Kill Contract form so
   // per-field error cues only appear after a real attempt, not while typing.
@@ -1792,8 +1829,25 @@ const KillList = () => {
                 </label>
                 <p className="text-[#858585] text-xs mb-4">Pre-commit to the response now. In the moment of the trigger, you should not be deciding — you should be executing.</p>
                 <div className="bg-[#0a0a0a] border-l-2 border-[#ef4444]/40 px-4 py-3 rounded-r-xl text-[#ababab] text-sm mb-5">
-                  <span className="text-[#858585] text-xs uppercase tracking-widest mr-2">Example.</span>
-                  <em className="not-italic text-[#d1d1d1]">When I feel the urge to scroll my phone in bed after 10pm, I will leave the phone in the kitchen and read paper for 20 minutes.</em>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <span className="text-[#858585] text-xs uppercase tracking-widest mr-2">Example.</span>
+                      <em className="not-italic text-[#d1d1d1]">{IMPLEMENTATION_INTENTION_EXAMPLES[exampleIdx]}</em>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={cycleExample}
+                      aria-label="Show another example"
+                      title="Show another example"
+                      className="shrink-0 text-[#858585] hover:text-[#d1d1d1] focus:text-[#d1d1d1] focus:outline-none transition-colors -mr-1"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="23 4 23 10 17 10" />
+                        <polyline points="1 20 1 14 7 14" />
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <div>

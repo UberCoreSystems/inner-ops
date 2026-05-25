@@ -19,6 +19,15 @@ const makeDeps = (data, writeSpy = null) => ({
   writeData: writeSpy ?? (async () => {}),
 });
 
+// Minimum cross-module fixture: one relapse entry satisfies the
+// insufficient-data gate so cadence/bypass tests can exercise their
+// own paths without tripping the cold-start check.
+const minCrossModuleData = () => ({
+  [COLLECTIONS.RELAPSE_ENTRIES]: [
+    { id: 'r-seed', timestamp: now - dayMs, [RELAPSE_FIELDS.ARCHETYPE]: 'Avoider' },
+  ],
+});
+
 describe('generateSynthesisBriefing — preconditions', () => {
   it('throws when userId is missing', async () => {
     await assert.rejects(
@@ -54,6 +63,7 @@ describe('generateSynthesisBriefing — cadence enforcement', () => {
 
   it('runs (status ok) when last weekly briefing was 8 days ago', async () => {
     const deps = makeDeps({
+      ...minCrossModuleData(),
       [COLLECTIONS.SYNTHESES]: [
         { generatedAt: new Date(now - 8 * dayMs).toISOString() },
       ],
@@ -64,7 +74,7 @@ describe('generateSynthesisBriefing — cadence enforcement', () => {
   });
 
   it('runs (status ok) when no prior briefing exists', async () => {
-    const deps = makeDeps({});
+    const deps = makeDeps(minCrossModuleData());
     const result = await generateSynthesisBriefing('u1', 'weekly', deps);
     assert.equal(result.status, 'ok');
     assert.ok(result.briefing);
@@ -73,6 +83,7 @@ describe('generateSynthesisBriefing — cadence enforcement', () => {
   it('bypassCadence:true forces generation despite recent briefing', async () => {
     const deps = {
       ...makeDeps({
+        ...minCrossModuleData(),
         [COLLECTIONS.SYNTHESES]: [
           { generatedAt: new Date(now - dayMs).toISOString() },
         ],
@@ -81,6 +92,39 @@ describe('generateSynthesisBriefing — cadence enforcement', () => {
     };
     const result = await generateSynthesisBriefing('u1', 'weekly', deps);
     assert.equal(result.status, 'ok');
+  });
+});
+
+describe('generateSynthesisBriefing — cold-start gate', () => {
+  it('returns insufficient-data when no active target, finalized rule, or relapse entry exists', async () => {
+    let written = null;
+    const writeSpy = async (collection, doc) => { written = { collection, doc }; };
+    const deps = makeDeps({}, writeSpy);
+    const result = await generateSynthesisBriefing('u1', 'weekly', deps);
+    assert.equal(result.status, 'insufficient-data');
+    assert.equal(written, null, 'no briefing is written for cold-start users');
+  });
+
+  it('returns insufficient-data even with bypassCadence when no cross-module signal exists', async () => {
+    let written = null;
+    const writeSpy = async (collection, doc) => { written = { collection, doc }; };
+    const deps = {
+      ...makeDeps({}, writeSpy),
+      // Note: bypassCadence is passed via options, so we pass it on a separate call below.
+    };
+    const result = await generateSynthesisBriefing('u1', 'weekly', { ...deps, bypassCadence: true });
+    assert.equal(result.status, 'insufficient-data');
+    assert.equal(written, null);
+  });
+
+  it('returns insufficient-data when only journal entries exist (journal is not cross-module signal)', async () => {
+    const deps = makeDeps({
+      [COLLECTIONS.JOURNAL_ENTRIES]: [
+        { id: 'j1', timestamp: now - dayMs, text: 'first entry' },
+      ],
+    });
+    const result = await generateSynthesisBriefing('u1', 'weekly', deps);
+    assert.equal(result.status, 'insufficient-data');
   });
 });
 

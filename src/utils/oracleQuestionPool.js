@@ -129,6 +129,15 @@ const SOURCE_HANDLERS = [
  * user. Filters to entries within the lookback window. Returns up to one
  * question per source doc; older questions and prose without a recoverable
  * question are skipped.
+ *
+ * `hasAnyEntries` reports whether any of the 6 source collections contained at
+ * least one doc — a true-zero signal that DailyPrompt uses to decide whether
+ * to show the cold-start hint. This is distinct from `pool.length === 0`,
+ * which can also be zero when entries exist but yielded no extractable
+ * questions.
+ *
+ * The return type changed from `Array` to `{ pool, hasAnyEntries }`. Treat as
+ * an internal API — only DailyPrompt.jsx consumes it.
  */
 export async function buildOracleQuestionPool({ now = new Date() } = {}) {
   const reads = await Promise.all(
@@ -138,9 +147,11 @@ export async function buildOracleQuestionPool({ now = new Date() } = {}) {
   );
 
   const pool = [];
+  let entryCount = 0;
   for (let i = 0; i < SOURCE_HANDLERS.length; i += 1) {
     const handler = SOURCE_HANDLERS[i];
     const docs = Array.isArray(reads[i]) ? reads[i] : [];
+    entryCount += docs.length;
     for (const doc of docs) {
       if (!doc || !doc.id) continue;
       const eventDate = pickEventDate(doc);
@@ -151,7 +162,7 @@ export async function buildOracleQuestionPool({ now = new Date() } = {}) {
     }
   }
 
-  return pool;
+  return { pool, hasAnyEntries: entryCount > 0 };
 }
 
 /**

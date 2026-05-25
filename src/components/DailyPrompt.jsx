@@ -71,13 +71,21 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSi
         }
         if (isStaticPromptId(storedId)) {
           const staticPrompt = getTodaysStaticPrompt();
-          setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category, id: storedId });
+          // Cold-start hint for the same-day replay path — check source counts
+          // so the hint stays accurate even after settings has been written.
+          let isColdStart = false;
+          try {
+            const { hasAnyEntries } = await buildOracleQuestionPool();
+            if (cancelled) return;
+            isColdStart = !hasAnyEntries;
+          } catch { /* fail closed — no hint */ }
+          setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category, id: storedId, isColdStart });
           return;
         }
         // Oracle ID — look up in the pool. If the source doc was archived or
         // aged past the lookback window, fall through to a fresh pick.
         try {
-          const pool = await buildOracleQuestionPool();
+          const { pool } = await buildOracleQuestionPool();
           if (cancelled) return;
           const found = pool.find((p) => p.id === storedId);
           if (found) {
@@ -96,11 +104,13 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSi
       }
 
       // Fresh pick path (new day, no record, or stored ID no longer in pool).
+      let hasAnyEntries = true; // assume not cold-start unless pool read confirms
       try {
-        const pool = await buildOracleQuestionPool();
+        const result = await buildOracleQuestionPool();
         if (cancelled) return;
+        hasAnyEntries = result.hasAnyEntries;
         const recent = settings?.[USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS] || [];
-        const pick = pickTodaysOracleQuestion(pool, recent, today);
+        const pick = pickTodaysOracleQuestion(result.pool, recent, today);
         if (pick) {
           setPrompt({
             kind: 'oracle',
@@ -118,7 +128,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSi
 
       if (cancelled) return;
       const staticPrompt = getTodaysStaticPrompt();
-      setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category, id: staticPrompt.id });
+      setPrompt({ kind: 'static', text: staticPrompt.text, category: staticPrompt.category, id: staticPrompt.id, isColdStart: !hasAnyEntries });
       assignDailyPrompt({ promptId: staticPrompt.id, today, settings });
     })();
 
@@ -181,10 +191,11 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSi
           </div>
         </div>
 
-        {/* Refresh hint */}
+        {/* Refresh hint — swaps for cold-start (zero entries across all source
+            modules) so first-time users understand prompts will personalize. */}
         <div className="flex items-center gap-2 text-[#858585] text-xs">
           <AppIcon name="sunrise" size={16} color="#f59e0b" glow={true} glowIntensity={0.3} />
-          <span>New prompt daily</span>
+          <span>{prompt.isColdStart ? 'Prompts personalize after your first entry' : 'New prompt daily'}</span>
         </div>
       </div>
 

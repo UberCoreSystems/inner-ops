@@ -42,6 +42,9 @@ export function useSynthesisAutoGenerate(userId) {
         // Finding 13: discriminated result instead of thrown CADENCE_LOCK string.
         const result = await generateSynthesisBriefing(userId, cadence);
         if (result?.status === 'locked') return;
+        // Cold-start gate: skip silently for users with no cross-module signal.
+        // Auto-generation should be invisible until there's something to synthesize.
+        if (result?.status === 'insufficient-data') return;
         // Pass 3 New Finding 9 remediation: surface the auto-generated
         // briefing so the user understands why SynthesisGuard may redirect
         // them. Toast is grounded, not motivational, per CLAUDE.md.

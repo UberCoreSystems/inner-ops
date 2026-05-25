@@ -409,9 +409,10 @@ export default function Dashboard() {
           signalReport={signalReport}
         />
 
-        {/* Weekly Rule Review — once-per-ISO-week sweep over finalized rules.
-            Self-gating: returns null when there are no rules, when the user
-            has already reviewed this week, or while data is loading. */}
+        {/* Weekly Rule Review — Sunday-anchored sweep over finalized rules.
+            Self-gating: visible Sun-Wed only; returns null on Thu/Fri/Sat,
+            when there are no rules, when the user has already reviewed this
+            Sunday's window, or while data is loading. */}
         <WeeklyRuleReview />
 
         {/* Morning Brief — operator-cadence daily readout, Firestore-cached. */}

@@ -136,6 +136,10 @@ export default function SynthesisBriefing() {
         ouraToast.info(result.reused ? 'Latest briefing is under an hour old — showing it.' : 'Briefing generated');
       } else if (result?.status === 'locked') {
         ouraToast.info(`Next briefing eligible in ${result.remainingDays} day(s).`);
+      } else if (result?.status === 'insufficient-data') {
+        // Defense in depth — the button is already disabled by hasCrossModuleData,
+        // but a stale flag from a race could let a click through.
+        ouraToast.info('Add a Kill Target, Hard Lesson, or Relapse entry first.');
       }
     } catch (err) {
       logger.error('Synthesis generation failed:', err);
