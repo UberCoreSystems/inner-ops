@@ -51,6 +51,7 @@ export default function AuthForm({ onAuthSuccess }) {
   const [resetting, setResetting] = useState(false);
 
   const handleForgotPassword = async () => {
+    if (resetting) return;
     const email = (formData.email || '').trim();
     if (!email) {
       setError('Enter your email above first, then tap "Forgot password?"');
@@ -73,6 +74,7 @@ export default function AuthForm({ onAuthSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setLoading(true);
 

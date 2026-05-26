@@ -14,7 +14,7 @@ import SignalReport from '../components/SignalReport';
 import BehavioralRecordDensity from '../components/BehavioralRecordDensity';
 import MorningBrief from '../components/MorningBrief';
 import KillListDashboard from '../components/KillListDashboard';
-import QuickJournalModal from '../components/QuickJournalModal';
+import TodaysReflectionModal from '../components/TodaysReflectionModal';
 import DailyPrompt from '../components/DailyPrompt';
 import MirrorStack from '../components/MirrorStack';
 import WeeklyRuleReview from '../components/WeeklyRuleReview';
@@ -31,12 +31,12 @@ const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true'
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [quickJournalOpen, setQuickJournalOpen] = useState(false);
-  // Tracks whether the QuickJournalModal was opened by DailyPrompt's
+  const [todaysReflectionOpen, setTodaysReflectionOpen] = useState(false);
+  // Tracks whether the TodaysReflectionModal was opened by DailyPrompt's
   // "Journal This" button. A successful save in that case marks today's
   // reflection as answered (DailyPrompt hides itself for the rest of the day).
-  const [quickJournalFromPrompt, setQuickJournalFromPrompt] = useState(false);
-  const [quickJournalInitialEntry, setQuickJournalInitialEntry] = useState('');
+  const [todaysReflectionFromPrompt, setTodaysReflectionFromPrompt] = useState(false);
+  const [todaysReflectionInitialEntry, setTodaysReflectionInitialEntry] = useState('');
   const [dailyPromptAnsweredSignal, setDailyPromptAnsweredSignal] = useState(0);
   const [stats, setStats] = useState({
     journalEntries: 0,
@@ -428,9 +428,9 @@ export default function Dashboard() {
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <DailyPrompt
             onJournalClick={(promptText) => {
-              setQuickJournalInitialEntry(promptText || '');
-              setQuickJournalFromPrompt(true);
-              setQuickJournalOpen(true);
+              setTodaysReflectionInitialEntry(promptText || '');
+              setTodaysReflectionFromPrompt(true);
+              setTodaysReflectionOpen(true);
             }}
             answeredSignal={dailyPromptAnsweredSignal}
           />
@@ -700,10 +700,10 @@ export default function Dashboard() {
                   <p className="text-[#858585] text-sm mt-1">Start using the modules to track progress</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
                     <button
-                      onClick={() => setQuickJournalOpen(true)}
+                      onClick={() => setTodaysReflectionOpen(true)}
                       className="px-5 py-2.5 bg-[#00d4aa] hover:bg-[#00e6b8] text-black rounded-xl transition-all duration-300 font-medium text-sm"
                     >
-                      Quick Journal
+                      Today's Reflection
                     </button>
                     <Link
                       to="/ledger"
@@ -720,19 +720,19 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quick Journal Modal */}
-        <QuickJournalModal
-          isOpen={quickJournalOpen}
-          initialEntry={quickJournalInitialEntry}
+        {/* Today's Reflection Modal */}
+        <TodaysReflectionModal
+          isOpen={todaysReflectionOpen}
+          initialEntry={todaysReflectionInitialEntry}
           onClose={() => {
-            setQuickJournalOpen(false);
-            setQuickJournalFromPrompt(false);
-            setQuickJournalInitialEntry('');
+            setTodaysReflectionOpen(false);
+            setTodaysReflectionFromPrompt(false);
+            setTodaysReflectionInitialEntry('');
           }}
           onSuccess={() => {
             // Refresh data after successful entry
             loadDashboardData();
-            if (quickJournalFromPrompt) {
+            if (todaysReflectionFromPrompt) {
               setDailyPromptAnsweredSignal((n) => n + 1);
             }
           }}

@@ -15,13 +15,13 @@ import {
   stashHardLessonExtraction,
 } from '../utils/crossModuleExtraction';
 
-// Quick capture mirrors the Journal page entry form: mood, intensity, freeform
+// Today's Reflection mirrors the Journal page entry form: mood, intensity, freeform
 // textarea. Trimmed layout for modal context — no category tabs, no rotating
 // prompts — but the underlying shape (content + mood + intensity) and the
 // Oracle feedback pass match Journal.jsx exactly so entries stay consistent
 // across surfaces.
 
-const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClose, onSuccess, initialEntry = '' }) {
+const TodaysReflectionModal = React.memo(function TodaysReflectionModal({ isOpen, onClose, onSuccess, initialEntry = '' }) {
   const navigate = useNavigate();
   const [entry, setEntry] = useState('');
   const [mood, setMood] = useState('focused');
@@ -100,7 +100,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
         eventOccurredAt: new Date().toISOString(),
         entryProximityFlag: 'contemporaneous',
         oracleJudgment: feedbackText,
-        isQuickEntry: true,
+        isTodaysReflection: true,
         ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
         ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
       });
@@ -110,7 +110,7 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
       ouraToast.success('Journal entry saved');
 
       // Non-blocking cross-module classification + conditional extraction.
-      // Mirrors the Journal page on-save flow so Quick Entry surfaces the
+      // Mirrors the Journal page on-save flow so Today's Reflection surfaces the
       // same Hard Lesson / Ledger / Signal cards when warranted.
       const entrySnapshot = entry;
       classifyAndExtract(entrySnapshot)
@@ -123,9 +123,9 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
             });
           }
         })
-        .catch((err) => logger.error('[QuickJournal] cross-module extraction failed:', err?.message));
+        .catch((err) => logger.error('[TodaysReflection] cross-module extraction failed:', err?.message));
     } catch (error) {
-      logger.error('Error saving quick entry:', error);
+      logger.error("Error saving today's reflection:", error);
       setOracleResponse('Oracle unavailable. Entry saved.');
     } finally {
       setSaving(false);
@@ -175,11 +175,11 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
   const selectedMoodOption = moodOptions.find(m => m.value === mood);
 
   return (
-    <InlineErrorBoundary name="QuickJournalModal">
-      <div role="dialog" aria-modal="true" aria-label="Quick journal entry" className="fixed inset-0 z-50 flex items-center justify-center px-4">
+    <InlineErrorBoundary name="TodaysReflectionModal">
+      <div role="dialog" aria-modal="true" aria-label="Today's reflection" className="fixed inset-0 z-50 flex items-center justify-center px-4">
         <button
           type="button"
-          aria-label="Close quick entry"
+          aria-label="Close today's reflection"
           onClick={onClose}
           className="absolute inset-0 bg-black/80 backdrop-blur-sm cursor-default"
         />
@@ -196,13 +196,13 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
                 </svg>
               </div>
               <div>
-                <h2 className="text-white font-light">Quick Entry</h2>
+                <h2 className="text-white font-light">Today's Reflection</h2>
                 <p className="text-[#858585] text-xs">Write freely. The Oracle reads for signal.</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              aria-label="Close quick entry"
+              aria-label="Close today's reflection"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-all"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -273,11 +273,11 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
 
               {/* Entry */}
               <div className="p-4 border-b border-[#1a1a1a]">
-                <label htmlFor="quick-entry-input" className="block text-[#ababab] text-xs uppercase tracking-wider mb-3">
+                <label htmlFor="todays-reflection-input" className="block text-[#ababab] text-xs uppercase tracking-wider mb-3">
                   What's on your mind?
                 </label>
                 <textarea
-                  id="quick-entry-input"
+                  id="todays-reflection-input"
                   ref={textareaRef}
                   value={entry}
                   onChange={(e) => setEntry(e.target.value)}
@@ -338,8 +338,16 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
               </div>
 
               {oracleLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="w-8 h-8 border-2 border-[#a855f7]/30 border-t-[#a855f7] rounded-full animate-spin" />
+                <div className="mb-6 border border-[#1a1a1a] animate-border-breathe rounded-2xl p-4 animate-fade-in-up">
+                  <div className="flex items-center gap-3">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a855f7] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#a855f7]"></span>
+                    </span>
+                    <p className="text-white text-sm font-medium">
+                      Reading the signal…
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div className="bg-[#050505] border border-[#1a1a1a] border-l-2 border-l-[#a855f7] rounded-xl p-4 mb-6">
@@ -373,4 +381,4 @@ const QuickJournalModal = React.memo(function QuickJournalModal({ isOpen, onClos
   );
 });
 
-export default QuickJournalModal;
+export default TodaysReflectionModal;

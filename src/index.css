@@ -248,8 +248,19 @@ html {
   animation: skel-breathe 8s ease-in-out infinite;
 }
 
+/* READING-state container breath — border opacity fades while text stays sharp */
+@keyframes borderBreathe {
+  0%, 100% { border-color: #1a1a1a; }
+  50%      { border-color: #2a2a2a; }
+}
+
+.animate-border-breathe {
+  animation: borderBreathe 8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skel-animate { animation: none; }
+  .animate-border-breathe { animation: none; }
 }
 
 /* Fade helpers for skeleton/content cross-fade */

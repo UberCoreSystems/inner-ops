@@ -937,7 +937,7 @@ export const composeJournalContent = ({ event = '', attribution = '', expansion 
  *
  * The structured form is used by the retired-mood Journal entry flow
  * (Spec 3, UXR-002). Other modules (Kill List, Hard Lessons, Relapse Radar,
- * Emergency, Black Mirror, QuickJournalModal, OracleModal) continue to pass
+ * Emergency, Black Mirror, TodaysReflectionModal, OracleModal) continue to pass
  * the legacy string form.
  */
 export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntries = [], behavioralContext = null) => {

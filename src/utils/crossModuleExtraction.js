@@ -241,7 +241,7 @@ export async function extractHardLessonDirect(text, { tone = 'stoic' } = {}) {
   }
 }
 
-// Confirm-handler helpers — shared by Journal page and Quick Entry modal.
+// Confirm-handler helpers — shared by Journal page and Today's Reflection modal.
 // Each stashes a prefill payload under the destination module's expected
 // sessionStorage key. The caller is responsible for navigation.
 

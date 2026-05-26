@@ -100,7 +100,7 @@ const MoodIcons = {
 };
 
 // Mood/intensity taxonomy lives in [src/constants/moods.js] so the
-// Journal page and the Quick Entry modal stay in sync.
+// Journal page and the Today's Reflection modal stay in sync.
 
 // Intensity ring visualization component
 const IntensityRing = ({ level, selected, onClick }) => {
@@ -1145,7 +1145,7 @@ export default function Journal() {
             colored cards below take over once at least one extraction
             populates. Never silent. */}
         {classifierStatus === 'pending' && (
-          <div className="mb-8 border border-[#1a1a1a] rounded-2xl p-4 animate-fade-in-up">
+          <div className="mb-8 border border-[#1a1a1a] animate-border-breathe rounded-2xl p-4 animate-fade-in-up">
             <div className="flex items-center gap-3 mb-1.5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a855f7] opacity-75"></span>

@@ -1,4 +1,4 @@
-// Mood taxonomy — shared between the Journal page and the Quick Entry modal.
+// Mood taxonomy — shared between the Journal page and the Today's Reflection modal.
 // Three valence categories × four moods each. Colors are mood-semantic
 // (Energized blue, Grounded grey, Challenged amber) and intentionally
 // distinct from the per-module accent palette so a journal entry's mood

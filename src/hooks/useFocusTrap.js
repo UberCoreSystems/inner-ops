@@ -11,7 +11,7 @@ const FOCUSABLE_SELECTOR = [
 
 // Trap keyboard focus inside a container while it is mounted, restore focus
 // to the previously-focused element on unmount. Used by every modal in the
-// app (OracleModal, QuickJournalModal, KillClosureModal, EmergencyButton).
+// app (OracleModal, TodaysReflectionModal, KillClosureModal, EmergencyButton).
 //
 // Usage:
 //   const ref = useFocusTrap(isOpen);

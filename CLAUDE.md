@@ -108,6 +108,7 @@ UI · UX · AI quality · feature completeness — **equal weight.**
 - [ ] Deploy Cloud Functions (oracle, oracleFollowUp)
 - [ ] Set `ANTHROPIC_API_KEY` secret in Firebase Functions config
 - [ ] Smoke test: auth flow, journal CRUD, Kill List operations, Hard Lessons extraction, Relapse Radar entry, Synthesis briefing generation
+- [ ] Email deliverability: default `noreply@inner-ops-8ce36.firebaseapp.com` sender lands in Gmail spam for new projects (confirmed 2026-05-25 — verification + reset emails were in spam, not missing). Before public launch, configure custom SMTP (SendGrid/Postmark/Resend) with SPF/DKIM on a real domain. Closed beta on default sender is acceptable but warn testers to check spam.
 
 ## How Bo Works
 
