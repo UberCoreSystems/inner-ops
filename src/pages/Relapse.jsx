@@ -42,14 +42,14 @@ export default function Relapse() {
       <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8">
         <div className="mb-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#4da6ff]/10 border border-[#4da6ff]/20 flex items-center justify-center shrink-0">
-              <AppIcon name="relapse" size={22} color="#4da6ff" glow={false} />
+            <div className="w-10 h-10 rounded-2xl bg-[#00d4aa]/10 border border-[#00d4aa]/20 flex items-center justify-center shrink-0">
+              <AppIcon name="relapse" size={22} color="#00d4aa" glow={false} />
             </div>
             <h1 className="text-4xl md:text-5xl font-light text-white tracking-tight">
               The Signal
             </h1>
           </div>
-          <div className="border-l-4 border-[#4da6ff] pl-4 py-1">
+          <div className="border-l-4 border-[#00d4aa] pl-4 py-1">
             <p className="text-[#ababab]">Catch the drift before it compounds.</p>
           </div>
         </div>

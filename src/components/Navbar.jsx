@@ -117,8 +117,8 @@ export default function Navbar({ onLogout, user }) {
                   height="24"
                   viewBox="0 0 24 24"
                   fill="none"
-                  className="text-oura-cyan transition-all duration-300 group-hover:scale-105"
-                  style={{ filter: 'drop-shadow(0 0 6px rgba(0, 212, 170, 0.45))' }}
+                  className="text-oura-blue transition-all duration-300 group-hover:scale-105"
+                  style={{ filter: 'drop-shadow(0 0 6px rgba(77, 166, 255, 0.45))' }}
                 >
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
                   <circle cx="12" cy="12" r="6" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
@@ -126,8 +126,8 @@ export default function Navbar({ onLogout, user }) {
                 </svg>
                 <span className="text-xl font-light tracking-tight">
                   <span
-                    className="text-oura-cyan"
-                    style={{ textShadow: '0 0 12px rgba(0, 212, 170, 0.35)' }}
+                    className="text-oura-blue"
+                    style={{ textShadow: '0 0 12px rgba(77, 166, 255, 0.35)' }}
                   >
                     Inner
                   </span>

@@ -8,7 +8,7 @@ import React from 'react';
  * surface is recognizable at a glance:
  *
  *   • General Ledger / Kill List → red   #ef4444
- *   • The Signal / Relapse Radar → blue  #4da6ff
+ *   • The Signal / Relapse Radar → cyan  #00d4aa
  *   • Hard Lessons               → amber #b45309
  *
  * Props:
@@ -79,17 +79,17 @@ export default function CrossModuleExtractionPrompts({
       )}
 
       {relapseRadar && (
-        <div className="border border-[#4da6ff]/30 bg-[#4da6ff]/5 rounded-2xl p-4">
+        <div className="border border-[#00d4aa]/30 bg-[#00d4aa]/5 rounded-2xl p-4">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-[#4da6ff] text-xs uppercase tracking-widest">The Signal</p>
+                <p className="text-[#00d4aa] text-xs uppercase tracking-widest">The Signal</p>
                 {relapseRadar.urgency && (
                   <span className={`text-xs px-1.5 py-0.5 rounded-md border ${
                     relapseRadar.urgency === 'high'
                       ? 'text-[#ef4444] border-[#ef4444]/30 bg-[#ef4444]/10'
                       : relapseRadar.urgency === 'medium'
-                        ? 'text-[#4da6ff] border-[#4da6ff]/30 bg-[#4da6ff]/10'
+                        ? 'text-[#00d4aa] border-[#00d4aa]/30 bg-[#00d4aa]/10'
                         : 'text-[#858585] border-[#5a5a5a]/30 bg-[#5a5a5a]/10'
                   }`}>
                     {relapseRadar.urgency}
@@ -114,14 +114,14 @@ export default function CrossModuleExtractionPrompts({
           {Array.isArray(relapseRadar.precursorConditions) && relapseRadar.precursorConditions.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-3">
               {relapseRadar.precursorConditions.map((c) => (
-                <span key={c} className="text-xs px-2 py-0.5 bg-[#4da6ff]/10 border border-[#4da6ff]/20 text-[#4da6ff] rounded-md">
+                <span key={c} className="text-xs px-2 py-0.5 bg-[#00d4aa]/10 border border-[#00d4aa]/20 text-[#00d4aa] rounded-md">
                   {c.replace(/_/g, ' ')}
                 </span>
               ))}
             </div>
           )}
           {relapseRadar.evidenceFromEntry && (
-            <p className="text-[#858585] text-xs italic mb-3 border-l-2 border-[#4da6ff]/20 pl-2">
+            <p className="text-[#858585] text-xs italic mb-3 border-l-2 border-[#00d4aa]/20 pl-2">
               "{relapseRadar.evidenceFromEntry}"
             </p>
           )}
@@ -133,7 +133,7 @@ export default function CrossModuleExtractionPrompts({
           <div className="flex gap-2">
             <button
               onClick={() => onConfirmRelapseRadar(relapseRadar)}
-              className="px-4 py-1.5 bg-[#4da6ff]/20 hover:bg-[#4da6ff]/30 text-[#4da6ff] text-xs font-medium rounded-lg transition-colors"
+              className="px-4 py-1.5 bg-[#00d4aa]/20 hover:bg-[#00d4aa]/30 text-[#00d4aa] text-xs font-medium rounded-lg transition-colors"
             >
               Assign Signal
             </button>

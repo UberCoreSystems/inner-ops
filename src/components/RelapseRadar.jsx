@@ -698,7 +698,7 @@ const RelapseRadar = () => {
                     <div className="text-gray-400 text-xs w-36 shrink-0 truncate">{label}</div>
                     <div className="flex-1 bg-oura-border rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="h-1.5 rounded-full bg-oura-blue transition-all duration-500"
+                        className="h-1.5 rounded-full bg-oura-cyan transition-all duration-500"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -738,7 +738,7 @@ const RelapseRadar = () => {
               onClick={() => setEntryType(RELAPSE_ENTRY_TYPES.SIGNAL)}
               className={`p-3 rounded-xl text-left transition-all duration-200 border ${
                 entryType === RELAPSE_ENTRY_TYPES.SIGNAL
-                  ? 'bg-oura-blue/15 border-oura-blue text-white'
+                  ? 'bg-oura-cyan/15 border-oura-cyan text-white'
                   : 'bg-oura-card border-oura-border text-gray-400 hover:bg-oura-darker'
               }`}
             >
@@ -762,7 +762,7 @@ const RelapseRadar = () => {
 
         <div className="w-full bg-oura-border rounded-full h-2">
           <div
-            className="bg-oura-blue h-2 rounded-full transition-all duration-300"
+            className="bg-oura-cyan h-2 rounded-full transition-all duration-300"
             style={{ width: `${(step / 5) * 100}%` }}
           ></div>
         </div>
@@ -779,7 +779,7 @@ const RelapseRadar = () => {
                 onClick={() => handlePrecursorToggle(condition)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedPrecursors.includes(condition)
-                    ? 'bg-oura-blue text-black font-medium shadow-oura-glow-blue'
+                    ? 'bg-oura-cyan text-black font-medium shadow-oura-glow-cyan'
                     : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
@@ -842,7 +842,7 @@ const RelapseRadar = () => {
                 <button
                   type="button"
                   onClick={connectOura}
-                  className="text-xs text-gray-500 hover:text-oura-blue transition-colors"
+                  className="text-xs text-gray-500 hover:text-oura-cyan transition-colors"
                 >
                   Connect Oura Ring
                 </button>
@@ -858,7 +858,7 @@ const RelapseRadar = () => {
               value={precursorContext}
               onChange={(e) => setPrecursorContext(e.target.value)}
               placeholder="Brief context — what was happening..."
-              className="w-full p-3 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-blue focus:outline-none text-sm transition-colors"
+              className="w-full p-3 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-cyan focus:outline-none text-sm transition-colors"
             />
           </div>
         </div>
@@ -884,7 +884,7 @@ const RelapseRadar = () => {
                 onClick={() => setSelectedSelf(id)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedSelf === id
-                    ? 'bg-oura-blue text-black font-medium shadow-oura-glow-blue'
+                    ? 'bg-oura-cyan text-black font-medium shadow-oura-glow-cyan'
                     : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
@@ -906,7 +906,7 @@ const RelapseRadar = () => {
                 onClick={() => handleHabitToggle(id)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedHabits.includes(id)
-                    ? 'bg-oura-blue text-black font-medium shadow-oura-glow-blue'
+                    ? 'bg-oura-cyan text-black font-medium shadow-oura-glow-cyan'
                     : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
@@ -928,7 +928,7 @@ const RelapseRadar = () => {
                 onClick={() => handleSubstanceToggle(substance)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   substanceUse.includes(substance)
-                    ? 'bg-oura-blue text-black font-medium shadow-oura-glow-blue'
+                    ? 'bg-oura-cyan text-black font-medium shadow-oura-glow-cyan'
                     : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
                 }`}
               >
@@ -949,7 +949,7 @@ const RelapseRadar = () => {
               placeholder={entryType === RELAPSE_ENTRY_TYPES.RELAPSE
                 ? 'What led to this? What can you learn? How will you recover?'
                 : 'What did you notice? What conditions are stacking up?'}
-              className="w-full h-32 p-4 pr-14 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-blue focus:outline-none resize-none transition-all duration-200"
+              className="w-full h-32 p-4 pr-14 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-cyan focus:outline-none resize-none transition-all duration-200"
             />
             <div className="absolute right-2 top-2">
               <VoiceInputButton
@@ -967,7 +967,7 @@ const RelapseRadar = () => {
               value={eventOccurredAt}
               max={new Date().toISOString().slice(0, 16)}
               onChange={(e) => setEventOccurredAt(e.target.value)}
-              className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-blue focus:outline-none transition-colors text-sm"
+              className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-cyan focus:outline-none transition-colors text-sm"
             />
           </div>
         </div>
@@ -1078,7 +1078,7 @@ const RelapseRadar = () => {
         <button
           onClick={nextStep}
           disabled={loading || submitSuccess || postSaveAction !== null || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf)}
-          className="px-6 py-3 bg-oura-blue text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-blue-400 transition-all duration-200"
+          className="px-6 py-3 bg-oura-cyan text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-[#00e6b8] transition-all duration-200"
         >
           {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 5 ? 'Submit' : 'Next')}
         </button>
@@ -1122,7 +1122,7 @@ const RelapseRadar = () => {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search entries..."
-                className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-blue focus:outline-none transition-colors"
+                className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-cyan focus:outline-none transition-colors"
               />
               {searchInput && (
                 <button
@@ -1146,7 +1146,7 @@ const RelapseRadar = () => {
                 <div key={entry.id} className="oura-card p-5 opacity-75 hover:opacity-100 transition-opacity">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="text-oura-blue font-light">{resolveArchetypeLabel(entry.selectedSelf)}</div>
+                      <div className="text-oura-cyan font-light">{resolveArchetypeLabel(entry.selectedSelf)}</div>
                       <div className="text-gray-500 text-xs mt-1">
                         Archived {entry.archivedAt ? new Date(entry.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                       </div>
@@ -1170,7 +1170,7 @@ const RelapseRadar = () => {
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         onClick={() => restoreRelapseEntry(entry)}
-                        className="px-3 py-1.5 text-xs rounded-lg border border-oura-blue/30 text-oura-blue hover:bg-oura-blue/10 transition-colors"
+                        className="px-3 py-1.5 text-xs rounded-lg border border-oura-cyan/30 text-oura-cyan hover:bg-oura-cyan/10 transition-colors"
                       >
                         Restore
                       </button>
@@ -1193,7 +1193,7 @@ const RelapseRadar = () => {
                 <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-sm transition-shadow duration-300">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="text-oura-blue font-light text-lg">{resolveArchetypeLabel(entry.selectedSelf)}</div>
+                      <div className="text-oura-cyan font-light text-lg">{resolveArchetypeLabel(entry.selectedSelf)}</div>
                       <div className="text-gray-500 text-sm mt-2">
                         {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </div>

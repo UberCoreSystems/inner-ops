@@ -8,6 +8,7 @@ import { readUserData, writeData } from '../utils/firebaseUtils';
 // the page's static import graph, so Vite/Terser can omit them entirely.
 import { authService } from '../utils/authService';
 import { composeSignalReport, getBehavioralRecordDensity } from '../utils/clarityScore';
+import { getBehavioralContext } from '../utils/getBehavioralContext';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
 import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
 import SignalReport from '../components/SignalReport';
@@ -54,6 +55,10 @@ export default function Dashboard() {
 
   // Behavioral Record Density — factual inventory of work produced.
   const [density, setDensity] = useState(null);
+
+  // Behavioral context — feeds MirrorStack with identityDirection +
+  // journalLanguagePattern. Same upstream as Oracle's context injection.
+  const [behavioralContext, setBehavioralContext] = useState(null);
 
   // Store raw data for deferred signal report composition
   const [rawUserData, setRawUserData] = useState(null);
@@ -179,7 +184,7 @@ export default function Dashboard() {
       // Load ALL data at once - await everything before setting state.
       // blackMirrorEntries is gated behind the feature flag so v1 deploys
       // (BM disabled) skip the round-trip entirely.
-      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons] = await Promise.all([
+      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons, userSettings] = await Promise.all([
         readUserData('journalEntries').then(data => {
           logger.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
@@ -201,7 +206,8 @@ export default function Dashboard() {
         readUserData('hardLessons').then(data => {
           logger.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
           return data || [];
-        })
+        }),
+        readUserData('userSettings').then(data => data || []).catch(() => []),
       ]);
 
       logger.log("📊 Dashboard: All data loaded:", {
@@ -253,7 +259,7 @@ export default function Dashboard() {
       setRecentEntries(allEntries);
       
       // Store raw data for deferred clarity score calculation
-      setRawUserData({ journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons });
+      setRawUserData({ journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons, userSettings });
 
       logger.log("✅ Dashboard: Critical data loaded and UI updated", {
         stats: { 
@@ -285,12 +291,14 @@ export default function Dashboard() {
       const timer = setTimeout(async () => {
         try {
           const inMemoryReader = async (name) => rawUserData[name] || [];
-          const [report, densityResult] = await Promise.all([
+          const [report, densityResult, ctx] = await Promise.all([
             composeSignalReport(user?.uid, { readUserData: inMemoryReader }),
             getBehavioralRecordDensity(user?.uid, { readUserData: inMemoryReader }),
+            getBehavioralContext(user?.uid, { readUserData: inMemoryReader, useCache: false }),
           ]);
           setSignalReport(report);
           setDensity(densityResult);
+          setBehavioralContext(ctx);
 
           // Compute early warning signal (unchanged — distinct from Signal Report)
           const NEGATIVE_MOODS = new Set(['heavy','hollow','foggy','chaotic']);
@@ -401,12 +409,15 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Mirror Stack — declared vs. observed vs. direction */}
+        {/* Mirror Stack — layered reflective surface (direction, observed,
+            precursor, synthesis, question). Content selection lives in
+            composeMirrorReading.js. */}
         <MirrorStack
           killTargets={rawUserData?.killTargets || []}
           hardLessons={rawUserData?.hardLessons || []}
           relapseEntries={rawUserData?.relapseEntries || []}
           signalReport={signalReport}
+          behavioralContext={behavioralContext}
         />
 
         {/* Weekly Rule Review — Sunday-anchored sweep over finalized rules.
@@ -610,7 +621,7 @@ export default function Dashboard() {
             <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" />
             <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" />
             <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" />
-            <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#4da6ff" icon={<AppIcon name="relapse" size={20} color="#4da6ff" />} size="small" />
+            <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" />
           </div>
         </section>
 
@@ -642,9 +653,9 @@ export default function Dashboard() {
               <p className="text-[#858585] text-sm">Turn pain to wisdom</p>
             </Link>
 
-            <Link to="/relapse" className="oura-card p-5 group hover:border-[#4da6ff]/50 transition-all">
-              <div className="w-12 h-12 rounded-2xl bg-[#4da6ff]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <AppIcon name="relapse" size={28} color="#4da6ff" />
+            <Link to="/relapse" className="oura-card p-5 group hover:border-[#00d4aa]/50 transition-all">
+              <div className="w-12 h-12 rounded-2xl bg-[#00d4aa]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <AppIcon name="relapse" size={28} color="#00d4aa" />
               </div>
               <h4 className="text-white font-medium mb-1">The Signal</h4>
               <p className="text-[#858585] text-sm">Catch the drift</p>
