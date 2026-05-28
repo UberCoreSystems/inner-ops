@@ -5,6 +5,7 @@ import { writeData, updateData, deleteData, subscribeToUserData } from '../utils
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { coerceClosureResponseText } from '../utils/composeClosureFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
@@ -1389,7 +1390,7 @@ const KillList = () => {
                     {target.closureOracleResponse && (
                       <div className="mt-2 pt-2 border-t border-[#a855f7]/20">
                         <div className="text-[#a855f7] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
-                        <p className="text-[#ababab] text-xs italic leading-relaxed">{target.closureOracleResponse}</p>
+                        <p className="text-[#ababab] text-xs italic leading-relaxed">{coerceClosureResponseText(target.closureOracleResponse)}</p>
                       </div>
                     )}
                   </div>

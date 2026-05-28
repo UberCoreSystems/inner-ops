@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppIcon } from './AppIcons';
+import { coerceClosureResponseText } from '../utils/composeClosureFeedback';
 
 const MODE_CONFIG = {
   kill: {
@@ -268,7 +269,7 @@ export default function KillClosureModal({
                   Reading the closure…
                 </div>
               ) : (
-                <p className="text-[#d1d1d1] text-sm leading-relaxed italic">{oracleResponse}</p>
+                <p className="text-[#d1d1d1] text-sm leading-relaxed italic">{coerceClosureResponseText(oracleResponse)}</p>
               )}
             </div>
 

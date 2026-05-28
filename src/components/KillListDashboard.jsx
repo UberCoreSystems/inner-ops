@@ -14,6 +14,7 @@ import { SkeletonList, SkeletonKillTarget } from './SkeletonLoader';
 import logger from '../utils/logger';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { generateAIFeedback } from '../utils/aiFeedback';
+import { composeClosureFeedback } from '../utils/composeClosureFeedback';
 import ouraToast from '../utils/toast';
 import { KillTargetSummary } from './KillTargetCard';
 
@@ -147,20 +148,13 @@ const KillListDashboard = React.memo(function KillListDashboard() {
         : `A kill contract just broke on me: "${target.title}". What caught me: ${note}`;
       const pastTitles = todaysTargets.slice(0, 3).map(t => t.title);
 
-      let oracleResponse = '';
-      let oracleClosingQuestion = null;
+      let feedback = null;
       try {
-        const feedback = await generateAIFeedback('killList', entryText, pastTitles);
-        oracleResponse = feedback || (mode === 'kill'
-          ? 'Contract closed. Logged to archive.'
-          : 'Breach logged. Regroup.');
-        oracleClosingQuestion = feedback?.closingQuestion || null;
+        feedback = await generateAIFeedback('killList', entryText, pastTitles);
       } catch (err) {
         logger.error('Oracle closure response error:', err);
-        oracleResponse = mode === 'kill'
-          ? 'Contract closed. Logged to archive.'
-          : 'Breach logged. Regroup.';
       }
+      const { oracleResponse, oracleClosingQuestion } = composeClosureFeedback(feedback, mode);
 
       // Persist the Oracle line. Kill records live in confirmedKills;
       // escape records remain in killTargets.

@@ -207,7 +207,7 @@ export default function Navbar({ onLogout, user }) {
                 key={item.path}
                 to={item.path}
                 className={`flex flex-col items-center justify-center gap-0.5 transition-all duration-200 ${
-                  isActive ? 'text-oura-cyan' : 'text-gray-500 active:text-white'
+                  isActive ? 'text-oura-cyan' : 'text-gray-400 active:text-white'
                 }`}
               >
                 <span className={`transition-transform duration-200 ${isActive ? 'scale-110' : ''}`}>

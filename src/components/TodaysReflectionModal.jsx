@@ -6,7 +6,9 @@ import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { InlineErrorBoundary } from './ErrorBoundary';
 import CrossModuleExtractionPrompts from './CrossModuleExtractionPrompts';
-import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
+import { moodOptions } from '../constants/moods';
+import MoodPicker from './MoodPicker';
+import IntensityPicker from './IntensityPicker';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import {
   classifyAndExtract,
@@ -216,59 +218,12 @@ const TodaysReflectionModal = React.memo(function TodaysReflectionModal({ isOpen
               {/* Mood */}
               <div className="p-4 border-b border-[#1a1a1a]">
                 <label className="block text-[#ababab] text-xs uppercase tracking-wider mb-3">Mood</label>
-                <div className="space-y-2">
-                  {moodCategories.map(cat => (
-                    <div key={cat.name} className="flex items-center gap-2">
-                      <span className="text-[10px] text-[#858585] uppercase tracking-widest w-20 shrink-0" style={{ color: `${cat.color}99` }}>{cat.name}</span>
-                      <div className="flex flex-wrap gap-1.5 flex-1">
-                        {cat.moods.map(m => {
-                          const active = mood === m.value;
-                          return (
-                            <button
-                              key={m.value}
-                              type="button"
-                              onClick={() => setMood(m.value)}
-                              className={`px-3 py-1.5 rounded-lg text-xs transition-all border ${
-                                active
-                                  ? 'text-white border-transparent'
-                                  : 'text-[#858585] border-[#1a1a1a] hover:text-white hover:border-[#2a2a2a]'
-                              }`}
-                              style={active ? { backgroundColor: `${cat.color}1a`, borderColor: `${cat.color}66`, color: cat.color } : {}}
-                            >
-                              {m.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <MoodPicker value={mood} onChange={setMood} />
               </div>
 
               {/* Intensity */}
               <div className="p-4 border-b border-[#1a1a1a]">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="block text-[#ababab] text-xs uppercase tracking-wider">Intensity</label>
-                  <span className="text-[#858585] text-xs">{intensityLevels.find(l => l.value === intensity)?.label}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {intensityLevels.map(l => {
-                    const active = intensity >= l.value;
-                    return (
-                      <button
-                        key={l.value}
-                        type="button"
-                        onClick={() => setIntensity(l.value)}
-                        className="flex-1 h-2 rounded-full transition-all"
-                        style={{
-                          background: active ? '#a855f7' : '#1a1a1a',
-                          boxShadow: active && intensity === l.value ? '0 0 8px rgba(168, 85, 247, 0.35)' : 'none',
-                        }}
-                        aria-label={`Intensity ${l.value}: ${l.label}`}
-                      />
-                    );
-                  })}
-                </div>
+                <IntensityPicker value={intensity} onChange={setIntensity} />
               </div>
 
               {/* Entry */}

@@ -9,6 +9,7 @@ import { readUserData, writeData } from '../utils/firebaseUtils';
 import { authService } from '../utils/authService';
 import { composeSignalReport, getBehavioralRecordDensity } from '../utils/clarityScore';
 import { getBehavioralContext } from '../utils/getBehavioralContext';
+import { computeDepthTrend } from '../utils/computeDepthTrend';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
 import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
 import SignalReport from '../components/SignalReport';
@@ -59,6 +60,9 @@ export default function Dashboard() {
   // Behavioral context — feeds MirrorStack with identityDirection +
   // journalLanguagePattern. Same upstream as Oracle's context injection.
   const [behavioralContext, setBehavioralContext] = useState(null);
+
+  // 30-day metacognitive-depth trend for MirrorStack.
+  const [depthTrend, setDepthTrend] = useState(null);
 
   // Store raw data for deferred signal report composition
   const [rawUserData, setRawUserData] = useState(null);
@@ -299,6 +303,7 @@ export default function Dashboard() {
           setSignalReport(report);
           setDensity(densityResult);
           setBehavioralContext(ctx);
+          setDepthTrend(computeDepthTrend(rawUserData.journalEntries || []));
 
           // Compute early warning signal (unchanged — distinct from Signal Report)
           const NEGATIVE_MOODS = new Set(['heavy','hollow','foggy','chaotic']);
@@ -418,6 +423,7 @@ export default function Dashboard() {
           relapseEntries={rawUserData?.relapseEntries || []}
           signalReport={signalReport}
           behavioralContext={behavioralContext}
+          depthTrend={depthTrend}
         />
 
         {/* Weekly Rule Review — Sunday-anchored sweep over finalized rules.

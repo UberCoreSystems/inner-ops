@@ -9,6 +9,7 @@ import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
 import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
+import { composeJournalSignal } from '../utils/composeJournalSignal';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
@@ -102,50 +103,96 @@ const MoodIcons = {
 // Mood/intensity taxonomy lives in [src/constants/moods.js] so the
 // Journal page and the Today's Reflection modal stay in sync.
 
-// Intensity ring visualization component
+// Intensity ring visualization component — concentric rings whose count
+// encodes the level; outer container scaled 20% smaller than the original
+// design (w-14 → w-11, inner-ring sizing 28+i*10 → 22+i*8) for the Journal
+// page's tightened form footprint.
 const IntensityRing = ({ level, selected, onClick }) => {
   const rings = intensityLevels.find(l => l.value === level)?.rings || 1;
   const isActive = selected >= level;
-  
-  // Color gradient from cool to warm
-  const getColor = (lvl) => {
-    // Single-accent intensity scale — ring count already conveys level.
-    const colors = ['#a855f7', '#a855f7', '#a855f7', '#a855f7', '#a855f7'];
-    return colors[lvl - 1];
-  };
-  
+
+  const getColor = () => '#a855f7';
+
   return (
     <button
       type="button"
       onClick={onClick}
       className="group relative flex flex-col items-center transition-all duration-300"
     >
-      <div className="relative w-14 h-14 flex items-center justify-center">
+      <div className="relative w-11 h-11 flex items-center justify-center">
         {[...Array(rings)].map((_, i) => (
           <div
             key={i}
             className={`absolute rounded-full border-2 transition-all duration-500 ${
-              isActive 
-                ? 'opacity-100' 
+              isActive
+                ? 'opacity-100'
                 : 'opacity-20 group-hover:opacity-40'
             }`}
             style={{
-              width: `${28 + i * 10}px`,
-              height: `${28 + i * 10}px`,
-              borderColor: isActive ? getColor(level) : '#3a3a3a',
+              width: `${22 + i * 8}px`,
+              height: `${22 + i * 8}px`,
+              borderColor: isActive ? getColor() : '#3a3a3a',
               animationDelay: `${i * 0.1}s`,
-              boxShadow: isActive && selected === level ? `0 0 ${10 + i * 5}px ${getColor(level)}40` : 'none',
+              boxShadow: isActive && selected === level ? `0 0 ${8 + i * 4}px ${getColor()}40` : 'none',
             }}
           />
         ))}
-        <div 
-          className={`w-3 h-3 rounded-full transition-all duration-300 ${
+        <div
+          className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
             isActive ? 'scale-100' : 'scale-50 opacity-30'
           }`}
-          style={{ backgroundColor: isActive ? getColor(level) : '#3a3a3a' }}
+          style={{ backgroundColor: isActive ? getColor() : '#3a3a3a' }}
         />
       </div>
     </button>
+  );
+};
+
+// 30-day mood strip — single-row flex of 30 cells that auto-scale to the
+// container width. Replaces the former grid; the takeaway lives outside.
+const MoodStrip = ({ entries }) => {
+  const today = new Date();
+  const toLocalKey = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const todayKey = toLocalKey(today);
+  const entryMap = {};
+  entries.forEach((e) => {
+    const raw = e.createdAt || e.timestamp;
+    if (!raw) return;
+    const d = raw.toDate ? raw.toDate() : new Date(raw);
+    if (isNaN(d.getTime())) return;
+    entryMap[toLocalKey(d)] = e;
+  });
+  const getMoodColor = (mood) => {
+    if (['electric', 'light', 'radiant', 'triumphant'].includes(mood)) return '#4da6ff';
+    if (['focused', 'sharp', 'steady', 'calm'].includes(mood)) return '#8a8a8a';
+    if (['heavy', 'hollow', 'foggy', 'chaotic'].includes(mood)) return '#b45309';
+    return '#3a3a3a';
+  };
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - (29 - i));
+    return d;
+  });
+  return (
+    <div className="flex w-full gap-0.5">
+      {days.map((day) => {
+        const k = toLocalKey(day);
+        const e = entryMap[k];
+        const color = e ? getMoodColor(e.mood) : null;
+        const intensity = e?.intensity || 3;
+        const opacity = color ? 0.25 + (intensity / 5) * 0.75 : 1;
+        const isToday = k === todayKey;
+        return (
+          <div
+            key={k}
+            title={`${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${e ? `: ${e.mood}` : ': no entry'}`}
+            className={`h-6 flex-1 rounded-sm ${isToday ? 'ring-1 ring-white/40' : ''}`}
+            style={{ backgroundColor: color || '#1a1a1a', opacity }}
+          />
+        );
+      })}
+    </div>
   );
 };
 
@@ -154,8 +201,8 @@ export default function Journal() {
   const [entry, setEntry] = useState('');
   const [eventOccurredAt, setEventOccurredAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [mood, setMood] = useState('focused');
-  const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [intensity, setIntensity] = useState(3);
+  const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [entries, setEntries] = useState([]);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -268,6 +315,8 @@ export default function Journal() {
     const id = setTimeout(() => setSearchQuery(searchInput), 300);
     return () => clearTimeout(id);
   }, [searchInput]);
+
+  const journalSignal = useMemo(() => composeJournalSignal(entries), [entries]);
 
   const filteredEntries = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -794,64 +843,25 @@ export default function Journal() {
           </div>
         </header>
 
-        {/* 30-Day Mood Calendar */}
+        {/* 30-Day Mood — strip + derived takeaway */}
         {entries.length > 0 && (
           <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
             <div className="oura-card p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[#858585] text-xs uppercase tracking-widest">30-Day Mood</h3>
-                <div className="flex items-center gap-3 text-[10px] text-[#858585]">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#4da6ff]" />Energized</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#8a8a8a]" />Grounded</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm inline-block bg-[#b45309]" />Challenged</span>
-                </div>
+                <div className="w-2 h-2 rounded-sm ring-1 ring-white/40" title="Today" />
               </div>
-              {(() => {
-                const today = new Date();
-                const toLocalKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                const todayKey = toLocalKey(today);
-                // Build date→last-entry map for last 30 days
-                const entryMap = {};
-                entries.forEach(e => {
-                  const raw = e.createdAt || e.timestamp;
-                  if (!raw) return;
-                  const d = raw.toDate ? raw.toDate() : new Date(raw);
-                  if (isNaN(d.getTime())) return; // guard unresolved server timestamps
-                  const k = toLocalKey(d);
-                  entryMap[k] = e; // keep most recent per day
-                });
-                const getMoodColor = (mood) => {
-                  if (['electric','light','radiant','triumphant'].includes(mood)) return '#4da6ff';
-                  if (['focused','sharp','steady','calm'].includes(mood)) return '#8a8a8a';
-                  if (['heavy','hollow','foggy','chaotic'].includes(mood)) return '#b45309';
-                  return '#3a3a3a';
-                };
-                const days = Array.from({ length: 30 }, (_, i) => {
-                  const d = new Date(today);
-                  d.setDate(today.getDate() - (29 - i));
-                  return d;
-                });
-                return (
-                  <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-                    {days.map((day) => {
-                      const k = toLocalKey(day);
-                      const e = entryMap[k];
-                      const color = e ? getMoodColor(e.mood) : null;
-                      const intensity = e?.intensity || 3;
-                      const opacity = color ? 0.25 + (intensity / 5) * 0.75 : 1;
-                      const isToday = k === todayKey;
-                      return (
-                        <div
-                          key={k}
-                          title={`${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${e ? `: ${e.mood}` : ': no entry'}`}
-                          className={`h-7 rounded-md transition-all duration-300 cursor-default ${isToday ? 'ring-1 ring-white/40' : ''}`}
-                          style={{ backgroundColor: color || '#1a1a1a', opacity }}
-                        />
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+              <MoodStrip entries={entries} />
+              {journalSignal.takeaway && (
+                <p className="text-[#ababab] text-sm leading-relaxed mt-4">
+                  {journalSignal.takeaway}
+                </p>
+              )}
+              {journalSignal.cluster && (
+                <p className="text-[#858585] text-xs leading-relaxed mt-2">
+                  {journalSignal.cluster}
+                </p>
+              )}
             </div>
           </section>
         )}
@@ -903,11 +913,11 @@ export default function Journal() {
           )}
 
               <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-4 font-medium">How are you feeling?</label>
-                
+                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-3 font-medium">How are you feeling?</label>
+
                 {/* Mood History Mini-visualization */}
                 {entries.length > 0 && (
-                  <div className="mb-4 flex items-center gap-2">
+                  <div className="mb-3 flex items-center gap-2">
                     <span className="text-[#858585] text-xs">Recent:</span>
                     <div className="flex gap-1">
                       {entries.slice(0, 5).map((e, i) => {
@@ -932,14 +942,14 @@ export default function Journal() {
                   </div>
                 )}
 
-                {/* Category Tabs */}
-                <div className="flex gap-2 mb-5">
+                {/* Category Tabs — restored from de5e9d3 at 20% smaller padding/text */}
+                <div className="flex gap-2 mb-4">
                   {moodCategories.map((cat) => (
                     <button
                       key={cat.name}
                       type="button"
                       onClick={() => setSelectedCategory(cat.name)}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-300 ${
                         selectedCategory === cat.name
                           ? `${cat.bgColor} border-2 ${cat.borderColor}`
                           : 'bg-[#0a0a0a] text-[#858585] border border-[#1a1a1a] hover:border-[#2a2a2a] hover:text-[#ababab]'
@@ -951,8 +961,8 @@ export default function Journal() {
                   ))}
                 </div>
 
-                {/* Mood Options Grid */}
-                <div className="grid grid-cols-4 gap-3">
+                {/* Mood Options Grid — restored from de5e9d3 at 20% smaller tile + icon */}
+                <div className="grid grid-cols-4 gap-2">
                   {moodCategories.find(c => c.name === selectedCategory)?.moods.map((option) => {
                     const category = moodCategories.find(c => c.name === selectedCategory);
                     return (
@@ -960,22 +970,22 @@ export default function Journal() {
                         key={option.value}
                         type="button"
                         onClick={() => setMood(option.value)}
-                        className={`group relative p-4 rounded-2xl border-2 transition-all duration-300 ${
+                        className={`group relative p-3 rounded-xl border-2 transition-all duration-300 ${
                           mood === option.value
                             ? `${category.borderColor} ${category.bgColor} scale-[1.02]`
                             : 'border-transparent bg-[#0a0a0a] hover:bg-[#111] hover:border-[#2a2a2a]'
                         }`}
-                        style={{ 
-                          boxShadow: mood === option.value ? `0 0 20px ${category.color}30` : 'none'
+                        style={{
+                          boxShadow: mood === option.value ? `0 0 16px ${category.color}30` : 'none'
                         }}
                       >
-                        <div 
-                          className={`w-8 h-8 mx-auto mb-2 transition-transform duration-300 ${mood === option.value ? 'scale-110' : 'group-hover:scale-105'}`}
+                        <div
+                          className={`w-6 h-6 mx-auto mb-1.5 transition-transform duration-300 ${mood === option.value ? 'scale-110' : 'group-hover:scale-105'}`}
                           style={{ color: mood === option.value ? category.color : '#5a5a5a' }}
                         >
                           {MoodIcons[option.value]}
                         </div>
-                        <div className={`text-xs font-medium tracking-wide transition-colors duration-300 text-center ${
+                        <div className={`text-[11px] font-medium tracking-wide transition-colors duration-300 text-center ${
                           mood === option.value ? '' : 'text-[#ababab] group-hover:text-white'
                         }`} style={{ color: mood === option.value ? category.color : undefined }}>
                           {option.label}
@@ -984,8 +994,8 @@ export default function Journal() {
                           {option.description}
                         </div>
                         {mood === option.value && (
-                          <div 
-                            className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-1 rounded-full"
+                          <div
+                            className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-5 h-1 rounded-full"
                             style={{ backgroundColor: category.color }}
                           />
                         )}
@@ -996,10 +1006,10 @@ export default function Journal() {
               </div>
 
               <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-6 font-medium">Intensity Level</label>
-                <div className="space-y-5">
-                  {/* Ring-based intensity visualization */}
-                  <div className="flex justify-between items-center px-4">
+                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-4 font-medium">Intensity Level</label>
+                <div className="space-y-4">
+                  {/* Ring-based intensity visualization — restored from de5e9d3 at 20% smaller (w-11) */}
+                  <div className="flex justify-between items-center px-3">
                     {intensityLevels.map((level) => (
                       <IntensityRing
                         key={level.value}
@@ -1009,9 +1019,9 @@ export default function Journal() {
                       />
                     ))}
                   </div>
-                  
+
                   {/* Progress line with gradient */}
-                  <div className="relative h-1 mx-4 bg-[#1a1a1a] rounded-full overflow-hidden">
+                  <div className="relative h-1 mx-3 bg-[#1a1a1a] rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -1021,13 +1031,13 @@ export default function Journal() {
                       }}
                     />
                   </div>
-                  
+
                   {/* Selected intensity card */}
-                  <div className="text-center p-5 bg-gradient-to-b from-[#0a0a0a] to-black rounded-2xl border border-[#1a1a1a]">
-                    <div className="text-white text-lg font-light tracking-wide mb-1">
+                  <div className="text-center p-4 bg-gradient-to-b from-[#0a0a0a] to-black rounded-xl border border-[#1a1a1a]">
+                    <div className="text-white text-base font-light tracking-wide mb-0.5">
                       {intensityLevels.find(level => level.value === intensity)?.label}
                     </div>
-                    <div className="text-[#858585] text-sm font-light">
+                    <div className="text-[#858585] text-xs font-light">
                       {intensityLevels.find(level => level.value === intensity)?.description}
                     </div>
                   </div>
@@ -1035,10 +1045,10 @@ export default function Journal() {
               </div>
 
               <div>
-                <label className="block text-[#ababab] text-sm uppercase tracking-wider mb-4">What's on your mind?</label>
+                <label className="block text-[#ababab] text-xs uppercase tracking-wider mb-3">What's on your mind?</label>
 
-                <div className="mb-6">
-                  <div className="mb-4 h-20 flex items-center justify-center">
+                <div className="mb-5">
+                  <div className="mb-3 h-16 flex items-center justify-center">
                     <button
                       type="button"
                       onClick={() => {
