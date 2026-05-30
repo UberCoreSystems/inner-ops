@@ -87,7 +87,6 @@ function resolvePromptContext(key, params) {
  * reconstructing ad-hoc fields.
  */
 function logOracleCall(fields) {
-  // eslint-disable-next-line no-console
   console.log("oracle.call", JSON.stringify(fields));
 }
 

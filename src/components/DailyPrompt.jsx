@@ -150,6 +150,9 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSi
       if (!cancelled) setPrompt({ kind: 'answered' });
     })();
     return () => { cancelled = true; };
+    // Re-runs only when answeredSignal increments. `prompt` is read as a guard,
+    // not a trigger — depending on it would re-mark the prompt answered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answeredSignal]);
 
   if (!prompt || prompt.kind === 'answered') return null;

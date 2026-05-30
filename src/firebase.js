@@ -9,8 +9,6 @@ import logger from './utils/logger.js';
 const viteEnv = (typeof import.meta !== 'undefined' && import.meta.env) || {};
 const isNodeTestContext = !viteEnv || Object.keys(viteEnv).length === 0;
 
-const isDevEnvironment = viteEnv.DEV;
-
 // Validate required environment variables
 const requiredEnvVars = [
   'VITE_FIREBASE_API_KEY',

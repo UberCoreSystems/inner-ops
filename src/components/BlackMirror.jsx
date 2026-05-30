@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
@@ -761,7 +761,7 @@ const BlackMirror = () => {
                         {activeRestructuringRule === pattern.rule && (
                           <CueRestructuringFlow
                             pattern={pattern}
-                            onSave={(saved) => {
+                            onSave={() => {
                               setActiveRestructuringRule(null);
                               refetchRestructurings();
                               loadAnalytics();

@@ -6,7 +6,7 @@ import logger from '../utils/logger';
 
 export const useVoiceInput = () => {
   const [isListening, setIsListening] = useState(false);
-  const [isSupported, setIsSupported] = useState(
+  const [isSupported] = useState(
     'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
   );
   const recognitionRef = useRef(null);
@@ -33,14 +33,11 @@ export const useVoiceInput = () => {
 
     recognition.onresult = (event) => {
       let finalTranscript = '';
-      let interimTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
         }
       }
 

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
@@ -88,14 +88,14 @@ const RelapseRadar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitSuccess] = useState(false);
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null);
 
   // BER-128: precursor capture + drift detection
   const [selectedPrecursors, setSelectedPrecursors] = useState([]);
   const [precursorContext, setPrecursorContext] = useState('');
-  const [driftThreshold, setDriftThreshold] = useState(3);
+  const [driftThreshold] = useState(3);
   const [killTargets, setKillTargets] = useState([]);
 
   // BER-133: archetype-to-kill-list match prompt shown after submission

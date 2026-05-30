@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { readUserData, writeData } from '../utils/firebaseUtils';
 // Pass 2 Finding 7 remediation: privileged admin helpers (data migration,
@@ -174,6 +174,9 @@ export default function Dashboard() {
     // Dev-mode debug surface (window.debugDashboard, admin helpers,
     // legacy localStorage migration tools) removed. Admin recovery
     // helpers now live at scripts/firebaseAdmin.js (out of the app bundle).
+    // Mount-only: loadDashboardData captures the user at mount; re-running on
+    // its identity change would reload the dashboard on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
   const loadDashboardData = useCallback(async (currentUser = user) => {
@@ -347,6 +350,10 @@ export default function Dashboard() {
 
       return () => clearTimeout(timer);
     }
+    // Recompute only when load state / raw data changes. composingReport is a
+    // re-entrancy guard; user?.uid and stats.streakDays are read from the same
+    // render. Depending on them would thrash this callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, rawUserData]);
 
   const showShell = loading || showSkeleton || !user;

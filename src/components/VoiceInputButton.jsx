@@ -1,5 +1,3 @@
-
-import React from 'react';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import ouraToast from '../utils/toast';
 

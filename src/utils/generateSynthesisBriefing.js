@@ -111,7 +111,6 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
 
   const now = Date.now();
   const windowMs28 = 28 * 24 * 60 * 60 * 1000;
-  const windowMs14 = 14 * 24 * 60 * 60 * 1000;
 
   // --- Relapse: archetype frequencies (last 28d) ---
   const recentRelapses = (relapseEntries || []).filter(e => now - getTimestamp(e) < windowMs28);

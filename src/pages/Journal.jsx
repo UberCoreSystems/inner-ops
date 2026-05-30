@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
@@ -24,6 +24,22 @@ import {
   stashRelapseExtraction,
   stashHardLessonExtraction,
 } from '../utils/crossModuleExtraction';
+
+// Reflective prompts surfaced one at a time. The Gibbs-cycle "action plan"
+// stage was removed — action commitments live in the Kill List module, and
+// the cross-module extraction layer already lifts kill-worthy patterns out
+// of journal entries automatically. Module-scoped: static content, never
+// derived from state.
+const basePrompts = [
+  "What triggered strong emotions today?",
+  "What fear held me back today?",
+  "What challenged me and how did I handle it?",
+  "What did I avoid today, and what did I tell myself to justify it?",
+  "What action produced the most leverage today?",
+  "What patterns am I noticing in my behavior?",
+  "What am I learning about myself?",
+  "What would I do differently if I could replay today?",
+];
 
 // Custom SVG mood icons - Oura-style geometric designs
 const MoodIcons = {
@@ -274,21 +290,6 @@ export default function Journal() {
     }
   }, [entries]);
 
-  // Reflective prompts surfaced one at a time. The Gibbs-cycle "action plan"
-  // stage was removed — action commitments live in the Kill List module, and
-  // the cross-module extraction layer already lifts kill-worthy patterns out
-  // of journal entries automatically.
-  const basePrompts = [
-    "What triggered strong emotions today?",
-    "What fear held me back today?",
-    "What challenged me and how did I handle it?",
-    "What did I avoid today, and what did I tell myself to justify it?",
-    "What action produced the most leverage today?",
-    "What patterns am I noticing in my behavior?",
-    "What am I learning about myself?",
-    "What would I do differently if I could replay today?",
-  ];
-
   // Oracle questions surface first, then the standard prompts
   const journalPrompts = useMemo(
     () => [...oraclePrompts, ...basePrompts],
@@ -336,7 +337,7 @@ export default function Journal() {
 
       return haystack.includes(normalizedQuery);
     });
-  }, [entries, searchQuery, moodOptions]);
+  }, [entries, searchQuery]);
 
   // Pass 2 Finding 16 remediation: consolidated skeleton lifecycle. One
   // effect owns both the show-delay and the dwell timer, both timers are
@@ -530,7 +531,6 @@ export default function Journal() {
     setEntry('');
     setMood(moodOptions[0].value);
     setIntensity(3);
-    setActionPlan('');
     setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
   };
 

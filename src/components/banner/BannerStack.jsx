@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { subscribeToUserData, writeData, updateData } from '../../utils/firebaseUtils';
 import { getUserProfile } from '../../utils/userProfile';
@@ -115,6 +115,9 @@ export default function BannerStack({ user }) {
         settingsUnsubRef.current = null;
       }
     };
+    // Re-subscribe only when uid changes; a same-uid user object identity
+    // change carries no new data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
   const banners = useMemo(() => {

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { throttleInput } from '../utils/performanceUtils';
 
 const VirtualizedList = ({ 
@@ -73,7 +73,6 @@ const VirtualizedList = ({
           // it would force a full unmount/remount of every visible row.
           if (item?.id == null) {
             if (import.meta.env.DEV) {
-              // eslint-disable-next-line no-console
               console.warn(
                 'VirtualizedList: item missing stable `id`. Items must have a unique id field; positional fallback would defeat virtualization.',
                 item

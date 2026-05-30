@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { readUserData, updateData, writeData } from '../utils/firebaseUtils';
 import { readUserSettings } from '../utils/oracleQuestionPool';
 import { COLLECTIONS, HARD_LESSON_FIELDS, USER_SETTINGS_FIELDS } from '../utils/schema';

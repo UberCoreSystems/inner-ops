@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { updateProfile } from 'firebase/auth';
@@ -76,7 +76,7 @@ export default function Profile() {
     }
   };
 
-  const saveIdentityDirection = async (newStatement, isReview = false) => {
+  const saveIdentityDirection = async (newStatement) => {
     const trimmed = newStatement.trim();
     if (trimmed.length < 20 || trimmed.length > 200) {
       ouraToast.error('Identity direction must be 20–200 characters. Use "Clear" to remove.');

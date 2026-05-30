@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * Standalone briefing screen. Renders the system framing without any data
  * capture. Used as step 0 of the onboarding wizard and as the "Replay

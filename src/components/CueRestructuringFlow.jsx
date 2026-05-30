@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { writeData } from '../utils/firebaseUtils';
 import { PATTERN_LABELS } from '../utils/blackMirrorAnalytics';
 import logger from '../utils/logger';

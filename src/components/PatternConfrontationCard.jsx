@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';

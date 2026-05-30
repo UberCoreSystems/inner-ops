@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   updateDoc, 
   doc,
@@ -27,7 +27,6 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     stats,
     refetch,
     toggleTargetStatus,
-    markAsKilled,
     markAsEscaped,
     markAsActive,
     updateReflectionNote,
@@ -76,20 +75,6 @@ const KillListDashboard = React.memo(function KillListDashboard() {
 
   // Remove the old loadTodaysTargets function since we're using the hook
   // ...existing code...
-
-  const updateTargetStatus = async (targetId, newStatus) => {
-    setUpdating(prev => ({ ...prev, [targetId]: true }));
-
-    try {
-      // Use the hook's toggle functions instead of manual updateDoc
-      await toggleTargetStatus(targetId, newStatus);
-      logger.log(`✅ Target ${newStatus}: ${targetId}`);
-    } catch (error) {
-      logger.error("Error updating target status:", error);
-    } finally {
-      setUpdating(prev => ({ ...prev, [targetId]: false }));
-    }
-  };
 
   // Kill / escape flows both require a closing entry — open the modal in
   // the appropriate mode. Mode drives the prompt, tags, and Oracle framing.
@@ -142,7 +127,6 @@ const KillListDashboard = React.memo(function KillListDashboard() {
 
       // 3. Oracle one-line response — runs regardless of whether modal
       //    stays open. If dismissed mid-call, we surface via toast instead.
-      const killVerb = mode === 'kill' ? 'closed' : 'lost to';
       const entryText = mode === 'kill'
         ? `I just closed a kill contract: "${target.title}". What ended it: ${note}`
         : `A kill contract just broke on me: "${target.title}". What caught me: ${note}`;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { writeData, updateData, deleteData, subscribeToUserData } from '../utils/firebaseUtils';
@@ -10,8 +10,6 @@ import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
-import { debounce } from '../utils/debounce';
-import VirtualizedList from '../components/VirtualizedList';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
@@ -246,9 +244,6 @@ const KillList = () => {
   const [avePrompt, setAvePrompt] = useState(false);
   
   // Reflection notes state
-  const [reflectionNotes, setReflectionNotes] = useState({});
-  const [showReflection, setShowReflection] = useState({});
-  const [updatingReflection, setUpdatingReflection] = useState({});
   const [user, setUser] = useState(null);
 
   // Implementation intentions (BER-126)
@@ -626,7 +621,7 @@ const KillList = () => {
       if (redirectIfAuthLost(error)) return;
       ouraToast.error('Check-in failed. Please try again.');
     }
-  }, [categories]);
+  }, []);
 
   // Submit escape autopsy
   const submitAutopsy = useCallback(async () => {
@@ -949,14 +944,6 @@ const KillList = () => {
     }
   }, []);
 
-  const markAsEscaped = useCallback((targetId) => {
-    // Always opens autopsy flow — status update happens in submitAutopsy()
-    const target = targetsRef.current.find(t => t.id === targetId);
-    if (target) {
-      setAutopsyTarget(target);
-    }
-  }, []);
-
   const reactivateTarget = useCallback(async (targetId, opts = {}) => {
     try {
       logger.log("🎯 KillList: Reactivating escaped target:", targetId);
@@ -1073,60 +1060,6 @@ const KillList = () => {
     setEditValue('');
   }, []);
 
-  // Reflection notes functions
-  const saveReflectionNote = useCallback(async (targetId) => {
-    const notes = reflectionNotes[targetId];
-    if (!notes || notes.trim() === '') return;
-
-    setUpdatingReflection(prev => ({ ...prev, [targetId]: true }));
-
-    try {
-      await updateData('killTargets', targetId, {
-        reflectionNotes: notes.trim(),
-        lastUpdated: new Date()
-      });
-
-      ouraToast.success('Reflection notes saved');
-      logger.log(`✅ Reflection notes saved for target: ${targetId}`);
-    } catch (error) {
-      logger.error("Error saving reflection notes:", error);
-      ouraToast.error('Failed to save reflection notes');
-    } finally {
-      setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
-    }
-  }, [reflectionNotes]);
-
-  const clearReflectionNote = useCallback(async (targetId) => {
-    setUpdatingReflection(prev => ({ ...prev, [targetId]: true }));
-
-    try {
-      await updateData('killTargets', targetId, {
-        reflectionNotes: '',
-        lastUpdated: new Date()
-      });
-
-      setReflectionNotes(prev => ({ ...prev, [targetId]: '' }));
-      ouraToast.success('Reflection notes cleared');
-      logger.log(`✅ Reflection notes cleared for target: ${targetId}`);
-    } catch (error) {
-      logger.error("Error clearing reflection notes:", error);
-      ouraToast.error('Failed to clear reflection notes');
-    } finally {
-      setUpdatingReflection(prev => ({ ...prev, [targetId]: false }));
-    }
-  }, []);
-
-  // Initialize reflection notes when targets load
-  useEffect(() => {
-    const notes = {};
-    targets.forEach(target => {
-      if (target.reflectionNotes) {
-        notes[target.id] = target.reflectionNotes;
-      }
-    });
-    setReflectionNotes(notes);
-  }, [targets]);
-
   const requestKillOracleStatement = useCallback(async (kill) => {
     setRequestingOracleForKillId(kill.id);
     setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
@@ -1233,7 +1166,7 @@ const KillList = () => {
     return { total, completed, active, escaped, completionRate, avgStreakToKill, categoryDist };
   }, [targets, confirmedKills]);
 
-  const renderTargetItem = useCallback((target, index) => {
+  const renderTargetItem = useCallback((target) => {
     // Title, status, "Kill requires" copy, progress bar, and 3-metric row
     // are rendered by <KillTargetSummary />. Module-only state derived here
     // is consumed by the sections below the summary.
@@ -1244,7 +1177,7 @@ const KillList = () => {
     const showBackfill = missedDates.length >= 2 && !backfillDismissed[target.id];
 
     return (
-      <React.Fragment key={target.id}>
+      <Fragment key={target.id}>
         {showBackfill && (
           <KillListBackfillCard
             target={target}
@@ -1575,10 +1508,10 @@ const KillList = () => {
           </div>
         )}
       </div>
-      </React.Fragment>
+      </Fragment>
     );
-    }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, markAsEscaped, reactivateTarget, recontractTarget, dailyCheckIn, categories, categoryIcons,
-      reflectionNotes, showReflection, updatingReflection, saveReflectionNote, clearReflectionNote, showIntention, setShowIntention, setReviseTarget, setReviseIntention,
+    }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, reactivateTarget, recontractTarget, dailyCheckIn,
+      showIntention, setShowIntention, setReviseTarget, setReviseIntention,
       showAutopsyPattern, setShowAutopsyPattern, backfillBusy, backfillDismissed, handleBackfillAllHeld, handleBackfillLogEscape, handleBackfillLogEach, handleBackfillDismiss,
       thresholdEditingId, thresholdEditValue]);
 

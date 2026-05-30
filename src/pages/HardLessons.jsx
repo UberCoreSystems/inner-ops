@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
@@ -276,7 +276,7 @@ export default function HardLessons() {
 
       return haystack.includes(normalizedQuery);
     });
-  }, [lessons, searchQuery, eventCategories]);
+  }, [lessons, searchQuery]);
 
   // BER-130: finalized rules aggregated for the library
   const finalizedRules = useMemo(() => {
@@ -866,7 +866,7 @@ export default function HardLessons() {
           {/* Step progress bar */}
           <div className="mb-8">
             <div className="flex items-center gap-1.5 mb-2">
-              {formSteps.map((step, i) => (
+              {formSteps.map((step) => (
                 <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
                   <div className={`h-1.5 w-full rounded-full transition-all duration-300 ${
                     step.done ? 'bg-[#f59e0b]' : 'bg-[#1a1a1a]'

@@ -1,4 +1,4 @@
-import { doc, setDoc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getAuth, getDb } from '../firebase.js';
 import logger from './logger.js';
 
@@ -15,15 +15,6 @@ const normalizeDocTimestamp = (docData) => {
   return new Date();
 };
 
-// Mapping of collection names to localStorage keys
-const LOCALSTORAGE_KEYS = {
-  'journalEntries': 'inner_ops_journal_entries',
-  'killTargets': 'inner_ops_kill_targets',
-  'hardLessons': 'inner_ops_hard_lessons',
-  'blackMirrorEntries': 'inner_ops_black_mirror_entries',
-  'relapseEntries': 'inner_ops_relapse_entries'
-};
-
 // Finding 9: boot-time env diagnostics removed — firebase.js throws on
 // missing config, which is a clearer failure mode than a log line.
 
@@ -36,36 +27,6 @@ const ensureAuthenticated = async () => {
   }
   logger.error("❌ User must be authenticated to access data");
   throw new Error("Please sign in to continue using the app");
-};
-
-// Get data from localStorage as fallback
-const getLocalStorageFallback = (collectionName) => {
-  try {
-    const lsKey = LOCALSTORAGE_KEYS[collectionName];
-    if (!lsKey) {
-      return [];
-    }
-
-    const data = localStorage.getItem(lsKey);
-    if (!data) {
-      return [];
-    }
-
-    const parsed = JSON.parse(data);
-    const entries = Array.isArray(parsed) ? parsed : [];
-    
-    logger.log(`💾 Retrieved ${entries.length} entries from localStorage for ${collectionName}`);
-    
-    // Sort by date descending
-    return entries.sort((a, b) => {
-      const dateA = new Date(a.createdAt || a.timestamp || 0);
-      const dateB = new Date(b.createdAt || b.timestamp || 0);
-      return dateB - dateA;
-    });
-  } catch (error) {
-    logger.warn(`⚠️ Could not read from localStorage for ${collectionName}:`, error.message);
-    return [];
-  }
 };
 
 // Finding 8 remediation: callers that write sensitive data (emergency logs,
@@ -133,9 +94,9 @@ export const updateData = async (collectionName, docId, data) => {
 
 export const deleteData = async (collectionName, docId) => {
   try {
-    const user = await ensureAuthenticated();
+    await ensureAuthenticated();
     const db = await getDb();
-    
+
     await deleteDoc(doc(db, collectionName, docId));
     logger.log("✅ Data deleted successfully from", collectionName, "for doc:", docId);
     return { id: docId, deleted: true };

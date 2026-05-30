@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * Base Skeleton Pulse Animation Component
  * Creates the shimmer effect for loading states

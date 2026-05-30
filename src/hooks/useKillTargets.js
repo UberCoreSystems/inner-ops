@@ -5,7 +5,6 @@ import {
   where, 
   getDocs, 
   onSnapshot,
-  orderBy,
   doc,
   updateDoc,
   serverTimestamp

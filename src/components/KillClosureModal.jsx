@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppIcon } from './AppIcons';
 import { coerceClosureResponseText } from '../utils/composeClosureFeedback';
 

@@ -1,5 +1,3 @@
-import React from 'react';
-
 // Small pill that toggles between active and archive views.
 // Mirrors the `Active (N) · Archive (M)` pattern from the archive plan.
 export default function ArchiveToggle({ view, onChange, activeCount, archiveCount, className = '' }) {

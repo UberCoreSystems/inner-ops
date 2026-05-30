@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -114,6 +114,10 @@ const OracleModal = ({
         }
       } catch { /* no-op */ }
     }
+    // generateOracleFeedback is an unmemoized closure (new each render) — adding
+    // it would regenerate on every render. metacognitiveDepth is intentionally
+    // re-applied only on open, not on every prop change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, target, moduleName, feedback, content]);
 
   // Sync displayFeedback whenever the base feedback changes

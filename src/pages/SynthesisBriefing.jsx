@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { readUserData, updateData, deleteData } from '../utils/firebaseUtils';
@@ -31,7 +31,6 @@ const SIGNAL_DELTA_COLORS = {
 export default function SynthesisBriefing() {
   const [userId, setUserId] = useState(null);
   const [briefings, setBriefings] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [cadence, setCadence] = useState('weekly');

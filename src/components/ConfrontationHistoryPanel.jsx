@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { CONFRONTATION_FIELDS } from '../utils/schema';
 import { resolveArchetypeLabel } from '../utils/relapseTaxonomy';
 

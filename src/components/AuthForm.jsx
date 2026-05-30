@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { authService } from '../utils/authService';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';

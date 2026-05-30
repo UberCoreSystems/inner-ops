@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { authService } from '../utils/authService';
 
@@ -88,7 +88,7 @@ const NAV_ITEMS = [
   { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis },
 ];
 
-export default function Navbar({ onLogout, user }) {
+export default function Navbar({ onLogout }) {
   const location = useLocation();
 
   const navItems = NAV_ITEMS;

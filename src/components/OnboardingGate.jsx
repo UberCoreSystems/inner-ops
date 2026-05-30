@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { subscribeUserProfile } from '../utils/userProfile';
 import { isExemptPath } from '../utils/routeGating';
@@ -65,6 +65,9 @@ export default function OnboardingGate({ user, children }) {
         unsubRef.current = null;
       }
     };
+    // Re-subscribe only when the user's uid changes, not on every new user
+    // object identity; a same-uid object change carries no new data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
   // Not authenticated — let downstream routes handle the /auth redirect.

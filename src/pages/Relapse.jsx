@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import RelapseRadar from '../components/RelapseRadar';
 import { SkeletonBox } from '../components/SkeletonLoader';
 import { AppIcon } from '../components/AppIcons';

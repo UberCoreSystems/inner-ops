@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * CrossModuleExtractionPrompts — inline, dismissible suggestion cards. Oracle
  * classifies a journal entry into three independent signals (Kill List

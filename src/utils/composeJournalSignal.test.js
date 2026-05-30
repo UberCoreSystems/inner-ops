@@ -5,7 +5,6 @@ import { composeJournalSignal } from './composeJournalSignal.js';
 
 const NOW = Date.UTC(2026, 4, 27, 12, 0, 0); // 2026-05-27T12:00:00Z (Wednesday)
 const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
 
 // Each entry "i hours ago" so they all fall in the last 7 entries when needed
 // without colliding on the same day in cluster tests.
