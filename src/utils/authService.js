@@ -146,7 +146,7 @@ export const authService = {
     const user = auth?.currentUser;
     if (!user) return null;
     
-    return user.displayName || user.email?.split('@')[0] || 'Warrior';
+    return user.displayName || user.email?.split('@')[0] || 'Operator';
   },
 
   // Handle authentication errors with user-friendly messages

@@ -159,12 +159,12 @@ export default function AuthForm({ onAuthSuccess }) {
           </div>
 
           <h2 className="text-2xl font-light text-white mb-2 tracking-wide">
-            {isSignIn ? 'Welcome Back' : 'Begin Your Journey'}
+            {isSignIn ? 'Welcome Back' : 'Open your command center.'}
           </h2>
           <p className="text-[#858585] text-sm mb-8">
-            {isSignIn 
-              ? 'Continue your path of self-mastery'
-              : 'Create your account to start the inner work'
+            {isSignIn
+              ? 'Pick up where the work left off.'
+              : 'Create the account only you will see.'
             }
           </p>
         </div>
@@ -212,7 +212,7 @@ export default function AuthForm({ onAuthSuccess }) {
                     onFocus={() => setFocusedField('displayName')}
                     onBlur={() => setFocusedField(null)}
                     className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#6a6a6a] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
-                    placeholder="How should we call you?"
+                    placeholder="What name does the Oracle use?"
                   />
                   {focusedField === 'displayName' && (
                     <div className="absolute inset-0 rounded-xl bg-[#00d4aa]/5 pointer-events-none" />

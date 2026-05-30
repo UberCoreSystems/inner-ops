@@ -117,7 +117,7 @@ export default function SynthesisBriefing() {
   const handleGenerate = async () => {
     if (!userId || generating) return;
     if (!hasCrossModuleData) {
-      ouraToast.info('Add a Kill Target, Hard Lesson, or Relapse entry first.');
+      ouraToast.info('Add a Kill Contract, Hard Lesson, or Relapse entry first.');
       return;
     }
     setGenerating(true);
@@ -138,7 +138,7 @@ export default function SynthesisBriefing() {
       } else if (result?.status === 'insufficient-data') {
         // Defense in depth — the button is already disabled by hasCrossModuleData,
         // but a stale flag from a race could let a click through.
-        ouraToast.info('Add a Kill Target, Hard Lesson, or Relapse entry first.');
+        ouraToast.info('Add a Kill Contract, Hard Lesson, or Relapse entry first.');
       }
     } catch (err) {
       logger.error('Synthesis generation failed:', err);
@@ -222,13 +222,13 @@ export default function SynthesisBriefing() {
               <p className="text-[#858585] text-xs">
                 {hasCrossModuleData
                   ? 'The cadence below governs the automatic weekly/biweekly generation.'
-                  : 'Synthesis needs cross-module data. Add a Kill Target, Hard Lesson, or Relapse entry first.'}
+                  : 'Synthesis needs cross-module data. Add a Kill Contract, Hard Lesson, or Relapse entry first.'}
               </p>
             </div>
             <button
               onClick={handleGenerate}
               disabled={generating || !hasCrossModuleData}
-              title={!hasCrossModuleData ? 'Add a Kill Target, Hard Lesson, or Relapse entry first' : undefined}
+              title={!hasCrossModuleData ? 'Add a Kill Contract, Hard Lesson, or Relapse entry first' : undefined}
               className="px-6 py-2.5 bg-[#a855f7] hover:bg-[#9333ea] hover:shadow-lg hover:shadow-[#a855f7]/20 disabled:bg-[#1a1a1a] disabled:text-[#858585] disabled:shadow-none disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all text-sm flex items-center gap-2"
             >
               {generating ? (
@@ -258,13 +258,38 @@ export default function SynthesisBriefing() {
 
         {/* No briefings yet */}
         {briefings.length === 0 && (
-          <div className="oura-card p-12 text-center">
-            <p className="text-[#858585] text-sm mb-2">No briefings generated yet.</p>
-            <p className="text-[#858585] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
-            <p className="text-[#858585] text-xs mt-3 max-w-md mx-auto leading-relaxed">
-              Synthesis reads across modules. Convergence detection sharpens once you have entries in at least two — the journal plus one of Kill List, Hard Lessons, or the Signal.
-            </p>
-          </div>
+          <>
+            <div className="oura-card p-12 text-center">
+              <p className="text-[#858585] text-sm mb-2">No briefings generated yet.</p>
+              <p className="text-[#858585] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
+              <p className="text-[#858585] text-xs mt-3 max-w-md mx-auto leading-relaxed">
+                Synthesis reads across modules. Convergence detection sharpens once you have entries in at least two — the journal plus one of General Ledger, Hard Lessons, or the Signal.
+              </p>
+            </div>
+
+            {/* Day-1 teaser: show the shape of a real briefing before any data exists */}
+            <div className="mt-6 opacity-60">
+              <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your first synthesis will look like</p>
+              <div className="oura-card p-8 space-y-8">
+                <div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
+                  <p className="text-[#5a5a5a] text-sm leading-relaxed">Where your journal, contracts, lessons, and signals point at the same thing — named in one paragraph.</p>
+                </div>
+                <div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Violated Rules</div>
+                  <p className="text-[#5a5a5a] text-sm leading-relaxed">The rules you wrote and then broke this period, with how many times.</p>
+                </div>
+                <div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Signal Delta</div>
+                  <p className="text-[#5a5a5a] text-lg font-light">Improving · Stable · Deteriorating</p>
+                </div>
+                <div className="border-t border-[#1a1a1a] pt-8">
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Confrontation Question</div>
+                  <p className="text-[#5a5a5a] text-lg font-light leading-relaxed">The one question your own data forces you to answer.</p>
+                </div>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Current / selected briefing */}
@@ -297,7 +322,7 @@ export default function SynthesisBriefing() {
             {isSparseBriefing && (
               <div className="mb-6 border border-[#1a1a1a] bg-[#0a0a0a] rounded-xl px-4 py-3">
                 <p className="text-[#ababab] text-sm leading-relaxed">
-                  This briefing reads generic because there's no cross-module signal yet — no recent relapse entries, no active Kill List targets, no finalized Hard Lessons. Add data in two or more modules and the next briefing will surface real convergence.
+                  This briefing reads generic because there's no cross-module signal yet — no recent relapse entries, no active General Ledger contracts, no finalized Hard Lessons. Add data in two or more modules and the next briefing will surface real convergence.
                 </p>
               </div>
             )}

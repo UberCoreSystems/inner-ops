@@ -13,7 +13,7 @@ import './App.css';
 
 // Core components (loaded immediately)
 import Navbar from './components/Navbar';
-import AuthForm from './components/AuthForm';
+import AuthGate from './components/AuthGate';
 import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
 import OnboardingGate from './components/OnboardingGate';
@@ -180,9 +180,9 @@ function App() {
             path="/auth"
             element={
               <InlineErrorBoundary name="Auth">
-                {user ? 
-                  <Navigate to="/dashboard" /> : 
-                  <AuthForm onAuthSuccess={handleAuthSuccess} />
+                {user ?
+                  <Navigate to="/dashboard" /> :
+                  <AuthGate onAuthSuccess={handleAuthSuccess} />
                 }
               </InlineErrorBoundary>
             } 

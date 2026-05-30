@@ -330,7 +330,7 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 /**
  * Hook for ALL kill targets regardless of creation date.
  * Returns all targets for stats, but `activeTargets` filtered to active only.
- * Used by the Dashboard "Active Battles" widget.
+ * Used by the Dashboard "Active Contracts" widget.
  */
 export const useActiveKillTargets = (realtime = true) => {
   const [allTargets, setAllTargets] = useState([]);

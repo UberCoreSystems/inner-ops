@@ -175,7 +175,7 @@ export default function Navbar({ onLogout }) {
                 }`}
               >
                 <span className="opacity-80">{Icons.profile}</span>
-                <span className="hidden sm:inline">{authService.getUserDisplayName() || 'Warrior'}</span>
+                <span className="hidden sm:inline">{authService.getUserDisplayName() || 'Operator'}</span>
               </Link>
               <button
                 onClick={onLogout}

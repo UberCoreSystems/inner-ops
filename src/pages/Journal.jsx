@@ -448,60 +448,60 @@ export default function Journal() {
     
     // Content-based insights
     if (content.toLowerCase().includes('stress') || content.toLowerCase().includes('overwhelm')) {
-      insights.push("Consider: What specific stressors can you control vs. accept?");
+      insights.push("Which of these did you choose, and which did you let happen?");
     }
-    
+
     if (content.toLowerCase().includes('angry') || content.toLowerCase().includes('frustrated')) {
-      insights.push("Reflection: What boundary or value might have been crossed?");
+      insights.push("What line got crossed — and did you defend it or let it slide?");
     }
-    
+
     if (content.toLowerCase().includes('grateful') || content.toLowerCase().includes('thankful')) {
-      insights.push("What specifically are you grateful for, and what does that reveal about your values?");
+      insights.push("Name the one thing here you'd fight to keep. Why that one?");
     }
-    
+
     // Mood and intensity insights
     if (mood === 'chaotic' && intensity >= 4) {
-      insights.push("High chaos energy detected. Consider grounding techniques or channeling this into creative work.");
+      insights.push("Scattered and running hot. What's the one thing actually worth your attention right now?");
     }
-    
+
     if (mood === 'hollow' || mood === 'heavy') {
-      insights.push("These states often precede behavioral regression. What specifically triggered this?");
+      insights.push("This state usually comes before a slip. Name what's stacking up.");
     }
-    
+
     // Pattern analysis with recent entries
     if (recentEntries.length > 0) {
       const recentMoods = recentEntries.map(e => e.mood);
       const isRepeatingPattern = recentMoods.filter(m => m === mood).length >= 2;
-      
+
       if (isRepeatingPattern) {
-        insights.push(`Pattern notice: This is your ${recentMoods.filter(m => m === mood).length + 1}rd time feeling ${mood} recently. What's the common thread?`);
+        insights.push(`${recentMoods.filter(m => m === mood).length + 1}× at "${mood}" lately. What keeps putting you back here?`);
       }
     }
-    
+
     // Writing depth insights
     if (wordCount > 200) {
-      insights.push("Extended entry. What's driving this volume?");
+      insights.push("A lot of words. What's the one sentence underneath them?");
     } else if (wordCount < 50 && content.length > 0) {
-      insights.push("Low word count. What's not being said?");
+      insights.push("You stopped short. What are you not writing down?");
     }
-    
+
     // Default insight if none triggered
     if (insights.length === 0) {
       const moodInsights = {
-        electric: "This energy is powerful. How can you direct it toward your goals?",
-        foggy: "Foggy state. What was clear recently that is no longer clear?",
-        sharp: "Your focus is cutting through noise. What truth is emerging?",
-        hollow: "What specifically is absent right now?",
-        chaotic: "What is triggering the scatter? Name the source.",
-        triumphant: "What made this outcome possible? What would replicate it?",
-        heavy: "Heavy state. What is its specific source?",
-        light: "Low-resistance state. What's the highest-value move right now?",
-        focused: "Sharp state. What deserves this level of attention?",
-        radiant: "High-output state. What needs to be locked in right now?",
-        steady: "Stability is a foundation. What can you build from this position?",
-        calm: "Still water sees clearly. What do you notice from this state?"
+        electric: "Plenty of charge. Where does it go before it burns off?",
+        foggy: "What was clear last week that isn't now?",
+        sharp: "You're cutting clean. What's the truth on the other side?",
+        hollow: "Name what's missing. Be specific.",
+        chaotic: "What's driving the scatter? Name the source.",
+        triumphant: "What made this work — and what would repeat it?",
+        heavy: "Where is the weight coming from? Name it.",
+        light: "Low resistance today. What's the highest-value move?",
+        focused: "What deserves this level of attention — and what's stealing it?",
+        radiant: "Running high. What gets locked in before it fades?",
+        steady: "Steady ground. What do you build from here?",
+        calm: "Quiet enough to see clearly. What do you notice?"
       };
-      
+
       insights.push(moodInsights[mood] || "What behavioral pattern is most active right now?");
     }
     
@@ -880,18 +880,18 @@ export default function Journal() {
               {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
                 <div className="mb-6 p-5 bg-[#0a0a0a] border border-[#a855f7]/20 rounded-2xl">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-[#a855f7] font-medium text-sm uppercase tracking-wider">🧠 Live Insights</h3>
+                    <h3 className="text-[#a855f7] font-medium text-sm uppercase tracking-wider">Live Reading</h3>
                     {aiInsights.isGenerating && (
                       <div className="flex items-center text-[#a855f7] text-xs">
                         <div className="animate-spin rounded-full h-3 w-3 border-b border-[#a855f7] mr-2"></div>
-                        Analyzing...
+                        Reading...
                       </div>
                     )}
                   </div>
                   <div className="space-y-2">
                     {aiInsights.isGenerating && aiInsights.reflections.length === 0 ? (
                       <div className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl animate-pulse">
-                        Generating contextual insights based on your writing...
+                        Reading the signal in what you're writing...
                       </div>
                     ) : (
                       aiInsights.reflections.map((insight, idx) => (
@@ -906,7 +906,7 @@ export default function Journal() {
                   </div>
                   {aiInsights.reflections.length > 0 && (
                     <div className="mt-3 text-xs text-[#ababab]">
-                      💡 Insights update as you write • Based on mood, content, and patterns
+                      Updates as you write • read from mood, content, and patterns
                 </div>
               )}
             </div>

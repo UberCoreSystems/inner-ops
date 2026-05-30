@@ -353,7 +353,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
               <circle cx="40" cy="40" r="4" fill="#ef4444" opacity="0.8" />
             </svg>
           </div>
-          <h3 className="text-xl font-light text-white mb-2">No Active Battles</h3>
+          <h3 className="text-xl font-light text-white mb-2">No Active Contracts</h3>
           <p className="text-[#858585] text-sm mb-6 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
           <button
             onClick={() => window.location.href = '/ledger'}
@@ -378,7 +378,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             </svg>
           </div>
           <div>
-            <h2 className="text-lg font-light text-white">Active Battles</h2>
+            <h2 className="text-lg font-light text-white">Active Contracts</h2>
             <p className="text-[#858585] text-sm font-light">
               <span className="text-[#ef4444]">{stats.active} active</span>
             </p>

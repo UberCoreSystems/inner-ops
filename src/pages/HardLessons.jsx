@@ -62,6 +62,10 @@ export default function HardLessons() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  // Oracle-first entry: a fresh extraction starts with just the event + the
+  // "Ask Oracle" action. The downstream forensic fields appear once the Oracle
+  // populates them or the user opts into filling them in by hand.
+  const [manualMode, setManualMode] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
@@ -683,6 +687,7 @@ export default function HardLessons() {
       violatedRuleId: null,
     });
     setShowForm(false);
+    setManualMode(false);
     setEditingLesson(null);
     setPendingOracleWisdom('');
     setPendingOracleReaction(null);
@@ -765,6 +770,20 @@ export default function HardLessons() {
     { key: 'ruleGoingForward', label: 'Rule',        done: !!newLesson.ruleGoingForward?.trim() },
   ];
   const completedSteps = formSteps.filter(s => s.done).length;
+
+  // Reveal the full forensic field set once there's anything to edit: the user
+  // opted into manual entry, the Oracle has extracted, an existing lesson is
+  // being edited, or a prefill already carried downstream content. Otherwise
+  // the form stays in its Oracle-first state (event + Ask Oracle only).
+  const hasDownstreamContent = !!(
+    newLesson.myAssumption?.trim() ||
+    newLesson.signalIgnored?.trim() ||
+    newLesson.costDescription?.trim() ||
+    newLesson.extractedLesson?.trim() ||
+    newLesson.ruleGoingForward?.trim() ||
+    newLesson.costs.length
+  );
+  const showAllFields = manualMode || newLesson.isOracleExtracted || !!editingLesson || hasDownstreamContent;
 
   return (
     <div className="min-h-screen bg-black">
@@ -934,6 +953,19 @@ export default function HardLessons() {
               />
             </div>
 
+            {!showAllFields && (
+              <div className="px-4 py-3 rounded-xl border border-[#a855f7]/20 bg-[#a855f7]/5">
+                <p className="text-sm text-[#ababab] leading-relaxed">
+                  Describe what happened above, then let the Oracle extract the assumption, the ignored signal, the cost, the lesson, and the rule. You edit everything after.
+                </p>
+              </div>
+            )}
+
+            {showAllFields && (
+            <>
+            {newLesson.isOracleExtracted && (
+              <p className="text-xs uppercase tracking-widest text-[#a855f7]">Review &amp; edit the extraction</p>
+            )}
             {/* My Assumption */}
             <div>
               <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
@@ -1032,32 +1064,47 @@ export default function HardLessons() {
                 placeholder='If... then... / Always... / Never...'
               />
             </div>
+            </>
+            )}
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3 pt-6 border-t border-[#1a1a1a] max-sm:sticky max-sm:bottom-16 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:z-10 max-sm:pb-3">
-              <button
-                onClick={() => submitLesson(false)}
-                disabled={loading}
-                className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
-              >
-                {loading ? 'Saving...' : 'Save Draft'}
-              </button>
+              {showAllFields && (
+                <>
+                  <button
+                    onClick={() => submitLesson(false)}
+                    disabled={loading}
+                    className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
+                  >
+                    {loading ? 'Saving...' : 'Save Draft'}
+                  </button>
 
-              <button
-                onClick={() => submitLesson(true)}
-                disabled={loading}
-                className="px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
-              >
-                {loading ? 'Finalizing...' : 'Finalize Lesson'}
-              </button>
+                  <button
+                    onClick={() => submitLesson(true)}
+                    disabled={loading}
+                    className="px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
+                  >
+                    {loading ? 'Finalizing...' : 'Finalize Lesson'}
+                  </button>
+                </>
+              )}
 
               <button
                 onClick={seekOracleExtraction}
                 disabled={loading || (newLesson.eventDescription?.trim().length ?? 0) < 30}
                 className="px-6 py-3 bg-[#a855f7] hover:bg-[#9333ea] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
               >
-                🔮 Ask Oracle to Extract Lesson & Rule
+                {showAllFields ? '🔮 Re-extract with Oracle' : '🔮 Ask Oracle to Extract Lesson & Rule'}
               </button>
+
+              {!showAllFields && (
+                <button
+                  onClick={() => setManualMode(true)}
+                  className="px-6 py-3 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-[#ababab] rounded-2xl transition-all duration-300 font-medium border border-[#1a1a1a]"
+                >
+                  Fill in manually instead
+                </button>
+              )}
 
               <button
                 onClick={resetForm}

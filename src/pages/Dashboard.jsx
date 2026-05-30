@@ -30,6 +30,11 @@ import logger from '../utils/logger';
 // BM v2 deferred — match the gate used in App.jsx and Navbar.jsx.
 const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
 
+// Mirrors the Synthesis briefing's signal-delta vocabulary so the dashboard's
+// consolidated Trajectory header can show the same verdict without recomputing.
+const SIGNAL_DELTA_LABELS = { improving: 'Improving', stable: 'Stable', deteriorating: 'Deteriorating' };
+const SIGNAL_DELTA_COLORS = { improving: 'text-[#22c55e]', stable: 'text-[#ababab]', deteriorating: 'text-[#ef4444]' };
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -76,6 +81,9 @@ export default function Dashboard() {
 
   // Synthesis Briefing ready indicator
   const [latestSynthesisIsNew, setLatestSynthesisIsNew] = useState(false);
+  // Latest synthesis signal delta (improving/stable/deteriorating), surfaced in
+  // the consolidated Trajectory header. Captured from the prefetch below.
+  const [latestSignalDelta, setLatestSignalDelta] = useState(null);
 
   // Sunday Autopsy
   const [autopsyText, setAutopsyText] = useState('');
@@ -164,6 +172,7 @@ export default function Dashboard() {
       readUserData('syntheses').then(data => {
         const sorted = (data || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
         if (sorted[0]?.isNew === true) setLatestSynthesisIsNew(true);
+        if (sorted[0]?.signalDelta) setLatestSignalDelta(sorted[0].signalDelta);
       }).catch((err) => {
         logger.warn('Dashboard: synthesis prefetch failed:', err?.message);
       });
@@ -399,7 +408,7 @@ export default function Dashboard() {
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </p>
               <h1 className="text-2xl sm:text-3xl font-bold text-white break-words">
-                Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Warrior'}
+                Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Operator'}
               </h1>
             </header>
 
@@ -609,6 +618,25 @@ export default function Dashboard() {
           );
         })()}
 
+        {/* Trajectory — consolidated progress surface answering "is this working?"
+            Reuses the existing Signal Report, Behavioral Record, and stats
+            surfaces under one header, with the latest Synthesis signal delta as
+            the verdict. No new metrics computed here. */}
+        <div className="mb-6 flex items-end justify-between gap-4 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
+          <div>
+            <h2 className="text-white text-lg font-light">Trajectory</h2>
+            <p className="text-[#858585] text-xs mt-0.5">Is the work moving you? Signal, record, and totals in one place.</p>
+          </div>
+          {latestSignalDelta && (
+            <div className="text-right shrink-0">
+              <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">Signal Delta</p>
+              <p className={`text-lg font-light ${SIGNAL_DELTA_COLORS[latestSignalDelta] || 'text-[#ababab]'}`}>
+                {SIGNAL_DELTA_LABELS[latestSignalDelta] || latestSignalDelta}
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Signal Report — prose-only, no score, no rank, no rings */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40">
@@ -720,21 +748,21 @@ export default function Dashboard() {
               ) : (
                 <div className="oura-card p-8 text-center">
                   <div className="text-4xl mb-3 opacity-30">📊</div>
-                  <p className="text-[#858585]">No recent activity</p>
-                  <p className="text-[#858585] text-sm mt-1">Start using the modules to track progress</p>
+                  <p className="text-[#858585]">Nothing logged yet.</p>
+                  <p className="text-[#858585] text-sm mt-1 max-w-sm mx-auto">The system has no signal to read. Start with the General Ledger — name what needs to die.</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
-                    <button
-                      onClick={() => setTodaysReflectionOpen(true)}
-                      className="px-5 py-2.5 bg-[#00d4aa] hover:bg-[#00e6b8] text-black rounded-xl transition-all duration-300 font-medium text-sm"
-                    >
-                      Today's Reflection
-                    </button>
                     <Link
                       to="/ledger"
-                      className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
+                      className="px-5 py-2.5 bg-[#00d4aa] hover:bg-[#00e6b8] text-black rounded-xl transition-all duration-300 font-medium text-sm"
                     >
                       Add a Kill Contract
                     </Link>
+                    <button
+                      onClick={() => setTodaysReflectionOpen(true)}
+                      className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
+                    >
+                      Today's Reflection
+                    </button>
                   </div>
                 </div>
               )}

@@ -10,6 +10,9 @@
  *   secondaryLabel — secondary action text (defaults to "Skip")
  *   showProgress — when true, renders a progress bar above the content
  *   stepIndex / totalSteps — progress-bar inputs (only used when showProgress)
+ *   eyebrow / heading — optional copy overrides (default to the onboarding framing)
+ *   paragraphs — optional array of body strings; when provided, replaces the
+ *                default multi-paragraph body (used for the pre-auth intro)
  */
 export default function BriefingScreen({
   onContinue,
@@ -19,6 +22,9 @@ export default function BriefingScreen({
   showProgress = false,
   stepIndex = 0,
   totalSteps = 1,
+  eyebrow = 'Inner Operations',
+  heading = 'This is your inner command center.',
+  paragraphs = null,
 }) {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4 py-12">
@@ -35,20 +41,30 @@ export default function BriefingScreen({
         )}
 
         <div className="animate-fade-in-up">
-          <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Inner Operations</p>
+          <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">{eyebrow}</p>
           <h1 className="text-4xl font-light text-white mb-6 leading-tight">
-            This is your inner command center.
+            {heading}
           </h1>
-          <p className="text-[#ababab] text-lg leading-relaxed mb-4">
-            Every module — your journal, kill list, hard lessons, relapse tracking — feeds an AI advisor called the Oracle.
-          </p>
-          <p className="text-[#ababab] text-lg leading-relaxed mb-4">
-            The Oracle reads what you actually write and responds to it directly. No generic advice. No comfort. The more honest you are, the more useful it becomes.
-          </p>
-          <p className="text-[#858585] text-sm leading-relaxed mb-2">
-            <span className="text-[#ababab] font-medium">Where to start:</span> Ledger first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. The Signal when you slip. Black Mirror when attention drifts.
-          </p>
-          <p className="text-[#858585] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
+          {paragraphs ? (
+            paragraphs.map((text, i) => (
+              <p key={i} className="text-[#ababab] text-lg leading-relaxed mb-4">
+                {text}
+              </p>
+            ))
+          ) : (
+            <>
+              <p className="text-[#ababab] text-lg leading-relaxed mb-4">
+                Every module — your journal, General Ledger, hard lessons, relapse tracking — feeds an AI advisor called the Oracle.
+              </p>
+              <p className="text-[#ababab] text-lg leading-relaxed mb-4">
+                The Oracle reads what you actually write and responds to it directly. No generic advice. No comfort. The more honest you are, the more useful it becomes.
+              </p>
+              <p className="text-[#858585] text-sm leading-relaxed mb-2">
+                <span className="text-[#ababab] font-medium">Where to start:</span> Ledger first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. The Signal when you slip. Black Mirror when attention drifts.
+              </p>
+              <p className="text-[#858585] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
+            </>
+          )}
         </div>
 
         <div className="flex justify-between items-center mt-12">
