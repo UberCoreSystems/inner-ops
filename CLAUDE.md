@@ -5,10 +5,8 @@
 - **Status:** Pre-deploy. Nothing is live. No migrations, no hotfix urgency. Aggressive changes are safe.
 - **Build:** Clean. BER-1 through BER-13 closed. QA and CI agents operational.
 - **v1 Scope (locked):** Journaling + Kill List + Hard Lessons + Relapse Radar + Synthesis
-- **Deferred (do not build unless explicitly unblocked by Bo):**
-  - Black Mirror — complex 3-layer analytics architecture (Signal Capture, Pattern Recognition, Identity Reflection in `src/utils/blackMirrorAnalytics.js`), confirmed post-launch
 - **Open items (post-launch):** Oracle UI redesign, engagement notifications, AI interaction layer (Command Brief — extends Synthesis cross-module reading to session-level prompts), MCP/skills integration
-- **Black Mirror nav visibility:** Route and nav link exist in the codebase. Remove or feature-flag before beta deploy — module is not in v1 scope.
+- **Black Mirror — removed (2026-05-31):** the module, its analytics engine, cue-restructuring, routes/nav, and all `blackMirror*` data reads were fully excised from the codebase. Oura remains built but flagged off (`VITE_ENABLE_OURA`).
 
 ## Product Language — Non-Negotiable
 
@@ -45,13 +43,13 @@ It is **not** a habit tracker, wellness app, or motivational tool. Enforce this 
 
 | Module | Status |
 |--------|--------|
-| **Black Mirror** | Component and route exist. Nav link present. Do not QA, do not surface to beta testers. Gate or remove before deploy. |
+| **Oura Ring** | Built but flagged off (`VITE_ENABLE_OURA`, default off). `/oura/callback` route and the RelapseRadar connect button stay hidden until enabled. |
 
 ## Cross-Module Architecture
 
 Synthesis and Oracle both read across all modules via `readUserData`. Key data flows:
 
-- **`generateSynthesisBriefing.js`** — Pulls journalEntries, killTargets, hardLessons, relapseEntries, blackMirrorEntries, userSettings. Computes convergence point, violated rules, signal delta. Cadence-enforced (weekly/biweekly). Confrontation question via Oracle with local fallback.
+- **`generateSynthesisBriefing.js`** — Pulls journalEntries, killTargets, hardLessons, relapseEntries, userSettings. Computes convergence point, violated rules, signal delta. Cadence-enforced (weekly/biweekly). Confrontation question via Oracle with local fallback.
 - **`getBehavioralContext.js`** — 5-minute cached cross-module snapshot injected into Oracle calls. Gives Oracle awareness of active kill targets, relapse archetypes, drift signals, rule violations, and identity direction.
 - **`detectDriftSignals.js`** — Rules-based early warning. Archetype frequency (3+ in 7d), precursor pattern recurrence, correlated Kill List escape + relapse within 48h.
 - **`detectEvasionMarkers.js`** — Behavioral evasion detection layer.
@@ -100,7 +98,6 @@ UI · UX · AI quality · feature completeness — **equal weight.**
 
 ## Pre-Deploy Checklist
 
-- [x] Remove or feature-flag Black Mirror from Navbar and App.jsx routes — gated by `VITE_ENABLE_BLACK_MIRROR` env var (default off)
 - [x] Add Firebase Hosting config to `firebase.json`
 - [ ] Verify `.env` / environment variables are set for production Firebase project
 - [ ] Run `npm run build` and confirm clean production build

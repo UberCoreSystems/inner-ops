@@ -81,14 +81,6 @@ export const Icons = {
     </svg>
   ),
 
-  // Black Mirror / Reflection
-  mirror: (size = 24) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="3" />
-      <circle cx="12" cy="12" r="4" opacity="0.5" />
-    </svg>
-  ),
-
   // Relapse / Warning
   relapse: (size = 24) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

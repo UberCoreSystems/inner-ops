@@ -6,7 +6,6 @@ import {
   pickTodaysOracleQuestion,
   readUserSettings,
   assignDailyPrompt,
-  markDailyPromptAnswered,
   formatRelativeDate,
   todayUtcDateString,
 } from '../utils/oracleQuestionPool.js';
@@ -42,7 +41,7 @@ const getTodaysStaticPrompt = () => {
 
 const isStaticPromptId = (id) => typeof id === 'string' && id.startsWith('static/');
 
-const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSignal = 0 }) {
+const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
   const [prompt, setPrompt] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -135,25 +134,9 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, answeredSi
     return () => { cancelled = true; };
   }, []);
 
-  // Parent signals "the user just answered this prompt" via answeredSignal.
-  // Initial value is 0 — we ignore the first render so the prompt isn't
-  // marked answered on mount.
-  useEffect(() => {
-    if (answeredSignal === 0) return;
-    if (!prompt || prompt.kind === 'answered') return;
-    let cancelled = false;
-    (async () => {
-      let settings = null;
-      try { settings = await readUserSettings(); } catch { /* swallow */ }
-      if (cancelled) return;
-      await markDailyPromptAnswered(settings);
-      if (!cancelled) setPrompt({ kind: 'answered' });
-    })();
-    return () => { cancelled = true; };
-    // Re-runs only when answeredSignal increments. `prompt` is read as a guard,
-    // not a trigger — depending on it would re-mark the prompt answered.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answeredSignal]);
+  // The daily prompt is marked answered when a journal entry is saved from
+  // the "Journal This" hand-off (see Journal.jsx). On the next dashboard
+  // mount this component re-reads settings and hides itself for the day.
 
   if (!prompt || prompt.kind === 'answered') return null;
 

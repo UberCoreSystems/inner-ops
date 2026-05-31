@@ -318,9 +318,6 @@ function buildBehavioralContextBlock(behavioralContext) {
     const rules = behavioralContext.violatedHardLessons.map((l) => `"${l.rule}"`).join(", ");
     parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
   }
-  if (behavioralContext.blackMirrorTrend) {
-    parts.push(`Black Mirror attention trend: ${behavioralContext.blackMirrorTrend}.`);
-  }
   if (behavioralContext.journalMoodPattern) {
     parts.push(`Dominant journal mood (last 7d): ${behavioralContext.journalMoodPattern}.`);
   }
@@ -341,7 +338,6 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount) {
     killlist: "This is from the Kill List — the user is eliminating a specific pattern (habit, addiction, behavior, or fear). Read whether he named a new target, killed one, or had one escape, and respond to THAT event.",
     relapse: "This is a relapse entry — the user fell back into a pattern he is fighting to break. He is examining what happened.",
     hardlessons: "This is a Hard Lesson extraction — the user is converting a painful experience into an enforceable rule.",
-    blackmirror: "This is a Black Mirror entry — the user is examining his screen time, digital consumption, and its effect on his clarity. He has logged concrete data (hours, fog level, interaction quality).",
     emergency: "This is an EMERGENCY — the user is in the middle of an acute struggle right now. An urge, a crisis, intense pressure. He reached for help instead of acting out.",
     lessonextraction: "STRUCTURED_EXTRACTION",
   };
@@ -625,12 +621,6 @@ Hard Lesson entries:
 - Go one level deeper than the lesson he already stated.
 - Test the rule: name the most likely scenario where he will rationalize breaking it.
 - Close with a question about when the next test of this rule will arrive.
-
-Black Mirror entries:
-- Read the data as a whole — hours, fog, interaction quality, unconscious checking. What do they reveal together?
-- Name what the screen use is likely displacing or numbing.
-- Give one actionable signal from the data.
-- Close with a question about what presence or sharpness he traded for the screen time.
 
 Hard rules:
 - Respond only to what was actually written. Every sentence must connect to something specific in his entry.

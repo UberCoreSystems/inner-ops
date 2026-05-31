@@ -296,9 +296,6 @@ export const extractThemes = (entryText, moduleName = '') => {
   if (module.includes('kill')) {
     matched.push('discipline', 'strategy');
   }
-  if (module.includes('black')) {
-    matched.push('physical_state', 'discipline');
-  }
   if (module.includes('emergency')) {
     matched.push('impulse', 'fear_avoidance');
   }
@@ -388,9 +385,6 @@ const buildCrossModuleInstruction = (behavioralContext) => {
   if (behavioralContext.violatedHardLessons?.length) {
     const rules = behavioralContext.violatedHardLessons.map(l => `"${l.rule}"`).join(', ');
     parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
-  }
-  if (behavioralContext.blackMirrorTrend) {
-    parts.push(`Black Mirror attention trend: ${behavioralContext.blackMirrorTrend}.`);
   }
   if (behavioralContext.journalLanguagePattern) {
     parts.push(`Dominant journal language pattern (last 7d): ${behavioralContext.journalLanguagePattern}.`);
@@ -835,7 +829,7 @@ export const generateFeedback = async ({
 
   // UXR-002 Spec 5: evasion-aware tone calibration.
   // Runs for every module (Journal, Kill List, Hard Lessons, Relapse Radar,
-  // Black Mirror, Emergency) so confrontation precision scales with avoidance
+  // Emergency) so confrontation precision scales with avoidance
   // density regardless of entry surface. detectEvasionMarkers short-circuits
   // entries under 20 chars internally, so this is safe for brief inputs.
   const evasionMarkers = detectEvasionMarkers(cleanEntry);
@@ -937,8 +931,7 @@ export const composeJournalContent = ({ event = '', attribution = '', expansion 
  *
  * The structured form is used by the retired-mood Journal entry flow
  * (Spec 3, UXR-002). Other modules (Kill List, Hard Lessons, Relapse Radar,
- * Emergency, Black Mirror, TodaysReflectionModal, OracleModal) continue to pass
- * the legacy string form.
+ * Emergency, OracleModal) continue to pass the legacy string form.
  */
 export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntries = [], behavioralContext = null) => {
   let moduleName;

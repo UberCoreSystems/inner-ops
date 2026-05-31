@@ -7,7 +7,7 @@ service cloud.firestore {
     // Inner Ops Firestore rules
     //
     // Canonical data layout: top-level collections (`journalEntries`,
-    // `killTargets`, `blackMirrorEntries`, `relapseEntries`, `hardLessons`,
+    // `killTargets`, `relapseEntries`, `hardLessons`,
     // `compassChecks`) where each document carries `userId`. The application
     // ALWAYS queries with `where("userId","==",auth.uid)`; the rules below
     // enforce that shape so unfiltered reads are rejected by the rules
@@ -104,12 +104,6 @@ service cloud.firestore {
       allow list: if ownerListAllowed();
     }
 
-    match /blackMirrorEntries/{docId} {
-      allow create: if createsOwnDocument();
-      allow get, delete: if isOwner(resource.data.userId);
-      allow update: if updatesOwnDocument();
-      allow list: if ownerListAllowed();
-    }
 
     match /relapseEntries/{docId} {
       allow create: if createsOwnDocument();
@@ -185,13 +179,6 @@ service cloud.firestore {
       allow list: if ownerListAllowed();
     }
 
-    // BER-264: Black Mirror cue-restructuring saves
-    match /cueRestructurings/{docId} {
-      allow create: if createsOwnDocument();
-      allow get, delete: if isOwner(resource.data.userId);
-      allow update: if updatesOwnDocument();
-      allow list: if ownerListAllowed();
-    }
 
     // EmergencyButton session logging
     match /emergencyLogs/{docId} {

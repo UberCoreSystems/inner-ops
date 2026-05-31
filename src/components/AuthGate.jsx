@@ -41,6 +41,11 @@ export default function AuthGate({ onAuthSuccess }) {
         'A private system for turning self-awareness into self-command. Journal, name what needs to die, log the lessons you refuse to pay for twice, catch the drift before it lands.',
         "One advisor — the Oracle — reads across all of it and tells you what you're avoiding. No comfort. No generic advice.",
       ]}
+      sample={{
+        context: 'Skipped the gym again. Told myself I\'d go tomorrow. That\'s four days running.',
+        response:
+          "You're not negotiating with your schedule — you're negotiating with your self-image. “Tomorrow” is the story that lets today off the hook. The pattern isn't the missed workout; it's that you've started trusting your own postponements. Name what “tomorrow” is protecting you from.",
+      }}
     />
   );
 }

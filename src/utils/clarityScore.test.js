@@ -24,7 +24,6 @@ const emptyCollections = () => ({
   killTargets: [],
   hardLessons: [],
   relapseEntries: [],
-  blackMirrorEntries: [],
 });
 
 // ─── getConfrontationRate ─────────────────────────────────────────────────────

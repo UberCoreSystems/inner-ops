@@ -26,7 +26,6 @@ import {
   RELAPSE_FIELDS,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
-  BLACK_MIRROR_FIELDS,
   USER_SETTINGS_FIELDS,
 } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
@@ -83,12 +82,11 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     }
   }
 
-  // --- Pull data from all 5 modules + user settings ---
-  const [relapseEntries, killTargets, hardLessons, blackMirrorEntries, journalEntries, userSettings] = await Promise.all([
+  // --- Pull data from all modules + user settings ---
+  const [relapseEntries, killTargets, hardLessons, journalEntries, userSettings] = await Promise.all([
     reader(COLLECTIONS.RELAPSE_ENTRIES).catch(() => []),
     reader(COLLECTIONS.KILL_TARGETS).catch(() => []),
     reader(COLLECTIONS.HARD_LESSONS).catch(() => []),
-    reader(COLLECTIONS.BLACK_MIRROR_ENTRIES).catch(() => []),
     reader(COLLECTIONS.JOURNAL_ENTRIES).catch(() => []),
     reader(COLLECTIONS.USER_SETTINGS).catch(() => []),
   ]);
@@ -150,21 +148,10 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
   const recentJournals = (journalEntries || []).filter(e => now - getTimestamp(e) < windowMs28);
   const journalEntriesPerWeek = Number((recentJournals.length / 4).toFixed(1));
 
-  // --- Black Mirror: trend over 4 weeks (BER-149: incorporates violatedRules) ---
+  // --- Signal Delta: trend from relapse / escape / rule-violation data ---
   let signalDelta = 'stable';
-  if ((blackMirrorEntries || []).length >= 4) {
-    const bmSorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
-    const recent2 = bmSorted.slice(0, 2).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
-    const older2 = bmSorted.slice(2, 4).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
-    const recentAvg = recent2.reduce((s, v) => s + v, 0) / 2;
-    const olderAvg = older2.reduce((s, v) => s + v, 0) / 2;
-    if (recentRelapseCount === 0 && totalEscapes28d <= 1 && recentAvg < olderAvg * 0.9 && violatedRules.length === 0) signalDelta = 'improving';
-    else if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || recentAvg > olderAvg * 1.2 || violatedRules.length >= 2) signalDelta = 'deteriorating';
-  } else {
-    // Fallback without Black Mirror data
-    if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || violatedRules.length >= 2) signalDelta = 'deteriorating';
-    else if (recentRelapseCount === 0 && activeTargets.some(t => t.streak > 14) && violatedRules.length === 0) signalDelta = 'improving';
-  }
+  if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || violatedRules.length >= 2) signalDelta = 'deteriorating';
+  else if (recentRelapseCount === 0 && activeTargets.some(t => t.streak > 14) && violatedRules.length === 0) signalDelta = 'improving';
 
   // --- Convergence Point (cross-module pattern, rules-based) ---
   const convergencePoint = deriveConvergencePoint({

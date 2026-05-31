@@ -354,7 +354,8 @@ const KillListDashboard = React.memo(function KillListDashboard() {
             </svg>
           </div>
           <h3 className="text-xl font-light text-white mb-2">No Active Contracts</h3>
-          <p className="text-[#858585] text-sm mb-6 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
+          <p className="text-[#858585] text-sm mb-2 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
+          <p className="text-[#6a6a6a] text-xs mb-6 max-w-xs mx-auto">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
           <button
             onClick={() => window.location.href = '/ledger'}
             className="px-6 py-3 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] transition-colors"

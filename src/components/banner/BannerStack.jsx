@@ -28,6 +28,7 @@ import logger from '../../utils/logger';
 export default function BannerStack({ user }) {
   const location = useLocation();
   const [journalEntries, setJournalEntries] = useState([]);
+  const [killTargets, setKillTargets] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
   const [settingsId, setSettingsId] = useState(null);
   const [notificationPreferences, setNotificationPreferences] = useState(
@@ -39,11 +40,13 @@ export default function BannerStack({ user }) {
   // Subscription unsubscribers held in refs so cleanup runs even if the
   // promise resolves after unmount.
   const journalUnsubRef = useRef(null);
+  const killTargetsUnsubRef = useRef(null);
   const settingsUnsubRef = useRef(null);
 
   useEffect(() => {
     if (!user) {
       setJournalEntries([]);
+      setKillTargets([]);
       setUserProfile(null);
       setSettingsId(null);
       setNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
@@ -78,6 +81,18 @@ export default function BannerStack({ user }) {
       logger.warn('BannerStack journal subscribe failed:', err);
     });
 
+    // Realtime kill targets — feeds the daily check-in trigger. A check-in
+    // or a new/closed contract updates banner state without a route change.
+    subscribeToUserData('killTargets', (data) => {
+      if (!active) return;
+      setKillTargets(data || []);
+    }).then((unsub) => {
+      if (!active) { unsub(); return; }
+      killTargetsUnsubRef.current = unsub;
+    }).catch((err) => {
+      logger.warn('BannerStack killTargets subscribe failed:', err);
+    });
+
     // Realtime user settings — toggling notification prefs / dismissals
     // updates banner state instantly.
     subscribeToUserData('userSettings', (docs) => {
@@ -110,6 +125,10 @@ export default function BannerStack({ user }) {
         try { journalUnsubRef.current(); } catch { /* noop */ }
         journalUnsubRef.current = null;
       }
+      if (killTargetsUnsubRef.current) {
+        try { killTargetsUnsubRef.current(); } catch { /* noop */ }
+        killTargetsUnsubRef.current = null;
+      }
       if (settingsUnsubRef.current) {
         try { settingsUnsubRef.current(); } catch { /* noop */ }
         settingsUnsubRef.current = null;
@@ -124,11 +143,12 @@ export default function BannerStack({ user }) {
     if (!loaded || !user) return [];
     return evaluateAllTriggers({
       journalEntries,
+      killTargets,
       userProfile,
       notificationPreferences,
       bannerDismissals,
     });
-  }, [loaded, user, journalEntries, userProfile, notificationPreferences, bannerDismissals]);
+  }, [loaded, user, journalEntries, killTargets, userProfile, notificationPreferences, bannerDismissals]);
 
   const persistDismissal = useCallback(async (triggerId) => {
     const next = { ...bannerDismissals, [triggerId]: new Date().toISOString() };

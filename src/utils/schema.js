@@ -13,7 +13,6 @@ export const COLLECTIONS = Object.freeze({
   JOURNAL_ENTRIES: 'journalEntries',
   KILL_TARGETS: 'killTargets',
   HARD_LESSONS: 'hardLessons',
-  BLACK_MIRROR_ENTRIES: 'blackMirrorEntries',
   RELAPSE_ENTRIES: 'relapseEntries',
   USER_SETTINGS: 'userSettings',
   SYNTHESES: 'syntheses',
@@ -62,11 +61,6 @@ export const HARD_LESSON_FIELDS = Object.freeze({
 export const JOURNAL_FIELDS = Object.freeze({
   MOOD: 'mood',
   MOOD_ALT: 'selectedMood', // legacy alias, still present in older docs
-});
-
-// Black Mirror entry fields.
-export const BLACK_MIRROR_FIELDS = Object.freeze({
-  INDEX: 'blackMirrorIndex',
 });
 
 // Pattern-confrontation fields. Each doc in COLLECTIONS.CONFRONTATIONS

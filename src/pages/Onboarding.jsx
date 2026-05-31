@@ -45,9 +45,14 @@ export default function Onboarding() {
   const [knownTriggersText, setKnownTriggersText] = useState('');
   const [operatingContext, setOperatingContext] = useState('');
 
-  // 0=briefing, 1=driver, 2=style, 3=focus, 4=kill target, 5=confrontation,
-  // 6=active situations, 7=known triggers, 8=operating context
-  const TOTAL_STEPS = 9;
+  // 0=briefing, 1=driver, 2=style, 3=focus (1–3 required), 4=kill target,
+  // 5=confrontation, 6=operating context (active situations + known triggers
+  // + free-form, combined). Steps 4–6 are optional and skippable via the
+  // "Enter now" affordance.
+  const TOTAL_STEPS = 7;
+  // First optional step — from here the user can bail to the dashboard at any
+  // time; handleComplete persists whatever has been captured so far.
+  const FIRST_OPTIONAL_STEP = 4;
 
   const canAdvance = () => {
     if (step === 1) return !!driver;
@@ -346,60 +351,51 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* Step 6: Active situations */}
+        {/* Step 6: Operating context — active situations, known triggers, and
+            free-form, combined into one optional screen. */}
         {step === 6 && (
           <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 1 of 3</p>
-            <h2 className="text-2xl font-light text-white mb-3">What are you currently navigating?</h2>
+            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context</p>
+            <h2 className="text-2xl font-light text-white mb-3">Give the Oracle your context.</h2>
             <p className="text-[#858585] text-sm mb-8">
-              The situations consuming your attention right now. The Oracle and the journal prompt you when you go quiet will reference these by name. One per line. Up to three.
+              All optional. Anything here sharpens the feedback — the Oracle and your journal prompts will reference it by name. Skip any field by leaving it blank.
             </p>
-            <textarea
-              value={activeSituationsText}
-              onChange={(e) => setActiveSituationsText(e.target.value)}
-              placeholder={'e.g.\nCareer transition — uncertain runway\nRebuilding after the breakup\nFinancial reset'}
-              rows={5}
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
-            />
-            <p className="text-[#858585] text-xs mt-2">Skip by leaving blank.</p>
-          </div>
-        )}
 
-        {/* Step 7: Known triggers */}
-        {step === 7 && (
-          <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 2 of 3</p>
-            <h2 className="text-2xl font-light text-white mb-3">Where do you historically fail?</h2>
-            <p className="text-[#858585] text-sm mb-8">
-              The times, places, or states that consistently precede failure. Naming them now sharpens drift detection later. One per line. Up to five.
-            </p>
-            <textarea
-              value={knownTriggersText}
-              onChange={(e) => setKnownTriggersText(e.target.value)}
-              placeholder={'e.g.\nAlone after 11pm\nAfter conflict with R.\nWhen finances are tight\nLong unstructured weekends'}
-              rows={6}
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
-            />
-            <p className="text-[#858585] text-xs mt-2">Skip by leaving blank.</p>
-          </div>
-        )}
+            <div className="mb-5">
+              <label className="text-[#858585] text-xs uppercase tracking-widest block mb-2">What are you currently navigating?</label>
+              <p className="text-[#858585] text-xs mb-2">The situations consuming your attention. One per line. Up to three.</p>
+              <textarea
+                value={activeSituationsText}
+                onChange={(e) => setActiveSituationsText(e.target.value)}
+                placeholder={'e.g.\nCareer transition — uncertain runway\nRebuilding after the breakup\nFinancial reset'}
+                rows={4}
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+              />
+            </div>
 
-        {/* Step 8: Operating context */}
-        {step === 8 && (
-          <div className="animate-fade-in-up">
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Optional · Operating context 3 of 3</p>
-            <h2 className="text-2xl font-light text-white mb-3">Anything else the system should know?</h2>
-            <p className="text-[#858585] text-sm mb-8">
-              Constraints, history, current state — anything that would help the Oracle give you sharper feedback. Free-form.
-            </p>
-            <textarea
-              value={operatingContext}
-              onChange={(e) => setOperatingContext(e.target.value)}
-              placeholder="e.g. Recovering from injury, no caffeine for the next 90 days. Sober 18 months. Single parent — limited solitude. Don't soften when I'm rationalizing."
-              rows={6}
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
-            />
-            <p className="text-[#858585] text-xs mt-2">Skip by leaving blank.</p>
+            <div className="mb-5">
+              <label className="text-[#858585] text-xs uppercase tracking-widest block mb-2">Where do you historically fail?</label>
+              <p className="text-[#858585] text-xs mb-2">Times, places, or states that precede failure. Sharpens drift detection. One per line. Up to five.</p>
+              <textarea
+                value={knownTriggersText}
+                onChange={(e) => setKnownTriggersText(e.target.value)}
+                placeholder={'e.g.\nAlone after 11pm\nAfter conflict with R.\nWhen finances are tight\nLong unstructured weekends'}
+                rows={4}
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+              />
+            </div>
+
+            <div className="mb-2">
+              <label className="text-[#858585] text-xs uppercase tracking-widest block mb-2">Anything else the system should know?</label>
+              <p className="text-[#858585] text-xs mb-2">Constraints, history, current state. Free-form.</p>
+              <textarea
+                value={operatingContext}
+                onChange={(e) => setOperatingContext(e.target.value)}
+                placeholder="e.g. Recovering from injury, no caffeine for the next 90 days. Sober 18 months. Single parent — limited solitude. Don't soften when I'm rationalizing."
+                rows={4}
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+              />
+            </div>
           </div>
         )}
 
@@ -412,13 +408,27 @@ export default function Onboarding() {
             Back
           </button>
 
-          <button
-            onClick={handleNext}
-            disabled={!canAdvance() || saving}
-            className="px-8 py-3 bg-white text-black font-medium rounded-2xl disabled:opacity-20 hover:bg-gray-100 transition-all duration-200 text-sm min-h-11"
-          >
-            {saving ? 'Saving...' : step === TOTAL_STEPS - 1 ? 'Enter' : 'Continue'}
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Escape hatch — on optional steps the user can finish immediately
+                with whatever has been captured so far. */}
+            {step >= FIRST_OPTIONAL_STEP && step < TOTAL_STEPS - 1 && (
+              <button
+                onClick={handleComplete}
+                disabled={saving}
+                className="text-[#858585] hover:text-white transition-colors text-sm min-h-11 inline-flex items-center disabled:opacity-20"
+              >
+                Enter now →
+              </button>
+            )}
+
+            <button
+              onClick={handleNext}
+              disabled={!canAdvance() || saving}
+              className="px-8 py-3 bg-white text-black font-medium rounded-2xl disabled:opacity-20 hover:bg-gray-100 transition-all duration-200 text-sm min-h-11"
+            >
+              {saving ? 'Saving...' : step === TOTAL_STEPS - 1 ? 'Enter' : 'Continue'}
+            </button>
+          </div>
         </div>
 
       </div>

@@ -16,7 +16,6 @@ import SignalReport from '../components/SignalReport';
 import BehavioralRecordDensity from '../components/BehavioralRecordDensity';
 import MorningBrief from '../components/MorningBrief';
 import KillListDashboard from '../components/KillListDashboard';
-import TodaysReflectionModal from '../components/TodaysReflectionModal';
 import DailyPrompt from '../components/DailyPrompt';
 import MirrorStack from '../components/MirrorStack';
 import WeeklyRuleReview from '../components/WeeklyRuleReview';
@@ -27,9 +26,6 @@ import { SkeletonDashboard } from '../components/SkeletonLoader';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 
-// BM v2 deferred — match the gate used in App.jsx and Navbar.jsx.
-const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
-
 // Mirrors the Synthesis briefing's signal-delta vocabulary so the dashboard's
 // consolidated Trajectory header can show the same verdict without recomputing.
 const SIGNAL_DELTA_LABELS = { improving: 'Improving', stable: 'Stable', deteriorating: 'Deteriorating' };
@@ -38,13 +34,6 @@ const SIGNAL_DELTA_COLORS = { improving: 'text-[#22c55e]', stable: 'text-[#ababa
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [todaysReflectionOpen, setTodaysReflectionOpen] = useState(false);
-  // Tracks whether the TodaysReflectionModal was opened by DailyPrompt's
-  // "Journal This" button. A successful save in that case marks today's
-  // reflection as answered (DailyPrompt hides itself for the rest of the day).
-  const [todaysReflectionFromPrompt, setTodaysReflectionFromPrompt] = useState(false);
-  const [todaysReflectionInitialEntry, setTodaysReflectionInitialEntry] = useState('');
-  const [dailyPromptAnsweredSignal, setDailyPromptAnsweredSignal] = useState(0);
   const [stats, setStats] = useState({
     journalEntries: 0,
     relapseEntries: 0,
@@ -198,9 +187,7 @@ export default function Dashboard() {
       logger.log("📡 Dashboard: Loading data for user:", currentUser.uid);
       
       // Load ALL data at once - await everything before setting state.
-      // blackMirrorEntries is gated behind the feature flag so v1 deploys
-      // (BM disabled) skip the round-trip entirely.
-      const [journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons, userSettings] = await Promise.all([
+      const [journalEntries, relapseEntries, killTargets, hardLessons, userSettings] = await Promise.all([
         readUserData('journalEntries').then(data => {
           logger.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
@@ -213,12 +200,6 @@ export default function Dashboard() {
           logger.log("🎯 Dashboard: Kill targets loaded:", data?.length || 0);
           return data || [];
         }),
-        BLACK_MIRROR_ENABLED
-          ? readUserData('blackMirrorEntries').then(data => {
-              logger.log("📱 Dashboard: Black mirror entries loaded:", data?.length || 0);
-              return data || [];
-            })
-          : Promise.resolve([]),
         readUserData('hardLessons').then(data => {
           logger.log("⚡ Dashboard: Hard lessons loaded:", data?.length || 0);
           return data || [];
@@ -230,7 +211,6 @@ export default function Dashboard() {
         journalEntries: journalEntries.length,
         relapseEntries: relapseEntries.length,
         killTargets: killTargets.length,
-        blackMirrorEntries: blackMirrorEntries.length,
         hardLessons: hardLessons.length
       });
 
@@ -259,23 +239,20 @@ export default function Dashboard() {
         killTargets: killTargets.length,  // All-time total
         killTargetsTotal: killTargets.length,
         hardLessons: hardLessons.length,  // All-time total
-        hardLessonsTotal: hardLessons.length,
-        blackMirrorEntries: blackMirrorEntries.length,  // All-time total
-        blackMirrorEntriesTotal: blackMirrorEntries.length
+        hardLessonsTotal: hardLessons.length
       });
 
       // Get recent entries from all sources
       const allEntries = [
         ...journalEntries.slice(0, 3).map(e => ({ ...e, type: 'journal' })),
         ...relapseEntries.slice(0, 2).map(e => ({ ...e, type: 'relapse' })),
-        ...hardLessons.slice(0, 2).map(e => ({ ...e, type: 'hardlesson' })),
-        ...blackMirrorEntries.slice(0, 2).map(e => ({ ...e, type: 'blackmirror' }))
+        ...hardLessons.slice(0, 2).map(e => ({ ...e, type: 'hardlesson' }))
       ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
 
       setRecentEntries(allEntries);
       
       // Store raw data for deferred clarity score calculation
-      setRawUserData({ journalEntries, relapseEntries, killTargets, blackMirrorEntries, hardLessons, userSettings });
+      setRawUserData({ journalEntries, relapseEntries, killTargets, hardLessons, userSettings });
 
       logger.log("✅ Dashboard: Critical data loaded and UI updated", {
         stats: { 
@@ -381,8 +358,7 @@ export default function Dashboard() {
     const meta = {
       journal: { icon: '📝', color: '#a855f7', label: 'Journal' },
       relapse: { icon: '⚠️', color: '#f59e0b', label: 'Awareness' },
-      hardlesson: { icon: '⚡', color: '#f59e0b', label: 'Hard Lesson' },
-      blackmirror: { icon: '📱', color: '#4da6ff', label: 'Mirror Check' }
+      hardlesson: { icon: '⚡', color: '#f59e0b', label: 'Hard Lesson' }
     };
     return meta[type] || { icon: '📊', color: '#8a8a8a', label: 'Activity' };
   }, []);
@@ -461,11 +437,8 @@ export default function Dashboard() {
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
           <DailyPrompt
             onJournalClick={(promptText) => {
-              setTodaysReflectionInitialEntry(promptText || '');
-              setTodaysReflectionFromPrompt(true);
-              setTodaysReflectionOpen(true);
+              navigate('/journal', { state: { seedPrompt: promptText || '', fromDailyPrompt: true } });
             }}
-            answeredSignal={dailyPromptAnsweredSignal}
           />
         </section>
 
@@ -599,7 +572,7 @@ export default function Dashboard() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-white text-sm font-medium mb-1">Last Week's Record</h3>
-                    <p className="text-[#858585] text-xs">Across {activeTargets.length} active battle{activeTargets.length !== 1 ? 's' : ''}</p>
+                    <p className="text-[#858585] text-xs">Across {activeTargets.length} active contract{activeTargets.length !== 1 ? 's' : ''}</p>
                   </div>
                   <button onClick={() => setKillReportDismissed(true)} className="text-[#858585] hover:text-[#858585] transition-colors shrink-0">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -675,7 +648,7 @@ export default function Dashboard() {
                 <AppIcon name="journal" size={28} color="#a855f7" />
               </div>
               <h4 className="text-white font-medium mb-1">Journal</h4>
-              <p className="text-[#858585] text-sm">Reflect & process</p>
+              <p className="text-[#858585] text-sm">Today's reflection</p>
             </Link>
             
             <Link to="/ledger" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all">
@@ -683,7 +656,7 @@ export default function Dashboard() {
                 <AppIcon name="target" size={28} color="#ef4444" />
               </div>
               <h4 className="text-white font-medium mb-1">General Ledger</h4>
-              <p className="text-[#858585] text-sm">Eliminate patterns</p>
+              <p className="text-[#858585] text-sm">Name what needs to die</p>
             </Link>
 
             <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all">
@@ -691,7 +664,7 @@ export default function Dashboard() {
                 <AppIcon name="hardLessons" size={28} color="#f59e0b" />
               </div>
               <h4 className="text-white font-medium mb-1">Hard Lessons</h4>
-              <p className="text-[#858585] text-sm">Turn pain to wisdom</p>
+              <p className="text-[#858585] text-sm">Convert cost into a rule</p>
             </Link>
 
             <Link to="/relapse" className="oura-card p-5 group hover:border-[#00d4aa]/50 transition-all">
@@ -757,12 +730,12 @@ export default function Dashboard() {
                     >
                       Add a Kill Contract
                     </Link>
-                    <button
-                      onClick={() => setTodaysReflectionOpen(true)}
+                    <Link
+                      to="/journal"
                       className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
                     >
                       Today's Reflection
-                    </button>
+                    </Link>
                   </div>
                 </div>
               )}
@@ -771,24 +744,6 @@ export default function Dashboard() {
 
           </div>
         </div>
-
-        {/* Today's Reflection Modal */}
-        <TodaysReflectionModal
-          isOpen={todaysReflectionOpen}
-          initialEntry={todaysReflectionInitialEntry}
-          onClose={() => {
-            setTodaysReflectionOpen(false);
-            setTodaysReflectionFromPrompt(false);
-            setTodaysReflectionInitialEntry('');
-          }}
-          onSuccess={() => {
-            // Refresh data after successful entry
-            loadDashboardData();
-            if (todaysReflectionFromPrompt) {
-              setDailyPromptAnsweredSignal((n) => n + 1);
-            }
-          }}
-        />
 
         {/* Debug panel and window.debugDashboard surface removed.
             Admin recovery helpers live at scripts/firebaseAdmin.js. */}

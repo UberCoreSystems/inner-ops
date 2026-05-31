@@ -797,7 +797,7 @@ export default function HardLessons() {
             <h1 className="text-2xl sm:text-4xl font-bold text-white">Hard Lessons</h1>
           </div>
           <p className="text-[#ababab] text-lg mb-4">
-            Forensic extraction of irreversible signal from irreversible pain
+            Extract the lesson once, so you never pay for it twice.
           </p>
           <div className="oura-card p-4 border-l-4 border-[#f59e0b]">
             <p className="text-sm text-[#ababab]">

@@ -33,7 +33,7 @@ export const debugInspectAllFirebaseData = async () => {
 
     logger.log("🔍 Inspecting all Firestore data for user:", user.uid);
 
-    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'relapseEntries'];
     const results = {};
 
     for (const collectionName of collections) {
@@ -89,7 +89,7 @@ export const previewDataMigration = async (sourceUserId, targetUserId) => {
   try {
     await ensureAdminAuth();
     const db = await getDb();
-    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'relapseEntries'];
     const preview = {};
     let totalDocuments = 0;
 
@@ -140,7 +140,7 @@ export const executeDataMigration = async (sourceUserId, targetUserId) => {
     await ensureAdminAuth();
 
     const db = await getDb();
-    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'relapseEntries'];
     const migrationResults = {};
     let totalMigrated = 0;
     let totalErrors = 0;
@@ -197,7 +197,7 @@ export const findDuplicateDocuments = async () => {
   try {
     await ensureAdminAuth();
     const db = await getDb();
-    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'relapseEntries'];
     const duplicateReport = {};
 
     for (const collectionName of collections) {
@@ -259,7 +259,7 @@ export const removeDuplicateDocuments = async () => {
   try {
     await ensureAdminAuth();
     const db = await getDb();
-    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'blackMirrorEntries', 'relapseEntries'];
+    const collections = ['journalEntries', 'killTargets', 'hardLessons', 'relapseEntries'];
     const removalResults = {};
     let totalRemoved = 0;
     let totalErrors = 0;

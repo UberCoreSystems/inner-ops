@@ -4,7 +4,7 @@
 
 **Scope:** Journaling · Kill List · Hard Lessons · Relapse Radar · Synthesis · Dashboard · Auth · Cloud Functions · Mobile parity · Firestore rules.
 
-**Out of scope:** Black Mirror (deferred; verify gated off only).
+**Out of scope:** Oura Ring (deferred; verify gated off only).
 
 ---
 
@@ -286,10 +286,6 @@
 - [ ] Lists targets killed in last 7 days
 - [ ] Non-Monday → hidden
 
-### 6.9 Black Mirror gate
-- [ ] `VITE_ENABLE_BLACK_MIRROR=false` (or unset) → no nav link, route `/black-mirror` does not mount (try direct URL)
-- [ ] Mirror Stack section not rendered on Dashboard
-
 ---
 
 ## Section 7 — Synthesis ([src/pages/SynthesisBriefing.jsx](src/pages/SynthesisBriefing.jsx))
@@ -362,7 +358,6 @@ Test on real phone (or Chrome devtools device mode at 375x667 minimum). **Do not
 
 ### 9.1 Navbar ([src/components/Navbar.jsx](src/components/Navbar.jsx))
 - [ ] All 6 v1 tabs render on mobile (no `hidden md:flex` regression)
-- [ ] Black Mirror tab NOT present (env flag off)
 - [ ] Active tab visually distinct
 - [ ] Bottom safe-area padding clears the iOS home indicator
 - [ ] Settings/Profile icons render (text may be hidden)

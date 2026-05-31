@@ -19,12 +19,7 @@ import { InlineErrorBoundary } from './components/ErrorBoundary';
 import OnboardingGate from './components/OnboardingGate';
 import BannerStack from './components/banner/BannerStack';
 
-// Finding 5 remediation: Black Mirror is deferred (post-v1). The route is
-// gated behind an env flag so it can be re-enabled without a code change.
-// Default: off. Beta deploys must not ship with VITE_ENABLE_BLACK_MIRROR=true.
-const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
-
-// Oura Ring is also deferred (post-v1). Same env-flag pattern as Black Mirror.
+// Oura Ring is deferred (post-v1), gated behind an env flag.
 // When false: the /oura/callback route is not mounted and the Oura UI in
 // RelapseRadar is hidden. The OAuth token-storage path is still missing a
 // Firestore rule (defense-in-depth `deny` lives in firestore.rules) so even
@@ -32,9 +27,6 @@ const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true'
 const OURA_ENABLED = import.meta.env.VITE_ENABLE_OURA === 'true';
 
 // Lazy-loaded pages (code splitting)
-const BlackMirror = BLACK_MIRROR_ENABLED
-  ? React.lazy(() => import('./components/BlackMirror'))
-  : null;
 const KillList = React.lazy(() => import('./pages/KillList'));
 const Journal = React.lazy(() => import('./pages/Journal'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -283,21 +275,6 @@ function App() {
               </InlineErrorBoundary>
             } 
           />
-          {BLACK_MIRROR_ENABLED && (
-            <Route
-              path="/blackmirror"
-              element={
-                <InlineErrorBoundary name="BlackMirror">
-                  {user ? (
-                    <Suspense fallback={<PageLoader />}>
-                      <BlackMirror />
-                    </Suspense>
-                  ) : <Navigate to="/auth" />}
-                </InlineErrorBoundary>
-              }
-            />
-          )}
-
           <Route
             path="/synthesis"
             element={

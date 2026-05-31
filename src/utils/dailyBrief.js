@@ -65,11 +65,12 @@ const docIdFor = (userId, dateKey) => `${userId}_${dateKey}`;
 // Lazy so tests that inject everything never pull Firebase SDK into the
 // module graph. Production callers pay a one-time dynamic-import cost.
 const loadDefaults = async () => {
-  const [contextMod, clarityMod, firebaseUtilsMod, firebaseMod, firestoreMod, functionsMod] =
+  const [contextMod, clarityMod, firebaseUtilsMod, profileMod, firebaseMod, firestoreMod, functionsMod] =
     await Promise.all([
       import('./getBehavioralContext.js'),
       import('./clarityScore.js'),
       import('./firebaseUtils.js'),
+      import('./userProfile.js'),
       import('../firebase.js'),
       import('firebase/firestore'),
       import('firebase/functions'),
@@ -79,6 +80,7 @@ const loadDefaults = async () => {
     getBehavioralContext: contextMod.getBehavioralContext,
     getActiveDriftSignals: clarityMod.getActiveDriftSignals,
     readUserData: firebaseUtilsMod.readUserData,
+    getUserProfile: profileMod.getUserProfile,
     getDb: firebaseMod.getDb,
     getAuth: firebaseMod.getAuth,
     firestore: firestoreMod,
@@ -97,6 +99,9 @@ const loadDefaults = async () => {
  *   - recentViolatedRules: up to 3 Hard Lessons rules violated in last 14d
  *   - escapedTargets: active Kill List targets with an escape in last 7d,
  *                     with their implementation intention
+ *   - activeSituations / knownTriggers: personal-context fields captured in
+ *                     onboarding so the brief can reference them by name
+ *                     (onboarding promises the system will do exactly this)
  *
  * Any individual source's failure is isolated — the brief should never
  * block. A failing reader yields an empty array / null for its field.
@@ -109,6 +114,9 @@ export async function buildSourceContext(userId, deps = {}) {
   const getBehavioralContextFn = deps.getBehavioralContext || loadedDefaults.getBehavioralContext;
   const getActiveDriftSignalsFn = deps.getActiveDriftSignals || loadedDefaults.getActiveDriftSignals;
   const readUserData = deps.readUserData || loadedDefaults.readUserData;
+  // Profile read is optional: tests that inject the three core readers skip
+  // loadDefaults entirely and don't provide getUserProfile, so guard for it.
+  const getUserProfileFn = deps.getUserProfile || loadedDefaults?.getUserProfile || null;
 
   const now = Date.now();
   const window14 = 14 * MS_PER_DAY;
@@ -200,11 +208,27 @@ export async function buildSourceContext(userId, deps = {}) {
     escapedTargets = [];
   }
 
+  // Personal context from the user profile (set during onboarding / Settings).
+  // Optional and best-effort — a failure here must never block the brief.
+  let activeSituations = [];
+  let knownTriggers = [];
+  if (typeof getUserProfileFn === 'function') {
+    try {
+      const profile = await getUserProfileFn();
+      activeSituations = Array.isArray(profile?.activeSituations) ? profile.activeSituations.filter(Boolean) : [];
+      knownTriggers = Array.isArray(profile?.knownTriggers) ? profile.knownTriggers.filter(Boolean) : [];
+    } catch (err) {
+      logger.warn('dailyBrief: user profile fetch failed', err?.message);
+    }
+  }
+
   return {
     behavioralContext: behavioralContext || null,
     activeDriftSignals,
     recentViolatedRules,
     escapedTargets,
+    activeSituations,
+    knownTriggers,
   };
 }
 
@@ -233,9 +257,6 @@ function serializeSourceContext(ctx) {
   }
   if (bc.journalLanguagePattern) {
     lines.push(`Recent journal language pattern: ${bc.journalLanguagePattern}`);
-  }
-  if (bc.blackMirrorTrend) {
-    lines.push(`Black Mirror trend: ${bc.blackMirrorTrend}`);
   }
 
   if (Array.isArray(ctx.activeDriftSignals) && ctx.activeDriftSignals.length > 0) {
@@ -272,6 +293,14 @@ function serializeSourceContext(ctx) {
         `  - "${t.title}" — ${t.escapeCountLast7d} escape${t.escapeCountLast7d === 1 ? '' : 's'} in last 7 days (last ${t.lastEscapeDaysAgo} day${t.lastEscapeDaysAgo === 1 ? '' : 's'} ago)${intent}`
       );
     });
+  }
+
+  if (Array.isArray(ctx.activeSituations) && ctx.activeSituations.length > 0) {
+    lines.push(`Currently navigating: ${ctx.activeSituations.join('; ')}`);
+  }
+
+  if (Array.isArray(ctx.knownTriggers) && ctx.knownTriggers.length > 0) {
+    lines.push(`Known failure points: ${ctx.knownTriggers.join('; ')}`);
   }
 
   if (Array.isArray(bc.activeKillTargets) && bc.activeKillTargets.length > 0 && ctx.escapedTargets.length === 0) {

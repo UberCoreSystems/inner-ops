@@ -21,7 +21,6 @@ const emptyCollections = () => ({
   killTargets: [],
   hardLessons: [],
   relapseEntries: [],
-  blackMirrorEntries: [],
   userSettings: [],
 });
 
@@ -31,7 +30,6 @@ const makeBehavioralContext = (overrides = {}) => ({
   activeKillTargets: [],
   dominantRelapseArchetype: null,
   recentRelapseCount: 0,
-  blackMirrorTrend: null,
   violatedHardLessons: [],
   journalLanguagePattern: null,
   identityDirection: null,
@@ -288,6 +286,63 @@ test('buildSourceContext: escapedTargets filter to active targets with 7d escape
   assert.equal(ctx.escapedTargets[0].title, 'Target With Recent Escape');
   assert.equal(ctx.escapedTargets[0].escapeCountLast7d, 1, 'only the escape in window counts');
   assert.equal(ctx.escapedTargets[0].implementationIntention.trigger, 'T');
+});
+
+test('buildSourceContext: reads activeSituations/knownTriggers from the user profile', async () => {
+  const ctx = await buildSourceContext('u1', {
+    getBehavioralContext: async () => makeBehavioralContext(),
+    getActiveDriftSignals: async () => [],
+    readUserData: makeReader(emptyCollections()),
+    getUserProfile: async () => ({
+      activeSituations: ['Career transition — uncertain runway', 'Rebuilding after the breakup'],
+      knownTriggers: ['Alone after 11pm'],
+    }),
+  });
+  assert.deepEqual(ctx.activeSituations, ['Career transition — uncertain runway', 'Rebuilding after the breakup']);
+  assert.deepEqual(ctx.knownTriggers, ['Alone after 11pm']);
+});
+
+test('buildSourceContext: absent getUserProfile yields empty personal-context arrays', async () => {
+  const ctx = await buildSourceContext('u1', {
+    getBehavioralContext: async () => makeBehavioralContext(),
+    getActiveDriftSignals: async () => [],
+    readUserData: makeReader(emptyCollections()),
+  });
+  assert.deepEqual(ctx.activeSituations, []);
+  assert.deepEqual(ctx.knownTriggers, []);
+});
+
+test('buildSourceContext: profile read failure does not throw', async () => {
+  const ctx = await buildSourceContext('u1', {
+    getBehavioralContext: async () => makeBehavioralContext(),
+    getActiveDriftSignals: async () => [],
+    readUserData: makeReader(emptyCollections()),
+    getUserProfile: async () => { throw new Error('profile down'); },
+  });
+  assert.deepEqual(ctx.activeSituations, []);
+  assert.deepEqual(ctx.knownTriggers, []);
+});
+
+test('generateDailyBrief: serialized snapshot names active situations for the brief', async () => {
+  let capturedEntryText = null;
+  await generateDailyBrief('u1', {
+    readBrief: async () => null,
+    writeBrief: async () => {},
+    callOracle: async ({ entryText }) => {
+      capturedEntryText = entryText;
+      return { data: { feedback: 'Brief body.' } };
+    },
+    getBehavioralContext: async () => makeBehavioralContext(),
+    getActiveDriftSignals: async () => [],
+    readUserData: makeReader(emptyCollections()),
+    getUserProfile: async () => ({
+      activeSituations: ['Rebuilding after the breakup'],
+      knownTriggers: ['Long unstructured weekends'],
+    }),
+    serverTimestamp: () => SERVER_TIMESTAMP_SENTINEL,
+  });
+  assert.match(capturedEntryText, /Currently navigating: Rebuilding after the breakup/);
+  assert.match(capturedEntryText, /Known failure points: Long unstructured weekends/);
 });
 
 test('buildSourceContext: individual reader failure does not throw', async () => {

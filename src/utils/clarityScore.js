@@ -104,12 +104,11 @@ export async function getConfrontationRate(userId, windowDays = 14, deps = {}) {
   const readUserData = deps.readUserData || (await loadDefaults()).defaultReadUserData;
   const compareToPrior = deps.compareToPrior === true;
   try {
-    const [journal, killTargets, hardLessons, relapse, blackMirror, confrontations] = await Promise.all([
+    const [journal, killTargets, hardLessons, relapse, confrontations] = await Promise.all([
       readUserData('journalEntries'),
       readUserData('killTargets'),
       readUserData('hardLessons'),
       readUserData('relapseEntries'),
-      readUserData('blackMirrorEntries'),
       readUserData('confrontations'),
     ]);
 
@@ -118,7 +117,6 @@ export async function getConfrontationRate(userId, windowDays = 14, deps = {}) {
       ...(killTargets || []),
       ...(hardLessons || []),
       ...(relapse || []),
-      ...(blackMirror || []),
       ...(confrontations || []),
     ];
 

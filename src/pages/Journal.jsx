@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -13,6 +13,7 @@ import { composeJournalSignal } from '../utils/composeJournalSignal';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
+import { markDailyPromptAnswered } from '../utils/oracleQuestionPool.js';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
 import CrossModuleExtractionPrompts from '../components/CrossModuleExtractionPrompts';
 import { parseDate } from '../utils/dateUtils';
@@ -214,6 +215,11 @@ const MoodStrip = ({ entries }) => {
 
 export default function Journal() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set when this page is opened from the Dashboard daily prompt's "Journal
+  // This" hand-off. A successful new-entry save then marks the daily prompt
+  // answered so it hides on the dashboard for the rest of the day.
+  const fromDailyPromptRef = useRef(false);
   const [entry, setEntry] = useState('');
   const [eventOccurredAt, setEventOccurredAt] = useState(() => new Date().toISOString().slice(0, 16));
   const [mood, setMood] = useState('focused');
@@ -266,6 +272,25 @@ export default function Journal() {
     el.style.height = 'auto';
     el.style.height = el.scrollHeight + 'px';
   }, [entry]);
+
+  // Seed the entry from the Dashboard daily-prompt hand-off. Runs once on
+  // mount; prefills "<prompt>\n\n", focuses the textarea with the cursor at
+  // the end, and clears router state so a refresh doesn't re-seed.
+  useEffect(() => {
+    const seed = location.state?.seedPrompt;
+    if (!seed) return;
+    setEntry(`${seed}\n\n`);
+    fromDailyPromptRef.current = !!location.state?.fromDailyPrompt;
+    requestAnimationFrame(() => {
+      const el = entryTextareaRef.current;
+      if (!el) return;
+      el.focus();
+      const len = el.value.length;
+      try { el.setSelectionRange(len, len); } catch { /* older browsers */ }
+    });
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Entry editing state
   const [editingEntryId, setEditingEntryId] = useState(null);
@@ -636,6 +661,14 @@ export default function Journal() {
       setLastClassifiedText(savedEntryText);
       setClassifiedEntryId(savedEntryId);
       classifyAndPersist(savedEntryId, savedEntryText, { surfaceTopOfList: true });
+
+      // If this entry was started from the dashboard daily prompt, mark the
+      // prompt answered so it hides on the dashboard for the rest of the day.
+      // Fire-and-forget — the helper is self-contained and never throws.
+      if (fromDailyPromptRef.current) {
+        fromDailyPromptRef.current = false;
+        markDailyPromptAnswered();
+      }
 
     } catch (error) {
       logger.error("Error saving journal entry:", error);

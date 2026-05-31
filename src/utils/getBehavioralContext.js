@@ -19,7 +19,6 @@ import {
   RELAPSE_FIELDS,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
-  BLACK_MIRROR_FIELDS,
   USER_SETTINGS_FIELDS,
 } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
@@ -56,11 +55,10 @@ export async function getBehavioralContext(userId, deps = {}) {
         return [];
       });
 
-    const [killTargets, relapseEntries, hardLessons, blackMirrorEntries, journalEntries, userSettings] = await Promise.all([
+    const [killTargets, relapseEntries, hardLessons, journalEntries, userSettings] = await Promise.all([
       loadCollection(COLLECTIONS.KILL_TARGETS),
       loadCollection(COLLECTIONS.RELAPSE_ENTRIES),
       loadCollection(COLLECTIONS.HARD_LESSONS),
-      loadCollection(COLLECTIONS.BLACK_MIRROR_ENTRIES),
       loadCollection(COLLECTIONS.JOURNAL_ENTRIES),
       loadCollection(COLLECTIONS.USER_SETTINGS),
     ]);
@@ -117,19 +115,6 @@ export async function getBehavioralContext(userId, deps = {}) {
           : null,
       }));
 
-    // --- Black Mirror: trend ---
-    let blackMirrorTrend = null;
-    if ((blackMirrorEntries || []).length >= 4) {
-      const sorted = [...blackMirrorEntries].sort((a, b) => getTimestamp(b) - getTimestamp(a));
-      const recent = sorted.slice(0, 2).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
-      const older = sorted.slice(2, 4).map(e => e[BLACK_MIRROR_FIELDS.INDEX] || 0);
-      const recentAvg = recent.reduce((s, v) => s + v, 0) / recent.length;
-      const olderAvg = older.reduce((s, v) => s + v, 0) / older.length;
-      if (recentAvg < olderAvg * 0.85) blackMirrorTrend = 'improving';
-      else if (recentAvg > olderAvg * 1.15) blackMirrorTrend = 'deteriorating';
-      else blackMirrorTrend = 'stable';
-    }
-
     // --- Journaling: dominant language pattern last 7 days ---
     // Mood labels were retired (Spec 3, UXR-002). Language is the signal.
     // Pull the top 3 substantive words across recent entries. Lightweight,
@@ -150,7 +135,6 @@ export async function getBehavioralContext(userId, deps = {}) {
       activeKillTargets,
       dominantRelapseArchetype,
       recentRelapseCount,
-      blackMirrorTrend,
       violatedHardLessons,
       journalLanguagePattern,
       identityDirection, // BER-137
@@ -171,7 +155,6 @@ function buildEmpty() {
     activeKillTargets: [],
     dominantRelapseArchetype: null,
     recentRelapseCount: 0,
-    blackMirrorTrend: null,
     violatedHardLessons: [],
     journalLanguagePattern: null,
     identityDirection: null,

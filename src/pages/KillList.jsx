@@ -1988,6 +1988,9 @@ const KillList = () => {
                       filterStatus === 'active' ? 'All your contracts have been completed!' :
                       'Complete some contracts to see them here')}
                 </p>
+                {!searchQuery.trim() && filterStatus !== 'completed' && (
+                  <p className="text-[#6a6a6a] text-xs mb-6">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
+                )}
                 {searchQuery.trim() ? (
                   <button
                     onClick={() => setSearchQuery('')}

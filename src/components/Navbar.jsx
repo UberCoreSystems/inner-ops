@@ -1,9 +1,5 @@
-import { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { authService } from '../utils/authService';
-
-// Finding 5: Black Mirror is gated post-v1. Flag mirrors App.jsx.
-const BLACK_MIRROR_ENABLED = import.meta.env.VITE_ENABLE_BLACK_MIRROR === 'true';
 
 // Finding 20 remediation: Icons hoisted to module scope so the object is
 // constructed once per module load rather than once per render.
@@ -35,12 +31,6 @@ const Icons = {
   hardLessons: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="12,2 15,10 23,10 17,15 19,23 12,18 5,23 7,15 1,10 9,10" />
-    </svg>
-  ),
-  blackMirror: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="3" />
-      <circle cx="12" cy="12" r="4" opacity="0.5" />
     </svg>
   ),
   relapse: (
@@ -75,15 +65,11 @@ const Icons = {
 };
 
 // Finding 20 remediation: nav config hoisted to module scope.
-// Finding 5: Black Mirror entry omitted unless feature flag is enabled.
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard },
   { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal },
-  { path: '/ledger', label: 'General Ledger', mobileLabel: 'General Ledger', icon: Icons.killList },
+  { path: '/ledger', label: 'General Ledger', mobileLabel: 'Ledger', icon: Icons.killList },
   { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
-  ...(BLACK_MIRROR_ENABLED
-    ? [{ path: '/blackmirror', label: 'Black Mirror', mobileLabel: 'Mirror', icon: Icons.blackMirror }]
-    : []),
   { path: '/relapse', label: 'The Signal', mobileLabel: 'Signal', icon: Icons.relapse },
   { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis },
 ];
@@ -92,17 +78,8 @@ export default function Navbar({ onLogout }) {
   const location = useLocation();
 
   const navItems = NAV_ITEMS;
-  // Mobile grid column count reflects actual item count (7 with Black Mirror,
-  // 6 without). useMemo avoids re-building the class string on every render.
-  const mobileGridClass = useMemo(
-    () => `grid h-16 ${
-      navItems.length === 7 ? 'grid-cols-7' :
-      navItems.length === 6 ? 'grid-cols-6' :
-      navItems.length === 5 ? 'grid-cols-5' :
-      'grid-cols-7'
-    }`,
-    [navItems.length]
-  );
+  // Six fixed nav items — the mobile bottom bar is always a 6-column grid.
+  const mobileGridClass = 'grid h-16 grid-cols-6';
 
   return (
     <>
@@ -232,10 +209,6 @@ export default function Navbar({ onLogout }) {
                     </>}
                     {item.path === '/hardlessons' && <>
                       <polygon points="12,2 15,10 23,10 17,15 19,23 12,18 5,23 7,15 1,10 9,10" />
-                    </>}
-                    {item.path === '/blackmirror' && <>
-                      <rect x="3" y="3" width="18" height="18" rx="3" />
-                      <circle cx="12" cy="12" r="4" opacity="0.5" />
                     </>}
                     {item.path === '/relapse' && <>
                       <path d="M12 2L2 22h20L12 2z" />

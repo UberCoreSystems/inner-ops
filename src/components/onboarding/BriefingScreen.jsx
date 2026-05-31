@@ -13,6 +13,9 @@
  *   eyebrow / heading — optional copy overrides (default to the onboarding framing)
  *   paragraphs — optional array of body strings; when provided, replaces the
  *                default multi-paragraph body (used for the pre-auth intro)
+ *   sample — optional { context, response } shown as a quoted Oracle example
+ *            below the body. Used only on the pre-auth surface to demonstrate
+ *            the Oracle's voice before signup; omitted during onboarding.
  */
 export default function BriefingScreen({
   onContinue,
@@ -25,6 +28,7 @@ export default function BriefingScreen({
   eyebrow = 'Inner Operations',
   heading = 'This is your inner command center.',
   paragraphs = null,
+  sample = null,
 }) {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4 py-12">
@@ -64,6 +68,15 @@ export default function BriefingScreen({
               </p>
               <p className="text-[#858585] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
             </>
+          )}
+
+          {sample && (
+            <div className="mt-8 border-l-2 border-[#a855f7]/40 pl-4">
+              <p className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-2">What someone wrote</p>
+              <p className="text-[#858585] text-sm italic leading-relaxed mb-4">{sample.context}</p>
+              <p className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-2">The Oracle</p>
+              <p className="text-[#ababab] text-sm leading-relaxed">{sample.response}</p>
+            </div>
           )}
         </div>
 
