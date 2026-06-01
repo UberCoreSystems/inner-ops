@@ -13,6 +13,8 @@ import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import logger from '../utils/logger';
 import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
+import { isUnderReview, getHeldStreakDays, getMostRecentBreak } from '../utils/ruleState';
+import { toMs } from '../utils/dateUtils';
 
 // Event categories for Hard Lessons
 const eventCategories = [
@@ -284,6 +286,7 @@ export default function HardLessons() {
 
   // BER-130: finalized rules aggregated for the library
   const finalizedRules = useMemo(() => {
+    const now = Date.now();
     const base = lessons
       .filter(l => l.isFinalized && l.ruleGoingForward?.trim())
       .map(l => {
@@ -293,11 +296,19 @@ export default function HardLessons() {
         // populated by the "Rule broken" button + Weekly Rule Review.
         const legacyCount = lessons.filter(x => x.isRuleViolation && x.violatedRuleId === l.id).length;
         const directCount = Array.isArray(l.violations) ? l.violations.length : 0;
+        // Derived breach state — single source of truth in ruleState.js.
+        const underReview = isUnderReview(l);
+        const heldStreakDays = getHeldStreakDays(l, now);
+        const reaffirmedAt = (Array.isArray(l.violations) ? l.violations : [])
+          .reduce((latest, v) => Math.max(latest, toMs(v?.resolvedAt)), 0);
         return {
           id: l.id,
           rule: l.ruleGoingForward,
           lesson: l,
           violationCount: legacyCount + directCount,
+          underReview,
+          heldStreakDays,
+          reaffirmedAt: reaffirmedAt || null,
         };
       })
       .sort((a, b) => new Date(b.lesson.finalizedAt || b.lesson.createdAt) - new Date(a.lesson.finalizedAt || a.lesson.createdAt));
@@ -353,17 +364,18 @@ export default function HardLessons() {
     setViolationPrompt({ visible: false, matchedRule: null });
   };
 
-  // Inline post-tap note panel — open after a successful "Rule broken" write
-  // so the user can optionally add context for the violation just logged.
-  // The violation is already committed to Firestore at this point; saving a
-  // note is an enrichment, walking away is fine.
-  const [ruleNotePanel, setRuleNotePanel] = useState({ ruleId: null, note: '', violationDate: null });
+  // After-action review panel — opens on a fresh break (the rule is now under
+  // review) and on demand for an already-breached rule. Completing it stamps
+  // the break with cause/correction/resolvedAt, which re-affirms the rule and
+  // restarts its held streak. Skipping leaves the rule under review.
+  const [aarPanel, setAarPanel] = useState({ ruleId: null, cause: '', correction: '', violationDate: null });
+  const [savingAar, setSavingAar] = useState(false);
   const ruleBreakingRef = useRef(new Set()); // synchronous guard against rapid double-taps
 
   // Direct violation logger — fires when the user taps "Rule broken" on a
-  // finalized rule card. Writes to the rule's own document via violations[]
-  // (the shape the Mirror tile / clarityScore counter already reads).
-  // Daily dedupe: at most one violation per rule per UTC day.
+  // finalized rule card. Writes an unresolved entry to the rule's own
+  // violations[] (the shape every reader now agrees on via ruleState.js) →
+  // the rule goes under review. Daily dedupe: one per rule per UTC day.
   const markRuleBroken = useCallback(async (rule) => {
     if (!rule?.id) return;
     if (ruleBreakingRef.current.has(rule.id)) return; // re-entry guard
@@ -377,7 +389,7 @@ export default function HardLessons() {
         return new Date(d).toISOString().slice(0, 10) === todayKey;
       });
       if (alreadyToday) {
-        ouraToast.info('Already logged a violation for this rule today');
+        ouraToast.info('Already logged a break for this rule today');
         return;
       }
       const nowIso = new Date().toISOString();
@@ -387,47 +399,81 @@ export default function HardLessons() {
         lastViolatedAt: nowIso,
       });
       await loadHardLessons();
-      ouraToast.success('Rule broken — logged');
-      setRuleNotePanel({ ruleId: rule.id, note: '', violationDate: nowIso });
+      ouraToast.success('Rule broken — under review');
+      setAarPanel({ ruleId: rule.id, cause: '', correction: '', violationDate: nowIso });
     } catch (err) {
-      logger.error('markRuleBroken failed:', err?.message);
-      if (redirectIfAuthLost(err)) return;
-      ouraToast.error('Failed to log violation');
+      // Surface the real Firestore error instead of hard-redirecting to /auth.
+      // A failed in-page write must not nuke the session/context — and the
+      // redirect was hiding the actual error code.
+      logger.error('markRuleBroken failed:', { code: err?.code, message: err?.message });
+      ouraToast.error('Could not log the break — try again');
     } finally {
       ruleBreakingRef.current.delete(rule.id);
     }
   }, []);
 
-  // Attach the optional note to the violation entry just written. We match
-  // by the ISO date stamp captured in ruleNotePanel.violationDate.
-  const saveRuleBreakingNote = useCallback(async () => {
-    const { ruleId, note, violationDate } = ruleNotePanel;
-    if (!ruleId || !violationDate || !note.trim()) {
-      setRuleNotePanel({ ruleId: null, note: '', violationDate: null });
-      return;
-    }
+  // Open the after-action panel for an already-breached rule, targeting its
+  // most-recent (unresolved) break.
+  const openAfterAction = useCallback((rule) => {
+    const b = getMostRecentBreak(rule);
+    if (!b?.date) return;
+    setAarPanel({ ruleId: rule.id, cause: '', correction: '', violationDate: b.date });
+  }, []);
+
+  // Complete the after-action review: stamp the targeted break with cause,
+  // correction, and resolvedAt. resolvedAt re-affirms the rule (clears under
+  // review, restarts the held streak). Both fields required.
+  const saveAfterAction = useCallback(async () => {
+    const { ruleId, cause, correction, violationDate } = aarPanel;
+    if (!ruleId || !violationDate || !cause.trim() || !correction.trim()) return;
+    setSavingAar(true);
     try {
       const rule = lessons.find(l => l.id === ruleId);
       if (!rule) return;
+      const resolvedAt = new Date().toISOString();
       const violations = (Array.isArray(rule.violations) ? rule.violations : []).map(v => {
         const d = v?.date || v?.timestamp;
-        if (d === violationDate) return { ...v, note: note.trim() };
+        if (d === violationDate) {
+          return { ...v, cause: cause.trim(), correction: correction.trim(), resolvedAt };
+        }
         return v;
       });
       await updateData('hardLessons', ruleId, { violations });
       await loadHardLessons();
-      ouraToast.success('Context saved');
+      ouraToast.success('Rule re-affirmed');
+      setAarPanel({ ruleId: null, cause: '', correction: '', violationDate: null });
     } catch (err) {
-      logger.error('saveRuleBreakingNote failed:', err?.message);
-      ouraToast.error('Failed to save context');
+      logger.error('saveAfterAction failed:', { code: err?.code, message: err?.message });
+      ouraToast.error('Could not save the after-action review — try again');
     } finally {
-      setRuleNotePanel({ ruleId: null, note: '', violationDate: null });
+      setSavingAar(false);
     }
-  }, [ruleNotePanel, lessons]);
+  }, [aarPanel, lessons]);
 
-  const dismissRuleBreakingNote = useCallback(() => {
-    setRuleNotePanel({ ruleId: null, note: '', violationDate: null });
+  const dismissAfterAction = useCallback(() => {
+    setAarPanel({ ruleId: null, cause: '', correction: '', violationDate: null });
   }, []);
+
+  // After-action handoff from the Weekly Rule Review: open the library with the
+  // breached rule's after-action panel ready. Waits for lessons to load so the
+  // target rule is resolvable.
+  const aarPrefillRef = useRef(false);
+  useEffect(() => {
+    if (aarPrefillRef.current || lessons.length === 0) return;
+    let raw = null;
+    try { raw = sessionStorage.getItem('hl_aar_open'); } catch {}
+    aarPrefillRef.current = true;
+    if (!raw) return;
+    try {
+      const { ruleId } = JSON.parse(raw);
+      const rule = lessons.find(l => l.id === ruleId);
+      if (rule) {
+        setShowRulesLibrary(true);
+        openAfterAction(rule);
+      }
+    } catch {}
+    try { sessionStorage.removeItem('hl_aar_open'); } catch {}
+  }, [lessons, openAfterAction]);
 
   // BER-131: send rule to the Kill List intake form. Per the cross-module
   // rule, no doc is written here — we stash the prefill and navigate so the
@@ -616,8 +662,20 @@ export default function HardLessons() {
     setLoading(true);
 
     try {
+      // Strip server-/path-managed meta so we never persist them into the doc.
+      // Persisting `id` in particular is what corrupted the canonical doc id
+      // (readUserData spreads doc data; a stored `id` used to win). userId,
+      // timestamps, and lastUpdated are owned by firebaseUtils on write.
+      const {
+        id: _omitId,
+        createdAt: _omitCreatedAt,
+        timestamp: _omitTimestamp,
+        userId: _omitUserId,
+        lastUpdated: _omitLastUpdated,
+        ...cleanLesson
+      } = newLesson;
       const lessonData = {
-        ...newLesson,
+        ...cleanLesson,
         isFinalized: finalize,
         finalizedAt: finalize ? new Date().toISOString() : null,
         isRuleViolation: pendingViolation.isRuleViolation,
@@ -1246,12 +1304,12 @@ export default function HardLessons() {
             </div>
           ) : (
             <div className="space-y-3">
-              {finalizedRules.map(({ id, rule, lesson, violationCount }) => {
+              {finalizedRules.map(({ id, rule, lesson, violationCount, underReview, heldStreakDays, reaffirmedAt }) => {
                 const category = eventCategories.find(c => c.value === lesson.eventCategory);
                 const lessonCosts = costCategories.filter(c => lesson.costs?.includes(c.value));
-                const noteOpen = ruleNotePanel.ruleId === id;
+                const aarOpen = aarPanel.ruleId === id;
                 return (
-                  <div key={id} className={`oura-card p-5 ${violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
+                  <div key={id} className={`oura-card p-5 ${underReview ? 'border-[#b45309]/50' : violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <p className="text-[#fbbf24] font-medium leading-relaxed border-l-4 border-[#f59e0b] pl-3">{rule}</p>
@@ -1260,54 +1318,79 @@ export default function HardLessons() {
                           {category && <span className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">{category.icon} {category.label}</span>}
                           {lessonCosts.map(c => <span key={c.value} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">{c.icon} {c.label}</span>)}
                           <span className="text-[10px] text-[#858585]">{new Date(lesson.finalizedAt || lesson.createdAt).toLocaleDateString()}</span>
+                          {underReview ? (
+                            <span className="text-[10px] px-2 py-0.5 bg-[#b45309]/10 text-[#b45309] rounded-lg border border-[#b45309]/40 uppercase tracking-wider">Under review — after-action required</span>
+                          ) : (
+                            <span className="text-[10px] text-[#00d4aa]">Held {heldStreakDays}d{reaffirmedAt ? ` · re-affirmed ${new Date(reaffirmedAt).toLocaleDateString()}` : ''}</span>
+                          )}
                         </div>
                       </div>
                       {violationCount > 0 && (
                         <div className="shrink-0 text-center">
                           <div className="text-red-400 text-xl font-light tabular-nums">{violationCount}</div>
-                          <div className="text-red-500/60 text-[10px] uppercase tracking-wider">violation{violationCount !== 1 ? 's' : ''}</div>
+                          <div className="text-red-500/60 text-[10px] uppercase tracking-wider">break{violationCount !== 1 ? 's' : ''}</div>
                         </div>
                       )}
                     </div>
 
-                    {/* Direct violation logger. Single-tap commits the
-                        violation to violations[] + lastViolatedAt; the note
-                        panel below is an optional add-on. */}
+                    {/* Breach action. "Rule broken" commits an unresolved entry
+                        to violations[] → the rule goes under review and the
+                        after-action panel opens. An already-breached rule shows
+                        the after-action CTA instead. */}
                     <div className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center justify-end">
-                      <button
-                        onClick={() => markRuleBroken(lesson)}
-                        disabled={noteOpen}
-                        className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Rule broken
-                      </button>
+                      {underReview ? (
+                        <button
+                          onClick={() => openAfterAction(lesson)}
+                          disabled={aarOpen}
+                          className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Complete after-action review
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => markRuleBroken(lesson)}
+                          disabled={aarOpen}
+                          className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Rule broken
+                        </button>
+                      )}
                     </div>
 
-                    {noteOpen && (
-                      <div className="mt-3 p-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl">
-                        <div className="text-[#858585] text-[10px] uppercase tracking-widest mb-2">
-                          Logged at {new Date(ruleNotePanel.violationDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Add context?
+                    {aarOpen && (
+                      <div className="mt-3 p-4 bg-[#0a0a0a] border border-[#b45309]/30 rounded-xl">
+                        <div className="text-[#b45309] text-[10px] uppercase tracking-widest mb-3">
+                          After-action review{aarPanel.violationDate ? ` · break ${new Date(aarPanel.violationDate).toLocaleDateString()}` : ''}
                         </div>
+                        <label className="block text-[#858585] text-xs mb-1">Why did it break?</label>
                         <textarea
-                          value={ruleNotePanel.note}
-                          onChange={(e) => setRuleNotePanel(prev => ({ ...prev, note: e.target.value }))}
+                          value={aarPanel.cause}
+                          onChange={(e) => setAarPanel(prev => ({ ...prev, cause: e.target.value }))}
                           rows={2}
-                          placeholder="What broke it? Optional."
+                          placeholder="The conditions, the assumption, the moment it gave way."
+                          className="w-full p-2 mb-3 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#555555]"
+                        />
+                        <label className="block text-[#858585] text-xs mb-1">What changes so it holds?</label>
+                        <textarea
+                          value={aarPanel.correction}
+                          onChange={(e) => setAarPanel(prev => ({ ...prev, correction: e.target.value }))}
+                          rows={2}
+                          placeholder="The specific change that makes the next outcome different."
                           className="w-full p-2 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#555555]"
                         />
-                        <div className="flex justify-end gap-2 mt-2">
+                        <div className="flex justify-end gap-2 mt-3">
                           <button
-                            onClick={dismissRuleBreakingNote}
+                            onClick={dismissAfterAction}
                             className="px-3 py-1.5 text-xs text-[#858585] hover:text-[#ababab] transition-colors"
                           >
-                            Skip
+                            Later
                           </button>
                           <button
-                            onClick={saveRuleBreakingNote}
-                            disabled={!ruleNotePanel.note.trim()}
-                            className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            onClick={saveAfterAction}
+                            disabled={!aarPanel.cause.trim() || !aarPanel.correction.trim() || savingAar}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-[#00d4aa]/40 text-[#00d4aa] hover:bg-[#00d4aa]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           >
-                            Save context
+                            {savingAar ? 'Saving...' : 'Re-affirm rule'}
                           </button>
                         </div>
                       </div>

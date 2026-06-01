@@ -142,9 +142,11 @@ export const readUserData = async (collectionName, requireAuth = false) => {
     data = userScopedSnapshot.docs.map(doc => {
         const docData = doc.data();
         const createdAt = normalizeDocTimestamp(docData);
+        // doc.id LAST: the Firestore path id is canonical and must win over any
+        // stale `id` field that an older write may have persisted into the doc.
         return {
-          id: doc.id,
           ...docData,
+          id: doc.id,
           createdAt,
           timestamp: createdAt,
         };
@@ -205,9 +207,11 @@ export const subscribeToUserData = async (collectionName, callback) => {
       const data = snapshot.docs.map(docSnap => {
         const docData = docSnap.data();
         const createdAt = normalizeDocTimestamp(docData);
+        // docSnap.id LAST — see readUserData: canonical path id must win over a
+        // persisted `id` field.
         return {
-          id: docSnap.id,
           ...docData,
+          id: docSnap.id,
           createdAt,
           timestamp: createdAt,
         };

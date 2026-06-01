@@ -160,4 +160,27 @@ describe('generateSynthesisBriefing — briefing payload shape', () => {
     assert.ok(typeof written.doc.confrontationQuestion === 'string');
     assert.equal(result.briefing.meta?.identityDirection, 'become-direct');
   });
+
+  it('counts a break logged only via violations[] as a violated rule (regression)', async () => {
+    const deps = makeDeps(
+      {
+        [COLLECTIONS.RELAPSE_ENTRIES]: [
+          { id: 'r1', timestamp: now - dayMs, [RELAPSE_FIELDS.ARCHETYPE]: 'Avoider' },
+        ],
+        [COLLECTIONS.HARD_LESSONS]: [
+          {
+            id: 'h1',
+            [HARD_LESSON_FIELDS.IS_FINALIZED]: true,
+            [HARD_LESSON_FIELDS.RULE]: 'Verify before trusting',
+            violations: [{ date: new Date(now - 2 * dayMs).toISOString(), source: 'weekly_review' }],
+          },
+        ],
+      },
+      async () => {}
+    );
+    const result = await generateSynthesisBriefing('u1', 'weekly', deps);
+    assert.equal(result.status, 'ok');
+    assert.equal(result.briefing.violatedRules.length, 1);
+    assert.equal(result.briefing.violatedRules[0].rule, 'Verify before trusting');
+  });
 });

@@ -112,6 +112,22 @@ describe('getBehavioralContext — violated hard lessons', () => {
     assert.equal(ctx.violatedHardLessons.length, 1);
     assert.equal(ctx.violatedHardLessons[0].rule, 'No phone after 9pm');
   });
+
+  it('surfaces a break logged only via violations[] (regression: weekly review / button)', async () => {
+    const data = {
+      [COLLECTIONS.HARD_LESSONS]: [
+        {
+          id: 'h1',
+          [HARD_LESSON_FIELDS.IS_FINALIZED]: true,
+          [HARD_LESSON_FIELDS.RULE]: 'Verify before trusting',
+          violations: [{ date: new Date(T0 - dayMs).toISOString(), source: 'weekly_review' }],
+        },
+      ],
+    };
+    const ctx = await getBehavioralContext('u1', noDeps(data));
+    assert.equal(ctx.violatedHardLessons.length, 1);
+    assert.equal(ctx.violatedHardLessons[0].rule, 'Verify before trusting');
+  });
 });
 
 describe('getBehavioralContext — identity direction', () => {

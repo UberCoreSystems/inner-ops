@@ -4,6 +4,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { readUserData, writeData, updateData } from '../utils/firebaseUtils';
 import { COLLECTIONS, CONFRONTATION_FIELDS } from '../utils/schema';
+import { getViolatedRules } from '../utils/ruleState';
 import OracleModal from './OracleModal';
 import ConfrontationHistoryPanel from './ConfrontationHistoryPanel';
 import logger from '../utils/logger';
@@ -97,8 +98,11 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
     || localDismissed
     || alreadyConfronted;
 
+  // Name the rule via the unified reader so a break logged through violations[]
+  // (the "Rule broken" button / weekly review) resolves to the right rule —
+  // not just legacy isRuleViolation docs. Newest break first.
   const violatedRule = !activeSignal && violatedInWindow > 0
-    ? (hardLessons || []).filter((l) => l?.isRuleViolation)[0]
+    ? getViolatedRules(hardLessons, { windowDays: 30 })[0] || null
     : null;
 
   const handleDismiss = () => {

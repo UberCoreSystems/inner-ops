@@ -49,12 +49,21 @@ export const HARD_LESSON_FIELDS = Object.freeze({
   IS_FINALIZED: 'isFinalized',
   RULE: 'ruleGoingForward',
   LESSON: 'extractedLesson',
-  // Per-rule violation log. Each entry: { date: ISO, note?: string, source: 'direct' | 'weekly_review' }.
-  // Written by the in-the-moment "Rule broken" button on the Hard Lessons
-  // page and by the weekly rule review on the Dashboard. Read by the Mirror
-  // tile / Pattern Confrontation card via getRuleIntegrityStatus.
+  // Per-rule violation log. Each entry:
+  //   { date: ISO, source: 'direct' | 'weekly_review',
+  //     note?: string,                      // legacy free-text (pre after-action)
+  //     cause?: string, correction?: string, resolvedAt?: ISO }  // after-action
+  // Written by the in-the-moment "Rule broken" button on the Hard Lessons page
+  // and by the weekly rule review on the Dashboard. An unresolved most-recent
+  // break (no resolvedAt / note) means the rule is "under review"; completing
+  // the after-action review stamps resolvedAt and re-affirms the rule. State is
+  // derived in src/utils/ruleState.js — the single reader for every module.
   VIOLATIONS: 'violations',
   LAST_VIOLATED_AT: 'lastViolatedAt',
+  // After-action review fields on each violations[] entry.
+  VIOLATION_RESOLVED_AT: 'resolvedAt',
+  VIOLATION_CAUSE: 'cause',
+  VIOLATION_CORRECTION: 'correction',
 });
 
 // Journal-entry fields consumed cross-module.

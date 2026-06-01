@@ -21,6 +21,7 @@ import { readUserData, writeData } from './firebaseUtils.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import logger from './logger.js';
 import { getEntryTimestamp as getTimestamp } from './dateUtils.js';
+import { getViolatedRules } from './ruleState.js';
 import {
   COLLECTIONS,
   RELAPSE_FIELDS,
@@ -132,10 +133,11 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     return sum + recent.length;
   }, 0);
 
-  // --- Hard Lessons: violated finalized rules ---
-  const violatedRules = (hardLessons || [])
-    .filter(l => l[HARD_LESSON_FIELDS.IS_VIOLATION] && l[HARD_LESSON_FIELDS.RULE])
-    .map(l => ({ rule: l[HARD_LESSON_FIELDS.RULE], source: 'Hard Lessons' }));
+  // --- Hard Lessons: violated finalized rules (last 28d) ---
+  // Unified read: violations[] breaks (button / weekly review) and legacy
+  // isRuleViolation docs both count. See ruleState.js.
+  const violatedRules = getViolatedRules(hardLessons, { windowDays: 28, now })
+    .map(r => ({ rule: r.rule, source: 'Hard Lessons' }));
 
   const finalizedRules = (hardLessons || [])
     .filter(l => l[HARD_LESSON_FIELDS.IS_FINALIZED] && l[HARD_LESSON_FIELDS.RULE])

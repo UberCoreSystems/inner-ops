@@ -18,11 +18,11 @@ import {
   COLLECTIONS,
   RELAPSE_FIELDS,
   KILL_TARGET_FIELDS,
-  HARD_LESSON_FIELDS,
   USER_SETTINGS_FIELDS,
 } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 import { getEntryTimestamp as getTimestamp } from './dateUtils.js';
+import { getViolatedRules } from './ruleState.js';
 
 const contextCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -105,14 +105,13 @@ export async function getBehavioralContext(userId, deps = {}) {
       ? resolveArchetypeLabel(dominantArchetypeId)
       : null;
 
-    // --- Hard Lessons: violated rules ---
-    const violatedHardLessons = (hardLessons || [])
-      .filter(l => l[HARD_LESSON_FIELDS.IS_VIOLATION] && l[HARD_LESSON_FIELDS.RULE])
-      .map(l => ({
-        rule: l[HARD_LESSON_FIELDS.RULE],
-        violatedApprox: l.createdAt?.toDate?.()?.toISOString?.() ?? l.timestamp
-          ? new Date(l.timestamp).toISOString()
-          : null,
+    // --- Hard Lessons: violated rules (last 14d) ---
+    // Unified read: a break logged via violations[] (button / weekly review) OR
+    // the legacy isRuleViolation flag both surface here. See ruleState.js.
+    const violatedHardLessons = getViolatedRules(hardLessons, { windowDays: 14, now: ts })
+      .map(r => ({
+        rule: r.rule,
+        violatedApprox: r.lastBreakAt ? new Date(r.lastBreakAt).toISOString() : null,
       }));
 
     // --- Journaling: dominant language pattern last 7 days ---
