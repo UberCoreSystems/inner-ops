@@ -463,6 +463,64 @@ Rules:
 - Never use motivational, wellness, or therapeutic language in any output field.`;
   }
 
+  // Implementation-intention drafting — returns a JSON batch of When/I-Will
+  // options for a Kill Contract. No prose. Each clause is capped to fit the
+  // 50-char form fields; the client normalizes/truncates defensively.
+  if (normalizedModule === "killintentionsuggest") {
+    const archetype = behavioralContext?.dominantRelapseArchetype;
+    const groundingBlock = archetype
+      ? `\n\nHis dominant relapse archetype is "${archetype}". Bias the triggers toward the conditions that archetype surfaces in. Do not name the archetype in the output.`
+      : "";
+    return `The user is creating a Kill Contract — a commitment to eliminate one specific pattern. Draft implementation intentions: pre-committed "When [trigger], I will [response]" plans (if-then). The input names the target, its category, and optional context about when/where it strikes.${groundingBlock}
+
+Produce 5 distinct, concrete options tailored to THIS target and category. Each has two clauses:
+- "when": the triggering condition — a specific moment, place, internal state, or cue. NO leading "When".
+- "iWill": the competing physical action — executable in seconds, no further decision. NO leading "I will".
+
+Hard constraints — every one is mandatory:
+- Return ONLY a valid JSON object, no preamble, no markdown fences:
+{ "suggestions": [ { "when": "...", "iWill": "..." } ] }
+- 5 items unless you genuinely cannot produce that many, then return fewer.
+- Each "when" and each "iWill" is 50 CHARACTERS OR FEWER. Count characters. Terse — a clause, not a sentence.
+- Concrete and physical. The response is an action a body executes immediately ("call my partner", "leave the room", "do 10 pushups") — never "resist", "try", "remember", "stay strong".
+- Vary the triggers and responses — do not restate one plan five ways.
+- Operator/stoic voice. Never use motivational, wellness, therapeutic, or affirmational language.
+- Be specific to the named target and category. Do not invent facts about the user beyond the input and the grounding above.
+- If you cannot produce specific options, return { "suggestions": [] }.`;
+  }
+
+  // Target framing critique — pressure-tests whether the named Kill Contract
+  // target is the REAL target. Returns JSON only: a verdict plus, when the
+  // framing is flawed, a critique and 1-3 truer targets. Defaults to "sound".
+  if (normalizedModule === "targetframingcritique") {
+    const archetype = behavioralContext?.dominantRelapseArchetype;
+    const groundingBlock = archetype
+      ? `\n\nHis dominant relapse archetype is "${archetype}". If the named target is a downstream symptom of that archetype, the redirect should name the upstream pattern. Do not name the archetype in the output.`
+      : "";
+    const activeTargetsBlock =
+      Array.isArray(behavioralContext?.activeKillTargets) && behavioralContext.activeKillTargets.length > 0
+        ? `\n\nTargets already on his Ledger — do NOT suggest any of these as a redirect:\n${behavioralContext.activeKillTargets.map((t) => `- "${t.title}"`).join("\n")}`
+        : "";
+    return `The user is about to commit to a Kill Contract — a commitment to eliminate one specific pattern. Before he commits, pressure-test his framing. The input names the target, its category, and optional context about when/where it strikes.
+
+Your job: decide whether the named target is the REAL target, or whether it is a surface symptom, a vague catch-all, an effect mistaken for a cause, or a mis-frame that points him at the wrong problem. This is the Oracle finding the hole in his logic so he chases the correct problem.${groundingBlock}${activeTargetsBlock}
+
+DEFAULT TO "sound". A target does not need to be perfectly worded — it needs to point at a real, killable pattern. Only return "redirect" when there is a genuine logical flaw: the named target is a symptom of a deeper pattern, too vague to act on, or simply not the thing actually costing him. Do NOT manufacture a problem. Do NOT redirect a target that is already specific and behavioral just to sound insightful.
+
+When you redirect, name the flaw plainly, then offer 1-3 truer targets he could pursue instead.
+
+Hard constraints — every one is mandatory:
+- Return ONLY a valid JSON object, no preamble, no markdown fences:
+{ "verdict": "sound" | "redirect", "critique": "...", "suggestions": [ { "title": "...", "category": "...", "why": "..." } ] }
+- When verdict is "sound": "critique" is "" and "suggestions" is [].
+- When verdict is "redirect": "critique" is one or two sentences naming the flaw in his framing — direct, specific to what he wrote. "suggestions" has 1-3 items.
+- Each suggestion "title" is a short, specific, behavioral target name (≤100 chars) — what to actually eliminate, not advice.
+- Each suggestion "category" is EXACTLY one of: bad-habit, negative-thought, addiction, toxic-behavior, fear, procrastination, other.
+- Each suggestion "why" is one sentence: why this is the truer target than the one he named.
+- Operator/stoic voice. Never use motivational, wellness, therapeutic, or affirmational language.
+- Be specific to the named target and context. Do not invent facts about the user beyond the input and the grounding above.`;
+  }
+
   // Relapse precursor detection — returns structured JSON or null
   if (normalizedModule === "relapsedetection") {
     const activeTargetsBlock =

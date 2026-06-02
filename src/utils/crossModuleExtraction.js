@@ -1,5 +1,5 @@
-import logger from './logger';
-import { getBehavioralContext } from './getBehavioralContext';
+import logger from './logger.js';
+import { getBehavioralContext } from './getBehavioralContext.js';
 
 // Module-scoped per-session dedupe. Keys are short content fingerprints so
 // two identical entry submissions in one session run the Oracle classifier
@@ -237,6 +237,163 @@ export async function extractHardLessonDirect(text, { tone = 'stoic' } = {}) {
     return parseExtraction(result, 'lessonExtraction');
   } catch (err) {
     logger.error('[extractHardLessonDirect] unexpected error:', err?.message, err);
+    return null;
+  }
+}
+
+/**
+ * Pure shaper for the Oracle's implementation-intention suggestion payload.
+ * Takes the parsed `{ suggestions: [{ when, iWill }] }` object and returns a
+ * clean `{ when, iWill }[]`: trims, truncates each clause to `maxLen` (the
+ * When/I-Will field cap), drops entries missing either half, de-dupes, and
+ * caps the count. Defensive against malformed Oracle output — always an array.
+ * Firebase-free so it can be unit-tested directly.
+ */
+export function normalizeIntentionSuggestions(parsed, maxLen = 50, cap = 6) {
+  const list = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
+  const out = [];
+  const seen = new Set();
+  for (const item of list) {
+    const when = String(item?.when ?? '').trim().slice(0, maxLen);
+    const iWill = String(item?.iWill ?? '').trim().slice(0, maxLen);
+    if (!when || !iWill) continue;
+    const key = `${when.toLowerCase()}|${iWill.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ when, iWill });
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/**
+ * Ask the Oracle for personalized implementation-intention drafts for a Kill
+ * Contract. Mirrors extractHardLessonDirect: explicit user action, no session
+ * dedupe, behavioralContext-grounded. Returns a normalized `{ when, iWill }[]`
+ * (each clause ≤50 chars) or `[]` on empty/failure so the caller falls back to
+ * the instant category seed deck.
+ */
+export async function suggestImplementationIntentions(targetTitle, categoryLabel, context, { tone = 'stoic' } = {}) {
+  const title = String(targetTitle || '').trim();
+  if (!title) return [];
+
+  try {
+    const { getFunctions, httpsCallable } = await import('firebase/functions');
+    const functions = getFunctions();
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+
+    const { getAuth } = await import('firebase/auth');
+    const uid = getAuth().currentUser?.uid;
+
+    const behavioralContext = await getBehavioralContext(uid).catch((err) => {
+      logger.warn('[suggestImplementationIntentions] behavioralContext fetch failed:', err?.message);
+      return null;
+    });
+
+    const ctx = String(context || '').trim();
+    const entryText = `Target: "${title}". Category: ${categoryLabel || 'unspecified'}. Context: ${ctx || 'none'}.`;
+
+    const result = await oracleFn({
+      entryText,
+      moduleName: 'killIntentionSuggest',
+      userContext: {},
+      tone,
+      behavioralContext,
+    }).catch((err) => {
+      logger.error('[suggestImplementationIntentions] CF call FAILED:', err?.code, err?.message);
+      return null;
+    });
+
+    return normalizeIntentionSuggestions(parseExtraction(result, 'killIntentionSuggest'));
+  } catch (err) {
+    logger.error('[suggestImplementationIntentions] unexpected error:', err?.message, err);
+    return [];
+  }
+}
+
+// Valid General Ledger category values (mirrors killListCategories.js). A
+// redirect suggestion with any other category is coerced to 'other'.
+const REDIRECT_CATEGORIES = new Set([
+  'bad-habit', 'negative-thought', 'addiction', 'toxic-behavior', 'fear', 'procrastination', 'other',
+]);
+
+/**
+ * Pure shaper for the Oracle's target-framing critique payload. Takes the
+ * parsed `{ verdict, critique, suggestions }` object and returns a clean
+ * critique object, or `null` when the input is null/undefined (caller treats
+ * that as "couldn't evaluate" and fails open). A verdict that is not 'redirect'
+ * — or a 'redirect' with no usable suggestions — collapses to a sound verdict
+ * so the gate never interrupts with nothing actionable. Each suggestion is
+ * validated: title + why required, title capped, category coerced to the
+ * Ledger enum, de-duped by title, capped to `cap`. Firebase-free for testing.
+ */
+export function normalizeRedirectCritique(parsed, cap = 3) {
+  if (parsed == null) return null;
+
+  const sound = { verdict: 'sound', critique: '', suggestions: [] };
+  if (parsed.verdict !== 'redirect') return sound;
+
+  const list = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+  const out = [];
+  const seen = new Set();
+  for (const item of list) {
+    const title = String(item?.title ?? '').trim().slice(0, 100);
+    const why = String(item?.why ?? '').trim();
+    if (!title || !why) continue;
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const rawCategory = String(item?.category ?? '').trim();
+    const category = REDIRECT_CATEGORIES.has(rawCategory) ? rawCategory : 'other';
+    out.push({ title, category, why });
+    if (out.length >= cap) break;
+  }
+
+  if (out.length === 0) return sound;
+  return { verdict: 'redirect', critique: String(parsed.critique ?? '').trim(), suggestions: out };
+}
+
+/**
+ * Ask the Oracle to pressure-test the framing of a named Kill Contract target.
+ * Mirrors suggestImplementationIntentions: explicit user action, no session
+ * dedupe, behavioralContext-grounded. Returns a normalized critique object
+ * (`{ verdict, critique, suggestions }`) or `null` on empty/failure so the
+ * caller fails open and saves the contract without interruption.
+ */
+export async function critiqueTargetFraming(targetTitle, categoryLabel, context, { tone = 'stoic' } = {}) {
+  const title = String(targetTitle || '').trim();
+  if (!title) return null;
+
+  try {
+    const { getFunctions, httpsCallable } = await import('firebase/functions');
+    const functions = getFunctions();
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+
+    const { getAuth } = await import('firebase/auth');
+    const uid = getAuth().currentUser?.uid;
+
+    const behavioralContext = await getBehavioralContext(uid).catch((err) => {
+      logger.warn('[critiqueTargetFraming] behavioralContext fetch failed:', err?.message);
+      return null;
+    });
+
+    const ctx = String(context || '').trim();
+    const entryText = `Target: "${title}". Category: ${categoryLabel || 'unspecified'}. Context: ${ctx || 'none'}.`;
+
+    const result = await oracleFn({
+      entryText,
+      moduleName: 'targetFramingCritique',
+      userContext: {},
+      tone,
+      behavioralContext,
+    }).catch((err) => {
+      logger.error('[critiqueTargetFraming] CF call FAILED:', err?.code, err?.message);
+      return null;
+    });
+
+    return normalizeRedirectCritique(parseExtraction(result, 'targetFramingCritique'));
+  } catch (err) {
+    logger.error('[critiqueTargetFraming] unexpected error:', err?.message, err);
     return null;
   }
 }
