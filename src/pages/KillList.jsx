@@ -79,36 +79,57 @@ const INTENTION_SEEDS = {
     { when: 'I reach for my phone in bed', iWill: 'leave it in the kitchen and read paper' },
     { when: 'I open a new tab to procrastinate', iWill: 'close it and start the first task' },
     { when: 'I grab a snack out of boredom', iWill: 'drink a full glass of water first' },
+    { when: 'I sit down and reach for the remote', iWill: 'put on shoes and walk out the door' },
+    { when: 'I start scrolling the second I wake', iWill: 'put both feet on the floor and stand' },
+    { when: 'I light up out of habit', iWill: 'hold the urge for ten slow breaths' },
   ],
   'negative-thought': [
     { when: "I rehearse that I'm not good enough", iWill: 'write the thought down, read it aloud' },
     { when: 'I start comparing myself to others', iWill: 'name one fact I actually control' },
     { when: 'I replay an old failure', iWill: 'state the lesson in one sentence' },
+    { when: 'I catastrophize about tomorrow', iWill: 'name the next single action only' },
+    { when: 'I assume the worst of someone', iWill: 'write one alternative explanation' },
+    { when: 'I call myself a failure', iWill: 'describe the event without the verdict' },
   ],
   'addiction': [
     { when: 'I drive past the liquor store', iWill: 'call my accountability partner first' },
     { when: 'the craving rises after work', iWill: 'leave the house and walk 10 minutes' },
     { when: 'I am alone and reach for it', iWill: 'text my partner before any decision' },
+    { when: 'I tell myself just this once', iWill: 'wait 20 minutes, then reassess' },
+    { when: 'the urge hits late at night', iWill: 'go to bed and decide in the morning' },
+    { when: 'a stressful day ends', iWill: 'eat, shower, then go straight to bed' },
   ],
   'toxic-behavior': [
     { when: 'I feel the urge to escalate', iWill: 'leave the room for 10 minutes' },
     { when: 'I want to fire off a sharp reply', iWill: 'wait 60 seconds before I respond' },
     { when: 'I start blaming someone else', iWill: 'name my own part out loud' },
+    { when: 'I move to control the outcome', iWill: 'state what I want, then let go' },
+    { when: 'I rehearse the cutting remark', iWill: 'ask a question instead of landing it' },
+    { when: 'I go silent to punish', iWill: 'say the one thing I actually feel' },
   ],
   'fear': [
     { when: 'my chest tightens before sending', iWill: 'send it within 60 seconds' },
     { when: 'I want to avoid a hard call', iWill: 'dial it before I sit back down' },
     { when: 'I freeze before speaking up', iWill: 'say the first true sentence' },
+    { when: 'I draft the message and stall', iWill: 'reread once, then press send' },
+    { when: 'I talk myself out of the ask', iWill: 'ask the question as written' },
+    { when: 'I rehearse every way it fails', iWill: 'take the first concrete step now' },
   ],
   'procrastination': [
     { when: 'I want to tidy before starting', iWill: 'set a 25-min timer, start task one' },
     { when: 'I open my phone to "check"', iWill: 'set it face-down 6 feet away' },
     { when: 'I tell myself I will do it later', iWill: 'do the smallest version now' },
+    { when: 'I say I will start after one more thing', iWill: 'stop and open the actual task now' },
+    { when: 'the task feels too big to begin', iWill: 'commit to the first two minutes only' },
+    { when: 'I reach for an easier task', iWill: 'return to the one that actually matters' },
   ],
   'other': [
     { when: 'I notice the pattern starting', iWill: 'stop and take three slow breaths' },
     { when: 'I feel the familiar pull', iWill: 'leave the situation for 5 minutes' },
     { when: 'I reach for the old behavior', iWill: 'do the competing action instead' },
+    { when: 'I sense the decision slipping', iWill: 'state the pre-made choice out loud' },
+    { when: 'the trigger lands as expected', iWill: 'execute the plan, no renegotiation' },
+    { when: 'I start to rationalize', iWill: 'name the rationalization for what it is' },
   ],
 };
 
@@ -274,22 +295,100 @@ const KillList = () => {
   // Implementation intentions (BER-126)
   const [newIntention, setNewIntention] = useState({ trigger: '', response: '' });
 
-  // Pre-commitment surfer. The deck = Oracle drafts (if generated) followed by
-  // the instant category seed options. The user cycles with ↻ and taps
-  // "Use this" to load a pair into the When/I-Will fields (still editable, still
-  // capped). intentionContext is an optional hint fed to the Oracle only — not
-  // persisted to the target doc.
+  // The if-then plan is AI-drafted from the target name and pre-filled into the
+  // When/I-Will fields — naming the target IS the trigger to draft. oracleOptions
+  // is the draft pool (Redraft cycles it via draftIdx); seedOptions are the
+  // offline fallback so the clause is never blank. intentionContext is the
+  // optional "Sharpen" hint fed to the Oracle only — not persisted.
   const [intentionContext, setIntentionContext] = useState('');
   const [oracleOptions, setOracleOptions] = useState([]);
-  const [optionIdx, setOptionIdx] = useState(0);
   const [suggesting, setSuggesting] = useState(false);
+  const [draftIdx, setDraftIdx] = useState(0);
+  const [showSharpen, setShowSharpen] = useState(false);
+  // True once the user hand-edits the clause — auto-draft then stops overwriting.
+  const intentionEditedRef = useRef(false);
+  // Last `${target}|${category}` we auto-drafted, so the debounce fires once per pair.
+  const autoDraftSigRef = useRef('');
 
-  // Changing the category invalidates any Oracle drafts (tailored to the prior
-  // category) and resets the carousel to the fresh seed deck.
+  const seedOptions = (INTENTION_SEEDS[newTargetCategory] || INTENTION_SEEDS.other)
+    .map(o => ({ ...o, source: 'seed' }));
+
+  // Load a draft pair into the fields. Respects user ownership unless forced
+  // (an explicit Redraft / redirect-adopt). Marks the clause AI-owned again.
+  const applyDraft = (opt, { force = false } = {}) => {
+    if (!opt) return;
+    if (!force && intentionEditedRef.current) return;
+    setNewIntention({ trigger: opt.when, response: opt.iWill });
+    intentionEditedRef.current = false;
+  };
+
+  // targetOverride/categoryOverride let the redirect-adopt handler redraft for
+  // the freshly-swapped target without waiting on async setState.
+  const draftWithOracle = async (targetOverride, categoryOverride) => {
+    const target = (typeof targetOverride === 'string' ? targetOverride : newTarget).trim();
+    const categoryValue = typeof categoryOverride === 'string' ? categoryOverride : newTargetCategory;
+    if (suggesting || !target) return;
+    const seedFallback = (INTENTION_SEEDS[categoryValue] || INTENTION_SEEDS.other)[0];
+    setSuggesting(true);
+    try {
+      const label = CATEGORIES.find(c => c.value === categoryValue)?.label || '';
+      const drafts = await suggestImplementationIntentions(target, label, intentionContext);
+      if (!drafts.length) {
+        // Oracle had nothing — fall back to a seed clause so the field is never blank.
+        setOracleOptions([]);
+        setDraftIdx(0);
+        applyDraft(seedFallback);
+        return;
+      }
+      const tagged = drafts.map(d => ({ ...d, source: 'oracle' }));
+      setOracleOptions(tagged);
+      setDraftIdx(0);
+      applyDraft(tagged[0]);
+    } catch (err) {
+      logger.error('draftWithOracle failed:', err?.message);
+      applyDraft(seedFallback);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  // A category switch invalidates the prior category's Oracle drafts so Redraft
+  // never cycles stale cross-category options before the new draft lands.
   useEffect(() => {
     setOracleOptions([]);
-    setOptionIdx(0);
+    setDraftIdx(0);
   }, [newTargetCategory]);
+
+  // Auto-draft once the target is named and a category is set. Debounced so it
+  // fires when typing settles, once per (target, category), and never after the
+  // user has hand-authored the clause.
+  useEffect(() => {
+    const target = newTarget.trim();
+    if (target.length < 4 || !newTargetCategory) return;
+    if (intentionEditedRef.current) return;
+    const sig = `${target.toLowerCase()}|${newTargetCategory}`;
+    if (autoDraftSigRef.current === sig) return;
+    const t = setTimeout(() => {
+      autoDraftSigRef.current = sig;
+      draftWithOracle();
+    }, 700);
+    return () => clearTimeout(t);
+  }, [newTarget, newTargetCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The Redraft deck: Oracle drafts if present, else the seed fallback.
+  const draftDeck = oracleOptions.length ? oracleOptions : seedOptions;
+  const redraft = () => {
+    if (!draftDeck.length) return;
+    const next = (draftIdx + 1) % draftDeck.length;
+    setDraftIdx(next);
+    applyDraft(draftDeck[next], { force: true });
+  };
+  // Mark the clause user-owned so auto-draft stops overwriting it.
+  const editIntention = (patch) => {
+    intentionEditedRef.current = true;
+    setNewIntention(prev => ({ ...prev, ...patch }));
+  };
+  const clauseStatus = suggesting ? 'drafting' : (newTarget.trim() ? 'ready' : 'idle');
 
   // Oracle framing gate: pressure-tests the named target on submit. The ref
   // holds the lowercased title that has already cleared the gate (the user
@@ -298,39 +397,6 @@ const KillList = () => {
   const [checkingFraming, setCheckingFraming] = useState(false);
   const [framingCritique, setFramingCritique] = useState(null);
   const framingApprovedTitleRef = useRef(null);
-
-  // targetOverride/categoryOverride let the redirect-adopt handler redraft for
-  // the freshly-swapped target without waiting on async setState.
-  const draftWithOracle = async (targetOverride, categoryOverride) => {
-    const target = (targetOverride ?? newTarget).trim();
-    const categoryValue = categoryOverride ?? newTargetCategory;
-    if (suggesting || !target) return;
-    setSuggesting(true);
-    try {
-      const label = CATEGORIES.find(c => c.value === categoryValue)?.label || '';
-      const drafts = await suggestImplementationIntentions(target, label, intentionContext);
-      if (!drafts.length) {
-        ouraToast.info('Oracle had nothing sharper — examples below.');
-        return;
-      }
-      setOracleOptions(drafts.map(d => ({ ...d, source: 'oracle' })));
-      setOptionIdx(0);
-    } catch (err) {
-      logger.error('draftWithOracle failed:', err?.message);
-      ouraToast.error('Oracle unavailable — examples below.');
-    } finally {
-      setSuggesting(false);
-    }
-  };
-
-  const seedOptions = (INTENTION_SEEDS[newTargetCategory] || INTENTION_SEEDS.other)
-    .map(o => ({ ...o, source: 'seed' }));
-  const intentionOptions = [...oracleOptions, ...seedOptions];
-  const safeIdx = intentionOptions.length ? optionIdx % intentionOptions.length : 0;
-  const currentOption = intentionOptions[safeIdx] || null;
-  const useCurrentOption = () => {
-    if (currentOption) setNewIntention({ trigger: currentOption.when, response: currentOption.iWill });
-  };
 
   // Tracks whether the user has tried to submit the Add Kill Contract form so
   // per-field error cues only appear after a real attempt, not while typing.
@@ -619,6 +685,12 @@ const KillList = () => {
       setPendingFromHardLessonId(null);
       setPendingTargetDescription(null);
       setNewIntention({ trigger: '', response: '' });
+      setOracleOptions([]);
+      setDraftIdx(0);
+      setShowSharpen(false);
+      setIntentionContext('');
+      intentionEditedRef.current = false;
+      autoDraftSigRef.current = '';
       setAttemptedSubmit(false);
     } catch (error) {
       logger.error('❌ Error adding target:', error);
@@ -678,8 +750,10 @@ const KillList = () => {
     setNewTarget(title);
     setNewTargetCategory(category);
     setOracleOptions([]);
-    setOptionIdx(0);
     setFramingCritique(null);
+    // Redirect adopts a fresh target — drop the prior clause and redraft for it.
+    intentionEditedRef.current = false;
+    autoDraftSigRef.current = `${title.toLowerCase()}|${category}`;
     draftWithOracle(title, category);
   };
 
@@ -1807,11 +1881,16 @@ const KillList = () => {
             </p>
             <div className="space-y-6">
               <div className="text-[#858585] text-xs uppercase tracking-widest">1 · What you're killing</div>
-              {/* Target Name Input */}
+              {/* Target Name Input — hero field of the form */}
               <div>
-                <label className="block text-[#ababab] text-sm uppercase tracking-wider mb-3">
-                  Target Name
-                </label>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-white text-base font-semibold uppercase tracking-wider">
+                    Target Name <span className="text-[#ef4444]">*</span>
+                  </label>
+                  {!newTarget.trim() && (
+                    <span className="text-[#b45309]/70 text-xs">⚠ not yet named</span>
+                  )}
+                </div>
                 <input
                   ref={newTargetInputRef}
                   type="text"
@@ -1819,7 +1898,9 @@ const KillList = () => {
                   onChange={(e) => setNewTarget(e.target.value)}
                   placeholder="What negative pattern will you eliminate?"
                   maxLength={TITLE_MAX_LENGTH}
-                  className="w-full bg-[#0a0a0a] text-white p-4 rounded-2xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none transition-colors"
+                  className={`w-full bg-[#0a0a0a] text-white text-lg p-5 rounded-2xl border focus:border-[#ef4444] focus:outline-none transition-colors ${
+                    newTarget.trim() ? 'border-[#ef4444]/30' : 'border-[#b45309]/40'
+                  }`}
                   onKeyPress={(e) => e.key === 'Enter' && addTarget()}
                 />
                 {attemptedSubmit && !newTarget.trim() && (
@@ -1882,80 +1963,44 @@ const KillList = () => {
 
               {/* Implementation Intention — required */}
               <div className="border-t border-[#1a1a1a] pt-6">
-                <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">2 · The implementation intention</div>
-                <label className="block text-[#ababab] text-sm uppercase tracking-wider mb-1">
-                  When This Happens, I Will Do This Instead
-                </label>
-                <p className="text-[#858585] text-xs mb-4">Pre-commit to the response now. In the moment of the trigger, you should not be deciding — you should be executing.</p>
+                <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">2 · Your if-then plan</div>
+                <p className="text-[#858585] text-xs mb-1">Decide now what you'll do the moment it hits — so you execute, not deliberate.</p>
+                <p className="text-[#858585] text-xs mb-4">When you log an escape, this is replayed — you'll be asked whether it fired.</p>
 
-                {/* Pre-commitment surfer: optional context line + a carousel of
-                    instant category drafts, with an Oracle button to layer in
-                    personalized AI drafts. Tap "Use this" to load a pair into
-                    the When/I-Will fields below (still editable, still capped). */}
-                <input
-                  type="text"
-                  value={intentionContext}
-                  onChange={(e) => setIntentionContext(e.target.value)}
-                  placeholder="Where/when does this usually hit you? (optional, sharpens Oracle drafts)"
-                  className="w-full bg-[#0a0a0a] text-white p-2.5 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#555555] mb-3 transition-colors"
-                />
-                {currentOption && (
-                  <div className="bg-[#0a0a0a] border-l-2 border-[#ef4444]/40 px-4 py-3 rounded-r-xl mb-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <span className="text-[#858585] text-xs uppercase tracking-widest">
-                          {currentOption.source === 'oracle' ? 'Oracle draft' : 'Example'} {safeIdx + 1}/{intentionOptions.length}
-                        </span>
-                        <div className="mt-2 text-sm text-[#d1d1d1] leading-relaxed">
-                          <span className="text-[#858585]">When </span>{currentOption.when}<br />
-                          <span className="text-[#858585]">I will </span>{currentOption.iWill}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setOptionIdx((i) => (i + 1) % intentionOptions.length)}
-                        aria-label="Show another option"
-                        title="Show another option"
-                        className="shrink-0 text-[#858585] hover:text-[#d1d1d1] focus:text-[#d1d1d1] focus:outline-none transition-colors -mr-1"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="23 4 23 10 17 10" />
-                          <polyline points="1 20 1 14 7 14" />
-                          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-[#1a1a1a]">
-                      <button
-                        type="button"
-                        onClick={draftWithOracle}
-                        disabled={suggesting || !newTarget.trim()}
-                        title={!newTarget.trim() ? 'Name the target first' : 'Generate personalized drafts'}
-                        className="text-xs text-[#ef4444] hover:text-[#ff6b6b] disabled:text-[#555555] disabled:cursor-not-allowed transition-colors"
-                      >
-                        {suggesting ? 'Drafting…' : '✦ Oracle: draft for me'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={useCurrentOption}
-                        className="px-3 py-1.5 text-xs rounded-lg border border-[#ef4444]/40 text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors"
-                      >
-                        Use this
-                      </button>
-                    </div>
+                {clauseStatus === 'idle' ? (
+                  <p className="text-[#555555] text-sm italic mb-4">Name your target above — a plan will be drafted for you.</p>
+                ) : (
+                  <div className="flex items-center justify-between mb-2 min-h-[20px]">
+                    <span className="text-[#858585] text-[10px] uppercase tracking-widest">
+                      {clauseStatus === 'drafting' ? '✦ Drafting your plan…' : '✦ AI-drafted — edit freely'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={redraft}
+                      disabled={suggesting || !newTarget.trim()}
+                      title="Draft another version"
+                      className="shrink-0 inline-flex items-center gap-1 text-xs text-[#ef4444] hover:text-[#ff6b6b] disabled:text-[#555555] disabled:cursor-not-allowed transition-colors"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="23 4 23 10 17 10" />
+                        <polyline points="1 20 1 14 7 14" />
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                      </svg>
+                      Redraft
+                    </button>
                   </div>
                 )}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[#858585] text-xs uppercase tracking-widest mb-2">
-                      When [describe the specific triggering condition]
+                      When this happens
                     </label>
                     <textarea
                       value={newIntention.trigger}
-                      onChange={(e) => setNewIntention(prev => ({ ...prev, trigger: e.target.value }))}
+                      onChange={(e) => editIntention({ trigger: e.target.value })}
                       rows={2}
                       maxLength={INTENTION_MAX_LENGTH}
-                      placeholder="I reach for [X] after [context]..."
+                      placeholder={clauseStatus === 'drafting' ? 'Drafting from your target…' : 'I reach for [X] after [context]...'}
                       className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
                     />
                     <div className="flex justify-between items-start gap-3 mt-1">
@@ -1972,14 +2017,14 @@ const KillList = () => {
                   </div>
                   <div>
                     <label className="block text-[#858585] text-xs uppercase tracking-widest mb-2">
-                      I Will [describe the specific competing behavior]
+                      I will do this
                     </label>
                     <textarea
                       value={newIntention.response}
-                      onChange={(e) => setNewIntention(prev => ({ ...prev, response: e.target.value }))}
+                      onChange={(e) => editIntention({ response: e.target.value })}
                       rows={2}
                       maxLength={INTENTION_MAX_LENGTH}
-                      placeholder="[specific action], no further decisions..."
+                      placeholder={clauseStatus === 'drafting' ? 'Drafting…' : '[specific action], no further decisions...'}
                       className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
                     />
                     <div className="flex justify-between items-start gap-3 mt-1">
@@ -1995,6 +2040,37 @@ const KillList = () => {
                     )}
                   </div>
                 </div>
+
+                {clauseStatus !== 'idle' && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowSharpen(s => !s)}
+                      className="text-xs text-[#858585] hover:text-[#ababab] transition-colors"
+                    >
+                      {showSharpen ? '▾' : '▸'} Sharpen with context
+                    </button>
+                    {showSharpen && (
+                      <div className="mt-2 rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] p-3">
+                        <input
+                          type="text"
+                          value={intentionContext}
+                          onChange={(e) => setIntentionContext(e.target.value)}
+                          placeholder="Where/when does this usually hit you?"
+                          className="w-full bg-[#0a0a0a] text-white p-2.5 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#555555] mb-2 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { intentionEditedRef.current = false; draftWithOracle(); }}
+                          disabled={suggesting || !newTarget.trim()}
+                          className="w-full px-3 py-2 rounded-xl border border-[#ef4444]/60 text-[#ef4444] text-sm font-medium hover:bg-[#ef4444]/10 hover:border-[#ef4444] disabled:border-[#1a1a1a] disabled:text-[#555555] disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                        >
+                          {suggesting ? 'Drafting…' : '✦ Redraft with this context'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Submit Button */}
