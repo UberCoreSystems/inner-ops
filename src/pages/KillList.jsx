@@ -281,6 +281,9 @@ const KillList = () => {
   const [oracleModal, setOracleModal] = useState({ isOpen: false, content: '', isLoading: false, entryCount: null });
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  // Daily-first: the add-contract form is collapsed by default so the active
+  // list leads. Opens on demand, or automatically when there is nothing to act on.
+  const [showAddForm, setShowAddForm] = useState(false);
   const targetsRef = useRef([]);
   const addingTargetRef = useRef(false);
   const newTargetInputRef = useRef(null);
@@ -383,6 +386,16 @@ const KillList = () => {
     setDraftIdx(next);
     applyDraft(draftDeck[next], { force: true });
   };
+  // Redraft the if-then plan using the optional "Sharpen" hint. Resets the
+  // user-owned flag so the fresh draft can overwrite the clauses, then signals
+  // that the plan actually changed (the toast is here, not in draftWithOracle,
+  // so the debounced auto-draft-on-type stays silent).
+  const sharpenRedraft = async () => {
+    if (suggesting || !intentionContext.trim()) return;
+    intentionEditedRef.current = false;
+    await draftWithOracle();
+    ouraToast.success('Plan redrafted from your hint');
+  };
   // Mark the clause user-owned so auto-draft stops overwriting it.
   const editIntention = (patch) => {
     intentionEditedRef.current = true;
@@ -439,6 +452,11 @@ const KillList = () => {
     targetsRef.current = targets;
   }, [targets]);
 
+  // Daily-first: open the add form only when there are no contracts to act on.
+  useEffect(() => {
+    if (!loading && targets.length === 0) setShowAddForm(true);
+  }, [loading, targets.length]);
+
   // Subscribe to auth state so we don't miss a late Firebase Auth resolution
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChanged((currentUser) => {
@@ -485,6 +503,7 @@ const KillList = () => {
       }
       if (data.fromHardLessonId) setPendingFromHardLessonId(data.fromHardLessonId);
       if (data.targetDescription) setPendingTargetDescription(data.targetDescription);
+      setShowAddForm(true);
       setTimeout(() => newTargetInputRef.current?.focus(), 150);
     } catch (err) {
       logger.warn('KillList: failed to parse kl_extraction_prefill from sessionStorage', err?.message);
@@ -692,6 +711,7 @@ const KillList = () => {
       intentionEditedRef.current = false;
       autoDraftSigRef.current = '';
       setAttemptedSubmit(false);
+      setShowAddForm(false);
     } catch (error) {
       logger.error('❌ Error adding target:', error);
       if (redirectIfAuthLost(error)) return;
@@ -1210,6 +1230,7 @@ const KillList = () => {
     await deleteTarget(target.id);
 
     // Bring the form into view and focus it.
+    setShowAddForm(true);
     setTimeout(() => {
       newTargetInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       newTargetInputRef.current?.focus();
@@ -1716,9 +1737,9 @@ const KillList = () => {
 
   return (
     <div className="min-h-screen bg-black">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col">
         {/* Oura-style Header */}
-        <header className="mb-10 animate-fade-in-up">
+        <header className="mb-10 animate-fade-in-up order-1">
           <p className="text-[#858585] text-sm uppercase tracking-widest mb-2">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
@@ -1734,8 +1755,9 @@ const KillList = () => {
           </div>
         </header>
 
-        {/* Stats */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+        {/* Stats — relocated below the active list (order-5) so the daily
+            check-in loop leads and progress metrics stay secondary. */}
+        <section className="mb-10 animate-fade-in-up order-5">
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Progress</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="oura-card p-5 text-center">
@@ -1872,10 +1894,33 @@ const KillList = () => {
           })()}
         </section>
 
-        {/* Add New Target */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        {/* Add New Target — collapsible (order-2). Collapsed by default so the
+            active list leads; auto-opens only when there is nothing to act on. */}
+        <section className="mb-10 animate-fade-in-up order-2">
+          {!showAddForm ? (
+            <button
+              type="button"
+              onClick={() => { setShowAddForm(true); setTimeout(() => newTargetInputRef.current?.focus(), 50); }}
+              className="oura-card w-full p-4 flex items-center justify-between text-left hover:border-[#2a2a2a] transition-all"
+            >
+              <span className="flex items-center gap-3">
+                <span className="w-8 h-8 rounded-xl bg-[#ef4444]/10 border border-[#ef4444]/20 flex items-center justify-center text-[#ef4444] text-xl leading-none">+</span>
+                <span className="text-white font-medium">Add New Kill Contract</span>
+              </span>
+              <span className="text-[#858585] text-xs uppercase tracking-widest">Open</span>
+            </button>
+          ) : (
           <div className="oura-card p-6">
-            <h2 className="text-white font-semibold mb-3 text-lg">Add New Kill Contract</h2>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h2 className="text-white font-semibold text-lg">Add New Kill Contract</h2>
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="shrink-0 text-[#858585] hover:text-white text-xs uppercase tracking-widest transition-colors"
+              >
+                Collapse
+              </button>
+            </div>
             <p className="text-[#858585] text-sm leading-relaxed mb-6">
               A Kill Contract is a pre-decided behavior. You name the pattern, you name the trigger that activates it, you name the response that competes with it. The decision is made now so it cannot be remade in the moment when it would fail.
             </p>
@@ -2048,10 +2093,13 @@ const KillList = () => {
                       onClick={() => setShowSharpen(s => !s)}
                       className="text-xs text-[#858585] hover:text-[#ababab] transition-colors"
                     >
-                      {showSharpen ? '▾' : '▸'} Sharpen with context
+                      {showSharpen ? '▾' : '▸'} Sharpen the plan with a hint
                     </button>
                     {showSharpen && (
                       <div className="mt-2 rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] p-3">
+                        <p className="text-[#858585] text-xs mb-2 leading-relaxed">
+                          Fed to the Oracle to redraft your if-then plan — not saved on the contract.
+                        </p>
                         <input
                           type="text"
                           value={intentionContext}
@@ -2061,8 +2109,8 @@ const KillList = () => {
                         />
                         <button
                           type="button"
-                          onClick={() => { intentionEditedRef.current = false; draftWithOracle(); }}
-                          disabled={suggesting || !newTarget.trim()}
+                          onClick={sharpenRedraft}
+                          disabled={suggesting || !newTarget.trim() || !intentionContext.trim()}
                           className="w-full px-3 py-2 rounded-xl border border-[#ef4444]/60 text-[#ef4444] text-sm font-medium hover:bg-[#ef4444]/10 hover:border-[#ef4444] disabled:border-[#1a1a1a] disabled:text-[#555555] disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                         >
                           {suggesting ? 'Drafting…' : '✦ Redraft with this context'}
@@ -2100,10 +2148,11 @@ const KillList = () => {
               })()}
             </div>
           </div>
+          )}
         </section>
 
         {/* Filter Tabs */}
-        <section className="mb-6 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+        <section className="mb-6 animate-fade-in-up order-3">
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <ArchiveToggle
@@ -2157,7 +2206,7 @@ const KillList = () => {
         </section>
 
         {view === 'archive' && (
-          <div className="space-y-3 mb-8">
+          <div className="space-y-3 mb-8 order-4">
             {archivedTargets.length === 0 ? (
               <div className="oura-card p-10 text-center">
                 <p className="text-[#858585] text-sm">No archived contracts.</p>
@@ -2193,7 +2242,7 @@ const KillList = () => {
         )}
 
         {view === 'active' && (
-        <div className="relative">
+        <div className="relative order-4">
           <div className={`fade-pane ${showSkeleton ? 'visible' : 'hidden'}`}>
             <SkeletonList count={4} ItemComponent={SkeletonKillTarget} />
           </div>
@@ -2247,7 +2296,7 @@ const KillList = () => {
                   </button>
                 ) : (
                   <button
-                    onClick={() => newTargetInputRef.current?.focus()}
+                    onClick={() => { setShowAddForm(true); setTimeout(() => newTargetInputRef.current?.focus(), 50); }}
                     className="px-6 py-2 bg-white hover:bg-[#d1d1d1] text-black rounded-lg transition-all duration-300 font-medium text-sm"
                   >
                     {filterStatus === 'active' ? 'Create New Target' : 'Add Your First Target'}
@@ -2261,7 +2310,7 @@ const KillList = () => {
 
         {/* Confirmed Kills Archive */}
         {confirmedKills.length > 0 && (
-          <section className="mt-12 animate-fade-in-up">
+          <section className="mt-12 animate-fade-in-up order-6">
             <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Confirmed Kills</h3>
             <div className="space-y-3">
               {confirmedKills.map(kill => {

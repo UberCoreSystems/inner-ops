@@ -26,9 +26,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     error,
     stats,
     refetch,
-    toggleTargetStatus,
     markAsEscaped,
-    markAsActive,
     updateReflectionNote,
     clearReflectionNote,
   } = useActiveKillTargets(true);
@@ -194,36 +192,6 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       closureDismissedRef.current = true;
     }
     setClosureModal({ isOpen: false, mode: 'kill', target: null, oraclePhase: 'idle', oracleResponse: '' });
-  };
-
-  const handleQuickReset = async (targetId) => {
-    setUpdating(prev => ({ ...prev, [targetId]: true }));
-    try {
-      await markAsActive(targetId);
-    } catch (error) {
-      logger.error("Error resetting to active:", error);
-    } finally {
-      setUpdating(prev => ({ ...prev, [targetId]: false }));
-    }
-  };
-
-  // Cycle through statuses: active -> killed -> escaped -> active
-  const handleStatusCycle = async (target) => {
-    setUpdating(prev => ({ ...prev, [target.id]: true }));
-    try {
-      const statusCycle = {
-        'active': 'killed',
-        'killed': 'escaped', 
-        'escaped': 'active'
-      };
-      
-      const newStatus = statusCycle[target.status] || 'active';
-      await toggleTargetStatus(target.id, newStatus);
-    } catch (error) {
-      logger.error("Error cycling status:", error);
-    } finally {
-      setUpdating(prev => ({ ...prev, [target.id]: false }));
-    }
   };
 
   const saveReflectionNotes = async (targetId) => {
@@ -413,7 +381,9 @@ const KillListDashboard = React.memo(function KillListDashboard() {
               )}
             </div>
 
-            {/* Status Toggle Buttons */}
+            {/* Closure actions — each routes through KillClosureModal, which
+                requires a forensic closing entry. No silent status flips: the
+                full reactivate / re-contract / autopsy controls live on /ledger. */}
             <div className="flex gap-2 mb-4">
               <button
                 onClick={() => handleQuickKill(target)}
@@ -442,31 +412,6 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                   <AppIcon name="relapse" size={14} color={target.status === 'escaped' ? '#b45309' : '#8a8a8a'} glow={false} />
                   Escaped
                 </span>
-              </button>
-              <button
-                onClick={() => handleQuickReset(target.id)}
-                disabled={updating[target.id] || target.status === 'active'}
-                className={`px-4 py-2 text-sm font-light rounded-xl transition-all border ${
-                  target.status === 'active'
-                    ? 'bg-[#1a1a1a] text-[#ef4444] border-[#ef4444]/40'
-                    : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#ef4444]/50 hover:text-[#ef4444]'
-                } disabled:opacity-50`}
-              >
-                <span className="flex items-center gap-2">
-                  <AppIcon name="activity" size={14} color={target.status === 'active' ? '#ef4444' : '#8a8a8a'} glow={false} />
-                  Reset
-                </span>
-              </button>
-              <button
-                onClick={() => handleStatusCycle(target)}
-                disabled={updating[target.id]}
-                className="px-3 py-2 text-xs bg-transparent text-[#858585] rounded-xl border border-[#2a2a2a] hover:border-[#3a3a3a] hover:text-[#ababab] disabled:opacity-50 transition-all"
-                title={`Quick toggle: ${target.status} → ${
-                  target.status === 'active' ? 'killed' :
-                  target.status === 'killed' ? 'escaped' : 'active'
-                }`}
-              >
-                <AppIcon name="dashboard" size={14} color="#5a5a5a" glow={false} />
               </button>
             </div>
 
