@@ -3,6 +3,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { readUserData, updateData, deleteData } from '../utils/firebaseUtils';
 import { generateSynthesisBriefing } from '../utils/generateSynthesisBriefing';
+import { composeSeededPreview } from '../utils/composeSeededPreview';
+import { getUserProfile } from '../utils/userProfile';
 import { COLLECTIONS, KILL_TARGET_FIELDS, HARD_LESSON_FIELDS } from '../utils/schema';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
@@ -39,6 +41,9 @@ export default function SynthesisBriefing() {
   // cross-module read; with only journal entries the briefing has nothing
   // to converge on and produces boilerplate.
   const [hasCrossModuleData, setHasCrossModuleData] = useState(true);
+  // Day-one seeded preview from onboarding answers — personalizes the empty
+  // state so a user with no briefings still sees what synthesis will read.
+  const [seededPreview, setSeededPreview] = useState(null);
 
   useEffect(() => {
     let unsubscribe;
@@ -64,6 +69,11 @@ export default function SynthesisBriefing() {
       const data = await readUserData('syntheses');
       const sorted = (data || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
       setBriefings(sorted);
+      // The seeded teaser only renders in the empty state, so only pay for the
+      // profile read when there are no briefings yet.
+      if (sorted.length === 0) {
+        getUserProfile().then((profile) => setSeededPreview(composeSeededPreview(profile)));
+      }
     } catch (err) {
       logger.error('Failed to load syntheses:', err);
     } finally {
@@ -261,34 +271,50 @@ export default function SynthesisBriefing() {
           <>
             <div className="oura-card p-12 text-center">
               <p className="text-[#858585] text-sm mb-2">No briefings generated yet.</p>
-              <p className="text-[#858585] text-xs">Use the controls above to generate your first cross-module synthesis.</p>
+              <p className="text-[#858585] text-xs">This is the one screen that reads every other module at once.</p>
               <p className="text-[#858585] text-xs mt-3 max-w-md mx-auto leading-relaxed">
                 Synthesis reads across modules. Convergence detection sharpens once you have entries in at least two — the journal plus one of General Ledger, Hard Lessons, or the Signal.
               </p>
             </div>
 
-            {/* Day-1 teaser: show the shape of a real briefing before any data exists */}
-            <div className="mt-6 opacity-60">
-              <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your first synthesis will look like</p>
-              <div className="oura-card p-8 space-y-8">
-                <div>
-                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
-                  <p className="text-[#5a5a5a] text-sm leading-relaxed">Where your journal, contracts, lessons, and signals point at the same thing — named in one paragraph.</p>
+            {/* Day-1 teaser: seeded from onboarding answers when available, else the
+                structural shape of a real briefing. Never fabricated metrics. */}
+            {(() => {
+              const seeded = seededPreview && seededPreview.status !== 'empty';
+              return (
+                <div className="mt-6 opacity-60">
+                  <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">
+                    {seeded ? 'Your first synthesis, seeded from what you declared' : 'Your first synthesis will look like'}
+                  </p>
+                  <div className="oura-card p-8 space-y-8">
+                    <div>
+                      <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
+                      <p className="text-[#5a5a5a] text-sm leading-relaxed">
+                        {seeded && seededPreview.direction
+                          ? `You named your direction: “${seededPreview.direction}”. The briefing reads your journal, contracts, lessons, and signals against it.`
+                          : 'Where your journal, contracts, lessons, and signals point at the same thing — named in one paragraph.'}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Violated Rules</div>
+                      <p className="text-[#5a5a5a] text-sm leading-relaxed">The rules you wrote and then broke this period, with how many times.</p>
+                    </div>
+                    <div>
+                      <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Signal Delta</div>
+                      <p className="text-[#5a5a5a] text-lg font-light">Improving · Stable · Deteriorating</p>
+                    </div>
+                    <div className="border-t border-[#1a1a1a] pt-8">
+                      <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Confrontation Question</div>
+                      <p className="text-[#5a5a5a] text-lg font-light leading-relaxed">
+                        {seeded && seededPreview.firstQuestion
+                          ? seededPreview.firstQuestion
+                          : 'The one question your own data forces you to answer.'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Violated Rules</div>
-                  <p className="text-[#5a5a5a] text-sm leading-relaxed">The rules you wrote and then broke this period, with how many times.</p>
-                </div>
-                <div>
-                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Signal Delta</div>
-                  <p className="text-[#5a5a5a] text-lg font-light">Improving · Stable · Deteriorating</p>
-                </div>
-                <div className="border-t border-[#1a1a1a] pt-8">
-                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Confrontation Question</div>
-                  <p className="text-[#5a5a5a] text-lg font-light leading-relaxed">The one question your own data forces you to answer.</p>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </>
         )}
 

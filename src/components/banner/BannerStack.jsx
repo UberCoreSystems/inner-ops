@@ -29,6 +29,7 @@ export default function BannerStack({ user }) {
   const location = useLocation();
   const [journalEntries, setJournalEntries] = useState([]);
   const [killTargets, setKillTargets] = useState([]);
+  const [syntheses, setSyntheses] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
   const [settingsId, setSettingsId] = useState(null);
   const [notificationPreferences, setNotificationPreferences] = useState(
@@ -41,12 +42,14 @@ export default function BannerStack({ user }) {
   // promise resolves after unmount.
   const journalUnsubRef = useRef(null);
   const killTargetsUnsubRef = useRef(null);
+  const synthesesUnsubRef = useRef(null);
   const settingsUnsubRef = useRef(null);
 
   useEffect(() => {
     if (!user) {
       setJournalEntries([]);
       setKillTargets([]);
+      setSyntheses([]);
       setUserProfile(null);
       setSettingsId(null);
       setNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
@@ -93,6 +96,18 @@ export default function BannerStack({ user }) {
       logger.warn('BannerStack killTargets subscribe failed:', err);
     });
 
+    // Realtime syntheses — feeds the synthesis-ready trigger so a new briefing
+    // surfaces an app-wide return reason, and clears once it is opened/read.
+    subscribeToUserData('syntheses', (data) => {
+      if (!active) return;
+      setSyntheses(data || []);
+    }).then((unsub) => {
+      if (!active) { unsub(); return; }
+      synthesesUnsubRef.current = unsub;
+    }).catch((err) => {
+      logger.warn('BannerStack syntheses subscribe failed:', err);
+    });
+
     // Realtime user settings — toggling notification prefs / dismissals
     // updates banner state instantly.
     subscribeToUserData('userSettings', (docs) => {
@@ -129,6 +144,10 @@ export default function BannerStack({ user }) {
         try { killTargetsUnsubRef.current(); } catch { /* noop */ }
         killTargetsUnsubRef.current = null;
       }
+      if (synthesesUnsubRef.current) {
+        try { synthesesUnsubRef.current(); } catch { /* noop */ }
+        synthesesUnsubRef.current = null;
+      }
       if (settingsUnsubRef.current) {
         try { settingsUnsubRef.current(); } catch { /* noop */ }
         settingsUnsubRef.current = null;
@@ -144,11 +163,13 @@ export default function BannerStack({ user }) {
     return evaluateAllTriggers({
       journalEntries,
       killTargets,
+      syntheses,
       userProfile,
       notificationPreferences,
       bannerDismissals,
+      currentPath: location.pathname,
     });
-  }, [loaded, user, journalEntries, killTargets, userProfile, notificationPreferences, bannerDismissals]);
+  }, [loaded, user, journalEntries, killTargets, syntheses, userProfile, notificationPreferences, bannerDismissals, location.pathname]);
 
   const persistDismissal = useCallback(async (triggerId) => {
     const next = { ...bannerDismissals, [triggerId]: new Date().toISOString() };

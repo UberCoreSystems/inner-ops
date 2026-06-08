@@ -746,6 +746,30 @@ export default function Journal() {
     }
   };
 
+  // Persist a follow-up exchange (the user's challenge + the Oracle's reply)
+  // onto the journal entry, turning a one-shot reading into a conversation that
+  // survives a reload. The response is generated in OracleModal via the Claude
+  // proxy (callOracleRaw) — no local templates. Field names match the entry
+  // render slots so past entries show the exchange with no extra render code.
+  const persistFollowUp = async ({ followUpText, followUpResponse }) => {
+    if (!currentEntryId) return;
+    try {
+      await updateData('journalEntries', currentEntryId, {
+        userResponse: followUpText,
+        oracleFollowUp: followUpResponse,
+      });
+      setEntries(prev =>
+        prev.map(e =>
+          e.id === currentEntryId
+            ? { ...e, userResponse: followUpText, oracleFollowUp: followUpResponse }
+            : e
+        )
+      );
+    } catch (error) {
+      logger.error('Error saving oracle follow-up:', error);
+    }
+  };
+
   // Auto-classify a journal entry, persist the result on the entry doc, and
   // mirror it into local React state. Runs detached from the save UX —
   // failures are silent and retried by the backfill effect on next mount.
@@ -1484,7 +1508,9 @@ export default function Journal() {
                               );
                             })()}
 
-                            {/* Legacy: show old follow-up data if present */}
+                            {/* Persisted follow-up exchange (B1): the user's
+                                challenge and the Oracle's reply, saved via
+                                persistFollowUp so the conversation survives reload. */}
                             {entry.userResponse && typeof entry.userResponse === 'string' && (
                               <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
                                 <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Your Response</h5>
@@ -1579,6 +1605,7 @@ export default function Journal() {
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
+        onFollowUpStored={persistFollowUp}
         entryCount={oracleModal.entryCount}
         metacognitiveDepth={oracleModal.metacognitiveDepth}
         entryText={oracleModal.entryText}

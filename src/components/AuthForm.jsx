@@ -338,7 +338,7 @@ export default function AuthForm({ onAuthSuccess }) {
             <div className="w-8 h-px bg-[#1a1a1a]" />
           </div>
           <p className="text-[#858585] text-xs">Your data is private, encrypted, and user-scoped — no one else sees it</p>
-          <p className="text-[#858585] text-xs mt-1">The Oracle awaits your commitment</p>
+          <p className="text-[#858585] text-xs mt-1">Nothing here works until you tell it the truth</p>
         </div>
       </div>
     </div>

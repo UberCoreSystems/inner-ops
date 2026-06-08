@@ -7,7 +7,6 @@ import logger from './utils/logger';
 import { checkFirebaseConnection } from './firebase';
 import { identify } from './utils/analytics';
 import { useSynthesisAutoGenerate } from './hooks/useSynthesisAutoGenerate';
-import { useSynthesisNewFlag } from './hooks/useSynthesisNewFlag';
 import SynthesisGuard from './components/SynthesisGuard';
 import './App.css';
 
@@ -68,7 +67,6 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useSynthesisAutoGenerate(user?.uid || null);
-  const latestSynthesisIsNew = useSynthesisNewFlag(user?.uid || null);
 
   useEffect(() => {
     // Finding 9: boot-time env diagnostic removed. firebase.js fails fast on
@@ -162,7 +160,7 @@ function App() {
         <InlineErrorBoundary name="EmergencyButton">
           {user && <EmergencyButton />}
         </InlineErrorBoundary>
-        <SynthesisGuard latestSynthesisIsNew={latestSynthesisIsNew}>
+        <SynthesisGuard>
         <OnboardingGate user={user}>
         <InlineErrorBoundary name="BannerStack">
           {user && <BannerStack user={user} />}

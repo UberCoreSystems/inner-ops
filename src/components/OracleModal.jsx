@@ -193,8 +193,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       const response = followUpFeedback || 'Oracle unavailable. Challenge recorded.';
       setFollowUpResponse(response);
       setFollowUpUsed(true);
-      if (onFollowUpStored) {
-        onFollowUpStored({ followUpText: followUpText.trim(), followUpResponse: response });
+      // Persist only a genuine Oracle reply. Persisting the unavailable-
+      // fallback would write a non-response onto the entry that survives reload
+      // and reads as the Oracle's considered answer.
+      if (onFollowUpStored && followUpFeedback) {
+        onFollowUpStored({ followUpText: followUpText.trim(), followUpResponse: followUpFeedback });
       }
     } finally {
       setFollowUpLoading(false);

@@ -18,6 +18,7 @@ function MirrorStack({
   signalReport,
   behavioralContext,
   depthTrend = null,
+  seededPreview = null,
 }) {
   const reading = composeMirrorReading({
     killTargets,
@@ -28,6 +29,13 @@ function MirrorStack({
   });
 
   const hasDepth = !!depthTrend && depthTrend.classifiedCount > 0;
+
+  // Day-one: no module data yet. Instead of a blank/generic mirror, show an
+  // honest preview built from the user's onboarding answers (what the mirror
+  // WILL read once they log). Never fabricated metrics — see composeSeededPreview.
+  if (reading.isColdStart && !hasDepth && seededPreview && seededPreview.status !== 'empty') {
+    return <SeededMirror preview={seededPreview} />;
+  }
 
   const hasAnything =
     !!reading.direction ||
@@ -119,6 +127,58 @@ function MirrorStack({
           <div className="mt-3">
             <p className="text-[#858585] text-sm leading-relaxed italic">
               {reading.question}
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// SeededMirror — the day-one preview. Same visual language as the live Mirror,
+// but every line is declarative intent drawn from onboarding answers, labeled so
+// the user knows this is what the surface WILL read once they log — not observed
+// behavior. No metrics, no fabrication (enforced in composeSeededPreview).
+function SeededMirror({ preview }) {
+  return (
+    <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
+      <div className="oura-card p-6 border" style={{ borderColor: 'rgba(77, 166, 255, 0.15)' }}>
+        <div className="flex items-baseline justify-between mb-5">
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest">Mirror</h3>
+          <span className="text-[#5a5a5a] text-[10px] uppercase tracking-widest">Preview</span>
+        </div>
+
+        {preview.direction && (
+          <div>
+            <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-2">Direction</p>
+            <p className="text-white text-base font-light leading-relaxed italic">
+              “{preview.direction}”
+            </p>
+          </div>
+        )}
+
+        {preview.lines.length > 0 && (
+          <div className={preview.direction ? 'mt-5 pt-5 border-t border-[#1a1a1a]' : ''}>
+            <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-3">
+              What the mirror will read
+            </p>
+            <div className="space-y-3">
+              {preview.lines.map((line, i) => (
+                <p key={i} className="text-[#ababab] text-sm leading-relaxed">
+                  {line}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {preview.firstQuestion && (
+          <div className="mt-5 pt-5 border-t border-[#1a1a1a]">
+            <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-2">
+              The question waiting for you
+            </p>
+            <p className="text-[#ababab] text-sm leading-relaxed italic">
+              {preview.firstQuestion}
             </p>
           </div>
         )}

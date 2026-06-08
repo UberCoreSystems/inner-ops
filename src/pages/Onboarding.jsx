@@ -31,6 +31,11 @@ export default function Onboarding() {
   const [focusStatement, setFocusStatement] = useState('');
   const [killTarget, setKillTarget] = useState('');
   const [saving, setSaving] = useState(false);
+  // A3 guard: a user who skips before giving the system anything to reflect on
+  // lands on a meaningless empty dashboard. The first such skip is redirected
+  // to the focus step with a stark nudge; skipNudged then exposes a non-coercive
+  // "Skip anyway" escape so no one is trapped.
+  const [skipNudged, setSkipNudged] = useState(false);
   const navigate = useNavigate();
 
   // BER-200: confrontation criteria setup (step 5)
@@ -65,7 +70,15 @@ export default function Onboarding() {
   // step's Skip and from any "Skip remaining" affordance. Best-effort —
   // failures here log but do not block the navigate, since the user
   // explicitly asked to leave.
-  const handleSkipOnboarding = async () => {
+  const handleSkipOnboarding = async (force = false) => {
+    // First skip with no focus statement → nudge to the focus step instead of
+    // bailing to an empty dashboard. force === true (from "Skip anyway")
+    // bypasses the nudge so the user is never trapped.
+    if (force !== true && !focusStatement.trim() && step < 3) {
+      setStep(3);
+      setSkipNudged(true);
+      return;
+    }
     try {
       await saveUserProfile({
         onboardingCompletedAt: new Date().toISOString(),
@@ -181,7 +194,7 @@ export default function Onboarding() {
     return (
       <BriefingScreen
         onContinue={() => setStep(1)}
-        onSkip={handleSkipOnboarding}
+        onSkip={() => handleSkipOnboarding()}
         primaryLabel="Continue"
         secondaryLabel="Skip"
         showProgress
@@ -266,6 +279,11 @@ export default function Onboarding() {
             <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">Question 3 of 3</p>
             <h2 className="text-2xl font-light text-white mb-3">In one sentence — what do you most want to eliminate or become?</h2>
             <p className="text-[#858585] text-sm mb-8">The Oracle will use this as context every time it responds to you.</p>
+            {skipNudged && (
+              <p className="text-[#b45309] text-sm mb-6 leading-relaxed">
+                The system needs one input to reflect anything. Give it one sentence — or skip anyway.
+              </p>
+            )}
             <textarea
               value={focusStatement}
               onChange={(e) => setFocusStatement(e.target.value)}
@@ -409,6 +427,18 @@ export default function Onboarding() {
           </button>
 
           <div className="flex items-center gap-4">
+            {/* A3 non-coercive escape — only shown once the user has tried to
+                skip and been nudged to the focus step. They are never trapped. */}
+            {step === 3 && skipNudged && (
+              <button
+                onClick={() => handleSkipOnboarding(true)}
+                disabled={saving}
+                className="text-[#858585] hover:text-white transition-colors text-sm min-h-11 inline-flex items-center disabled:opacity-20"
+              >
+                Skip anyway →
+              </button>
+            )}
+
             {/* Escape hatch — on optional steps the user can finish immediately
                 with whatever has been captured so far. */}
             {step >= FIRST_OPTIONAL_STEP && step < TOTAL_STEPS - 1 && (

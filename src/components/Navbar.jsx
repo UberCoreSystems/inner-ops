@@ -65,13 +65,17 @@ const Icons = {
 };
 
 // Finding 20 remediation: nav config hoisted to module scope.
+// Synthesis sits at position 2 — it is the cross-module readout and the
+// product's distinguishing surface, so it should not be buried last.
+// `descriptor` is a plain-language hint (title tooltip) for first-time
+// legibility; the established module names are unchanged.
 const NAV_ITEMS = [
-  { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard },
-  { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal },
-  { path: '/ledger', label: 'General Ledger', mobileLabel: 'Ledger', icon: Icons.killList },
-  { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons },
-  { path: '/relapse', label: 'The Signal', mobileLabel: 'Signal', icon: Icons.relapse },
-  { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis },
+  { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard, descriptor: 'Your record at a glance' },
+  { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis, descriptor: 'One reading across every module' },
+  { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal, descriptor: 'Daily reflection' },
+  { path: '/ledger', label: 'General Ledger', mobileLabel: 'Ledger', icon: Icons.killList, descriptor: "Patterns you're killing" },
+  { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons, descriptor: 'Costs converted to rules' },
+  { path: '/relapse', label: 'The Signal', mobileLabel: 'Signal', icon: Icons.relapse, descriptor: 'Relapse & drift radar' },
 ];
 
 export default function Navbar({ onLogout }) {
@@ -117,6 +121,7 @@ export default function Navbar({ onLogout }) {
                   <Link
                     key={item.path}
                     to={item.path}
+                    title={item.descriptor}
                     className={`px-4 py-2 rounded-xl text-sm font-light transition-all duration-200 flex items-center space-x-2 border ${
                       location.pathname === item.path
                         ? 'bg-oura-card text-white border-oura-border'
@@ -183,6 +188,8 @@ export default function Navbar({ onLogout }) {
               <Link
                 key={item.path}
                 to={item.path}
+                title={item.descriptor}
+                aria-label={`${item.label} — ${item.descriptor}`}
                 className={`flex flex-col items-center justify-center gap-0.5 transition-all duration-200 ${
                   isActive ? 'text-oura-cyan' : 'text-gray-400 active:text-white'
                 }`}

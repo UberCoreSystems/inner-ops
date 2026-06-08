@@ -174,10 +174,11 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     identityDirection, journalEntriesPerWeek,
   });
 
-  // Manual on-demand generations do NOT set isNew. The SynthesisGuard force-
-  // redirects to /dashboard while isNew is true, which is the desired UX for
-  // surprise auto-generated briefings but breaks navigation when the user
-  // just pressed "Generate now" — they are already looking at the briefing.
+  // Manual on-demand generations do NOT set isNew. isNew drives the unread
+  // surfaces — the Dashboard's synthesis banner and the app-wide
+  // synthesis-ready banner — which are the right nudge for a surprise auto-
+  // generated briefing but pointless right after the user pressed "Generate
+  // now" (they are already looking at the briefing).
   const isManualTrigger = !!options.bypassCadence;
   const briefing = {
     userId,

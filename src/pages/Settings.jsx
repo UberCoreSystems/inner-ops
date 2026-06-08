@@ -182,6 +182,14 @@ export default function Settings() {
             disabled={savingNotifications || !loaded}
             onToggle={() => toggleTrigger(ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS)}
           />
+
+          <ToggleRow
+            label="New synthesis ready"
+            description="Shows a banner when a new cross-module synthesis briefing is waiting to be read. Not shown on the dashboard, which already surfaces it."
+            enabled={!!notificationPreferences[ENGAGEMENT_TRIGGERS.SYNTHESIS_READY]?.enabled}
+            disabled={savingNotifications || !loaded}
+            onToggle={() => toggleTrigger(ENGAGEMENT_TRIGGERS.SYNTHESIS_READY)}
+          />
         </div>
 
         {/* Briefing */}

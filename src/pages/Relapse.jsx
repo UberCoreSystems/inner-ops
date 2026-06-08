@@ -1,12 +1,16 @@
 
 import { useState, useEffect } from 'react';
 import RelapseRadar from '../components/RelapseRadar';
+import QuickSignalLog from '../components/QuickSignalLog';
 import { SkeletonBox } from '../components/SkeletonLoader';
 import { AppIcon } from '../components/AppIcons';
 
 export default function Relapse() {
   const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
+  // Bumped after a quick-log so RelapseRadar remounts and re-reads its pattern
+  // data (it loads on mount). Cheap and keeps the wizard component untouched.
+  const [radarKey, setRadarKey] = useState(0);
 
   // Delay showing skeleton to prevent flicker on fast loads
   useEffect(() => {
@@ -52,6 +56,9 @@ export default function Relapse() {
           <div className="border-l-4 border-[#00d4aa] pl-4 py-1">
             <p className="text-[#ababab]">Catch the drift before it compounds.</p>
           </div>
+          <div className="mt-4">
+            <QuickSignalLog onLogged={() => setRadarKey((k) => k + 1)} />
+          </div>
         </div>
         
         <div className="relative">
@@ -65,7 +72,7 @@ export default function Relapse() {
           </div>
 
           <div className={`fade-pane ${loading || showSkeleton ? 'hidden' : 'visible'}`}>
-            <RelapseRadar />
+            <RelapseRadar key={radarKey} />
           </div>
         </div>
       </div>

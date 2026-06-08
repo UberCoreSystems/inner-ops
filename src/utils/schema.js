@@ -144,13 +144,14 @@ export const ENGAGEMENT_TRIGGERS = Object.freeze({
   IDENTITY_DIRECTION_REVIEW: 'identityDirectionReview',
 });
 
-// Default notification preferences for new accounts. Journal-staleness is
-// the only trigger ON by default — journaling is the input layer; other
-// modules are recap or user-owned action that does not warrant push.
+// Default notification preferences for new accounts. Journal-staleness (the
+// input layer) and synthesis-ready (the cross-module readout, low frequency)
+// are ON by default; other modules are recap or user-owned action that does
+// not warrant a prompt.
 export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
   [ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS]: { enabled: true },
   [ENGAGEMENT_TRIGGERS.KILL_LIST_CHECK_IN]: { enabled: false },
-  [ENGAGEMENT_TRIGGERS.SYNTHESIS_READY]: { enabled: false },
+  [ENGAGEMENT_TRIGGERS.SYNTHESIS_READY]: { enabled: true },
   [ENGAGEMENT_TRIGGERS.IDENTITY_DIRECTION_REVIEW]: { enabled: false },
 });
 

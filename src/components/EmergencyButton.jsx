@@ -36,7 +36,7 @@ const groundingTechniques = [
 
 // Quick mantras
 const mantras = [
-  "This feeling is temporary. I am not my urges.",
+  "Name what this is. A feeling, not an instruction.",
   "Urge ≠ action. 90 seconds and it passes.",
   "This is a craving, not a command. Wait it out.",
   "The craving will pass whether I act on it or not.",

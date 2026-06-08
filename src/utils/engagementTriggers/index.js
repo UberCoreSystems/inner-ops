@@ -1,4 +1,5 @@
 import { evaluateJournalStaleness } from './journalStaleness.js';
+import { evaluateSynthesisReady } from './synthesisReady.js';
 import { evaluateKillListCheckIn } from './killListCheckIn.js';
 import { ENGAGEMENT_TRIGGERS } from '../schema.js';
 
@@ -12,6 +13,7 @@ import { ENGAGEMENT_TRIGGERS } from '../schema.js';
  */
 export const TRIGGERS = [
   { id: ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS, evaluate: evaluateJournalStaleness },
+  { id: ENGAGEMENT_TRIGGERS.SYNTHESIS_READY, evaluate: evaluateSynthesisReady },
   { id: ENGAGEMENT_TRIGGERS.KILL_LIST_CHECK_IN, evaluate: evaluateKillListCheckIn },
 ];
 
@@ -46,4 +48,4 @@ export const layoutBanners = (banners, { maxVisible = 1 } = {}) => {
   };
 };
 
-export { evaluateJournalStaleness, evaluateKillListCheckIn };
+export { evaluateJournalStaleness, evaluateSynthesisReady, evaluateKillListCheckIn };

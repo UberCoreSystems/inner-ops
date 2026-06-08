@@ -139,6 +139,7 @@ export function composeMirrorReading(input = {}) {
       precursorAlert: null,
       synthesis: null,
       question: null,
+      isColdStart: true,
     };
   }
 
@@ -325,6 +326,7 @@ export function composeMirrorReading(input = {}) {
     precursorAlert,
     synthesis,
     question,
+    isColdStart: false,
   };
 }
 

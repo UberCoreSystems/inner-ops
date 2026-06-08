@@ -10,6 +10,8 @@ import { authService } from '../utils/authService';
 import { composeSignalReport, getBehavioralRecordDensity } from '../utils/clarityScore';
 import { getBehavioralContext } from '../utils/getBehavioralContext';
 import { computeDepthTrend } from '../utils/computeDepthTrend';
+import { composeSeededPreview } from '../utils/composeSeededPreview';
+import { getUserProfile } from '../utils/userProfile';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
 import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
 import SignalReport from '../components/SignalReport';
@@ -57,6 +59,10 @@ export default function Dashboard() {
 
   // 30-day metacognitive-depth trend for MirrorStack.
   const [depthTrend, setDepthTrend] = useState(null);
+
+  // Day-one seeded mirror — honest preview built from onboarding answers,
+  // shown by MirrorStack only on cold-start (no module data yet).
+  const [seededPreview, setSeededPreview] = useState(null);
 
   // Store raw data for deferred signal report composition
   const [rawUserData, setRawUserData] = useState(null);
@@ -284,15 +290,29 @@ export default function Dashboard() {
       const timer = setTimeout(async () => {
         try {
           const inMemoryReader = async (name) => rawUserData[name] || [];
-          const [report, densityResult, ctx] = await Promise.all([
+          // "Truly cold" = no data in ANY module, journal included. The seeded
+          // preview ("what the mirror WILL read once you log") is only honest
+          // then — a user who has journaled must not be told the record is
+          // blank. Gating the profile read on this also avoids a wasted
+          // Firestore fetch for the common (established-user) case.
+          const isTrulyCold =
+            !(rawUserData.journalEntries || []).length &&
+            !(rawUserData.killTargets || []).length &&
+            !(rawUserData.hardLessons || []).length &&
+            !(rawUserData.relapseEntries || []).length;
+          const [report, densityResult, ctx, profile] = await Promise.all([
             composeSignalReport(user?.uid, { readUserData: inMemoryReader }),
             getBehavioralRecordDensity(user?.uid, { readUserData: inMemoryReader }),
             getBehavioralContext(user?.uid, { readUserData: inMemoryReader, useCache: false }),
+            isTrulyCold ? getUserProfile() : Promise.resolve(null),
           ]);
           setSignalReport(report);
           setDensity(densityResult);
           setBehavioralContext(ctx);
           setDepthTrend(computeDepthTrend(rawUserData.journalEntries || []));
+          // Non-null only when truly cold, so MirrorStack shows the seeded
+          // preview exclusively on a genuine day-one.
+          setSeededPreview(isTrulyCold ? composeSeededPreview(profile) : null);
 
           // Compute early warning signal (unchanged — distinct from Signal Report)
           const NEGATIVE_MOODS = new Set(['heavy','hollow','foggy','chaotic']);
@@ -373,19 +393,16 @@ export default function Dashboard() {
         <div className="min-h-screen bg-black animate-fade-in">
           <div className="max-w-6xl mx-auto px-4 py-8">
 
-            {/* Oura-style Header */}
-            {/* NOTE (Morning Brief integration): the "Good morning, <name>" greeting
-                below is the kind of cozy UX Inner Ops rejects now that the
-                Morning Brief is the first-contact surface. Flagged for removal
-                in a follow-up — keeping it here without product sign-off would
-                overreach the current task's scope. */}
+            {/* Operational header — the time-of-day greeting was removed: Inner Ops
+                is a command surface, not a cozy dashboard. Name + stark clause only. */}
             <header className="mb-10 animate-fade-in-up">
               <p className="text-[#858585] text-sm uppercase tracking-widest mb-2">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </p>
               <h1 className="text-2xl sm:text-3xl font-bold text-white break-words">
-                Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Operator'}
+                {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Operator'}
               </h1>
+              <p className="text-[#858585] text-sm mt-1">What your record says today.</p>
             </header>
 
         {/* Synthesis Briefing — Forced State (non-dismissible, must open before clearing) */}
@@ -416,6 +433,7 @@ export default function Dashboard() {
           signalReport={signalReport}
           behavioralContext={behavioralContext}
           depthTrend={depthTrend}
+          seededPreview={seededPreview}
         />
 
         {/* Weekly Rule Review — Sunday-anchored sweep over finalized rules.
