@@ -14,7 +14,7 @@ import { useOracleModal } from '../hooks/useOracleModal';
 import logger from '../utils/logger';
 import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
 import { isUnderReview, getHeldStreakDays, getMostRecentBreak } from '../utils/ruleState';
-import { toMs } from '../utils/dateUtils';
+import { toMs, localDateKey } from '../utils/dateUtils';
 
 // Event categories for Hard Lessons
 const eventCategories = [
@@ -75,6 +75,7 @@ export default function HardLessons() {
   const [pendingOracleClosingQuestion, setPendingOracleClosingQuestion] = useState(null);
   const autoOpenedIds = useRef(new Set());
   const submittingRef = useRef(false);
+  const savingScarsRef = useRef(false); // synchronous guard — setSavingScars is async
 
   // Scar Inventory state (first-time guided flow)
   const [scarInventory, setScarInventory] = useState(['', '', '']);
@@ -211,6 +212,11 @@ export default function HardLessons() {
   const submitScarInventory = async () => {
     const filled = scarInventory.filter(s => s.trim().length > 0);
     if (filled.length === 0) return;
+    // Synchronous re-entry guard — setSavingScars only disables the button on
+    // the next render, so a rapid double-click would otherwise write the scar
+    // stubs twice.
+    if (savingScarsRef.current) return;
+    savingScarsRef.current = true;
 
     setSavingScars(true);
     try {
@@ -240,6 +246,7 @@ export default function HardLessons() {
       ouraToast.error('Failed to save scars');
     } finally {
       setSavingScars(false);
+      savingScarsRef.current = false;
     }
   };
 
@@ -381,12 +388,12 @@ export default function HardLessons() {
     if (ruleBreakingRef.current.has(rule.id)) return; // re-entry guard
     ruleBreakingRef.current.add(rule.id);
     try {
-      const todayKey = new Date().toISOString().slice(0, 10);
+      const todayKey = localDateKey();
       const existing = Array.isArray(rule.violations) ? rule.violations : [];
       const alreadyToday = existing.some(v => {
         const d = v?.date || v?.timestamp;
         if (!d) return false;
-        return new Date(d).toISOString().slice(0, 10) === todayKey;
+        return localDateKey(d) === todayKey;
       });
       if (alreadyToday) {
         ouraToast.info('Already logged a break for this rule today');
@@ -1368,7 +1375,7 @@ export default function HardLessons() {
                           onChange={(e) => setAarPanel(prev => ({ ...prev, cause: e.target.value }))}
                           rows={2}
                           placeholder="The conditions, the assumption, the moment it gave way."
-                          className="w-full p-2 mb-3 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#555555]"
+                          className="w-full p-2 mb-3 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#828282]"
                         />
                         <label className="block text-[#858585] text-xs mb-1">What changes so it holds?</label>
                         <textarea
@@ -1376,7 +1383,7 @@ export default function HardLessons() {
                           onChange={(e) => setAarPanel(prev => ({ ...prev, correction: e.target.value }))}
                           rows={2}
                           placeholder="The specific change that makes the next outcome different."
-                          className="w-full p-2 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#555555]"
+                          className="w-full p-2 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#828282]"
                         />
                         <div className="flex justify-end gap-2 mt-3">
                           <button
@@ -1719,7 +1726,7 @@ export default function HardLessons() {
                               i === 1 ? 'The warning I ignored that cost me...' :
                               'The decision I made that changed everything...'
                             }
-                            className="flex-1 p-4 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#555555]"
+                            className="flex-1 p-4 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#828282]"
                             autoFocus={i === 0}
                           />
                         </div>

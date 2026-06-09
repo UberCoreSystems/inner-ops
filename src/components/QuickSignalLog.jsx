@@ -69,6 +69,7 @@ export default function QuickSignalLog({ onLogged }) {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
+          maxLength={20000}
           placeholder="What did you notice? Speak or type the condition stacking up…"
           className="w-full h-24 p-3 pr-12 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-cyan focus:outline-none resize-none transition-colors text-sm"
         />

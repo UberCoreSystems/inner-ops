@@ -84,8 +84,8 @@ const withinOffsetWindow = (value, windowDays, offsetDays) => {
  * Pattern Confrontation Card writes to the `confrontations` collection on
  * every confront tap (oracleEngaged: true) and on every manual dismiss
  * (oracleDismissed: true), so the metric now reflects the Dashboard's
- * Confront flow. Other modules (Journal, Kill List, Hard Lessons, Relapse,
- * Black Mirror) still rely on legacy `oracleFeedback` presence; their write
+ * Confront flow. Other modules (Journal, Kill List, Hard Lessons, Relapse)
+ * still rely on legacy `oracleFeedback` presence; their write
  * paths can later add explicit `oracleEngaged` / `oracleDismissed` flags for
  * tighter accounting, but they're already covered by the fallback.
  *

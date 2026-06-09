@@ -439,6 +439,18 @@ const RelapseRadar = () => {
 
   const submitRelapseEntry = async () => {
     if (submittingRef.current) return;
+    // Require real content — an empty-archetype or empty-reflection entry is
+    // noise that still inflates relapse counts, archetype frequency, and the
+    // Synthesis signal delta. Validate before the re-entry guard so a failed
+    // check never locks submission.
+    if (!selectedSelf) {
+      ouraToast.warning('Select which self showed up before logging.');
+      return;
+    }
+    if (!reflection.trim()) {
+      ouraToast.warning('Record a reflection before logging.');
+      return;
+    }
     submittingRef.current = true;
     try {
       setLoading(true);
@@ -619,7 +631,7 @@ const RelapseRadar = () => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-light text-white tracking-tight">The Signal</h2>
-          <div className="text-sm text-gray-500">Step {step} of 5</div>
+          <div className="text-sm text-gray-400">Step {step} of 5</div>
         </div>
         {/* Pattern Data */}
         {relapseEntries.length > 0 && step === 2 && (
@@ -669,7 +681,7 @@ const RelapseRadar = () => {
                 </div>
                 <div>
                   <div className="text-white text-sm font-light">day{daysSinceLastRelapse !== 1 ? 's' : ''} since last relapse</div>
-                  <div className="text-gray-500 text-xs">{relapseEntries.length} total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
+                  <div className="text-gray-400 text-xs">{relapseEntries.length} total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
                 </div>
               </>
             ) : (
@@ -679,7 +691,7 @@ const RelapseRadar = () => {
                 </div>
                 <div>
                   <div className="text-white text-sm font-light">total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
-                  <div className="text-gray-500 text-xs">No relapse logged yet — these are precursor signals</div>
+                  <div className="text-gray-400 text-xs">No relapse logged yet — these are precursor signals</div>
                 </div>
               </>
             )}
@@ -688,7 +700,7 @@ const RelapseRadar = () => {
 
         {step === 2 && archetypeFrequency.length >= 2 && (
           <div className="mb-6 oura-card p-5">
-            <h3 className="text-xs text-gray-500 tracking-widest uppercase mb-4">Archetype Frequency</h3>
+            <h3 className="text-xs text-gray-400 tracking-widest uppercase mb-4">Archetype Frequency</h3>
             <div className="space-y-2.5">
               {archetypeFrequency.map(({ id, label, count }) => {
                 const maxCount = archetypeFrequency[0].count;
@@ -702,7 +714,7 @@ const RelapseRadar = () => {
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <div className="text-gray-500 text-xs w-4 text-right shrink-0">{count}</div>
+                    <div className="text-gray-400 text-xs w-4 text-right shrink-0">{count}</div>
                   </div>
                 );
               })}
@@ -731,7 +743,7 @@ const RelapseRadar = () => {
             primary use) from an actual relapse event. Visible at every step so
             the user can correct the framing at any point before submit. */}
         <div className="mb-5">
-          <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">What are you logging?</div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">What are you logging?</div>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -743,7 +755,7 @@ const RelapseRadar = () => {
               }`}
             >
               <div className="text-sm font-medium">Signal</div>
-              <div className="text-[11px] text-gray-500 mt-0.5">A precursor — conditions or patterns before relapse</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">A precursor — conditions or patterns before relapse</div>
             </button>
             <button
               type="button"
@@ -755,7 +767,7 @@ const RelapseRadar = () => {
               }`}
             >
               <div className="text-sm font-medium">Actual relapse</div>
-              <div className="text-[11px] text-gray-500 mt-0.5">A relapse occurred — bridges to Hard Lessons after submit</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">A relapse occurred — bridges to Hard Lessons after submit</div>
             </button>
           </div>
         </div>
@@ -771,11 +783,12 @@ const RelapseRadar = () => {
       {step === 1 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">What conditions were present in the 24–48 hours before this?</h3>
-          <p className="text-gray-500 text-sm">Select all that apply. Select at least one before proceeding.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <p className="text-gray-400 text-sm">Select all that apply. Select at least one before proceeding.</p>
+          <div role="group" aria-label="Precursor conditions" className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {PRECURSOR_CONDITIONS.map((condition) => (
               <button
                 key={condition}
+                aria-pressed={selectedPrecursors.includes(condition)}
                 onClick={() => handlePrecursorToggle(condition)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedPrecursors.includes(condition)
@@ -791,19 +804,19 @@ const RelapseRadar = () => {
           {OURA_ENABLED && ouraConnected && ouraBiometrics && !ouraLoading && (
             <div className={`p-4 rounded-2xl border ${isPhysiologicalAlert ? 'border-red-500 bg-red-500/10' : 'border-oura-border bg-oura-card'}`}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-gray-500 uppercase tracking-widest">Physiological — Oura</span>
+                <span className="text-xs text-gray-400 uppercase tracking-widest">Physiological — Oura</span>
                 {isPhysiologicalAlert && (
                   <span className="text-xs text-red-400 font-medium tracking-wide">PRECURSOR DETECTED</span>
                 )}
               </div>
-              <div className="text-xs text-gray-600 mb-3">
+              <div className="text-xs text-gray-400 mb-3">
                 as of {ouraBiometrics.date}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {ouraBiometrics.hrv != null && (
                   <div className={`p-3 rounded-xl ${isHrvAlert ? 'bg-red-900/40' : 'bg-oura-darker'}`}>
                     <div className={`text-xl font-light tabular-nums ${isHrvAlert ? 'text-red-400' : 'text-white'}`}>{Math.round(ouraBiometrics.hrv)}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">HRV (rmssd){isHrvAlert ? ' — below baseline' : ''}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">HRV (rmssd){isHrvAlert ? ' — below baseline' : ''}</div>
                     {isHrvAlert && hrvBaseline != null && (
                       <div className="text-xs text-red-400/70 mt-1">Baseline: {Math.round(hrvBaseline)}</div>
                     )}
@@ -812,19 +825,19 @@ const RelapseRadar = () => {
                 {ouraBiometrics.readinessScore != null && (
                   <div className={`p-3 rounded-xl ${isReadinessAlert ? 'bg-red-900/40' : 'bg-oura-darker'}`}>
                     <div className={`text-xl font-light tabular-nums ${isReadinessAlert ? 'text-red-400' : 'text-white'}`}>{ouraBiometrics.readinessScore}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Readiness{isReadinessAlert ? ' — below 60' : ''}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Readiness{isReadinessAlert ? ' — below 60' : ''}</div>
                   </div>
                 )}
                 {ouraBiometrics.sleepScore != null && (
                   <div className="p-3 rounded-xl bg-oura-darker">
                     <div className="text-xl font-light tabular-nums text-white">{ouraBiometrics.sleepScore}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Sleep score</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Sleep score</div>
                   </div>
                 )}
                 {ouraBiometrics.restingHeartRate != null && (
                   <div className="p-3 rounded-xl bg-oura-darker">
                     <div className="text-xl font-light tabular-nums text-white">{ouraBiometrics.restingHeartRate}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Resting HR (bpm)</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Resting HR (bpm)</div>
                   </div>
                 )}
               </div>
@@ -838,21 +851,21 @@ const RelapseRadar = () => {
           {OURA_ENABLED && !ouraConnected && !ouraLoading && (
             <div className="p-4 rounded-2xl border border-oura-border bg-oura-card">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600 uppercase tracking-widest">Physiological</span>
+                <span className="text-xs text-gray-400 uppercase tracking-widest">Physiological</span>
                 <button
                   type="button"
                   onClick={connectOura}
-                  className="text-xs text-gray-500 hover:text-oura-cyan transition-colors"
+                  className="text-xs text-gray-400 hover:text-oura-cyan transition-colors"
                 >
                   Connect Oura Ring
                 </button>
               </div>
-              <p className="text-gray-600 text-xs mt-2">Connect Oura Ring to capture biometric precursors automatically.</p>
+              <p className="text-gray-400 text-xs mt-2">Connect Oura Ring to capture biometric precursors automatically.</p>
             </div>
           )}
 
           <div>
-            <label className="text-gray-500 text-xs uppercase tracking-widest mb-2 block">One-sentence context <span className="text-gray-600">(optional)</span></label>
+            <label className="text-gray-400 text-xs uppercase tracking-widest mb-2 block">One-sentence context <span className="text-gray-400">(optional)</span></label>
             <input
               type="text"
               value={precursorContext}
@@ -877,10 +890,11 @@ const RelapseRadar = () => {
       {step === 2 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">Which pattern showed up today?</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div role="group" aria-label="Which pattern showed up" className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {ARCHETYPE_IDS.map((id) => (
               <button
                 key={id}
+                aria-pressed={selectedSelf === id}
                 onClick={() => setSelectedSelf(id)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedSelf === id
@@ -898,11 +912,12 @@ const RelapseRadar = () => {
       {step === 3 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">What patterns emerged?</h3>
-          <p className="text-gray-500 text-sm">Skip if none apply.</p>
-          <div className="grid grid-cols-1 gap-3">
+          <p className="text-gray-400 text-sm">Skip if none apply.</p>
+          <div role="group" aria-label="Patterns that emerged" className="grid grid-cols-1 gap-3">
             {HABIT_IDS.map((id) => (
               <button
                 key={id}
+                aria-pressed={selectedHabits.includes(id)}
                 onClick={() => handleHabitToggle(id)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   selectedHabits.includes(id)
@@ -920,11 +935,12 @@ const RelapseRadar = () => {
       {step === 4 && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">Any substance use?</h3>
-          <p className="text-gray-500 text-sm">Skip if none apply.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <p className="text-gray-400 text-sm">Skip if none apply.</p>
+          <div role="group" aria-label="Substance use" className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {SUBSTANCE_OPTIONS.map((substance) => (
               <button
                 key={substance}
+                aria-pressed={substanceUse.includes(substance)}
                 onClick={() => handleSubstanceToggle(substance)}
                 className={`p-4 rounded-2xl text-left transition-all duration-200 ${
                   substanceUse.includes(substance)
@@ -946,6 +962,7 @@ const RelapseRadar = () => {
             <textarea
               value={reflection}
               onChange={(e) => setReflection(e.target.value)}
+              maxLength={20000}
               placeholder={entryType === RELAPSE_ENTRY_TYPES.RELAPSE
                 ? 'What led to this? What can you learn? How will you recover?'
                 : 'What did you notice? What conditions are stacking up?'}
@@ -961,7 +978,7 @@ const RelapseRadar = () => {
             </div>
           </div>
           <div>
-            <label className="block text-gray-500 text-xs uppercase tracking-widest mb-2 font-medium">When did this happen?</label>
+            <label className="block text-gray-400 text-xs uppercase tracking-widest mb-2 font-medium">When did this happen?</label>
             <input
               type="datetime-local"
               value={eventOccurredAt}
@@ -998,7 +1015,7 @@ const RelapseRadar = () => {
 
           {postSaveMantra && (
             <div className="oura-card p-4 border border-oura-purple/20">
-              <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">A reminder</p>
+              <p className="text-xs text-gray-400 uppercase tracking-widest mb-2">A reminder</p>
               <p className="text-gray-200 text-sm italic leading-relaxed">"{postSaveMantra}"</p>
             </div>
           )}
@@ -1058,7 +1075,7 @@ const RelapseRadar = () => {
                   localStorage.setItem(`rl_kl_arch_${archetypeMatchPrompt.archetype}_${archetypeMatchPrompt.targetId}`, Date.now().toString());
                   setArchetypeMatchPrompt(null);
                 }}
-                className="text-gray-600 hover:text-gray-400 text-sm transition-colors"
+                className="text-gray-400 hover:text-gray-400 text-sm transition-colors"
               >
                 ×
               </button>
@@ -1077,7 +1094,7 @@ const RelapseRadar = () => {
         </button>
         <button
           onClick={nextStep}
-          disabled={loading || submitSuccess || postSaveAction !== null || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf)}
+          disabled={loading || submitSuccess || postSaveAction !== null || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf) || (step === 5 && (!selectedSelf || !reflection.trim()))}
           className="px-6 py-3 bg-oura-cyan text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-[#00e6b8] transition-all duration-200"
         >
           {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 5 ? 'Submit' : 'Next')}
@@ -1103,7 +1120,7 @@ const RelapseRadar = () => {
               <h3 className="text-2xl font-light text-white tracking-tight">
                 {view === 'archive' ? 'Archive' : 'Recent Entries'}{' '}
                 {view === 'active' && (
-                  <span className="text-gray-500 text-lg">
+                  <span className="text-gray-400 text-lg">
                     ({searchQuery.trim() ? `${filteredRelapseEntries.length}/${relapseEntries.length}` : relapseEntries.length})
                   </span>
                 )}
@@ -1127,7 +1144,7 @@ const RelapseRadar = () => {
               {searchInput && (
                 <button
                   onClick={() => { setSearchInput(''); setSearchQuery(''); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-xs"
                 >
                   Clear
                 </button>
@@ -1140,14 +1157,14 @@ const RelapseRadar = () => {
             <div className="space-y-3">
               {archivedEntries.length === 0 ? (
                 <div className="oura-card p-10 text-center">
-                  <p className="text-gray-500 text-sm">No archived entries.</p>
+                  <p className="text-gray-400 text-sm">No archived entries.</p>
                 </div>
               ) : archivedEntries.map(entry => (
                 <div key={entry.id} className="oura-card p-5 opacity-75 hover:opacity-100 transition-opacity">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="text-oura-cyan font-light">{resolveArchetypeLabel(entry.selectedSelf)}</div>
-                      <div className="text-gray-500 text-xs mt-1">
+                      <div className="text-gray-400 text-xs mt-1">
                         Archived {entry.archivedAt ? new Date(entry.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                       </div>
                       {entry.reflection && (
@@ -1159,7 +1176,7 @@ const RelapseRadar = () => {
                             <button
                               type="button"
                               onClick={() => toggleExpand(`${entry.id}_reflection_archive`)}
-                              className="text-gray-500 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+                              className="text-gray-400 hover:text-gray-300 text-xs mt-1.5 transition-colors"
                             >
                               {expandedSections[`${entry.id}_reflection_archive`] ? '▲ Show less' : '▼ Show more'}
                             </button>
@@ -1190,11 +1207,11 @@ const RelapseRadar = () => {
           {view === 'active' && (filteredRelapseEntries.length > 0 ? (
             <div className="space-y-3">
               {filteredRelapseEntries.slice(0, 3).map((entry) => (
-                <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-sm transition-shadow duration-300">
+                <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-cyan transition-shadow duration-300">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="text-oura-cyan font-light text-lg">{resolveArchetypeLabel(entry.selectedSelf)}</div>
-                      <div className="text-gray-500 text-sm mt-2">
+                      <div className="text-gray-400 text-sm mt-2">
                         {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </div>
                     </div>
@@ -1202,7 +1219,7 @@ const RelapseRadar = () => {
                       onClick={() => archiveRelapseEntry(entry)}
                       aria-label="Archive entry"
                       title="Archive"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-white hover:bg-oura-darker transition-colors shrink-0"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-oura-darker transition-colors shrink-0"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="3" y="4" width="18" height="4" rx="1" />
@@ -1220,7 +1237,7 @@ const RelapseRadar = () => {
                         <button
                           type="button"
                           onClick={() => toggleExpand(`${entry.id}_reflection`)}
-                          className="text-gray-500 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+                          className="text-gray-400 hover:text-gray-300 text-xs mt-1.5 transition-colors"
                         >
                           {expandedSections[`${entry.id}_reflection`] ? '▲ Show less' : '▼ Show more'}
                         </button>
@@ -1244,7 +1261,7 @@ const RelapseRadar = () => {
                         <button
                           type="button"
                           onClick={() => toggleExpand(`${entry.id}_oracle`)}
-                          className="text-gray-500 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+                          className="text-gray-400 hover:text-gray-300 text-xs mt-1.5 transition-colors"
                         >
                           {expandedSections[`${entry.id}_oracle`] ? '▲ Show less' : '▼ Show more'}
                         </button>
@@ -1278,7 +1295,7 @@ const RelapseRadar = () => {
 
           {crossSignalTimeline.length >= 2 && (
             <div className="mt-8">
-              <h4 className="text-xs text-gray-500 tracking-widest uppercase mb-4">7-Day Cross-Signal Timeline</h4>
+              <h4 className="text-xs text-gray-400 tracking-widest uppercase mb-4">7-Day Cross-Signal Timeline</h4>
               <div className="relative space-y-0">
                 {crossSignalTimeline.map((event, idx) => (
                   <div key={event.id} className="flex items-start gap-3 pb-4">
@@ -1304,7 +1321,7 @@ const RelapseRadar = () => {
             🧭
           </div>
           <h3 className="text-lg font-light text-white mb-2">No check-ins logged</h3>
-          <p className="text-gray-500 text-sm">Log a signal above. Patterns only become visible once you track them.</p>
+          <p className="text-gray-400 text-sm">Log a signal above. Patterns only become visible once you track them.</p>
         </div>
       ))}
 

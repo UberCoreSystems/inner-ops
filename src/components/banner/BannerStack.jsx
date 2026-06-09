@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { subscribeToUserData, writeData, updateData } from '../../utils/firebaseUtils';
+import { subscribeToUserData, upsertUserSettings } from '../../utils/firebaseUtils';
 import { getUserProfile } from '../../utils/userProfile';
 import { evaluateAllTriggers, layoutBanners } from '../../utils/engagementTriggers';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '../../utils/schema';
@@ -31,7 +31,6 @@ export default function BannerStack({ user }) {
   const [killTargets, setKillTargets] = useState([]);
   const [syntheses, setSyntheses] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
-  const [settingsId, setSettingsId] = useState(null);
   const [notificationPreferences, setNotificationPreferences] = useState(
     DEFAULT_NOTIFICATION_PREFERENCES
   );
@@ -51,7 +50,6 @@ export default function BannerStack({ user }) {
       setKillTargets([]);
       setSyntheses([]);
       setUserProfile(null);
-      setSettingsId(null);
       setNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
       setBannerDismissals({});
       setLoaded(false);
@@ -114,11 +112,9 @@ export default function BannerStack({ user }) {
       if (!active) return;
       const settings = (docs || [])[0] || null;
       if (!settings) {
-        setSettingsId(null);
         setNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
         setBannerDismissals({});
       } else {
-        setSettingsId(settings.id);
         setNotificationPreferences({
           ...DEFAULT_NOTIFICATION_PREFERENCES,
           ...(settings.notificationPreferences || {}),
@@ -176,16 +172,11 @@ export default function BannerStack({ user }) {
     setBannerDismissals(next);
     try {
       const data = { bannerDismissals: next };
-      if (settingsId) {
-        await updateData('userSettings', settingsId, data);
-      } else {
-        const saved = await writeData('userSettings', data);
-        setSettingsId(saved.id);
-      }
+      await upsertUserSettings(data);
     } catch (err) {
       logger.warn('Failed to persist dismissal:', err);
     }
-  }, [bannerDismissals, settingsId]);
+  }, [bannerDismissals]);
 
   if (isExemptPath(location.pathname) || !user) return null;
   if (banners.length === 0) return null;

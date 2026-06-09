@@ -64,7 +64,7 @@ export default function BriefingScreen({
                 The Oracle reads what you actually write and responds to it directly. No generic advice. No comfort. The more honest you are, the more useful it becomes.
               </p>
               <p className="text-[#858585] text-sm leading-relaxed mb-2">
-                <span className="text-[#ababab] font-medium">Where to start:</span> Ledger first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. The Signal when you slip. Black Mirror when attention drifts.
+                <span className="text-[#ababab] font-medium">Where to start:</span> Ledger first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. The Signal when you slip.
               </p>
               <p className="text-[#858585] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
             </>
@@ -72,9 +72,9 @@ export default function BriefingScreen({
 
           {sample && (
             <div className="mt-8 border-l-2 border-[#a855f7]/40 pl-4">
-              <p className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-2">What someone wrote</p>
+              <p className="text-[#828282] text-xs uppercase tracking-widest mb-2">What someone wrote</p>
               <p className="text-[#858585] text-sm italic leading-relaxed mb-4">{sample.context}</p>
-              <p className="text-[#6a6a6a] text-xs uppercase tracking-widest mb-2">The Oracle</p>
+              <p className="text-[#828282] text-xs uppercase tracking-widest mb-2">The Oracle</p>
               <p className="text-[#ababab] text-sm leading-relaxed">{sample.response}</p>
             </div>
           )}

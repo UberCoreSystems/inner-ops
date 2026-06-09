@@ -289,7 +289,7 @@ export default function SynthesisBriefing() {
                   <div className="oura-card p-8 space-y-8">
                     <div>
                       <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
-                      <p className="text-[#5a5a5a] text-sm leading-relaxed">
+                      <p className="text-[#7a7a7a] text-sm leading-relaxed">
                         {seeded && seededPreview.direction
                           ? `You named your direction: “${seededPreview.direction}”. The briefing reads your journal, contracts, lessons, and signals against it.`
                           : 'Where your journal, contracts, lessons, and signals point at the same thing — named in one paragraph.'}
@@ -297,15 +297,15 @@ export default function SynthesisBriefing() {
                     </div>
                     <div>
                       <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Violated Rules</div>
-                      <p className="text-[#5a5a5a] text-sm leading-relaxed">The rules you wrote and then broke this period, with how many times.</p>
+                      <p className="text-[#7a7a7a] text-sm leading-relaxed">The rules you wrote and then broke this period, with how many times.</p>
                     </div>
                     <div>
                       <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Signal Delta</div>
-                      <p className="text-[#5a5a5a] text-lg font-light">Improving · Stable · Deteriorating</p>
+                      <p className="text-[#7a7a7a] text-lg font-light">Improving · Stable · Deteriorating</p>
                     </div>
                     <div className="border-t border-[#1a1a1a] pt-8">
                       <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Confrontation Question</div>
-                      <p className="text-[#5a5a5a] text-lg font-light leading-relaxed">
+                      <p className="text-[#7a7a7a] text-lg font-light leading-relaxed">
                         {seeded && seededPreview.firstQuestion
                           ? seededPreview.firstQuestion
                           : 'The one question your own data forces you to answer.'}

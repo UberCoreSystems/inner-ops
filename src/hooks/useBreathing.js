@@ -18,6 +18,11 @@ export const useBreathing = () => {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // Note on reduced-motion: this 4s phase cadence is FUNCTIONAL — it paces the
+  // guided box-breathing exercise — so it is intentionally not gated by
+  // `prefers-reduced-motion`. The decorative circle-scale animation in the UI
+  // is already neutralized by the global reduced-motion guard in index.css, so
+  // a reduced-motion user still gets the timed instructions without the easing.
   useEffect(() => {
     if (breathPhase === 'ready' || breathPhase === 'complete') return;
 

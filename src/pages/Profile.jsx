@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { updateProfile } from 'firebase/auth';
-import { readUserData, writeData, updateData } from '../utils/firebaseUtils';
+import { readUserData, upsertUserSettings } from '../utils/firebaseUtils';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 
@@ -15,7 +15,6 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
 
   // BER-137: identity direction
-  const [settingsId, setSettingsId] = useState(null);
   const [identityDirection, setIdentityDirection] = useState('');
   const [identityDirectionDraft, setIdentityDirectionDraft] = useState('');
   const [identityDirectionSetAt, setIdentityDirectionSetAt] = useState(null);
@@ -38,7 +37,6 @@ export default function Profile() {
       const docs = await readUserData('userSettings');
       const settings = (docs || [])[0] || null;
       if (settings) {
-        setSettingsId(settings.id);
         setIdentityDirection(settings.identityDirection || '');
         setIdentityDirectionDraft(settings.identityDirection || '');
         setIdentityDirectionSetAt(settings.identityDirectionSetAt || null);
@@ -102,12 +100,7 @@ export default function Profile() {
         identityDirectionHistory: newHistory,
       };
 
-      if (settingsId) {
-        await updateData('userSettings', settingsId, data);
-      } else {
-        const saved = await writeData('userSettings', data);
-        setSettingsId(saved.id);
-      }
+      await upsertUserSettings(data);
 
       // Local state mutations moved AFTER the await so a failed write does
       // not leave the UI in an "optimistically saved" state.
@@ -147,12 +140,7 @@ export default function Profile() {
         identityDirectionSetAt: null,
         identityDirectionHistory: newHistory,
       };
-      if (settingsId) {
-        await updateData('userSettings', settingsId, data);
-      } else {
-        const saved = await writeData('userSettings', data);
-        setSettingsId(saved.id);
-      }
+      await upsertUserSettings(data);
       setIdentityDirection(null);
       setIdentityDirectionSetAt(null);
       setIdentityDirectionHistory(newHistory);
@@ -173,7 +161,7 @@ export default function Profile() {
     try {
       const now = new Date().toISOString();
       const data = { identityDirectionSetAt: now };
-      if (settingsId) await updateData('userSettings', settingsId, data);
+      await upsertUserSettings(data);
       setIdentityDirectionSetAt(now);
       setQuarterlyReviewDue(false);
       ouraToast.success('Identity direction confirmed.');
@@ -284,7 +272,7 @@ export default function Profile() {
                 onChange={(e) => setIdentityDirectionDraft(e.target.value)}
                 maxLength={200}
                 rows={2}
-                className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a] transition-colors"
+                className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#828282] transition-colors"
                 placeholder="One sentence. Plain text. Present tense."
               />
               <div className="flex items-center justify-between">

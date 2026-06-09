@@ -146,7 +146,7 @@ export default function KillListBackfillCard({
                     value={entry.context}
                     onChange={(e) => updateEntry(entry.date, { context: e.target.value })}
                     placeholder="What happened that day?"
-                    className="mt-2 w-full p-2 bg-[#050505] text-white text-xs rounded-lg border border-[#1a1a1a] focus:border-[#b45309]/50 focus:outline-none placeholder-[#555555]"
+                    className="mt-2 w-full p-2 bg-[#050505] text-white text-xs rounded-lg border border-[#1a1a1a] focus:border-[#b45309]/50 focus:outline-none placeholder-[#828282]"
                   />
                 )}
               </div>

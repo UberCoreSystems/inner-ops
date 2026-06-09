@@ -71,8 +71,13 @@ export default function KillClosureModal({
     previousFocusRef.current = document.activeElement;
 
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && oraclePhase !== 'idle') {
-        onClose?.();
+      if (e.key === 'Escape') {
+        // During the Oracle phase there's nothing to lose, so close immediately.
+        // During the form (idle) phase, confirm only if the user has typed a
+        // note, so Escape can't silently discard in-progress input.
+        if (oraclePhase !== 'idle' || !note.trim() || window.confirm('Discard this closure? Your note will be lost.')) {
+          onClose?.();
+        }
         return;
       }
       if (e.key !== 'Tab') return;
@@ -103,7 +108,7 @@ export default function KillClosureModal({
         try { prior.focus(); } catch { /* element may have been removed */ }
       }
     };
-  }, [isOpen, oraclePhase, onClose]);
+  }, [isOpen, oraclePhase, onClose, note]);
 
   if (!isOpen || !target) return null;
 
@@ -175,7 +180,7 @@ export default function KillClosureModal({
               placeholder={config.placeholder}
               rows={3}
               autoFocus
-              className="w-full bg-[#0a0a0a] text-white p-4 rounded-xl border border-[#1a1a1a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a] transition-colors"
+              className="w-full bg-[#0a0a0a] text-white p-4 rounded-xl border border-[#1a1a1a] focus:outline-none resize-none text-sm placeholder-[#828282] transition-colors"
               style={{ borderColor: note ? `${config.accent}80` : undefined }}
             />
 

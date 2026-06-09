@@ -25,7 +25,7 @@ const MAX_REGEN = 3;
 async function callOracleRaw(entryText, promptContext, entryModuleName) {
   try {
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 20000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
     const result = await oracleFn({
       entryText,
       moduleName: entryModuleName === 'journal' ? 'journal' : 'oracle',
@@ -346,7 +346,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                     onChange={e => setFollowUpText(e.target.value)}
                     rows={2}
                     maxLength={8000}
-                    className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a]"
+                    className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#828282]"
                     placeholder="State your specific pushback..."
                   />
                   <div className="text-[#858585] text-xs text-right" aria-live="polite">

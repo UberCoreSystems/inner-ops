@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { authService } from '../utils/authService';
-import { writeData, updateData, deleteData, subscribeToUserData } from '../utils/firebaseUtils';
+import { writeData, updateData, moveDocAtomic, subscribeToUserData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -18,6 +18,7 @@ import KillListBackfillCard from '../components/KillListBackfillCard';
 import { KillTargetSummary } from '../components/KillTargetCard';
 import { categories as CATEGORIES } from '../utils/killListCategories';
 import { suggestImplementationIntentions, critiqueTargetFraming } from '../utils/crossModuleExtraction';
+import { localDateKey } from '../utils/dateUtils';
 
 // Stable icon definitions to avoid recreating objects on every render
 const CATEGORY_ICONS = {
@@ -191,7 +192,11 @@ const getConsecutiveDaysRequired = (target) => {
   return 30;
 };
 
-const todayKey = () => new Date().toISOString().split('T')[0];
+// All KillList day-keys use LOCAL date (via the canonical localDateKey helper)
+// so check-ins, streaks, and backfill agree with the rest of the app (Journal,
+// daily brief). This cluster is internally consistent: today, stored-value
+// parsing, and the missed-date arithmetic below all anchor to local noon.
+const todayKey = () => localDateKey();
 
 // Parse a YYYY-MM-DD string or ISO-like createdAt value into a YYYY-MM-DD string.
 // Returns null for unparseable inputs.
@@ -199,19 +204,18 @@ const toDateKey = (value) => {
   if (!value) return null;
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
   try {
-    const d = value?.toDate ? value.toDate() : new Date(value);
-    if (isNaN(d.getTime())) return null;
-    return d.toISOString().slice(0, 10);
+    return localDateKey(value);
   } catch {
     return null;
   }
 };
 
 // Calendar days between two YYYY-MM-DD strings. Positive when `to` is after `from`.
+// Anchored at local noon so DST transitions never shift the day count.
 const daysBetweenKeys = (fromKey, toKey) => {
   if (!fromKey || !toKey) return 0;
-  const from = new Date(`${fromKey}T12:00:00Z`).getTime();
-  const to = new Date(`${toKey}T12:00:00Z`).getTime();
+  const from = new Date(`${fromKey}T12:00:00`).getTime();
+  const to = new Date(`${toKey}T12:00:00`).getTime();
   return Math.round((to - from) / 86400000);
 };
 
@@ -227,9 +231,9 @@ const computeMissedDates = (target) => {
   if (gap < 2) return [];
   const dates = [];
   for (let i = 1; i <= gap; i++) {
-    const d = new Date(`${anchor}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + i);
-    dates.push(d.toISOString().slice(0, 10));
+    const d = new Date(`${anchor}T12:00:00`);
+    d.setDate(d.getDate() + i);
+    dates.push(localDateKey(d));
   }
   return dates;
 };
@@ -252,7 +256,7 @@ const KillList = () => {
     // rehydrate same-day dismissals from sessionStorage
     const all = {};
     try {
-      const todayK = new Date().toISOString().split('T')[0];
+      const todayK = localDateKey();
       for (let i = 0; i < sessionStorage.length; i++) {
         const key = sessionStorage.key(i);
         if (key && key.startsWith(`kl_backfill_dismissed_`) && key.endsWith(`_${todayK}`)) {
@@ -286,6 +290,12 @@ const KillList = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const targetsRef = useRef([]);
   const addingTargetRef = useRef(false);
+  // Synchronous re-entry guards for the check-in / autopsy paths. setState and
+  // target.lastCheckIn both update only after the async writes resolve, so a
+  // rapid double-tap can pass the same-day guard twice and duplicate a kill
+  // record. These refs block reentry immediately.
+  const checkingInRef = useRef(new Set());
+  const submittingAutopsyRef = useRef(false);
   const newTargetInputRef = useRef(null);
   
 
@@ -466,9 +476,9 @@ const KillList = () => {
     return unsubscribe;
   }, []);
 
-  // Get today's date in YYYY-MM-DD format
+  // Get today's date in YYYY-MM-DD format (local)
   const getTodaysDate = () => {
-    return new Date().toISOString().split('T')[0];
+    return localDateKey();
   };
 
   // Cross-module prefill consumer. Sources:
@@ -779,6 +789,11 @@ const KillList = () => {
 
   // Daily check-in: "Held the line" or "It got me"
   const dailyCheckIn = useCallback(async (targetId, held, note = '') => {
+    // Synchronous re-entry guard FIRST — the lastCheckIn === today check below
+    // reads targetsRef, which only updates after the async writes resolve, so
+    // it cannot stop a rapid double-tap on its own.
+    if (checkingInRef.current.has(targetId)) return;
+    checkingInRef.current.add(targetId);
     try {
       const target = targetsRef.current.find(t => t.id === targetId);
       if (!target) return;
@@ -817,8 +832,10 @@ const KillList = () => {
         const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
 
         const { id: _removeId, ...targetFields } = target;
-        await writeData('confirmedKills', { ...targetFields, ...targetUpdate, killedAt, activeDuration });
-        await deleteData('killTargets', targetId);
+        // Atomic: confirmedKills create + killTargets delete commit together, so
+        // a retry/double-tap can never write a second kill record or orphan the
+        // delete.
+        await moveDocAtomic('killTargets', targetId, 'confirmedKills', { ...targetFields, ...targetUpdate, killedAt, activeDuration });
 
         setTargets(prev => prev.filter(t => t.id !== targetId));
         ouraToast.success('Target killed. Record updated.');
@@ -839,12 +856,15 @@ const KillList = () => {
       logger.error('Error during check-in:', error);
       if (redirectIfAuthLost(error)) return;
       ouraToast.error('Check-in failed. Please try again.');
+    } finally {
+      checkingInRef.current.delete(targetId);
     }
   }, []);
 
   // Submit escape autopsy
   const submitAutopsy = useCallback(async () => {
     if (!autopsyTarget) return;
+    if (submittingAutopsyRef.current) return;
     const { context, rationalization, prevention, intentionActivated, intentionFailReason, eventDate } = autopsyData;
     const hasIntention = !!autopsyTarget.implementationIntention?.trigger;
     if (!context.trim() || !rationalization.trim()) {
@@ -860,6 +880,9 @@ const KillList = () => {
       return;
     }
 
+    // Re-entry guard set only after validation passes, so a failed validation
+    // never leaves the guard stuck.
+    submittingAutopsyRef.current = true;
     try {
       const escapeDate = eventDate || todayKey();
       const isBackfilledEscape = escapeDate !== todayKey();
@@ -924,6 +947,8 @@ const KillList = () => {
       logger.error('Error saving autopsy:', error);
       if (redirectIfAuthLost(error)) return;
       ouraToast.error('Failed to save autopsy');
+    } finally {
+      submittingAutopsyRef.current = false;
     }
   }, [autopsyTarget, autopsyData]);
 
@@ -959,8 +984,7 @@ const KillList = () => {
         const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / 86400000);
         const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
         const { id: _removeId, ...targetFields } = target;
-        await writeData('confirmedKills', { ...targetFields, ...targetUpdate, killedAt, activeDuration });
-        await deleteData('killTargets', target.id);
+        await moveDocAtomic('killTargets', target.id, 'confirmedKills', { ...targetFields, ...targetUpdate, killedAt, activeDuration });
         setTargets(prev => prev.filter(t => t.id !== target.id));
         ouraToast.success(`Target killed. ${missedDates.length} day${missedDates.length !== 1 ? 's' : ''} reconciled.`);
       } else {
@@ -1075,8 +1099,7 @@ const KillList = () => {
         const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / 86400000);
         const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
         const { id: _removeId, ...targetFields } = target;
-        await writeData('confirmedKills', { ...targetFields, ...preEscapeUpdate, killedAt, activeDuration });
-        await deleteData('killTargets', target.id);
+        await moveDocAtomic('killTargets', target.id, 'confirmedKills', { ...targetFields, ...preEscapeUpdate, killedAt, activeDuration });
         setTargets(prev => prev.filter(t => t.id !== target.id));
         ouraToast.success(`Target killed. ${heldPrefix.length} day${heldPrefix.length !== 1 ? 's' : ''} reconciled.`);
         return;
@@ -1866,15 +1889,15 @@ const KillList = () => {
 
             if (rows.length === 0) return null;
 
-            const fmtDate = (ms) => new Date(ms).toISOString().split('T')[0];
+            const fmtDate = (ms) => localDateKey(ms);
             const truncate = (s, n = 80) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
             return (
               <div className="mt-6 oura-card p-5 animate-fade-in-up">
                 <h3 className="text-xs text-[#858585] uppercase tracking-widest mb-4">Behavioral Record</h3>
                 <div className="divide-y divide-[#1a1a1a]">
-                  {rows.map((row, i) => (
-                    <div key={i} className="py-2 text-xs text-[#ababab] font-mono leading-relaxed">
+                  {rows.map((row) => (
+                    <div key={`${row.ts}-${row.type}-${row.title}`} className="py-2 text-xs text-[#ababab] font-mono leading-relaxed">
                       <span className="text-[#858585]">{fmtDate(row.ts)}</span>
                       <span className="text-[#858585]"> · </span>
                       <span className="text-[#ababab]">{row.type}</span>
@@ -1929,7 +1952,7 @@ const KillList = () => {
               {/* Target Name Input — hero field of the form */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <label className="block text-white text-base font-semibold uppercase tracking-wider">
+                  <label htmlFor="kill-target-name" className="block text-white text-base font-semibold uppercase tracking-wider">
                     Target Name <span className="text-[#ef4444]">*</span>
                   </label>
                   {!newTarget.trim() && (
@@ -1937,6 +1960,7 @@ const KillList = () => {
                   )}
                 </div>
                 <input
+                  id="kill-target-name"
                   ref={newTargetInputRef}
                   type="text"
                   value={newTarget}
@@ -2013,7 +2037,7 @@ const KillList = () => {
                 <p className="text-[#858585] text-xs mb-4">When you log an escape, this is replayed — you'll be asked whether it fired.</p>
 
                 {clauseStatus === 'idle' ? (
-                  <p className="text-[#555555] text-sm italic mb-4">Name your target above — a plan will be drafted for you.</p>
+                  <p className="text-[#828282] text-sm italic mb-4">Name your target above — a plan will be drafted for you.</p>
                 ) : (
                   <div className="flex items-center justify-between mb-2 min-h-[20px]">
                     <span className="text-[#858585] text-[10px] uppercase tracking-widest">
@@ -2024,7 +2048,7 @@ const KillList = () => {
                       onClick={redraft}
                       disabled={suggesting || !newTarget.trim()}
                       title="Draft another version"
-                      className="shrink-0 inline-flex items-center gap-1 text-xs text-[#ef4444] hover:text-[#ff6b6b] disabled:text-[#555555] disabled:cursor-not-allowed transition-colors"
+                      className="shrink-0 inline-flex items-center gap-1 text-xs text-[#ef4444] hover:text-[#ff6b6b] disabled:text-[#828282] disabled:cursor-not-allowed transition-colors"
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="23 4 23 10 17 10" />
@@ -2046,7 +2070,7 @@ const KillList = () => {
                       rows={2}
                       maxLength={INTENTION_MAX_LENGTH}
                       placeholder={clauseStatus === 'drafting' ? 'Drafting from your target…' : 'I reach for [X] after [context]...'}
-                      className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
+                      className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#828282] transition-colors"
                     />
                     <div className="flex justify-between items-start gap-3 mt-1">
                       <p className="text-[#858585] text-xs leading-relaxed flex-1">
@@ -2070,7 +2094,7 @@ const KillList = () => {
                       rows={2}
                       maxLength={INTENTION_MAX_LENGTH}
                       placeholder={clauseStatus === 'drafting' ? 'Drafting…' : '[specific action], no further decisions...'}
-                      className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555] transition-colors"
+                      className="w-full bg-[#0a0a0a] text-white p-3 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#828282] transition-colors"
                     />
                     <div className="flex justify-between items-start gap-3 mt-1">
                       <p className="text-[#858585] text-xs leading-relaxed flex-1">
@@ -2105,13 +2129,13 @@ const KillList = () => {
                           value={intentionContext}
                           onChange={(e) => setIntentionContext(e.target.value)}
                           placeholder="Where/when does this usually hit you?"
-                          className="w-full bg-[#0a0a0a] text-white p-2.5 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#555555] mb-2 transition-colors"
+                          className="w-full bg-[#0a0a0a] text-white p-2.5 rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#828282] mb-2 transition-colors"
                         />
                         <button
                           type="button"
                           onClick={sharpenRedraft}
                           disabled={suggesting || !newTarget.trim() || !intentionContext.trim()}
-                          className="w-full px-3 py-2 rounded-xl border border-[#ef4444]/60 text-[#ef4444] text-sm font-medium hover:bg-[#ef4444]/10 hover:border-[#ef4444] disabled:border-[#1a1a1a] disabled:text-[#555555] disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                          className="w-full px-3 py-2 rounded-xl border border-[#ef4444]/60 text-[#ef4444] text-sm font-medium hover:bg-[#ef4444]/10 hover:border-[#ef4444] disabled:border-[#1a1a1a] disabled:text-[#828282] disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                         >
                           {suggesting ? 'Drafting…' : '✦ Redraft with this context'}
                         </button>
@@ -2278,7 +2302,7 @@ const KillList = () => {
                       'Complete some contracts to see them here')}
                 </p>
                 {!searchQuery.trim() && filterStatus !== 'completed' && (
-                  <p className="text-[#6a6a6a] text-xs mb-6">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
+                  <p className="text-[#828282] text-xs mb-6">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
                 )}
                 {searchQuery.trim() ? (
                   <button
@@ -2448,7 +2472,7 @@ const KillList = () => {
                           type="text"
                           value={autopsyData.intentionFailReason}
                           onChange={(e) => setAutopsyData(prev => ({ ...prev, intentionFailReason: e.target.value }))}
-                          className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#555555]"
+                          className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#828282]"
                           placeholder="The trigger was present but the plan didn't fire because..."
                         />
                       </div>
@@ -2457,15 +2481,15 @@ const KillList = () => {
                 )}
                 <div>
                   <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">What was happening right before?</label>
-                  <textarea value={autopsyData.context} onChange={(e) => setAutopsyData(prev => ({ ...prev, context: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555]" placeholder="The environment, state of mind, time of day..." />
+                  <textarea value={autopsyData.context} onChange={(e) => setAutopsyData(prev => ({ ...prev, context: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#828282]" placeholder="The environment, state of mind, time of day..." />
                 </div>
                 <div>
                   <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">What did you tell yourself?</label>
-                  <textarea value={autopsyData.rationalization} onChange={(e) => setAutopsyData(prev => ({ ...prev, rationalization: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#555555]" placeholder="The rationalization that made it feel okay..." />
+                  <textarea value={autopsyData.rationalization} onChange={(e) => setAutopsyData(prev => ({ ...prev, rationalization: e.target.value }))} rows={2} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none resize-none text-sm placeholder-[#828282]" placeholder="The rationalization that made it feel okay..." />
                 </div>
                 <div>
                   <label className="text-[#ababab] text-xs uppercase tracking-widest mb-2 block">What would have stopped it? <span className="text-[#858585]">(optional)</span></label>
-                  <input type="text" value={autopsyData.prevention} onChange={(e) => setAutopsyData(prev => ({ ...prev, prevention: e.target.value }))} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#555555]" placeholder="One thing that would have changed the outcome..." />
+                  <input type="text" value={autopsyData.prevention} onChange={(e) => setAutopsyData(prev => ({ ...prev, prevention: e.target.value }))} className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#828282]" placeholder="One thing that would have changed the outcome..." />
                 </div>
               </div>
               <div className="flex gap-3 mt-6 shrink-0">

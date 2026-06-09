@@ -19,9 +19,10 @@
  * the rotation rather than living forever.
  */
 
-import { readUserData, writeData, updateData } from './firebaseUtils.js';
+import { readUserData, upsertUserSettings } from './firebaseUtils.js';
 import { COLLECTIONS, ORACLE_FIELDS, USER_SETTINGS_FIELDS } from './schema.js';
 import { extractClosingQuestion } from './oracleQuestionExtractor.js';
+import { localDateKey } from './dateUtils.js';
 
 const LOOKBACK_DAYS = 60;
 const RECENT_SHOWN_CAP = 14;
@@ -212,7 +213,7 @@ export function pickTodaysOracleQuestion(pool, recentlyShownIds, dateSeed, { now
   const totalWeight = weights.reduce((sum, w) => sum + w, 0);
   if (totalWeight <= 0) return usable[0];
 
-  const seedStr = String(dateSeed || todayUtcDateString(now));
+  const seedStr = String(dateSeed || todayLocalDateString(now));
   const rng = seededRandom(fnv1a(seedStr));
   const target = rng() * totalWeight;
 
@@ -224,8 +225,10 @@ export function pickTodaysOracleQuestion(pool, recentlyShownIds, dateSeed, { now
   return usable[usable.length - 1];
 }
 
-export function todayUtcDateString(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+// The daily prompt rotates at the user's LOCAL midnight (not UTC), so the
+// reflection doesn't change mid-afternoon for users west of UTC.
+export function todayLocalDateString(now = new Date()) {
+  return localDateKey(now);
 }
 
 /**
@@ -267,11 +270,9 @@ export async function assignDailyPrompt({ promptId, today, settings: existingSet
       [USER_SETTINGS_FIELDS.DAILY_PROMPT_ANSWERED_AT]: null,
       [USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS]: nextHistory,
     };
-    if (settings?.id) {
-      await updateData(COLLECTIONS.USER_SETTINGS, settings.id, payload);
-    } else {
-      await writeData(COLLECTIONS.USER_SETTINGS, payload);
-    }
+    // Singleton upsert — converges every writer on the one settings doc readers
+    // see, so concurrent first-run writers can't fork into duplicate docs.
+    await upsertUserSettings(payload);
   } catch {
     // intentional: never let this block the UI
   }
@@ -283,17 +284,12 @@ export async function assignDailyPrompt({ promptId, today, settings: existingSet
  *
  * Best-effort — failures are swallowed.
  */
-export async function markDailyPromptAnswered(existingSettings) {
+export async function markDailyPromptAnswered() {
   try {
-    const settings = existingSettings || (await readUserSettings());
     const payload = {
       [USER_SETTINGS_FIELDS.DAILY_PROMPT_ANSWERED_AT]: new Date().toISOString(),
     };
-    if (settings?.id) {
-      await updateData(COLLECTIONS.USER_SETTINGS, settings.id, payload);
-    } else {
-      await writeData(COLLECTIONS.USER_SETTINGS, payload);
-    }
+    await upsertUserSettings(payload);
   } catch {
     // intentional: never let this block the UI
   }

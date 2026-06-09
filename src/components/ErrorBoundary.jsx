@@ -111,14 +111,14 @@ class ErrorBoundary extends React.Component {
                   </summary>
                   <div className="bg-black/40 rounded-lg p-4 border border-gray-700">
                     <div className="mb-4">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Error Message</p>
+                      <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Error Message</p>
                       <p className="text-red-400 font-mono text-sm break-all">
                         {error.toString()}
                       </p>
                     </div>
                     {errorInfo && (
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Component Stack</p>
+                        <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Component Stack</p>
                         <pre className="text-xs text-gray-400 overflow-auto max-h-48 font-mono">
                           {errorInfo.componentStack}
                         </pre>
@@ -129,7 +129,7 @@ class ErrorBoundary extends React.Component {
               )}
 
               {/* Help Text */}
-              <p className="text-xs text-gray-500 text-center mt-6">
+              <p className="text-xs text-gray-400 text-center mt-6">
                 If this problem persists, try clearing your browser cache or contact support.
               </p>
             </div>

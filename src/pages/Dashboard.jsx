@@ -14,6 +14,7 @@ import { composeSeededPreview } from '../utils/composeSeededPreview';
 import { getUserProfile } from '../utils/userProfile';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
 import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
+import { localDateKey } from '../utils/dateUtils';
 import SignalReport from '../components/SignalReport';
 import BehavioralRecordDensity from '../components/BehavioralRecordDensity';
 import MorningBrief from '../components/MorningBrief';
@@ -87,7 +88,7 @@ export default function Dashboard() {
     const today = new Date();
     const sunday = new Date(today);
     sunday.setDate(today.getDate() - today.getDay());
-    return `autopsy_dismissed_${sunday.toISOString().split('T')[0]}`;
+    return `autopsy_dismissed_${localDateKey(sunday)}`;
   })();
   const [autopsyDismissed, setAutopsyDismissed] = useState(
     () => sessionStorage.getItem(autopsySessionKey) === 'true'
@@ -551,7 +552,7 @@ export default function Dashboard() {
                   value={autopsyText}
                   onChange={(e) => setAutopsyText(e.target.value)}
                   placeholder="I should have..."
-                  className="flex-1 p-3 bg-[#0a0a0a] text-white text-sm rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#555555]"
+                  className="flex-1 p-3 bg-[#0a0a0a] text-white text-sm rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#828282]"
                   onKeyDown={(e) => { if (e.key === 'Enter' && autopsyText.trim()) submitAutopsy(); }}
                 />
                 <button

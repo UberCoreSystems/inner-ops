@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { readUserData, updateData, writeData } from '../utils/firebaseUtils';
+import { readUserData, updateData, upsertUserSettings } from '../utils/firebaseUtils';
 import { readUserSettings } from '../utils/oracleQuestionPool';
 import { COLLECTIONS, HARD_LESSON_FIELDS, USER_SETTINGS_FIELDS } from '../utils/schema';
 import { isUnderReview, getMostRecentBreak, RULE_GRADUATION_DAYS } from '../utils/ruleState';
@@ -110,11 +110,7 @@ export default function WeeklyRuleReview() {
       const payload = {
         [USER_SETTINGS_FIELDS.LAST_REVIEWED_SUNDAY]: currentSunday,
       };
-      if (settings?.id) {
-        await updateData(COLLECTIONS.USER_SETTINGS, settings.id, payload);
-      } else {
-        await writeData(COLLECTIONS.USER_SETTINGS, payload);
-      }
+      await upsertUserSettings(payload);
     } catch (err) {
       logger.warn('WeeklyRuleReview: failed to stamp lastReviewedSunday', err?.message);
     }

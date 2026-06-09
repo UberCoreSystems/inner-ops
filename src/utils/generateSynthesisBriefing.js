@@ -251,7 +251,7 @@ async function generateConfrontationQuestion(data) {
 
   try {
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 20000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
     const result = await oracleFn({
       entryText: dataStr,
       moduleName: 'synthesis',

@@ -58,7 +58,7 @@ Synthesis and Oracle both read across all modules via `readUserData`. Key data f
 
 | Function | Purpose |
 |----------|---------|
-| `oracle` | Secure Claude API proxy. Auth-gated, rate-limited (20/day). Module-aware system prompts with posture matching (challenge/build/ground/clarify/receive). Receives behavioral context. |
+| `oracle` | Secure Claude API proxy. Auth-gated, rate-limited per user/UTC-day via `ORACLE_DAILY_LIMIT` (prod = 100, code default 50; shared pool with `oracleFollowUp`). One journal save costs ~5 Oracle calls (1 classifier + up to 3 extractors + feedback), so the effective budget is ~20 saves/day at 100. Module-aware system prompts with posture matching (challenge/build/ground/clarify/receive). Receives behavioral context (user-authored fields clamped + delimited server-side). |
 | `oracleFollowUp` | Second-layer conversational response. Reads user's reply to initial Oracle feedback and adapts posture. |
 
 ## Commands

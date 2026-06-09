@@ -5,7 +5,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { getDb } from '../firebase';
-import { writeData, deleteData } from '../utils/firebaseUtils';
+import { moveDocAtomic } from '../utils/firebaseUtils';
 import { useActiveKillTargets } from '../hooks/useKillTargets';
 import OracleModal from './OracleModal';
 import KillClosureModal from './KillClosureModal';
@@ -107,7 +107,8 @@ const KillListDashboard = React.memo(function KillListDashboard() {
         const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / (1000 * 60 * 60 * 24));
         const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
         const { id: _removeId, ...targetFields } = target;
-        const confirmedKillDoc = await writeData('confirmedKills', {
+        // Atomic: confirmedKills create + killTargets delete commit together.
+        const confirmedKillDoc = await moveDocAtomic('killTargets', target.id, 'confirmedKills', {
           ...targetFields,
           closureNote: note,
           closureTags: Array.isArray(tags) ? tags : [],
@@ -115,7 +116,6 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           activeDuration,
         });
         confirmedKillId = confirmedKillDoc.id;
-        await deleteData('killTargets', target.id);
       } else {
         await markAsEscaped(target.id, { note, tags });
       }
@@ -323,7 +323,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           </div>
           <h3 className="text-xl font-light text-white mb-2">No Active Contracts</h3>
           <p className="text-[#858585] text-sm mb-2 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
-          <p className="text-[#6a6a6a] text-xs mb-6 max-w-xs mx-auto">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
+          <p className="text-[#828282] text-xs mb-6 max-w-xs mx-auto">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
           <button
             onClick={() => window.location.href = '/ledger'}
             className="px-6 py-3 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] transition-colors"
@@ -448,7 +448,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                       [target.id]: e.target.value
                     }))}
                     placeholder="How did this target challenge you? What did you learn?"
-                    className="w-full h-24 p-4 bg-[#0a0a0a] text-white border border-[#2a2a2a] rounded-xl text-sm font-light resize-none focus:outline-none focus:border-[#a855f7]/50 placeholder-[#6a6a6a] transition-all"
+                    className="w-full h-24 p-4 bg-[#0a0a0a] text-white border border-[#2a2a2a] rounded-xl text-sm font-light resize-none focus:outline-none focus:border-[#a855f7]/50 placeholder-[#828282] transition-all"
                   />
                   <div className="flex gap-2">
                     <button

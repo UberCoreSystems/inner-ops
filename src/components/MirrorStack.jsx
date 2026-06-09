@@ -145,7 +145,7 @@ function SeededMirror({ preview }) {
       <div className="oura-card p-6 border" style={{ borderColor: 'rgba(77, 166, 255, 0.15)' }}>
         <div className="flex items-baseline justify-between mb-5">
           <h3 className="text-[#858585] text-xs uppercase tracking-widest">Mirror</h3>
-          <span className="text-[#5a5a5a] text-[10px] uppercase tracking-widest">Preview</span>
+          <span className="text-[#7a7a7a] text-[10px] uppercase tracking-widest">Preview</span>
         </div>
 
         {preview.direction && (

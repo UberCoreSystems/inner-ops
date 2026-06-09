@@ -7,7 +7,7 @@ import {
   readUserSettings,
   assignDailyPrompt,
   formatRelativeDate,
-  todayUtcDateString,
+  todayLocalDateString,
 } from '../utils/oracleQuestionPool.js';
 import { USER_SETTINGS_FIELDS } from '../utils/schema.js';
 import {
@@ -51,7 +51,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const today = todayUtcDateString();
+      const today = todayLocalDateString();
       let settings = null;
       try {
         settings = await readUserSettings();
@@ -187,7 +187,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
 
       {/* Provenance line — only when prompt is Oracle-sourced */}
       {provenance && (
-        <p className="text-[#6a6a6a] text-xs italic mb-3 relative z-10">{provenance}</p>
+        <p className="text-[#828282] text-xs italic mb-3 relative z-10">{provenance}</p>
       )}
 
       {/* Prompt Text */}

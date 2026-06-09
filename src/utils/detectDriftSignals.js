@@ -14,6 +14,7 @@
  */
 import logger from './logger.js';
 import { RELAPSE_FIELDS, KILL_TARGET_FIELDS } from './schema.js';
+import { localDateKey } from './dateUtils.js';
 
 // Finding 22 remediation: magic threshold promoted to a named constant.
 // Three consecutive calendar days of the same archetype / precursor state is
@@ -31,9 +32,11 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
     return entry.createdAt?.toDate?.()?.getTime() ?? entry.timestamp ?? 0;
   }
 
-  // Map a ms timestamp to a UTC calendar-day string (YYYY-MM-DD)
+  // Map a ms timestamp to a LOCAL calendar-day string (YYYY-MM-DD). Uses the
+  // shared helper so consecutive-day drift detection agrees with the rest of
+  // the app's "today" logic (see dateUtils.localDateKey).
   function dayKey(ms) {
-    return new Date(ms).toISOString().slice(0, 10);
+    return localDateKey(ms);
   }
 
   // Returns the longest run of consecutive calendar days from an array of day strings

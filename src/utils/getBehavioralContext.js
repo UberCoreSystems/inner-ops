@@ -2,8 +2,8 @@
  * getBehavioralContext — cross-module behavioral snapshot for Oracle context injection
  *
  * Queries Firestore for recent behavioral data across Kill List, Relapse Radar,
- * Hard Lessons, Black Mirror, and Journaling. Returns a structured snapshot
- * that Oracle can use to ground feedback in the user's actual patterns.
+ * Hard Lessons, and Journaling. Returns a structured snapshot that Oracle can
+ * use to ground feedback in the user's actual patterns.
  *
  * Cached for 5 minutes per userId. Never hallucinate — empty fields returned
  * as null rather than invented values.

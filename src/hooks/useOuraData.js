@@ -19,6 +19,15 @@ export function useOuraData() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Oura is post-v1 and flagged off by default. When disabled, skip the auth
+    // listener and Firestore read entirely so the hook does no work on every
+    // RelapseRadar mount. (The hook must still be called unconditionally per
+    // the rules of hooks — the guard lives here, not at the call site.)
+    if (import.meta.env.VITE_ENABLE_OURA !== 'true') {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     let authUnsub = null;
     // Pass 2 Finding 8 remediation: generation counter so a rapid sign-out /

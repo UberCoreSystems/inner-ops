@@ -63,6 +63,16 @@ const EmergencyButton = () => {
     }
   }, [isOpen]);
 
+  // Escape closes the modal (mirrors OracleModal). The focus trap keeps focus
+  // inside while open; this gives keyboard users a way out.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') resetAndClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   const startBreathing = () => {
     setStep('breathing');
     startBreathCycle();
@@ -127,6 +137,7 @@ const EmergencyButton = () => {
         onClick={() => setIsOpen(true)}
         className="fixed right-6 z-50 bottom-6 max-sm:bottom-[calc(5rem+env(safe-area-inset-bottom))] w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-red-800 text-white shadow-lg hover:shadow-red-500/50 hover:scale-110 transition-all duration-300 flex items-center justify-center group animate-pulse hover:animate-none"
         title="I'm Struggling"
+        aria-label="I'm struggling — open emergency support"
       >
         <span className="text-xl">🆘</span>
         <span className="absolute -top-12 right-0 bg-black text-white text-xs px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-red-500">
@@ -153,7 +164,7 @@ const EmergencyButton = () => {
                 <button
                   onClick={resetAndClose}
                   aria-label="Close emergency modal"
-                  className="text-gray-500 hover:text-white transition-colors text-2xl"
+                  className="text-gray-400 hover:text-white transition-colors text-2xl"
                 >
                   <span aria-hidden="true">×</span>
                 </button>
@@ -204,17 +215,29 @@ const EmergencyButton = () => {
                   <div>
                     <h3 className="text-white font-light mb-3">Quick Grounding Tools</h3>
                     <div className="grid grid-cols-2 gap-3">
-                      {groundingTechniques.map((technique, idx) => (
-                        <div
-                          key={idx}
-                          className="p-4 bg-oura-darker rounded-2xl border border-oura-border hover:border-oura-cyan transition-colors cursor-pointer"
-                          onClick={() => technique.name === "Box Breathing" && startBreathing()}
-                        >
-                          <span className="text-2xl">{technique.icon}</span>
-                          <h4 className="text-white text-sm font-medium mt-2">{technique.name}</h4>
-                          <p className="text-gray-500 text-xs mt-1">{technique.description}</p>
-                        </div>
-                      ))}
+                      {groundingTechniques.map((technique, idx) => {
+                        // Only "Box Breathing" triggers an action — render it as a
+                        // real keyboard-focusable button. The rest are informational
+                        // and stay non-interactive (no misleading cursor/hover).
+                        const isActionable = technique.name === "Box Breathing";
+                        const tileClass = `p-4 bg-oura-darker rounded-2xl border border-oura-border transition-colors text-left ${isActionable ? 'hover:border-oura-cyan cursor-pointer' : ''}`;
+                        const inner = (
+                          <>
+                            <span className="text-2xl" aria-hidden="true">{technique.icon}</span>
+                            <h4 className="text-white text-sm font-medium mt-2">{technique.name}</h4>
+                            <p className="text-gray-400 text-xs mt-1">{technique.description}</p>
+                          </>
+                        );
+                        return isActionable ? (
+                          <button key={idx} type="button" onClick={startBreathing} className={`${tileClass} block w-full`}>
+                            {inner}
+                          </button>
+                        ) : (
+                          <div key={idx} className={tileClass}>
+                            {inner}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -287,7 +310,7 @@ const EmergencyButton = () => {
                   {breathPhase !== 'complete' && breathPhase !== 'ready' && (
                     <button
                       onClick={() => setStep('main')}
-                      className="text-gray-500 hover:text-white text-sm"
+                      className="text-gray-400 hover:text-white text-sm"
                     >
                       ← Back to tools
                     </button>

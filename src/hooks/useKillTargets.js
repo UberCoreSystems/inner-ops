@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth, getDb } from '../firebase';
 import logger from '../utils/logger';
+import { localDateKey } from '../utils/dateUtils';
 
 /**
  * Custom hook to retrieve kill targets for the current date
@@ -23,10 +24,11 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Use provided date or default to today in YYYY-MM-DD format
-  const queryDateString = targetDate 
-    ? targetDate.toISOString().split('T')[0]
-    : new Date().toISOString().split('T')[0];
+  // Use provided date or default to today in YYYY-MM-DD format (local, to match
+  // how targetDate keys are written across the app)
+  const queryDateString = targetDate
+    ? localDateKey(targetDate)
+    : localDateKey();
 
   // Finding 16 remediation: fetchTargets is wrapped in useCallback with an
   // explicit dep (queryDateString). The fetch effect and the manual refetch

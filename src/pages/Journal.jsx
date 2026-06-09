@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
+import { writeData, readUserDataPage, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
@@ -226,6 +226,11 @@ export default function Journal() {
   const [intensity, setIntensity] = useState(3);
   const [selectedCategory, setSelectedCategory] = useState('Grounded');
   const [entries, setEntries] = useState([]);
+  // Pagination: entries are loaded a page at a time (most-recent first) so a
+  // heavy journaler never downloads/renders their entire history on mount.
+  const [pageCursor, setPageCursor] = useState(null);
+  const [hasMoreEntries, setHasMoreEntries] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -533,21 +538,42 @@ export default function Journal() {
     return insights.slice(0, 3); // Limit to 3 insights max
   };
 
+  const JOURNAL_PAGE_SIZE = 50;
+
   const loadJournalEntries = async () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const savedEntries = await readUserData('journalEntries');
-      logger.log("📔 Journal page: Loaded entries:", savedEntries.length);
-      savedEntries.forEach((entry, idx) => {
-        logger.log(`  Entry ${idx + 1}: ID=${entry.id}, hasOracle=${!!entry.oracleJudgment}, hasFollowUp=${!!entry.oracleFollowUp}, content="${entry.content?.substring(0, 50)}..."`);
-      });
-      setEntries(savedEntries);
+      const { items, cursor, hasMore } = await readUserDataPage('journalEntries', { pageSize: JOURNAL_PAGE_SIZE });
+      logger.log("📔 Journal page: Loaded entries:", items.length, "hasMore:", hasMore);
+      setEntries(items);
+      setPageCursor(cursor);
+      setHasMoreEntries(hasMore);
     } catch (error) {
       logger.error("❌ Error loading journal entries:", error);
       setLoadError(true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreEntries = async () => {
+    if (!hasMoreEntries || loadingMore || !pageCursor) return;
+    setLoadingMore(true);
+    try {
+      const { items, cursor, hasMore } = await readUserDataPage('journalEntries', { pageSize: JOURNAL_PAGE_SIZE, cursor: pageCursor });
+      // De-dupe against any optimistic in-memory entries just in case.
+      setEntries(prev => {
+        const seen = new Set(prev.map(e => e.id));
+        return [...prev, ...items.filter(e => !seen.has(e.id))];
+      });
+      setPageCursor(cursor);
+      setHasMoreEntries(hasMore);
+    } catch (error) {
+      logger.error("❌ Error loading more journal entries:", error);
+      ouraToast.error('Could not load older entries. Try again.');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -620,18 +646,39 @@ export default function Journal() {
 
       openOracleLoading();
 
-      const { text: feedbackText, metacognitiveDepth, closingQuestion } = await generateAIFeedback('journal', inputText, pastEntries);
+      // The Oracle call and the Firestore write are guarded separately so the
+      // user gets an accurate message: an AI failure still saves the entry, and
+      // a write failure is reported as a save failure (not a false "saved").
+      let feedbackText = null;
+      let metacognitiveDepth;
+      let closingQuestion;
+      let oracleFailed = false;
+      try {
+        ({ text: feedbackText, metacognitiveDepth, closingQuestion } = await generateAIFeedback('journal', inputText, pastEntries));
+      } catch (aiError) {
+        logger.error('Oracle feedback failed (entry will still be saved):', aiError);
+        oracleFailed = true;
+      }
 
-      const newEntry = await writeData('journalEntries', {
-        content: entry,
-        mood,
-        intensity,
-        eventOccurredAt: occurredAt.toISOString(),
-        entryProximityFlag,
-        oracleJudgment: feedbackText,
-        ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
-        ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
-      });
+      let newEntry;
+      try {
+        newEntry = await writeData('journalEntries', {
+          content: entry,
+          mood,
+          intensity,
+          eventOccurredAt: occurredAt.toISOString(),
+          entryProximityFlag,
+          ...(feedbackText ? { oracleJudgment: feedbackText } : {}),
+          ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
+          ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
+        });
+      } catch (writeError) {
+        logger.error('Error saving journal entry:', writeError);
+        if (redirectIfAuthLost(writeError)) return;
+        openOracleWithContent('Could not save your entry. Check your connection and try again.');
+        ouraToast.error('Failed to save journal entry');
+        return;
+      }
       // writeData returns timestamp as an unresolved serverTimestamp() sentinel,
       // which the date renderer can't parse. Give the in-memory copy a real
       // Date so the header shows the date immediately; the persisted doc keeps
@@ -640,7 +687,11 @@ export default function Journal() {
       setEntries(prev => [localEntry, ...prev]);
       setCurrentEntryId(localEntry.id);
 
-      openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth, inputText, 'journal');
+      if (oracleFailed) {
+        openOracleWithContent('Entry saved. Oracle is unavailable right now — submit again to request feedback.', getCachedTotalEntryCount());
+      } else {
+        openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth, inputText, 'journal');
+      }
 
       ouraToast.success('Journal entry saved');
 
@@ -671,9 +722,10 @@ export default function Journal() {
       }
 
     } catch (error) {
-      logger.error("Error saving journal entry:", error);
+      logger.error("Error in journal submit:", error);
       if (redirectIfAuthLost(error)) return;
-      openOracleWithContent("Oracle unavailable. Entry saved. Submit again to request feedback.");
+      openOracleWithContent("Something went wrong. Please try again.");
+      ouraToast.error('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
       submittingRef.current = false;
@@ -970,18 +1022,18 @@ export default function Journal() {
           )}
 
               <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-3 font-medium">How are you feeling?</label>
+                <label className="block text-gray-400 text-xs uppercase tracking-widest mb-3 font-medium">How are you feeling?</label>
 
                 {/* Mood History Mini-visualization */}
                 {entries.length > 0 && (
                   <div className="mb-3 flex items-center gap-2">
                     <span className="text-[#858585] text-xs">Recent:</span>
                     <div className="flex gap-1">
-                      {entries.slice(0, 5).map((e, i) => {
+                      {entries.slice(0, 5).map((e) => {
                         const moodData = moodOptions.find(m => m.value === e.mood);
                         return (
-                          <div 
-                            key={i}
+                          <div
+                            key={e.id}
                             className="w-6 h-6 rounded-full flex items-center justify-center transition-all duration-300 hover:scale-110"
                             style={{ 
                               backgroundColor: `${moodData?.color || '#5a5a5a'}20`,
@@ -1063,7 +1115,7 @@ export default function Journal() {
               </div>
 
               <div>
-                <label className="block text-gray-500 text-xs uppercase tracking-widest mb-4 font-medium">Intensity Level</label>
+                <label className="block text-gray-400 text-xs uppercase tracking-widest mb-4 font-medium">Intensity Level</label>
                 <div className="space-y-4">
                   {/* Ring-based intensity visualization — restored from de5e9d3 at 20% smaller (w-11) */}
                   <div className="flex justify-between items-center px-3">
@@ -1160,6 +1212,7 @@ export default function Journal() {
                     className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none resize-none transition-colors overflow-hidden"
                     placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
                     required
+                    maxLength={20000}
                   />
                   <div className="absolute right-2 top-2">
                     <VoiceInputButton
@@ -1174,7 +1227,7 @@ export default function Journal() {
 
               {!editingEntryId && (
                 <div>
-                  <label className="block text-gray-500 text-xs uppercase tracking-widest mb-2 font-medium">When did this happen?</label>
+                  <label className="block text-gray-400 text-xs uppercase tracking-widest mb-2 font-medium">When did this happen?</label>
                   <input
                     type="datetime-local"
                     value={eventOccurredAt}
@@ -1395,14 +1448,9 @@ export default function Journal() {
                 </div>
               ) : filteredEntries.length > 0 ? (
                 <div className="space-y-4">
-                  {filteredEntries.map((entry, mapIndex) => {
+                  {filteredEntries.map((entry) => {
                     const moodOption = moodOptions.find(m => m.value === entry.mood);
                     const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
-
-                    // Log each entry being rendered
-                    if (mapIndex < 3) {
-                      logger.log(`📝 Rendering entry ${mapIndex + 1}: ID=${entry.id}`);
-                    }
 
                     return (
                       <div key={entry.id} className="oura-card p-6">
@@ -1533,7 +1581,7 @@ export default function Journal() {
                                 interpretation card lives at the top of the
                                 entries list and dismisses after one use. */}
                             {entry.classification?.reasoning && (
-                              <p className="text-[#6a6a6a] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
+                              <p className="text-[#828282] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
                                 Oracle: {entry.classification.reasoning}
                               </p>
                             )}
@@ -1542,6 +1590,17 @@ export default function Journal() {
                       </div>
                     );
                   })}
+                  {hasMoreEntries && !searchQuery.trim() && (
+                    <div className="flex justify-center pt-2">
+                      <button
+                        onClick={loadMoreEntries}
+                        disabled={loadingMore}
+                        className="px-6 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm disabled:opacity-40"
+                      >
+                        {loadingMore ? 'Loading…' : 'Load older entries'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="oura-card p-12 text-center">

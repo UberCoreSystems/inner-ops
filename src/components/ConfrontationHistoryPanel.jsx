@@ -233,7 +233,7 @@ export default function ConfrontationHistoryPanel({ confrontations = [] }) {
                           )}
 
                           {!c?.[CONFRONTATION_FIELDS.ORACLE_RESPONSE] && c?.[CONFRONTATION_FIELDS.REACTION] === 'missed' && (
-                            <p className="text-[#5a5a5a] text-xs italic">Dismissed without confronting.</p>
+                            <p className="text-[#7a7a7a] text-xs italic">Dismissed without confronting.</p>
                           )}
 
                           {followUp && (

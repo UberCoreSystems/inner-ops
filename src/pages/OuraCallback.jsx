@@ -59,7 +59,7 @@ const OuraCallback = () => {
             <p className="text-red-400 text-sm mb-4">{error}</p>
             <button
               onClick={() => navigate('/relapse')}
-              className="text-gray-500 text-xs hover:text-gray-300 transition-colors"
+              className="text-gray-400 text-xs hover:text-gray-300 transition-colors"
             >
               Return to The Signal
             </button>

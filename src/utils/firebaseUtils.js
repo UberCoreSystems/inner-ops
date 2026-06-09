@@ -1,4 +1,4 @@
-import { doc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, writeBatch, orderBy, limit as fbLimit, startAfter } from 'firebase/firestore';
 import { getAuth, getDb } from '../firebase.js';
 import logger from './logger.js';
 
@@ -109,6 +109,50 @@ export const deleteData = async (collectionName, docId) => {
   }
 };
 
+// Atomically create a document in `toCollection` and delete `docId` from
+// `fromCollection` in a single batched commit. Used by the kill-confirmation
+// path (confirmedKills create + killTargets delete) so a crash or rapid
+// double-invocation can never leave a duplicate kill record or an orphaned
+// delete. Stamps userId/timestamp on the new doc exactly like writeData.
+export const moveDocAtomic = async (fromCollection, docId, toCollection, newData) => {
+  const user = await ensureAuthenticated();
+  const db = await getDb();
+  const batch = writeBatch(db);
+  const newRef = doc(collection(db, toCollection));
+  batch.set(newRef, {
+    ...newData,
+    userId: user.uid,
+    timestamp: serverTimestamp(),
+    isAnonymous: user.isAnonymous || false,
+  });
+  batch.delete(doc(db, fromCollection, docId));
+  await batch.commit();
+  logger.log("✅ Atomic move:", fromCollection, "→", toCollection, "new id:", newRef.id);
+  return { id: newRef.id, ...newData };
+};
+
+// userSettings is a per-user singleton, but historically several independent
+// writers each created a fresh doc when they held no local id, producing
+// duplicate settings docs and non-deterministic reads (readers take docs[0]).
+// upsertUserSettings funnels every writer onto the one doc the readers see:
+// it reuses readUserData (sorted newest-first, [0] is what readers read) and
+// merges into it, creating a doc only when none exists.
+export const upsertUserSettings = async (data) => {
+  const user = await ensureAuthenticated();
+  const db = await getDb();
+  const existing = await readUserData('userSettings');
+  if (existing.length > 0) {
+    const id = existing[0].id;
+    await updateDoc(doc(db, 'userSettings', id), {
+      ...data,
+      userId: user.uid,
+      lastUpdated: serverTimestamp(),
+    });
+    return { id, ...data };
+  }
+  return await writeData('userSettings', data);
+};
+
 export const readUserData = async (collectionName, requireAuth = false) => {
   try {
     const auth = await getAuth();
@@ -171,6 +215,87 @@ export const readUserData = async (collectionName, requireAuth = false) => {
 };
 
 export const readData = readUserData;
+
+// Bounded, ordered, cursor-paginated read. Unlike readUserData (which pulls a
+// user's ENTIRE collection and sorts client-side), this fetches at most
+// `pageSize` docs ordered by `orderByField`, and returns a cursor for "load
+// more". Use this for high-volume timeline collections (journalEntries,
+// relapseEntries) so a page load never scales with lifetime history.
+//
+// Requires a composite index (userId ASC, <orderByField> <direction>) — see
+// firestore.indexes.json. Returns { items, cursor, hasMore }. On a
+// permission/auth error it rethrows (callers surface error state); other
+// errors resolve to an empty page so the UI degrades gracefully.
+export const readUserDataPage = async (collectionName, options = {}) => {
+  const {
+    pageSize = 50,
+    orderByField = 'timestamp',
+    direction = 'desc',
+    cursor = null,
+  } = options;
+
+  // Degraded (no-index) mode uses a numeric offset cursor. Once we've fallen
+  // back, stay in fallback for subsequent pages of the same session.
+  if (typeof cursor === 'number') {
+    return readUserDataOffsetPage(collectionName, pageSize, cursor);
+  }
+
+  try {
+    const auth = await getAuth();
+    const db = await getDb();
+    const user = auth.currentUser;
+    if (!user) {
+      logger.warn('⚠️ User not authenticated - blocking paginated read');
+      return { items: [], cursor: null, hasMore: false };
+    }
+
+    const colRef = collection(db, collectionName);
+    const constraints = [
+      where('userId', '==', user.uid),
+      orderBy(orderByField, direction),
+    ];
+    if (cursor) constraints.push(startAfter(cursor));
+    constraints.push(fbLimit(pageSize));
+
+    const snapshot = await getDocs(query(colRef, ...constraints));
+    const items = snapshot.docs.map((docSnap) => {
+      const docData = docSnap.data();
+      const createdAt = normalizeDocTimestamp(docData);
+      return { ...docData, id: docSnap.id, createdAt, timestamp: createdAt };
+    });
+    const lastDoc = snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null;
+    return {
+      items,
+      cursor: lastDoc,
+      hasMore: snapshot.docs.length === pageSize,
+    };
+  } catch (error) {
+    logger.error('❌ Firestore paginated read error:', error);
+    if (error.code === 'permission-denied' || error.code?.startsWith('auth/')) {
+      throw error;
+    }
+    // A missing composite index surfaces as failed-precondition. Rather than
+    // returning an empty page (which reads to the user as DATA LOSS), degrade
+    // to the unbounded read sorted client-side — slower, but correct. The
+    // efficient indexed path resumes automatically once the index is deployed.
+    if (error.code === 'failed-precondition') {
+      logger.warn('⚠️ Missing composite index for ' + collectionName + ' (userId, ' + orderByField + '). Degrading to unbounded read. Deploy firestore.indexes.json to restore pagination.');
+      return readUserDataOffsetPage(collectionName, pageSize, 0);
+    }
+    return { items: [], cursor: null, hasMore: false };
+  }
+};
+
+// Fallback page used when the composite index is absent: read the full
+// user-scoped collection (already sorted newest-first by readUserData) and
+// slice it by a numeric offset so "load more" still works in degraded mode.
+const readUserDataOffsetPage = async (collectionName, pageSize, offset) => {
+  const all = await readUserData(collectionName);
+  const items = all.slice(offset, offset + pageSize);
+  const nextOffset = offset + items.length;
+  const hasMore = nextOffset < all.length;
+  return { items, cursor: hasMore ? nextOffset : null, hasMore };
+};
 
 // Subscribe to real-time updates for a user-scoped collection.
 // Calls `callback(data)` immediately on first snapshot and on every change.

@@ -44,3 +44,18 @@ export const parseDate = (value) => {
   return isNaN(d.getTime()) ? null : d;
 };
 
+/**
+ * Canonical YYYY-MM-DD key in the browser's LOCAL date (not UTC). Anchoring to
+ * local date is deliberate and must be used app-wide: a UTC `toISOString()`
+ * slice rolls to "tomorrow" for users west of UTC in the evening, so mixing
+ * the two makes "is this from today?" checks disagree across modules.
+ * Accepts a Date, Firestore Timestamp, ISO string, or ms number; defaults to now.
+ */
+export const localDateKey = (value = new Date()) => {
+  const d = value instanceof Date ? value : (parseDate(value) || new Date());
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
