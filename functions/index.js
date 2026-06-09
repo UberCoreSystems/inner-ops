@@ -299,30 +299,42 @@ Continue the conversation. Match your posture to what they actually said.`,
 // Helpers
 // ─────────────────────────────────────────────
 
+// Fields below (kill-target titles, hard-lesson rule text, identity direction)
+// are authored by the user. Wrap them in guillemets and strip newlines so they
+// read as DATA, not instructions, and cap their length + count so a user can't
+// inflate or hijack the system prompt with their own stored content.
+const MAX_CTX_FIELD_CHARS = 200;
+const MAX_CTX_ITEMS = 12;
+function ctxField(value) {
+  const s = String(value ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CTX_FIELD_CHARS);
+  return `«${s}»`;
+}
+
 function buildBehavioralContextBlock(behavioralContext) {
   if (!behavioralContext || typeof behavioralContext !== "object") return "";
   const parts = [];
   if (behavioralContext.dominantRelapseArchetype) {
-    parts.push(`Dominant relapse archetype (last 14d): ${behavioralContext.dominantRelapseArchetype}.`);
+    parts.push(`Dominant relapse archetype (last 14d): ${ctxField(behavioralContext.dominantRelapseArchetype)}.`);
   }
   if (behavioralContext.recentRelapseCount > 0) {
-    parts.push(`Relapse entries in last 14 days: ${behavioralContext.recentRelapseCount}.`);
+    parts.push(`Relapse entries in last 14 days: ${Number(behavioralContext.recentRelapseCount) || 0}.`);
   }
   if (Array.isArray(behavioralContext.activeKillTargets) && behavioralContext.activeKillTargets.length > 0) {
     const targets = behavioralContext.activeKillTargets
-      .map((t) => `${t.title} (streak: ${t.streak}, escapes: ${t.escapeCount})`)
+      .slice(0, MAX_CTX_ITEMS)
+      .map((t) => `${ctxField(t.title)} (streak: ${Number(t.streak) || 0}, escapes: ${Number(t.escapeCount) || 0})`)
       .join("; ");
     parts.push(`Active Kill List targets: ${targets}.`);
   }
   if (Array.isArray(behavioralContext.violatedHardLessons) && behavioralContext.violatedHardLessons.length > 0) {
-    const rules = behavioralContext.violatedHardLessons.map((l) => `"${l.rule}"`).join(", ");
+    const rules = behavioralContext.violatedHardLessons.slice(0, MAX_CTX_ITEMS).map((l) => ctxField(l.rule)).join(", ");
     parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
   }
   if (behavioralContext.journalMoodPattern) {
-    parts.push(`Dominant journal mood (last 7d): ${behavioralContext.journalMoodPattern}.`);
+    parts.push(`Dominant journal mood (last 7d): ${ctxField(behavioralContext.journalMoodPattern)}.`);
   }
   if (behavioralContext.identityDirection) {
-    parts.push(`User's stated identity direction: "${behavioralContext.identityDirection}". If the user's current behavior contradicts this stated direction, name the contradiction explicitly. Do not soften it.`);
+    parts.push(`User's stated identity direction: ${ctxField(behavioralContext.identityDirection)}. If the user's current behavior contradicts this stated direction, name the contradiction explicitly. Do not soften it.`);
   }
   if (parts.length === 0) return "";
   return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join("\n")}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
@@ -807,3 +819,79 @@ function parseOracleResponse(rawText) {
 
   return { feedback: trimmed, metacognitiveDepth, closingQuestion };
 }
+
+// ─────────────────────────────────────────────
+// Account / data deletion (right-to-erasure)
+// ─────────────────────────────────────────────
+
+// Every top-level collection that stores user-scoped documents (each carries a
+// `userId` field). Kept in sync with firestore.rules / src/utils/schema.js.
+const USER_DATA_COLLECTIONS = [
+  "journalEntries",
+  "killTargets",
+  "hardLessons",
+  "relapseEntries",
+  "userSettings",
+  "syntheses",
+  "confrontations",
+  "confirmedKills",
+  "compassChecks",
+  "emergencyLogs",
+  "dailyBriefs",
+  "journalEntriesArchive",
+  "killTargetsArchive",
+  "hardLessonsArchive",
+  "relapseEntriesArchive",
+];
+
+// Delete every doc in `collectionName` owned by `uid`, in batches of 400
+// (Firestore caps a write batch at 500). Pages through with a bounded query so
+// a huge collection can't exhaust memory. Returns the number deleted.
+async function deleteOwnedDocs(db, collectionName, uid) {
+  let deleted = 0;
+  for (;;) {
+    const snap = await db
+      .collection(collectionName)
+      .where("userId", "==", uid)
+      .limit(400)
+      .get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    deleted += snap.size;
+    if (snap.size < 400) break;
+  }
+  return deleted;
+}
+
+// deleteUserData — permanently erase all of the caller's data. Auth-gated; a
+// user can only delete their own account (uid comes from the verified token,
+// never from the client payload). The client calls this, then deletes the
+// Firebase Auth user itself (which requires recent re-authentication).
+exports.deleteUserData = onCall({ timeoutSeconds: 120 }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "You must be signed in to delete your account.");
+  }
+  const uid = request.auth.uid;
+  const { getFirestore } = require("firebase-admin/firestore");
+  const db = getFirestore();
+
+  const summary = {};
+  try {
+    for (const collectionName of USER_DATA_COLLECTIONS) {
+      summary[collectionName] = await deleteOwnedDocs(db, collectionName, uid);
+    }
+    // Doc-id-keyed records + any admin subcollections under the user doc
+    // (_rateLimits, integrations, biometrics) are removed recursively.
+    await db.recursiveDelete(db.collection("userProfiles").doc(uid));
+    await db.recursiveDelete(db.collection("users").doc(uid));
+  } catch (err) {
+    // Never echo raw error detail to the client.
+    console.error("deleteUserData failed", { uid, code: err?.code, message: err?.message });
+    throw new HttpsError("internal", "Account deletion failed partway through. Please try again.");
+  }
+
+  console.log("deleteUserData complete", { uid, summary });
+  return { ok: true, deleted: summary };
+});

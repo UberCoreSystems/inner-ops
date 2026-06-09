@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { saveUserProfile } from '../utils/userProfile';
 import { writeData } from '../utils/firebaseUtils';
 import { track } from '../utils/analytics';
@@ -8,6 +8,7 @@ import ouraToast from '../utils/toast';
 import { RELAPSE_ARCHETYPES, saveConfrontationCriteria } from '../utils/confrontationCriteria';
 import BriefingScreen from '../components/onboarding/BriefingScreen';
 import { parseLines, PERSONAL_CONTEXT_LIMITS } from '../utils/personalContext';
+import { localDateKey } from '../utils/dateUtils';
 
 const DRIVERS = [
   { value: 'addiction', label: 'Breaking an addiction or compulsive pattern' },
@@ -140,7 +141,7 @@ export default function Onboarding() {
           checkIns: [],
           lastCheckIn: null,
           escapeData: [],
-          targetDate: new Date().toISOString().split('T')[0],
+          targetDate: localDateKey(),
           createdAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString(),
           reflectionNotes: '',
@@ -289,7 +290,7 @@ export default function Onboarding() {
               onChange={(e) => setFocusStatement(e.target.value)}
               placeholder="e.g. Stop numbing discomfort with distraction and build the discipline to do hard things alone."
               rows={3}
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#828282] transition-colors"
             />
             <div className={`text-xs mt-2 text-right transition-colors ${focusStatement.trim().length >= 8 ? 'text-[#858585]' : 'text-[#2a2a2a]'}`}>
               {focusStatement.trim().length} characters
@@ -308,7 +309,7 @@ export default function Onboarding() {
               value={killTarget}
               onChange={(e) => setKillTarget(e.target.value)}
               placeholder="e.g. Doomscrolling at night, avoiding hard conversations, porn..."
-              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none placeholder-[#6a6a6a] transition-colors"
+              className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none placeholder-[#828282] transition-colors"
             />
           </div>
         )}
@@ -363,7 +364,7 @@ export default function Onboarding() {
                 onChange={(e) => setCriterionQuestion(e.target.value)}
                 rows={3}
                 placeholder="e.g. What exactly are you running from right now?"
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#828282] transition-colors"
               />
             </div>
           </div>
@@ -387,7 +388,7 @@ export default function Onboarding() {
                 onChange={(e) => setActiveSituationsText(e.target.value)}
                 placeholder={'e.g.\nCareer transition — uncertain runway\nRebuilding after the breakup\nFinancial reset'}
                 rows={4}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#828282] transition-colors"
               />
             </div>
 
@@ -399,7 +400,7 @@ export default function Onboarding() {
                 onChange={(e) => setKnownTriggersText(e.target.value)}
                 placeholder={'e.g.\nAlone after 11pm\nAfter conflict with R.\nWhen finances are tight\nLong unstructured weekends'}
                 rows={4}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#828282] transition-colors"
               />
             </div>
 
@@ -411,7 +412,7 @@ export default function Onboarding() {
                 onChange={(e) => setOperatingContext(e.target.value)}
                 placeholder="e.g. Recovering from injury, no caffeine for the next 90 days. Sober 18 months. Single parent — limited solitude. Don't soften when I'm rationalizing."
                 rows={4}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#6a6a6a] transition-colors"
+                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-white focus:outline-none resize-none placeholder-[#828282] transition-colors"
               />
             </div>
           </div>
@@ -459,6 +460,15 @@ export default function Onboarding() {
               {saving ? 'Saving...' : step === TOTAL_STEPS - 1 ? 'Enter' : 'Continue'}
             </button>
           </div>
+
+          <p className="text-[#858585] text-xs mt-6">
+            What you record here is stored privately under your account. By continuing you
+            acknowledge how your data is handled and that journal text is sent to the Oracle
+            for feedback —{' '}
+            <Link to="/privacy" className="underline hover:text-[#ababab] transition-colors">
+              Privacy &amp; Data
+            </Link>.
+          </p>
         </div>
 
       </div>

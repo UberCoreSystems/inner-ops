@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { readUserData, writeData, updateData } from '../utils/firebaseUtils';
+import { Link, useNavigate } from 'react-router-dom';
+import { EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getAuth } from '../firebase';
+import { readUserData, upsertUserSettings } from '../utils/firebaseUtils';
 import { getUserProfile, saveUserProfile } from '../utils/userProfile';
 import {
   ENGAGEMENT_TRIGGERS,
@@ -10,9 +14,20 @@ import logger from '../utils/logger';
 import BriefingScreen from '../components/onboarding/BriefingScreen';
 import { parseLines, linesToText, PERSONAL_CONTEXT_LIMITS } from '../utils/personalContext';
 
+// Collections that hold the user's own data — used by export + (mirrored
+// server-side) by the deleteUserData function.
+// Must mirror USER_DATA_COLLECTIONS in functions/index.js so an export
+// contains everything account deletion erases (right-to-portability parity).
+const EXPORTABLE_COLLECTIONS = [
+  'journalEntries', 'killTargets', 'hardLessons', 'relapseEntries',
+  'userSettings', 'syntheses', 'confrontations', 'confirmedKills',
+  'compassChecks', 'emergencyLogs', 'dailyBriefs',
+  'journalEntriesArchive', 'killTargetsArchive',
+  'hardLessonsArchive', 'relapseEntriesArchive',
+];
+
 export default function Settings() {
   // Notifications state
-  const [settingsId, setSettingsId] = useState(null);
   const [notificationPreferences, setNotificationPreferences] = useState(
     DEFAULT_NOTIFICATION_PREFERENCES
   );
@@ -34,6 +49,13 @@ export default function Settings() {
   const [showBriefing, setShowBriefing] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  // Privacy & data
+  const navigate = useNavigate();
+  const [exporting, setExporting] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -46,7 +68,6 @@ export default function Settings() {
 
         const settings = (settingsDocs || [])[0] || null;
         if (settings) {
-          setSettingsId(settings.id);
           setNotificationPreferences({
             ...DEFAULT_NOTIFICATION_PREFERENCES,
             ...(settings.notificationPreferences || {}),
@@ -94,12 +115,7 @@ export default function Settings() {
     setSavingNotifications(true);
     try {
       const data = { notificationPreferences: next };
-      if (settingsId) {
-        await updateData('userSettings', settingsId, data);
-      } else {
-        const saved = await writeData('userSettings', data);
-        setSettingsId(saved.id);
-      }
+      await upsertUserSettings(data);
       setNotificationPreferences(next);
     } catch (err) {
       logger.error('Failed to save notification prefs:', err);
@@ -144,6 +160,67 @@ export default function Settings() {
       ouraToast.error('Failed to save. Try again.');
     } finally {
       setSavingContext(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = { exportedAt: new Date().toISOString() };
+      for (const name of EXPORTABLE_COLLECTIONS) {
+        try { data[name] = await readUserData(name); } catch { data[name] = []; }
+      }
+      try { data.userProfile = await getUserProfile(); } catch { data.userProfile = null; }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `inner-ops-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      ouraToast.success('Your data was exported.');
+    } catch (err) {
+      logger.error('Data export failed:', err);
+      ouraToast.error('Export failed. Try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      ouraToast.error('Enter your password to confirm.');
+      return;
+    }
+    setDeleting(true);
+    try {
+      const auth = await getAuth();
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        ouraToast.error('You are not signed in.');
+        return;
+      }
+      // Deletion is a sensitive operation — re-authenticate first.
+      const cred = EmailAuthProvider.credential(user.email, deletePassword);
+      await reauthenticateWithCredential(user, cred);
+      // Wipe all Firestore data via the Admin-SDK function, then delete the
+      // Firebase Auth user itself.
+      const functions = getFunctions();
+      await httpsCallable(functions, 'deleteUserData')();
+      await deleteUser(user);
+      ouraToast.success('Your account and all data were deleted.');
+      navigate('/auth');
+    } catch (err) {
+      logger.error('Account deletion failed:', { code: err?.code });
+      if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+        ouraToast.error('Incorrect password.');
+      } else {
+        ouraToast.error('Could not delete your account. Please try again.');
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -256,6 +333,88 @@ export default function Settings() {
             </button>
           </div>
         </div>
+
+        {/* Privacy & Data */}
+        <div className="bg-[#0a0a0a] rounded-2xl p-6 border border-[#1a1a1a]">
+          <div className="mb-5">
+            <h2 className="text-lg font-light text-white">Privacy & Data</h2>
+            <p className="text-[#858585] text-xs mt-1">
+              What this app stores, how to take your data with you, and how to erase it.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <Link
+              to="/privacy"
+              className="block text-sm text-[#ababab] hover:text-white transition-colors"
+            >
+              How your data is handled →
+            </Link>
+
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-[#858585] text-xs">
+                Download everything you have written as a JSON file.
+              </p>
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="shrink-0 px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
+              >
+                {exporting ? 'Exporting…' : 'Export my data'}
+              </button>
+            </div>
+
+            <div className="border-t border-[#1a1a1a] pt-4">
+              {!showDelete ? (
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-[#858585] text-xs">
+                    Permanently delete your account and every entry. This cannot be undone.
+                  </p>
+                  <button
+                    onClick={() => setShowDelete(true)}
+                    className="shrink-0 px-4 py-2 text-xs bg-transparent text-[#ef4444] hover:bg-[#ef4444]/10 border border-[#ef4444]/40 rounded-xl transition-colors"
+                  >
+                    Delete account
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-white text-sm">
+                    This erases your account and all data permanently. There is no recovery.
+                  </p>
+                  <label htmlFor="delete-confirm-password" className="block text-[#858585] text-xs">
+                    Confirm your password to continue
+                  </label>
+                  <input
+                    id="delete-confirm-password"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#ef4444] focus:outline-none text-sm placeholder-[#828282] transition-colors"
+                    placeholder="Your password"
+                  />
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => { setShowDelete(false); setDeletePassword(''); }}
+                      disabled={deleting}
+                      className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={deleting || !deletePassword}
+                      className="px-4 py-2 text-xs bg-[#ef4444] text-white hover:bg-[#dc2626] disabled:opacity-40 rounded-xl transition-colors"
+                    >
+                      {deleting ? 'Deleting…' : 'Permanently delete'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -297,7 +456,7 @@ function ContextField({ label, hint, value, onChange, placeholder, rows }) {
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#6a6a6a] transition-colors"
+        className="w-full p-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#828282] transition-colors"
       />
       {hint && <p className="text-[#858585] text-xs mt-1">{hint}</p>}
     </div>

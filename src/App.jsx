@@ -35,6 +35,7 @@ const Onboarding = React.lazy(() => import('./pages/Onboarding'));
 const HardLessons = React.lazy(() => import('./pages/HardLessons'));
 const SynthesisBriefing = React.lazy(() => import('./pages/SynthesisBriefing'));
 const Settings = React.lazy(() => import('./pages/Settings'));
+const Privacy = React.lazy(() => import('./pages/Privacy'));
 const OuraCallback = OURA_ENABLED
   ? React.lazy(() => import('./pages/OuraCallback'))
   : null;
@@ -282,6 +283,17 @@ function App() {
                     <SynthesisBriefing />
                   </Suspense>
                 ) : <Navigate to="/auth" />}
+              </InlineErrorBoundary>
+            }
+          />
+          {/* Privacy is intentionally public — readable signed-out too. */}
+          <Route
+            path="/privacy"
+            element={
+              <InlineErrorBoundary name="Privacy">
+                <Suspense fallback={<PageLoader />}>
+                  <Privacy />
+                </Suspense>
               </InlineErrorBoundary>
             }
           />
