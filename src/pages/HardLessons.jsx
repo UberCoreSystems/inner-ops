@@ -914,14 +914,24 @@ export default function HardLessons() {
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="mb-8 animate-fade-in-up flex flex-wrap gap-3" style={{ animationDelay: '0.2s' }}>
-          <button
-            onClick={() => { setShowForm(!showForm); setShowRulesLibrary(false); }}
-            className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
-          >
-            {showForm ? 'Cancel' : '⚡ Extract New Lesson'}
-          </button>
+        {/* Action Buttons — Extract Lesson uses the General Ledger
+            "Add New Kill Contract" collapsed-card → expand pattern (see
+            KillList.jsx). When collapsed, a full-width card opens the form;
+            when open, the collapse control lives in the form header below. */}
+        <div className="mb-8 animate-fade-in-up space-y-3" style={{ animationDelay: '0.2s' }}>
+          {!showForm && (
+            <button
+              type="button"
+              onClick={() => { setShowForm(true); setShowRulesLibrary(false); }}
+              className="oura-card w-full p-4 flex items-center justify-between text-left hover:border-[#2a2a2a] transition-all"
+            >
+              <span className="flex items-center gap-3">
+                <span className="w-8 h-8 rounded-xl bg-[#f59e0b]/10 border border-[#f59e0b]/20 flex items-center justify-center text-[#f59e0b] text-xl leading-none">+</span>
+                <span className="text-white font-medium">Extract New Lesson</span>
+              </span>
+              <span className="text-[#858585] text-xs uppercase tracking-widest">Open</span>
+            </button>
+          )}
           {lessons.some(l => l.isFinalized && l.ruleGoingForward) && (
             <button
               onClick={() => { setShowRulesLibrary(!showRulesLibrary); setShowForm(false); }}
@@ -935,16 +945,28 @@ export default function HardLessons() {
       {/* Lesson Extraction Form */}
       {showForm && (
         <div className="oura-card p-8 mb-8 border-l-4 border-[#f59e0b] animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-start justify-between gap-3 mb-2">
             <h2 className="text-2xl font-bold text-white">
               {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
             </h2>
-            <span className="text-sm text-[#858585] font-light tabular-nums">
-              <span className={completedSteps === 7 ? 'text-[#22c55e]' : 'text-[#f59e0b]'}>
-                {completedSteps}
+            <div className="flex items-center gap-4 shrink-0">
+              <span className="text-sm text-[#858585] font-light tabular-nums">
+                <span className={completedSteps === 7 ? 'text-[#22c55e]' : 'text-[#f59e0b]'}>
+                  {completedSteps}
+                </span>
+                <span>/7 complete</span>
               </span>
-              <span>/7 complete</span>
-            </span>
+              {/* Collapse — GL pattern: hide the form without wiping input.
+                  Distinct from the in-form Cancel button (resetForm), which
+                  clears all state. */}
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="text-[#858585] hover:text-white text-xs uppercase tracking-widest transition-colors"
+              >
+                Collapse
+              </button>
+            </div>
           </div>
 
           {/* Step progress bar */}

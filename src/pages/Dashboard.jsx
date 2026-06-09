@@ -424,18 +424,48 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Mirror Stack — layered reflective surface (direction, observed,
-            precursor, synthesis, question). Content selection lives in
-            composeMirrorReading.js. */}
-        <MirrorStack
-          killTargets={rawUserData?.killTargets || []}
-          hardLessons={rawUserData?.hardLessons || []}
-          relapseEntries={rawUserData?.relapseEntries || []}
-          signalReport={signalReport}
-          behavioralContext={behavioralContext}
-          depthTrend={depthTrend}
-          seededPreview={seededPreview}
-        />
+        {/* Mirror Stack + Trajectory — side by side on desktop, stacked on
+            narrow (Mirror first). Mirror is the layered reflective surface
+            (direction, observed, precursor, synthesis, question; selection in
+            composeMirrorReading.js). Trajectory is the consolidated progress
+            surface answering "is this working?" — Signal Report under its own
+            header with the latest Synthesis signal delta as the verdict. */}
+        <div className="grid lg:grid-cols-2 gap-6 items-start mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
+          <MirrorStack
+            killTargets={rawUserData?.killTargets || []}
+            hardLessons={rawUserData?.hardLessons || []}
+            relapseEntries={rawUserData?.relapseEntries || []}
+            signalReport={signalReport}
+            behavioralContext={behavioralContext}
+            depthTrend={depthTrend}
+            seededPreview={seededPreview}
+          />
+
+          <div>
+            {/* Trajectory header — "is this working?" Reuses the existing
+                Signal Report below; no new metrics computed here. */}
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-white text-lg font-light">Trajectory</h2>
+                <p className="text-[#858585] text-xs mt-0.5">Is the work moving you? Signal, record, and totals in one place.</p>
+              </div>
+              {latestSignalDelta && (
+                <div className="text-right shrink-0">
+                  <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">Signal Delta</p>
+                  <p className={`text-lg font-light ${SIGNAL_DELTA_COLORS[latestSignalDelta] || 'text-[#ababab]'}`}>
+                    {SIGNAL_DELTA_LABELS[latestSignalDelta] || latestSignalDelta}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Signal Report — prose-only, no score, no rank, no rings */}
+            <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40">
+              <p className="text-xs font-medium uppercase tracking-widest text-[#00d4aa] mb-3">Signal Report</p>
+              <SignalReport report={signalReport} />
+            </div>
+          </div>
+        </div>
 
         {/* Weekly Rule Review — Sunday-anchored sweep over finalized rules.
             Self-gating: visible Sun-Wed only; returns null on Thu/Fri/Sat,
@@ -609,33 +639,6 @@ export default function Dashboard() {
             </section>
           );
         })()}
-
-        {/* Trajectory — consolidated progress surface answering "is this working?"
-            Reuses the existing Signal Report, Behavioral Record, and stats
-            surfaces under one header, with the latest Synthesis signal delta as
-            the verdict. No new metrics computed here. */}
-        <div className="mb-6 flex items-end justify-between gap-4 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
-          <div>
-            <h2 className="text-white text-lg font-light">Trajectory</h2>
-            <p className="text-[#858585] text-xs mt-0.5">Is the work moving you? Signal, record, and totals in one place.</p>
-          </div>
-          {latestSignalDelta && (
-            <div className="text-right shrink-0">
-              <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">Signal Delta</p>
-              <p className={`text-lg font-light ${SIGNAL_DELTA_COLORS[latestSignalDelta] || 'text-[#ababab]'}`}>
-                {SIGNAL_DELTA_LABELS[latestSignalDelta] || latestSignalDelta}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Signal Report — prose-only, no score, no rank, no rings */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40">
-            <p className="text-xs font-medium uppercase tracking-widest text-[#00d4aa] mb-3">Signal Report</p>
-            <SignalReport report={signalReport} />
-          </div>
-        </section>
 
         {/* Behavioral Record Density — factual inventory of work produced.
             Leads the factual-metrics surface; SignalReport leads the trajectory
