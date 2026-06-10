@@ -241,12 +241,31 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Connection-test scratch space (used by smoke tests only).
-    match /test-connection/{docId} {
-      allow create: if createsOwnDocument();
-      allow get, delete: if isOwner(resource.data.userId);
-      allow update: if updatesOwnDocument();
-      allow list: if ownerListAllowed();
+    // ─── AI memory document (pre-decided stub, not yet wired) ───────────
+    // When the post-launch AI interaction layer (Command Brief) persists a
+    // per-user memory document, it follows the same owner-only template as
+    // every other top-level user-data collection: owner-gated by the `userId`
+    // field, userId immutable on update, list satisfiable only when scoped by
+    // userId. Uncomment when the collection goes live — the pattern is fixed
+    // now so it can't be shipped with a weaker rule later.
+    //
+    // match /aiMemory/{docId} {
+    //   allow create: if createsOwnDocument();
+    //   allow get, delete: if isOwner(resource.data.userId);
+    //   allow update: if updatesOwnDocument();
+    //   allow list: if ownerListAllowed();
+    // }
+
+    // ─── Default deny (explicit floor) ──────────────────────────────────
+    // Firestore already denies any path not matched above, but the explicit
+    // catch-all makes the intent un-missable and ensures any collection added
+    // in the future is denied until it gets its own owner-scoped match block.
+    // Removed `test-connection`: the shipped client never reads/writes it, and
+    // "no collection the app doesn't use gets an allow" is the standard. Smoke
+    // tests run against the emulator (rules-permissive) or use a real user-data
+    // collection, so no production allow is needed for connectivity checks.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

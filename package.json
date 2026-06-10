@@ -8,12 +8,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js src/utils/dailyBrief.test.js src/utils/oracleQuestionExtractor.test.js src/utils/dateUtils.test.js src/utils/detectDriftSignals.test.js src/utils/getBehavioralContext.test.js src/utils/generateSynthesisBriefing.test.js src/utils/ruleState.test.js src/utils/crossModuleExtraction.test.js src/utils/composeMirrorReading.test.js src/utils/composeSeededPreview.test.js src/utils/buildQuickSignalEntry.test.js src/utils/composeJournalSignal.test.js src/utils/composeClosureFeedback.test.js src/utils/computeDepthTrend.test.js src/utils/engagementTriggers/journalStaleness.test.js src/utils/engagementTriggers/synthesisReady.test.js src/utils/engagementTriggers/index.test.js src/utils/personalContext.test.js src/utils/routeGating.test.js",
-    "lint": "eslint . --ext .js,.jsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext .js,.jsx --report-unused-disable-directives --max-warnings 0",
+    "test:rules": "node scripts/run-rules-tests.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "8.57.1",
     "eslint-plugin-react": "7.37.5",
