@@ -4,6 +4,7 @@ import { writeData, readUserDataPage, updateData } from '../utils/firebaseUtils'
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
+import { updateMemory } from '../utils/updateMemory';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
@@ -686,6 +687,9 @@ export default function Journal() {
       const localEntry = { ...newEntry, timestamp: new Date() };
       setEntries(prev => [localEntry, ...prev]);
       setCurrentEntryId(localEntry.id);
+
+      // Long-term memory — fire-and-forget; never blocks the save.
+      updateMemory('journal', newEntry.id);
 
       if (oracleFailed) {
         openOracleWithContent('Entry saved. Oracle is unavailable right now — submit again to request feedback.', getCachedTotalEntryCount());

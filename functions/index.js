@@ -16,6 +16,7 @@ const {
 } = require("./config");
 
 const { checkAndIncrementOracleLimit } = require("./rateLimit");
+const memory = require("./memory");
 
 // Initialize the admin app at module load. The prior lazy guard checked
 // `getApps().length === 0`, but the v2 Cloud Functions runtime can register
@@ -148,7 +149,17 @@ exports.oracle = onCall(
 
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
-    const baseSystemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount);
+    // Long-term memory: fetched SERVER-SIDE by verified uid (admin SDK) so the
+    // receipts injected are the real, validated ones — never client-supplied.
+    // Failure degrades to no-memory (identical to today); it never blocks feedback.
+    let memoryBlocks = [];
+    try {
+      memoryBlocks = await memory.fetchMemoryForInjection(uid, moduleName);
+    } catch (error) {
+      console.error("oracle.memory.fetch.error", { name: error.name });
+    }
+
+    const baseSystemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks);
     const promptContextFragment = resolvePromptContext(promptContextKey, promptContextParams);
     const systemPrompt = promptContextFragment
       ? `${baseSystemPrompt}\n\n${promptContextFragment}`
@@ -340,9 +351,13 @@ function buildBehavioralContextBlock(behavioralContext) {
   return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join("\n")}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
 }
 
-function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount) {
+function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks) {
   // Normalize: 'killList', 'Kill List', 'Kill_List' → 'killlist'
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
+
+  // Long-term memory section (themes + the user's own validated receipts).
+  // Empty string when there is no memory yet → Oracle behaves exactly as today.
+  const memoryBlock = memory.buildMemoryBlock(memoryBlocks);
 
   // Module context — tells the Oracle what kind of entry this is
   const moduleContext = {
@@ -700,7 +715,7 @@ Hard rules:
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
 - When you close with a question, wrap that single closing question inline in <closing_question>...</closing_question> tags. The tags must surround the question text exactly once. The question still reads as part of your prose; the tags are markers for downstream processing only.
-- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${normalizedModule === 'journal' ? `
+- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${normalizedModule === 'journal' ? `
 
 METACOGNITIVE DEPTH CLASSIFICATION (journal entries only):
 Before your response, output exactly one classification line as the very first line:
@@ -895,3 +910,14 @@ exports.deleteUserData = onCall({ timeoutSeconds: 120 }, async (request) => {
   console.log("deleteUserData complete", { uid, summary });
   return { ok: true, deleted: summary };
 });
+
+// ─── Long-term AI memory callables ──────────────────────────────────────────
+// Server-only writers for users/{uid}/memory/*. Generation (updateMemory),
+// theme edit (editMemory), receipt removal (deleteMemoryReceipt), and wipe
+// (wipeMemory) all run under the verified caller's uid via the Admin SDK.
+// (Memory docs are also cleared automatically by deleteUserData's recursive
+// delete of users/{uid}.)
+exports.updateMemory = memory.updateMemory;
+exports.editMemory = memory.editMemory;
+exports.deleteMemoryReceipt = memory.deleteMemoryReceipt;
+exports.wipeMemory = memory.wipeMemory;

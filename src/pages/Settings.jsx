@@ -12,6 +12,7 @@ import {
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import BriefingScreen from '../components/onboarding/BriefingScreen';
+import TheRecord from '../components/TheRecord';
 import { parseLines, linesToText, PERSONAL_CONTEXT_LIMITS } from '../utils/personalContext';
 
 // Collections that hold the user's own data — used by export + (mirrored
@@ -333,6 +334,9 @@ export default function Settings() {
             </button>
           </div>
         </div>
+
+        {/* The Record — long-term AI memory */}
+        <TheRecord />
 
         {/* Privacy & Data */}
         <div className="bg-[#0a0a0a] rounded-2xl p-6 border border-[#1a1a1a]">

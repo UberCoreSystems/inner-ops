@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from 'rea
 import { Link } from 'react-router-dom';
 import { authService } from '../utils/authService';
 import { writeData, updateData, moveDocAtomic, subscribeToUserData } from '../utils/firebaseUtils';
+import { updateMemory } from '../utils/updateMemory';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -903,6 +904,9 @@ const KillList = () => {
         escapedAt: new Date(),
         lastUpdated: new Date(),
       });
+
+      // Long-term memory — the autopsy is the confrontable text. Fire-and-forget.
+      updateMemory('killList', autopsyTarget.id);
 
       setTargets(prev => prev.map(t =>
         t.id === autopsyTarget.id ? { ...t, escapeData, status: 'escaped', escapedAt: new Date() } : t

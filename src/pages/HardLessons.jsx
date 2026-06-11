@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
+import { updateMemory } from '../utils/updateMemory';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -692,6 +693,7 @@ export default function HardLessons() {
         ...(pendingOracleClosingQuestion ? { oracleClosingQuestion: pendingOracleClosingQuestion } : {})
       };
 
+      let savedLessonId;
       if (editingLesson) {
         // Handle edits with immutability constraints
         if (editingLesson.isFinalized) {
@@ -702,11 +704,19 @@ export default function HardLessons() {
 
         lessonData.originalCreatedAt = editingLesson.createdAt;
         await updateData('hardLessons', editingLesson.id, lessonData);
+        savedLessonId = editingLesson.id;
       } else {
-        await writeData('hardLessons', lessonData);
+        const savedLesson = await writeData('hardLessons', lessonData);
+        savedLessonId = savedLesson?.id;
       }
 
       await loadHardLessons();
+
+      // Long-term memory — finalized lessons only (drafts must never be quoted).
+      // Fire-and-forget; the CF also re-checks isFinalized on the stored doc.
+      if (finalize && savedLessonId) {
+        updateMemory('hardLessons', savedLessonId);
+      }
 
       // BER-131: bridge trigger 1 — rule violation → Kill List prompt
       if (finalize && lessonData.isRuleViolation && lessonData.ruleGoingForward?.trim()) {

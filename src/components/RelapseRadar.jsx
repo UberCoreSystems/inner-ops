@@ -8,6 +8,7 @@ import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } f
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
+import { updateMemory } from '../utils/updateMemory';
 import { detectDriftSignals } from '../utils/detectDriftSignals';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
@@ -510,6 +511,9 @@ const RelapseRadar = () => {
       setCurrentEntryId(savedEntry.id);
       const now = new Date();
       setRelapseEntries(prev => [{ ...savedEntry, createdAt: now, timestamp: now }, ...prev]);
+
+      // Long-term memory — fire-and-forget; never blocks the save.
+      updateMemory('relapse', savedEntry.id);
 
       // Show Oracle feedback in modal
       openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());

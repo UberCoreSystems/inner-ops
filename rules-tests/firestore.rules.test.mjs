@@ -315,6 +315,48 @@ describe('users/{uid}/biometrics (CF-written, owner-read)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// Long-term AI memory — CF writes (Admin SDK), owner reads only. Generation,
+// edit, and wipe all route through callables, so EVERY client write is denied,
+// owner included. Covers all five docIds (global + four module memories).
+// ─────────────────────────────────────────────────────────────────────────
+describe('users/{uid}/memory (CF-written, owner-read)', () => {
+  before(clear);
+
+  const MEMORY_DOCS = ['global', 'journal', 'killList', 'hardLessons', 'relapse'];
+
+  for (const docId of MEMORY_DOCS) {
+    it(`owner: read own memory/${docId} allowed`, async () => {
+      await seed('users', [OWNER, 'memory', docId], { content: 'x', receipts: [] });
+      await assertSucceeds(getDoc(doc(ownerDb, 'users', OWNER, 'memory', docId)));
+    });
+
+    it(`owner: write memory/${docId} denied (client cannot author memory)`, async () => {
+      await assertFails(setDoc(doc(ownerDb, 'users', OWNER, 'memory', docId), { content: 'forged' }));
+    });
+
+    it(`owner: update memory/${docId} denied (client cannot edit directly)`, async () => {
+      await seed('users', [OWNER, 'memory', docId], { content: 'x', receipts: [] });
+      await assertFails(updateDoc(doc(ownerDb, 'users', OWNER, 'memory', docId), { content: 'rewritten' }));
+    });
+
+    it(`owner: delete memory/${docId} denied (wipe goes through callable)`, async () => {
+      await seed('users', [OWNER, 'memory', docId], { content: 'x', receipts: [] });
+      await assertFails(deleteDoc(doc(ownerDb, 'users', OWNER, 'memory', docId)));
+    });
+
+    it(`non-owner: read another user's memory/${docId} denied`, async () => {
+      await seed('users', [OWNER, 'memory', docId], { content: 'secret', receipts: [] });
+      await assertFails(getDoc(doc(otherDb, 'users', OWNER, 'memory', docId)));
+    });
+
+    it(`unauthenticated: read memory/${docId} denied`, async () => {
+      await seed('users', [OWNER, 'memory', docId], { content: 'x', receipts: [] });
+      await assertFails(getDoc(doc(anonDb, 'users', OWNER, 'memory', docId)));
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // Default-deny floor — the removed test-connection allow and any unknown
 // collection must reject even an authenticated owner-shaped write.
 // ─────────────────────────────────────────────────────────────────────────
