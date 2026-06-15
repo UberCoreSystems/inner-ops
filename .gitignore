@@ -144,3 +144,6 @@ DAILY_REVIEW.md
 DEAD_CODE_REPORT.md
 QA_REVIEW_REPORT*.md
 WEEKLY_HEALTH.md
+
+# Microsoft Office temp/lock files (e.g. ~$A_PLAN.docx)
+~$*
