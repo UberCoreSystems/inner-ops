@@ -10,6 +10,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { updateMemory } from '../utils/updateMemory';
 import { detectDriftSignals } from '../utils/detectDriftSignals';
+import RelapseForecastCard from './RelapseForecastCard';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import ArchiveToggle from './ArchiveToggle';
@@ -1115,6 +1116,10 @@ const RelapseRadar = () => {
             Retry
           </button>
         </div>
+      )}
+
+      {!loadError && view === 'active' && (
+        <RelapseForecastCard relapseEntries={relapseEntries} killTargets={killTargets} />
       )}
 
       {!loadError && ((relapseEntries.length > 0 || archivedEntries.length > 0) ? (

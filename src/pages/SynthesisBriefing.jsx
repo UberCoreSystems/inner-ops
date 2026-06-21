@@ -33,6 +33,8 @@ const SIGNAL_DELTA_COLORS = {
 export default function SynthesisBriefing() {
   const [userId, setUserId] = useState(null);
   const [briefings, setBriefings] = useState([]);
+  const [reckonings, setReckonings] = useState([]);
+  const [runningReckoning, setRunningReckoning] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [cadence, setCadence] = useState('weekly');
@@ -67,7 +69,11 @@ export default function SynthesisBriefing() {
     setInitialLoading(true);
     try {
       const data = await readUserData('syntheses');
-      const sorted = (data || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
+      const byRecency = (a, b) => new Date(b.generatedAt) - new Date(a.generatedAt);
+      // Reckoning docs share the collection but are a distinct type — keep them
+      // out of the synthesis briefing list and render them on their own surface.
+      const sorted = (data || []).filter((d) => (d.type || 'synthesis') !== 'reckoning').sort(byRecency);
+      setReckonings((data || []).filter((d) => d.type === 'reckoning').sort(byRecency));
       setBriefings(sorted);
       // The seeded teaser only renders in the empty state, so only pay for the
       // profile read when there are no briefings yet.
@@ -157,6 +163,40 @@ export default function SynthesisBriefing() {
       setGenerating(false);
     }
   };
+
+  const handleRunReckoning = async () => {
+    if (!userId || runningReckoning) return;
+    if (!hasCrossModuleData) {
+      ouraToast.info('Add a Kill Contract, Hard Lesson, or Relapse entry first.');
+      return;
+    }
+    setRunningReckoning(true);
+    try {
+      // On-demand: bypass cadence; the engine still enforces the write-cooldown.
+      const result = await generateSynthesisBriefing(userId, cadence, { mode: 'reckoning', bypassCadence: true });
+      if (result?.status === 'ok') {
+        await loadBriefings();
+        ouraToast.info(result.reused ? 'Latest reckoning is under an hour old — showing it.' : 'The Reckoning is ready.');
+      } else if (result?.status === 'insufficient-data') {
+        ouraToast.info('No contradictions to reckon with this period.');
+      }
+    } catch (err) {
+      logger.error('Reckoning generation failed:', err);
+      ouraToast.error('Failed to run The Reckoning');
+    } finally {
+      setRunningReckoning(false);
+    }
+  };
+
+  // Mark latest reckoning as read on open.
+  useEffect(() => {
+    const latest = reckonings[0];
+    if (latest?.isNew === true && latest?.id) {
+      updateData('syntheses', latest.id, { isNew: false, readAt: new Date().toISOString() }).catch((err) => {
+        logger.warn('Failed to mark reckoning as read:', err?.message);
+      });
+    }
+  }, [reckonings]);
 
   const handleDeleteBriefing = useCallback(async (briefingId) => {
     if (!briefingId) return;
@@ -264,6 +304,47 @@ export default function SynthesisBriefing() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* The Reckoning — stated commitments vs documented behavior */}
+        <div className="oura-card p-6 mb-8 border-l-2 border-[#b45309]">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-[#b45309] text-xs font-medium uppercase tracking-widest mb-1">The Reckoning</p>
+              <p className="text-[#858585] text-xs max-w-md">
+                Your stated commitments laid against what you actually did. Every line traces to a logged event — no metrics, no averages.
+              </p>
+            </div>
+            <button
+              onClick={handleRunReckoning}
+              disabled={runningReckoning || !hasCrossModuleData}
+              title={!hasCrossModuleData ? 'Add a Kill Contract, Hard Lesson, or Relapse entry first' : undefined}
+              className="px-6 py-2.5 bg-[#b45309] hover:bg-[#92400e] disabled:bg-[#1a1a1a] disabled:text-[#858585] disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all text-sm"
+            >
+              {runningReckoning ? 'Reckoning…' : 'Run The Reckoning'}
+            </button>
+          </div>
+
+          {reckonings[0] && (
+            <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+              <p className="text-white text-sm leading-relaxed whitespace-pre-line mb-4">
+                {reckonings[0].reckoningConfrontation}
+              </p>
+              <ul className="space-y-2">
+                {(reckonings[0].contradictions || []).map((c, i) => (
+                  <li key={i} className="text-xs">
+                    <span className="text-[#ababab]">{c.commitment?.text}</span>
+                    <span className="text-[#858585]">
+                      {' '}— contradicted by {c.evidence?.length} logged event(s): {(c.evidence || []).map((e) => (e.date || '').slice(0, 10)).join(', ')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[#5a5a5a] text-[10px] mt-3">
+                Generated {new Date(reckonings[0].generatedAt).toLocaleDateString()} · {reckonings[0].meta?.evidenceCount} events traced
+              </p>
+            </div>
+          )}
         </div>
 
         {/* No briefings yet */}

@@ -5,6 +5,9 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from '../firebase';
 import { readUserData, upsertUserSettings } from '../utils/firebaseUtils';
 import { getUserProfile, saveUserProfile } from '../utils/userProfile';
+import { readMemoryDocs } from '../utils/updateMemory';
+import { buildExportPayload } from '../utils/exportData';
+import { authService } from '../utils/authService';
 import {
   ENGAGEMENT_TRIGGERS,
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -34,6 +37,10 @@ export default function Settings() {
   );
   const [savingNotifications, setSavingNotifications] = useState(false);
 
+  // The Reckoning — optional periodic auto-generation (off by default).
+  const [reckoningAuto, setReckoningAuto] = useState(false);
+  const [savingReckoning, setSavingReckoning] = useState(false);
+
   // Personal context state — bound to textareas as raw text, parsed on save.
   const [activeSituationsText, setActiveSituationsText] = useState('');
   const [knownTriggersText, setKnownTriggersText] = useState('');
@@ -56,6 +63,12 @@ export default function Settings() {
   const [showDelete, setShowDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
+  // Deletion receipt: the manifest of what was erased, shown while the user is
+  // still authenticated. Finalizing (deleteUser) is deferred to acknowledgment,
+  // because deleteUser trips onAuthStateChanged → AuthGate and unmounts this
+  // page, which would otherwise hide the receipt before it could be read.
+  const [deletionReceipt, setDeletionReceipt] = useState(null);
+  const [finishing, setFinishing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +86,7 @@ export default function Settings() {
             ...DEFAULT_NOTIFICATION_PREFERENCES,
             ...(settings.notificationPreferences || {}),
           });
+          setReckoningAuto(!!settings.reckoningAuto);
         }
 
         if (profile) {
@@ -135,6 +149,21 @@ export default function Settings() {
     await persistNotificationPreferences(next);
   };
 
+  const toggleReckoningAuto = async () => {
+    const next = !reckoningAuto;
+    setReckoningAuto(next);
+    setSavingReckoning(true);
+    try {
+      await upsertUserSettings({ reckoningAuto: next });
+    } catch (err) {
+      logger.error('Failed to save reckoning setting:', err);
+      setReckoningAuto(!next); // revert on failure
+      ouraToast.error('Failed to save. Try again.');
+    } finally {
+      setSavingReckoning(false);
+    }
+  };
+
   const saveContext = async () => {
     setSavingContext(true);
     try {
@@ -167,11 +196,24 @@ export default function Settings() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const data = { exportedAt: new Date().toISOString() };
+      const errors = [];
+      const collections = {};
       for (const name of EXPORTABLE_COLLECTIONS) {
-        try { data[name] = await readUserData(name); } catch { data[name] = []; }
+        try { collections[name] = await readUserData(name); }
+        catch { collections[name] = []; errors.push(name); }
       }
-      try { data.userProfile = await getUserProfile(); } catch { data.userProfile = null; }
+      let userProfile = null;
+      try { userProfile = await getUserProfile(); } catch { errors.push('userProfile'); }
+      let memory = {};
+      try { memory = await readMemoryDocs({ useCache: false }); } catch { errors.push('memory'); }
+
+      const data = buildExportPayload({
+        exportedAt: new Date().toISOString(),
+        collections,
+        memory,
+        userProfile,
+        errors,
+      });
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -181,7 +223,11 @@ export default function Settings() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      ouraToast.success('Your data was exported.');
+      if (data.manifest.partial) {
+        ouraToast.error('Exported, but some data failed to load — see "partial" in the file.');
+      } else {
+        ouraToast.success(`Exported ${data.manifest.totalDocuments} records.`);
+      }
     } catch (err) {
       logger.error('Data export failed:', err);
       ouraToast.error('Export failed. Try again.');
@@ -206,13 +252,12 @@ export default function Settings() {
       // Deletion is a sensitive operation — re-authenticate first.
       const cred = EmailAuthProvider.credential(user.email, deletePassword);
       await reauthenticateWithCredential(user, cred);
-      // Wipe all Firestore data via the Admin-SDK function, then delete the
-      // Firebase Auth user itself.
+      // Wipe all Firestore data via the Admin-SDK function. The Firebase Auth
+      // user is deleted only after the user acknowledges the receipt below.
       const functions = getFunctions();
-      await httpsCallable(functions, 'deleteUserData')();
-      await deleteUser(user);
-      ouraToast.success('Your account and all data were deleted.');
-      navigate('/auth');
+      const res = await httpsCallable(functions, 'deleteUserData')();
+      setDeletePassword('');
+      setDeletionReceipt(res?.data?.manifest || {});
     } catch (err) {
       logger.error('Account deletion failed:', { code: err?.code });
       if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
@@ -222,6 +267,23 @@ export default function Settings() {
       }
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Final irreversible step: remove the auth user. Data is already erased; if
+  // this fails (e.g. stale re-auth after a long read of the receipt) we sign
+  // out anyway — the orphaned, data-empty auth record is harmless.
+  const finishDeletion = async () => {
+    setFinishing(true);
+    try {
+      const auth = await getAuth();
+      const user = auth.currentUser;
+      if (user) await deleteUser(user);
+    } catch (err) {
+      logger.error('Final account removal failed:', { code: err?.code });
+      try { await authService.signOut(); } catch { /* swap to auth surface regardless */ }
+    } finally {
+      navigate('/auth');
     }
   };
 
@@ -267,6 +329,14 @@ export default function Settings() {
             enabled={!!notificationPreferences[ENGAGEMENT_TRIGGERS.SYNTHESIS_READY]?.enabled}
             disabled={savingNotifications || !loaded}
             onToggle={() => toggleTrigger(ENGAGEMENT_TRIGGERS.SYNTHESIS_READY)}
+          />
+
+          <ToggleRow
+            label="Periodic Reckoning"
+            description="Automatically runs The Reckoning on a cadence — laying your stated commitments against your logged behavior and naming the contradictions. Off by default; you can always run it on demand from Synthesis."
+            enabled={reckoningAuto}
+            disabled={savingReckoning || !loaded}
+            onToggle={toggleReckoningAuto}
           />
         </div>
 
@@ -347,6 +417,13 @@ export default function Settings() {
             </p>
           </div>
 
+          {deletionReceipt ? (
+            <DeletionReceipt
+              manifest={deletionReceipt}
+              finishing={finishing}
+              onFinish={finishDeletion}
+            />
+          ) : (
           <div className="space-y-3">
             <Link
               to="/privacy"
@@ -418,8 +495,61 @@ export default function Settings() {
               )}
             </div>
           </div>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Human-readable label for a manifest key. camelCase → spaced; a couple of
+// keys get explicit names so the receipt reads in product voice.
+const RECEIPT_LABELS = {
+  memory: 'Memory records',
+  userProfile: 'Profile record',
+};
+function receiptLabel(key) {
+  if (RECEIPT_LABELS[key]) return RECEIPT_LABELS[key];
+  const spaced = key.replace(/([A-Z])/g, ' $1');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+// Receipt of exactly what account deletion erased. Shown while the user is
+// still authenticated; the auth user is removed only on acknowledgment.
+function DeletionReceipt({ manifest, finishing, onFinish }) {
+  const rows = Object.entries(manifest || {})
+    .filter(([, v]) => typeof v === 'number' && v > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-white text-sm">Your data has been erased.</p>
+        <p className="text-[#858585] text-xs mt-1">
+          What was removed from the record:
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="text-[#858585] text-sm">No stored records were found.</p>
+      ) : (
+        <ul className="space-y-1">
+          {rows.map(([key, count]) => (
+            <li key={key} className="flex justify-between text-sm border-b border-[#1a1a1a] py-1.5">
+              <span className="text-[#ababab]">{receiptLabel(key)}</span>
+              <span className="text-white tabular-nums">{count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <button
+        onClick={onFinish}
+        disabled={finishing}
+        className="w-full px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
+      >
+        {finishing ? 'Signing out…' : 'Finish — sign out'}
+      </button>
     </div>
   );
 }

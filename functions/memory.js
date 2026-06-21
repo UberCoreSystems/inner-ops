@@ -43,6 +43,8 @@ const {
   MEMORY_INJECTION_MAX_CHARS,
   MEMORY_PROCESSED_IDS_CAP,
   MEMORY_SCHEMA_VERSION,
+  MEMORY_SNAPSHOT_MAX_ITEMS,
+  MEMORY_SNAPSHOT_LABEL_MAX_CHARS,
 } = require("./config");
 
 // Haiku 4.5 — all memory-update calls. Compression, not reasoning.
@@ -184,6 +186,69 @@ async function loadEntryFacts(db, uid, module, entryId) {
   return null;
 }
 
+// ── Context snapshot — module state active at receipt write-time ──────────────
+const snapLabel = (s) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, MEMORY_SNAPSHOT_LABEL_MAX_CHARS);
+
+const tsOf = (d) => {
+  if (d?.eventOccurredAt) return new Date(d.eventOccurredAt).getTime();
+  if (d?.createdAt?.toDate) return d.createdAt.toDate().getTime();
+  return new Date(d?.createdAt || 0).getTime();
+};
+
+/**
+ * Compact snapshot of the user's module state right now, stamped onto NEW
+ * receipts so resurfacing can confront with context ("written while Target X
+ * was active"). Reads are by userId only (single-field index — no composite).
+ * Returns null when there is nothing meaningful to capture.
+ */
+async function buildContextSnapshot(db, uid, now = Date.now()) {
+  const windowMs = 28 * 24 * 60 * 60 * 1000;
+  const inWindow = (ms) => Number.isFinite(ms) && now - ms >= 0 && now - ms <= windowMs;
+
+  const [ktSnap, reSnap, hlSnap] = await Promise.all([
+    db.collection("killTargets").where("userId", "==", uid).get(),
+    db.collection("relapseEntries").where("userId", "==", uid).get(),
+    db.collection("hardLessons").where("userId", "==", uid).get(),
+  ]);
+
+  const activeTargets = [];
+  ktSnap.forEach((doc) => {
+    const d = doc.data() || {};
+    if (d.status === "active" && d.title) activeTargets.push(snapLabel(d.title));
+  });
+
+  // Dominant relapse archetype (raw selectedSelf key) over the window.
+  const counts = {};
+  reSnap.forEach((doc) => {
+    const d = doc.data() || {};
+    if (!inWindow(tsOf(d))) return;
+    const a = d.selectedSelf;
+    if (a) counts[a] = (counts[a] || 0) + 1;
+  });
+  const dominantArchetype = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+  // Finalized rules with a break in the window (violations[] or legacy flag).
+  const violatedRules = [];
+  hlSnap.forEach((doc) => {
+    const d = doc.data() || {};
+    if (d.isFinalized !== true || !d.ruleGoingForward) return;
+    const violations = Array.isArray(d.violations) ? d.violations : [];
+    const recentBreak =
+      violations.some((v) => v?.date && inWindow(new Date(v.date).getTime())) || d.isRuleViolation === true;
+    if (recentBreak) violatedRules.push(snapLabel(d.ruleGoingForward));
+  });
+
+  const snapshot = {
+    activeTargets: activeTargets.slice(0, MEMORY_SNAPSHOT_MAX_ITEMS),
+    dominantArchetype,
+    violatedRules: violatedRules.slice(0, MEMORY_SNAPSHOT_MAX_ITEMS),
+  };
+  if (!snapshot.activeTargets.length && !snapshot.dominantArchetype && !snapshot.violatedRules.length) {
+    return null;
+  }
+  return snapshot;
+}
+
 // ── Haiku updater ────────────────────────────────────────────────────────────
 const UPDATER_SYSTEM_PROMPT = `You compress a user's behavioral record into durable memory for a confrontational self-command system (Inner Ops). You are not a coach or therapist. Cold, observational register only. No praise, no encouragement, no diagnosis, no therapy language.
 
@@ -247,7 +312,7 @@ function parseUpdaterJson(raw) {
  *    since we only match the CURRENT doc's receipts).
  * Returns { receipts, validated, dropped }.
  */
-function reconcileReceipts(parsed, entry, module, priorReceipts, sourceEntryId) {
+function reconcileReceipts(parsed, entry, module, priorReceipts, sourceEntryId, contextSnapshot = null) {
   const out = [];
   let validated = 0;
   let dropped = 0;
@@ -274,7 +339,14 @@ function reconcileReceipts(parsed, entry, module, priorReceipts, sourceEntryId) 
     }
     // Default to "new": authenticity gate — must be in the real entry text.
     if (normEntry.includes(norm)) {
-      out.push({ date: entry.date, quote, sourceModule: module, sourceEntryId });
+      out.push({
+        date: entry.date,
+        quote,
+        sourceModule: module,
+        sourceEntryId,
+        // Snapshot is metadata attached AFTER the quote passes validation.
+        ...(contextSnapshot ? { contextSnapshot } : {}),
+      });
       seen.add(norm);
       validated++;
     } else {
@@ -286,6 +358,9 @@ function reconcileReceipts(parsed, entry, module, priorReceipts, sourceEntryId) 
 }
 
 async function callHaiku(client, systemPrompt, userPayload, maxTokens) {
+  // NO-TRAINING POSTURE: same as the Oracle call sites in index.js — entry
+  // text routed through the commercial Claude API is not used for model
+  // training by default; verify org-level settings in the Anthropic Console.
   const message = await client.messages.create({
     model: HAIKU_MODEL,
     max_tokens: maxTokens,
@@ -445,8 +520,22 @@ const updateMemory = onCall(
       return { updated: false, reason: "unparseable" };
     }
 
+    // Capture the module-state snapshot only when the model proposed at least
+    // one NEW receipt to stamp — avoids three reads when nothing will carry it.
+    const hasNewCandidate = (Array.isArray(parsed.receipts) ? parsed.receipts : [])
+      .some((c) => c?.source !== "prior" && typeof c?.quote === "string" && c.quote.trim());
+    let contextSnapshot = null;
+    if (hasNewCandidate) {
+      try {
+        contextSnapshot = await buildContextSnapshot(db, uid);
+      } catch (error) {
+        // Snapshot is best-effort metadata — never block the receipt on it.
+        console.error("memory.snapshot.error", { name: error.name });
+      }
+    }
+
     const { receipts, validated, dropped } = reconcileReceipts(
-      parsed, entry, module, priorReceipts, entryId
+      parsed, entry, module, priorReceipts, entryId, contextSnapshot
     );
 
     // userEdited content is the new base — keep it; merge forward only when the
@@ -599,13 +688,31 @@ async function fetchMemoryForInjection(uid, moduleName) {
  * injection stays ≤ ~2,000 input tokens. Returns "" when there is nothing —
  * the Oracle then behaves exactly as it does today (zero regression).
  */
+// Confrontational recall tag from a receipt's write-time snapshot. Prefers an
+// active target, then a violated rule, then the dominant archetype. Empty when
+// the receipt predates snapshots (legacy) or carries nothing meaningful.
+function snapshotTag(receipt) {
+  const s = receipt?.contextSnapshot;
+  if (!s) return "";
+  if (Array.isArray(s.activeTargets) && s.activeTargets.length) {
+    return ` · written while "${s.activeTargets[0]}" was active`;
+  }
+  if (Array.isArray(s.violatedRules) && s.violatedRules.length) {
+    return ` · written while breaking "${s.violatedRules[0]}"`;
+  }
+  if (s.dominantArchetype) {
+    return ` · written while the ${s.dominantArchetype} pattern was dominant`;
+  }
+  return "";
+}
+
 function buildMemoryBlock(blocks) {
   if (!Array.isArray(blocks) || blocks.length === 0) return "";
 
   const rendered = blocks.map((b) => {
     const lines = [`[${b.label}]`];
     if (b.content) lines.push(b.content);
-    for (const r of b.receipts) lines.push(`- (${r.date}) "${r.quote}"`);
+    for (const r of b.receipts) lines.push(`- (${r.date}${snapshotTag(r)}) "${r.quote}"`);
     return lines.join("\n");
   });
 
@@ -632,4 +739,5 @@ module.exports = {
   parseUpdaterJson,
   stripBannedTone,
   loadEntryFacts,
+  buildContextSnapshot,
 };

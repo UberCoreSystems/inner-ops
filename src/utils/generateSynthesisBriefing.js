@@ -25,13 +25,20 @@ import { getViolatedRules } from './ruleState.js';
 import {
   COLLECTIONS,
   RELAPSE_FIELDS,
+  RELAPSE_ENTRY_TYPES,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
   USER_SETTINGS_FIELDS,
 } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
+import { deriveLanguagePattern } from './getBehavioralContext.js';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
+
+// The Reckoning looks back over a fixed period when laying stated commitments
+// against documented behavior. Matches the synthesis 28-day analysis window.
+const RECKONING_PERIOD_DAYS = 28;
+const RECKONING_QUOTE_MAX_CHARS = 200;
 
 // Hard write-cooldown — defeats "Generate now" spamming. Manual generations
 // pass bypassCadence:true to skip the weekly/biweekly gate, but a click-storm
@@ -50,12 +57,21 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
   const reader = options.readUserData || readUserData;
   const writer = options.writeData || writeData;
 
+  // The Reckoning is a mode of this engine, not a parallel one. It shares the
+  // reads, the cold-start gate, and the write-cooldown — but its cadence and
+  // cooldown are scoped to its own doc type so a recent synthesis never blocks
+  // (or is returned in place of) a reckoning, and vice-versa.
+  const mode = options.mode === 'reckoning' ? 'reckoning' : 'synthesis';
+
   // --- Cadence check ---
   // Auto-generate path enforces the cadence so users don't drown in briefings.
   // Manual on-demand path passes { bypassCadence: true } to skip this gate —
   // Oracle CF's 20/day rate limit is the effective cap.
   const syntheses = await reader(COLLECTIONS.SYNTHESES).catch(() => []);
-  const sorted = (syntheses || []).sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
+  const sorted = (syntheses || [])
+    // Untyped legacy docs are synthesis briefings.
+    .filter((d) => (d.type || 'synthesis') === mode)
+    .sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
   const lastBriefing = sorted[0];
 
   if (!options.bypassCadence && lastBriefing?.generatedAt) {
@@ -107,6 +123,16 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
 
   // BER-137: identity direction
   const identityDirection = (userSettings || [])[0]?.[USER_SETTINGS_FIELDS.IDENTITY_DIRECTION] || null;
+
+  // --- The Reckoning (mode branch) ---
+  // Lay stated commitments against documented behavior and name the
+  // contradictions. Returns insufficient-data when nothing contradicts.
+  if (mode === 'reckoning') {
+    return await generateReckoning({
+      userId, cadence, options, writer,
+      killTargets, hardLessons, relapseEntries, journalEntries, identityDirection,
+    });
+  }
 
   const now = Date.now();
   const windowMs28 = 28 * 24 * 60 * 60 * 1000;
@@ -294,4 +320,238 @@ function buildFallbackQuestion({ dominantArchetype, violatedRules, highEscapeTar
     return 'The trend across modules is deteriorating — what specific decision in the last 14 days set this in motion?';
   }
   return 'What pattern in your behavior this period are you most reluctant to name precisely?';
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The Reckoning
+// ─────────────────────────────────────────────────────────────────────────
+
+// A receipt quote is a verbatim substring of the real event text (trimmed +
+// truncated). Returns null when there is nothing to quote — the event id +
+// date still anchor the contradiction, so we never fabricate a quote.
+function verbatimQuote(value) {
+  if (typeof value !== 'string') return null;
+  const s = value.replace(/\s+/g, ' ').trim();
+  if (!s) return null;
+  return s.slice(0, RECKONING_QUOTE_MAX_CHARS);
+}
+
+/**
+ * Rules-based contradiction assembly. Every contradiction traces to a real
+ * event id (or a doc-id#subevent@date locator); contradictions with no real
+ * evidence are dropped. journalLanguagePattern drift is attached as context,
+ * NOT as a contradiction (it is aggregate and cannot trace to one event).
+ */
+export function assembleReckoning({
+  killTargets = [],
+  hardLessons = [],
+  relapseEntries = [],
+  journalEntries = [],
+  now = Date.now(),
+  periodDays = RECKONING_PERIOD_DAYS,
+}) {
+  const windowMs = periodDays * 24 * 60 * 60 * 1000;
+  const inPeriod = (ms) => Number.isFinite(ms) && ms > 0 && now - ms >= 0 && now - ms <= windowMs;
+  const contradictions = [];
+
+  // Stated commitment: eliminate an active Kill List target.
+  // Contradicted by: escapes logged against it this period.
+  for (const t of killTargets) {
+    if (t[KILL_TARGET_FIELDS.STATUS] !== 'active') continue;
+    const escapes = (t[KILL_TARGET_FIELDS.ESCAPES] || []).filter(
+      (e) => e?.date && inPeriod(new Date(e.date).getTime())
+    );
+    if (escapes.length === 0 || !t.id) continue;
+    contradictions.push({
+      type: 'escape_vs_kill',
+      commitment: { kind: 'killTarget', id: t.id, text: t[KILL_TARGET_FIELDS.TITLE] || 'an unnamed target' },
+      evidence: escapes.map((e) => ({
+        collection: COLLECTIONS.KILL_TARGETS,
+        eventId: `${t.id}#escape@${e.date}`,
+        date: e.date,
+        kind: 'escape',
+        quote: verbatimQuote(e.context) || verbatimQuote(e.rationalization),
+      })),
+    });
+  }
+
+  // Stated commitment: a finalized Hard Lessons rule.
+  // Contradicted by: violations logged against it this period.
+  for (const l of hardLessons) {
+    if (!l[HARD_LESSON_FIELDS.IS_FINALIZED] || !l[HARD_LESSON_FIELDS.RULE] || !l.id) continue;
+    const violations = (l[HARD_LESSON_FIELDS.VIOLATIONS] || []).filter(
+      (v) => v?.date && inPeriod(new Date(v.date).getTime())
+    );
+    if (violations.length === 0) continue;
+    contradictions.push({
+      type: 'violation_vs_rule',
+      commitment: { kind: 'hardLesson', id: l.id, text: l[HARD_LESSON_FIELDS.RULE] },
+      evidence: violations.map((v) => ({
+        collection: COLLECTIONS.HARD_LESSONS,
+        eventId: `${l.id}#violation@${v.date}`,
+        date: v.date,
+        kind: 'violation',
+        quote: verbatimQuote(v.note) || verbatimQuote(v.cause),
+      })),
+    });
+  }
+
+  // Standing commitment contradicted by actual relapse events this period.
+  // Anchored to a real commitment (the one already most-contradicted, else the
+  // first finalized rule / active target) so both sides carry real ids.
+  const relapses = (relapseEntries || []).filter((e) => {
+    if (e?.[RELAPSE_FIELDS.ENTRY_TYPE] !== RELAPSE_ENTRY_TYPES.RELAPSE) return false;
+    const ms = e.eventOccurredAt ? new Date(e.eventOccurredAt).getTime() : getTimestamp(e);
+    return inPeriod(ms);
+  });
+  if (relapses.length > 0) {
+    const standing = pickStandingCommitment(contradictions, killTargets, hardLessons);
+    if (standing) {
+      const evidence = relapses
+        .filter((r) => r.id)
+        .map((r) => ({
+          collection: COLLECTIONS.RELAPSE_ENTRIES,
+          eventId: r.id,
+          date: r.eventOccurredAt || new Date(getTimestamp(r)).toISOString(),
+          kind: 'relapse',
+          quote: verbatimQuote(r[RELAPSE_FIELDS.REFLECTION]),
+        }));
+      if (evidence.length > 0) {
+        contradictions.push({ type: 'relapse_vs_commitment', commitment: standing, evidence });
+      }
+    }
+  }
+
+  // Defensive: never emit a contradiction without at least one real event id.
+  const cleaned = contradictions
+    .map((c) => ({ ...c, evidence: c.evidence.filter((ev) => ev.eventId) }))
+    .filter((c) => c.evidence.length > 0);
+
+  // journalLanguagePattern drift — recent half vs earlier half of the period.
+  const halfMs = windowMs / 2;
+  const ageOf = (e) => now - getTimestamp(e);
+  const recentJournals = (journalEntries || []).filter((e) => { const a = ageOf(e); return a >= 0 && a <= halfMs; });
+  const earlierJournals = (journalEntries || []).filter((e) => { const a = ageOf(e); return a > halfMs && a <= windowMs; });
+  const recent = deriveLanguagePattern(recentJournals);
+  const earlier = deriveLanguagePattern(earlierJournals);
+  const languageDrift = recent || earlier ? { recent, earlier } : null;
+
+  return { contradictions: cleaned, languageDrift };
+}
+
+function pickStandingCommitment(contradictions, killTargets, hardLessons) {
+  const mostContradicted = [...contradictions].sort((a, b) => b.evidence.length - a.evidence.length)[0];
+  if (mostContradicted) return mostContradicted.commitment;
+  const rule = (hardLessons || []).find((l) => l[HARD_LESSON_FIELDS.IS_FINALIZED] && l[HARD_LESSON_FIELDS.RULE] && l.id);
+  if (rule) return { kind: 'hardLesson', id: rule.id, text: rule[HARD_LESSON_FIELDS.RULE] };
+  const target = (killTargets || []).find((t) => t[KILL_TARGET_FIELDS.STATUS] === 'active' && t.id);
+  if (target) return { kind: 'killTarget', id: target.id, text: target[KILL_TARGET_FIELDS.TITLE] || 'an unnamed target' };
+  return null;
+}
+
+function buildReckoningEntryText({ contradictions, languageDrift, identityDirection }) {
+  const lines = ['THE RECKONING — stated commitments vs documented behavior this period.'];
+  contradictions.forEach((c, i) => {
+    const head =
+      c.commitment.kind === 'killTarget'
+        ? `Commitment: eliminate "${c.commitment.text}".`
+        : c.commitment.kind === 'hardLesson'
+          ? `Committed rule: "${c.commitment.text}".`
+          : `Standing commitment: "${c.commitment.text}".`;
+    const ev = c.evidence
+      .map((e) => {
+        const d = (e.date || '').slice(0, 10);
+        const q = e.quote ? ` — "${e.quote}"` : '';
+        return `   • ${e.kind} on ${d}${q}`;
+      })
+      .join('\n');
+    lines.push(`${i + 1}. ${head} Contradicted by ${c.evidence.length} logged event(s):\n${ev}`);
+  });
+  if (languageDrift?.recent) {
+    lines.push(`Journal language now: ${languageDrift.recent}${languageDrift.earlier ? `; earlier this period: ${languageDrift.earlier}` : ''}.`);
+  }
+  if (identityDirection) lines.push(`Stated identity direction: "${identityDirection}".`);
+  return lines.join('\n');
+}
+
+function buildFallbackReckoning({ contradictions }) {
+  const parts = contradictions.slice(0, 3).map((c) => {
+    const n = c.evidence.length;
+    const dates = c.evidence.slice(0, 3).map((e) => (e.date || '').slice(0, 10)).join(', ');
+    if (c.commitment.kind === 'killTarget') {
+      return `You committed to eliminate "${c.commitment.text}". It escaped ${n} time${n > 1 ? 's' : ''} this period (${dates}).`;
+    }
+    if (c.commitment.kind === 'hardLesson') {
+      return `You wrote the rule "${c.commitment.text}". You broke it ${n} time${n > 1 ? 's' : ''} this period (${dates}).`;
+    }
+    return `You logged ${n} relapse${n > 1 ? 's' : ''} this period (${dates}) against your standing commitment.`;
+  });
+  return `${parts.join(' ')} Word and act diverged. Name the decision that allowed it.`;
+}
+
+async function generateReckoningConfrontation(data) {
+  const entryText = buildReckoningEntryText(data);
+  try {
+    const functions = getFunctions();
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const result = await oracleFn({
+      entryText,
+      moduleName: 'synthesis',
+      userContext: {},
+      tone: 'stoic',
+      promptContextKey: 'reckoning_confrontation',
+      promptContextParams: { contradictionCount: data.contradictions.length },
+    });
+    const t = result.data?.feedback?.trim();
+    if (t) return t;
+  } catch (err) {
+    logger.warn('Oracle unavailable for reckoning confrontation:', err?.message);
+  }
+  return buildFallbackReckoning(data);
+}
+
+async function generateReckoning({
+  userId, cadence, options, writer,
+  killTargets, hardLessons, relapseEntries, journalEntries, identityDirection,
+}) {
+  const now = Date.now();
+  const { contradictions, languageDrift } = assembleReckoning({
+    killTargets, hardLessons, relapseEntries, journalEntries, now, periodDays: RECKONING_PERIOD_DAYS,
+  });
+
+  // Nothing contradicts the stated commitments → no reckoning, no billed call.
+  if (contradictions.length === 0) return { status: 'insufficient-data' };
+
+  const reckoningConfrontation = await generateReckoningConfrontation({
+    contradictions, languageDrift, identityDirection,
+  });
+
+  const isManualTrigger = !!options.bypassCadence;
+  const startMs = now - RECKONING_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+  const doc = {
+    userId,
+    type: 'reckoning',
+    generatedAt: new Date(now).toISOString(),
+    cadencePeriod: cadence,
+    period: {
+      start: new Date(startMs).toISOString(),
+      end: new Date(now).toISOString(),
+      days: RECKONING_PERIOD_DAYS,
+    },
+    isNew: !isManualTrigger,
+    readAt: isManualTrigger ? new Date(now).toISOString() : null,
+    contradictions,
+    languageDrift,
+    reckoningConfrontation,
+    meta: {
+      contradictionCount: contradictions.length,
+      commitmentCount: new Set(contradictions.map((c) => c.commitment.id).filter(Boolean)).size,
+      evidenceCount: contradictions.reduce((s, c) => s + c.evidence.length, 0),
+      identityDirection,
+    },
+  };
+
+  const written = await writer(COLLECTIONS.SYNTHESES, doc);
+  const docWithId = written?.id ? { ...doc, id: written.id } : doc;
+  return { status: 'ok', briefing: docWithId };
 }

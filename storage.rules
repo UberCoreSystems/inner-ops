@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Inner Ops ships NO client uploads in v1. Everything is denied.
+    // If an upload path is ever added, scope it to the owning user via the
+    // uid as the first path segment and KEEP the default-deny floor below it:
+    //
+    //   match /users/{userId}/{allPaths=**} {
+    //     allow read, write: if isOwner(userId);
+    //   }
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Default-deny floor — no reads, no writes, authenticated or not.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

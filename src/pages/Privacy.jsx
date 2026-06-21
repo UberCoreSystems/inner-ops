@@ -30,8 +30,25 @@ export default function Privacy() {
         <Section title="How the Oracle uses your entries">
           When you request Oracle feedback, the text of that entry — and a short summary of
           your recent cross-module activity — is sent to Anthropic&apos;s Claude API through a
-          secure server-side function to generate a response. It is not used to train models.
-          No third-party advertising or analytics service receives your entry text.
+          secure server-side function to generate a response. No third-party advertising or
+          analytics service receives your entry text.
+        </Section>
+
+        <Section title="Your entries are never used to train a model">
+          What you write is not training data. Text sent to the Claude API is used only to
+          generate your response and is not used to train or improve any model.
+        </Section>
+
+        <Section title="The Record is written by the server, not the client">
+          The long-term memory the Oracle keeps — its themes and your own quoted receipts —
+          is written exclusively server-side, under your verified account. The app cannot
+          author or alter that record directly, and every stored quote is checked against
+          your actual words before it is saved. You can edit or wipe it at any time.
+        </Section>
+
+        <Section title="Encrypted at rest">
+          All data is encrypted at rest by the database (Firestore, AES-256, managed by
+          Google) and in transit over TLS. No entry is stored in plaintext on disk.
         </Section>
 
         <Section title="Analytics & error reporting">

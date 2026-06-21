@@ -27,29 +27,36 @@ export function useSynthesisAutoGenerate(userId) {
         const cadenceDays = CADENCE_DAYS[cadence] ?? 7;
 
         const syntheses = await readUserData(COLLECTIONS.SYNTHESES).catch(() => []);
-        const sorted = (syntheses || []).sort(
-          (a, b) => new Date(b.generatedAt) - new Date(a.generatedAt)
-        );
+        // Only synthesis briefings gate the synthesis cadence — reckoning docs
+        // live in the same collection but are a different type.
+        const sorted = (syntheses || [])
+          .filter((d) => (d.type || 'synthesis') === 'synthesis')
+          .sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
         const lastBriefing = sorted[0];
 
-        if (lastBriefing?.generatedAt) {
-          const daysSince =
-            (Date.now() - new Date(lastBriefing.generatedAt).getTime()) /
-            (1000 * 60 * 60 * 24);
-          if (daysSince < cadenceDays) return;
+        const dueForSynthesis = !lastBriefing?.generatedAt ||
+          (Date.now() - new Date(lastBriefing.generatedAt).getTime()) / (1000 * 60 * 60 * 24) >= cadenceDays;
+
+        if (dueForSynthesis) {
+          // Finding 13: discriminated result instead of thrown CADENCE_LOCK string.
+          const result = await generateSynthesisBriefing(userId, cadence);
+          // Pass 3 New Finding 9 remediation: surface the auto-generated
+          // briefing so the user understands why SynthesisGuard may redirect
+          // them. Toast is grounded, not motivational, per CLAUDE.md.
+          if (result?.status === 'ok') {
+            ouraToast.info('New synthesis briefing ready.');
+          }
+          // 'locked' / 'insufficient-data' → skip silently.
         }
 
-        // Finding 13: discriminated result instead of thrown CADENCE_LOCK string.
-        const result = await generateSynthesisBriefing(userId, cadence);
-        if (result?.status === 'locked') return;
-        // Cold-start gate: skip silently for users with no cross-module signal.
-        // Auto-generation should be invisible until there's something to synthesize.
-        if (result?.status === 'insufficient-data') return;
-        // Pass 3 New Finding 9 remediation: surface the auto-generated
-        // briefing so the user understands why SynthesisGuard may redirect
-        // them. Toast is grounded, not motivational, per CLAUDE.md.
-        if (result?.status === 'ok') {
-          ouraToast.info('New synthesis briefing ready.');
+        // Optional periodic Reckoning — off by default, toggled in Settings.
+        // Uses its own cadence and the engine's own type-scoped cadence gate.
+        if (userSettings?.[0]?.reckoningAuto) {
+          const reckoningCadence = userSettings?.[0]?.reckoningCadence || 'biweekly';
+          const reckoning = await generateSynthesisBriefing(userId, reckoningCadence, { mode: 'reckoning' });
+          if (reckoning?.status === 'ok') {
+            ouraToast.info('The Reckoning is ready.');
+          }
         }
       } catch (err) {
         logger.warn('useSynthesisAutoGenerate: silent generation failed:', err?.message);

@@ -5,6 +5,7 @@ import { getBehavioralContext } from './getBehavioralContext.js';
 import { resolveTriggeredCriterion } from './confrontationCriteria.js';
 import { track } from './analytics.js';
 import { detectEvasionMarkers } from './detectEvasionMarkers.js';
+import { PATTERN_TRUST_MIN_ENTRIES } from './schema.js';
 import ouraToast from './toast.js';
 
 const logger = {
@@ -368,8 +369,8 @@ const buildAntiRepetitionData = ({ userId, moduleName, entryText, themes, lenses
 const buildCrossModuleInstruction = (behavioralContext) => {
   if (!behavioralContext) return '';
   const parts = [];
-  // BER-194: pattern-referencing data requires >= 21 entries to be meaningful
-  const isHighData = (behavioralContext.totalEntryCount || 0) >= 21;
+  // BER-194: pattern-referencing data requires the trust-gate entry count to be meaningful
+  const isHighData = (behavioralContext.totalEntryCount || 0) >= PATTERN_TRUST_MIN_ENTRIES;
   if (behavioralContext.dominantRelapseArchetype && isHighData) {
     parts.push(`Dominant relapse archetype (last 14d): ${behavioralContext.dominantRelapseArchetype}.`);
   }
@@ -461,7 +462,7 @@ const ensureSentenceCount = (text, min, max) => {
 
 const composeFeedback = ({ moduleName, entryText, themes, lenses, antiRepetitionData, strictMode = false, entryCount = null }) => {
   // BER-194: data-depth calibration — null means unknown (treated as high data)
-  const isHighData = entryCount === null || entryCount >= 21;
+  const isHighData = entryCount === null || entryCount >= PATTERN_TRUST_MIN_ENTRIES;
   const frame = FRAME_TEMPLATES[antiRepetitionData.frame] || FRAME_TEMPLATES.stoic_drill_down;
   const touchpoints = getTouchpoints(entryText);
   const words = tokenize(entryText).length;
@@ -603,6 +604,13 @@ export const callLLM = async (promptBundle, generationContext) => {
         }
       : null;
 
+    // Server-side prompt-context template. An explicit promptContextKey from the
+    // caller (e.g. 'relapse_forecast') takes precedence; reactance is the
+    // implicit fallback when a confrontation criterion is triggered.
+    const promptContext = generationContext?.promptContextKey
+      ? { key: generationContext.promptContextKey, params: generationContext.promptContextParams || {} }
+      : (reactanceParams ? { key: 'reactance', params: reactanceParams } : null);
+
     const result = await oracleFn({
       entryText: userPrompt.entryText,
       moduleName: userPrompt.moduleName,
@@ -613,9 +621,9 @@ export const callLLM = async (promptBundle, generationContext) => {
       entryCount: typeof userPrompt.behavioralContext?.totalEntryCount === 'number'
         ? userPrompt.behavioralContext.totalEntryCount
         : 0,
-      // BER-200 via server-side template: promptContextKey + params
-      ...(reactanceParams
-        ? { promptContextKey: 'reactance', promptContextParams: reactanceParams }
+      // Server-side template: promptContextKey + params (reactance / forecast / …)
+      ...(promptContext
+        ? { promptContextKey: promptContext.key, promptContextParams: promptContext.params }
         : {}),
     });
 
@@ -804,6 +812,8 @@ export const generateFeedback = async ({
   userPreferences = {},
   behavioralContext = null,
   triggeredCriterion = null,
+  promptContextKey = null,
+  promptContextParams = null,
 }) => {
   const cleanEntry = normalizeWhitespace(entryText);
   const safeModuleName = normalizeWhitespace(moduleName || 'journal') || 'journal';
@@ -875,6 +885,9 @@ export const generateFeedback = async ({
       strictRetry: true,
       // BER-200: pass resolved criterion so callLLM can augment system prompt
       triggeredCriterion,
+      // Explicit server-side prompt-context template (e.g. relapse_forecast)
+      promptContextKey,
+      promptContextParams,
       // Finding 11: profile is supplied by the caller so callLLM stays pure
       userProfile,
     });
@@ -938,6 +951,8 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
   let resolvedInput;
   let resolvedPast = pastEntries;
   let resolvedContext = behavioralContext;
+  let resolvedPromptContextKey = null;
+  let resolvedPromptContextParams = null;
 
   if (moduleNameOrArgs && typeof moduleNameOrArgs === 'object' && !Array.isArray(moduleNameOrArgs)) {
     // Structured form — destructured object.
@@ -949,6 +964,8 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
       content = '',
       pastEntries: pEntries = [],
       behavioralContext: bCtx = null,
+      promptContextKey = null,
+      promptContextParams = null,
     } = moduleNameOrArgs;
     moduleName = mod;
     // Prefer structured journal fields when provided; fall back to `content`
@@ -958,6 +975,8 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
       : content;
     resolvedPast = pEntries;
     resolvedContext = bCtx;
+    resolvedPromptContextKey = promptContextKey;
+    resolvedPromptContextParams = promptContextParams;
   } else {
     // Legacy positional form — preserved exactly for non-Journal callers.
     moduleName = moduleNameOrArgs;
@@ -1001,6 +1020,8 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
       priorFeedbackSummary,
       behavioralContext: resolvedContext,
       triggeredCriterion,
+      promptContextKey: resolvedPromptContextKey,
+      promptContextParams: resolvedPromptContextParams,
     });
 
     // Real Claude response — return structured object with prose, optional depth, and the

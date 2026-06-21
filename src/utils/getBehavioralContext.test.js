@@ -172,6 +172,48 @@ describe('getBehavioralContext — partial fetch failures', () => {
   });
 });
 
+describe('getBehavioralContext — temporal correlations (computed field)', () => {
+  const BASE = Date.UTC(2026, 0, 1, 0, 0, 0);
+  const iso = (d, h = 10) => new Date(BASE + d * dayMs + h * 3600000).toISOString();
+  const relapseEntry = (d) => ({ [RELAPSE_FIELDS.ENTRY_TYPE]: 'relapse', eventOccurredAt: iso(d) });
+  const journalEntry = (d, h) => ({ eventOccurredAt: iso(d, h) });
+
+  it('forwards a size-bounded correlation result when signal clears the gate', async () => {
+    const data = {
+      [COLLECTIONS.RELAPSE_ENTRIES]: [relapseEntry(0), relapseEntry(5), relapseEntry(10)],
+      [COLLECTIONS.JOURNAL_ENTRIES]: [journalEntry(0, 12), journalEntry(5, 13), journalEntry(10, 11)],
+      [COLLECTIONS.HARD_LESSONS]: Array.from({ length: 15 }, () => ({})), // pad to 21
+    };
+    const ctx = await getBehavioralContext('u1', noDeps(data));
+
+    assert.equal(ctx.temporalCorrelations.status, 'ok');
+    assert.ok(ctx.temporalCorrelations.items.length >= 1);
+    assert.ok(ctx.temporalCorrelations.items.length <= 3, 'capped to top 3');
+
+    const item = ctx.temporalCorrelations.items.find(
+      (c) => c.antecedent === 'relapse:relapse' && c.consequent === 'journal:entry'
+    );
+    assert.ok(item, 'expected relapse→journal correlation');
+    // Only scalar fields are forwarded — no heavy sub-objects.
+    assert.equal(item.lagUnit, 'hours');
+    assert.equal(typeof item.lagMedian, 'number');
+    assert.ok(!('lagDistribution' in item) && !('baseline' in item) && !('lift' in item));
+  });
+
+  it('returns insufficient-signal when the record is sparse', async () => {
+    const data = { [COLLECTIONS.RELAPSE_ENTRIES]: [relapseEntry(0), relapseEntry(1)] };
+    const ctx = await getBehavioralContext('u1', noDeps(data));
+    assert.equal(ctx.temporalCorrelations.status, 'insufficient-signal');
+    assert.deepEqual(ctx.temporalCorrelations.items, []);
+  });
+
+  it('empty snapshot carries the insufficient-signal default', async () => {
+    const ctx = await getBehavioralContext('u1', noDeps({}));
+    assert.equal(ctx.temporalCorrelations.status, 'insufficient-signal');
+    assert.deepEqual(ctx.temporalCorrelations.items, []);
+  });
+});
+
 describe('clearBehavioralContextCache', () => {
   it('does not throw when cache is empty', () => {
     assert.doesNotThrow(() => clearBehavioralContextCache('nobody'));

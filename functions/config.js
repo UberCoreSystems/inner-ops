@@ -44,5 +44,11 @@ exports.MEMORY_GLOBAL_REFRESH_HOURS = intFromEnv("MEMORY_GLOBAL_REFRESH_HOURS", 
 exports.MEMORY_INJECTION_MAX_CHARS = intFromEnv("MEMORY_INJECTION_MAX_CHARS", 8000);
 // Idempotency: cap on remembered processed-entry keys (FIFO).
 exports.MEMORY_PROCESSED_IDS_CAP = intFromEnv("MEMORY_PROCESSED_IDS_CAP", 50);
-// Memory doc schema version.
-exports.MEMORY_SCHEMA_VERSION = 1;
+// Receipt context-snapshot caps — the module-state tag captured at write time
+// (active targets, dominant archetype, recently violated rules). Bounded so the
+// metadata stays compact per receipt.
+exports.MEMORY_SNAPSHOT_MAX_ITEMS = intFromEnv("MEMORY_SNAPSHOT_MAX_ITEMS", 3);
+exports.MEMORY_SNAPSHOT_LABEL_MAX_CHARS = intFromEnv("MEMORY_SNAPSHOT_LABEL_MAX_CHARS", 80);
+// Memory doc schema version. v2 = receipts may carry contextSnapshot
+// (additive; legacy receipts without it render untagged — never backfilled).
+exports.MEMORY_SCHEMA_VERSION = 2;

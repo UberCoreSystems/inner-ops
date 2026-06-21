@@ -357,6 +357,37 @@ describe('users/{uid}/memory (CF-written, owner-read)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// Cross-uid read isolation — focused proof (Prompt 2). A signed-in non-owner
+// (OTHER) must NOT be able to read ANOTHER uid's (OWNER) data: neither a
+// direct get nor a userId-filtered query, across the core per-user
+// collections plus AI memory. This restates the per-collection non-owner
+// denials above as one named guarantee so the isolation property is provable
+// in a single place.
+// ─────────────────────────────────────────────────────────────────────────
+describe('cross-uid read isolation (signed-in non-owner)', () => {
+  before(clear);
+
+  const TOP_LEVEL = ['journalEntries', 'killTargets', 'relapseEntries', 'hardLessons'];
+
+  for (const coll of TOP_LEVEL) {
+    it(`non-owner cannot get another uid's ${coll} doc`, async () => {
+      await seed(coll, ['x'], { userId: OWNER, body: 'secret' });
+      await assertFails(getDoc(doc(otherDb, coll, 'x')));
+    });
+
+    it(`non-owner cannot query ${coll} for another uid`, async () => {
+      await seed(coll, ['x'], { userId: OWNER, body: 'secret' });
+      await assertFails(getDocs(query(collection(otherDb, coll), where('userId', '==', OWNER))));
+    });
+  }
+
+  it("non-owner cannot read another uid's memory doc", async () => {
+    await seed('users', [OWNER, 'memory', 'global'], { content: 'secret', receipts: [] });
+    await assertFails(getDoc(doc(otherDb, 'users', OWNER, 'memory', 'global')));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // Default-deny floor — the removed test-connection allow and any unknown
 // collection must reject even an authenticated owner-shaped write.
 // ─────────────────────────────────────────────────────────────────────────

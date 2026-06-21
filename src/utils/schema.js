@@ -19,6 +19,13 @@ export const COLLECTIONS = Object.freeze({
   CONFRONTATIONS: 'confrontations',
 });
 
+// Pattern-trust gate (BER-194): minimum total behavioral entries before
+// cross-module pattern claims (relapse archetypes, temporal correlations) are
+// meaningful. Below this, surfaces use non-pattern framing or return an
+// explicit insufficient-signal state. Single source of truth — consumed by
+// aiFeedback and crossModuleCorrelation.
+export const PATTERN_TRUST_MIN_ENTRIES = 21;
+
 // Relapse-entry fields consumed cross-module.
 export const RELAPSE_FIELDS = Object.freeze({
   ARCHETYPE: 'selectedSelf',            // dominant-archetype key

@@ -54,8 +54,8 @@ if (!hasJava(javaHome)) {
 }
 
 const command =
-  'firebase emulators:exec --only firestore --project=inner-ops-8ce36 ' +
-  '"node --test rules-tests/firestore.rules.test.mjs"';
+  'firebase emulators:exec --only firestore,storage --project=inner-ops-8ce36 ' +
+  '"node --test rules-tests/firestore.rules.test.mjs rules-tests/storage.rules.test.mjs"';
 
 const result = spawnSync(command, { stdio: 'inherit', shell: true });
 process.exit(result.status ?? 1);

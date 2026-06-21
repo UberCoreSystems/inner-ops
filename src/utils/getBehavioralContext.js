@@ -23,6 +23,7 @@ import {
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 import { getEntryTimestamp as getTimestamp } from './dateUtils.js';
 import { getViolatedRules } from './ruleState.js';
+import { extractEvents, computeCorrelations } from './crossModuleCorrelation.js';
 
 const contextCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -130,6 +131,15 @@ export async function getBehavioralContext(userId, deps = {}) {
       (relapseEntries || []).length +
       (hardLessons || []).length;
 
+    // Cross-module temporal correlations — computed from the already-loaded
+    // arrays (no extra reads). A COMPUTED field (not user-authored), so it
+    // bypasses the server's per-field char clamp, but kept tiny here: top-3 by
+    // confidence, scalar fields only.
+    const events = extractEvents({ killTargets, relapseEntries, hardLessons, journalEntries });
+    const temporalCorrelations = boundCorrelations(
+      computeCorrelations(events, { entryCount: totalEntryCount })
+    );
+
     const value = {
       activeKillTargets,
       dominantRelapseArchetype,
@@ -138,6 +148,7 @@ export async function getBehavioralContext(userId, deps = {}) {
       journalLanguagePattern,
       identityDirection, // BER-137
       totalEntryCount,   // BER-167
+      temporalCorrelations,
       missingCollections, // Finding 6: surface partial-load state to consumers
     };
 
@@ -158,8 +169,32 @@ function buildEmpty() {
     journalLanguagePattern: null,
     identityDirection: null,
     totalEntryCount: 0, // BER-167
+    temporalCorrelations: { status: 'insufficient-signal', items: [] },
     missingCollections: [], // Finding 6
   };
+}
+
+// Size-bound the correlation result for the wire: top-3 by confidence, scalar
+// fields only (drop histogram / baseline / lift). On insufficient-signal,
+// return an empty item list so the server injects nothing.
+const MAX_FORWARDED_CORRELATIONS = 3;
+function boundCorrelations(result) {
+  if (!result || result.status !== 'ok' || !Array.isArray(result.correlations)) {
+    return { status: 'insufficient-signal', items: [] };
+  }
+  const items = [...result.correlations]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, MAX_FORWARDED_CORRELATIONS)
+    .map((c) => ({
+      antecedent: c.antecedent,
+      consequent: c.consequent,
+      support: c.support,
+      confidence: c.confidence,
+      resolution: c.resolution,
+      lagMedian: c.lagDistribution?.median ?? 0,
+      lagUnit: c.lagDistribution?.unit ?? 'days',
+    }));
+  return { status: 'ok', items };
 }
 
 // Stop-word list kept tight — we want substantive signal words, not filler.
@@ -172,7 +207,7 @@ const LANGUAGE_STOP_WORDS = new Set([
   'could', 'should', 'can', 'event', 'attribution', // frame markers from composeJournalContent
 ]);
 
-function deriveLanguagePattern(entries) {
+export function deriveLanguagePattern(entries) {
   if (!Array.isArray(entries) || entries.length === 0) return null;
   const counts = new Map();
   entries.forEach((e) => {

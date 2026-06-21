@@ -53,6 +53,15 @@ const PROMPT_CONTEXT_REGISTRY = {
   // Synthesis confrontation question — fixed server-side template.
   synthesis_confrontation: () => `You generate one confrontation question. Rules:\n- One question only. No preamble, no context, no explanation.\n- Derived directly from the data provided. No invented patterns.\n- Not answerable with yes/no. Requires honest reflection.\n- No advisory language, no suggestions, no affirmations, no motivational framing.\n- Uncomfortable, specific, unflinching.`,
 
+  // The Reckoning — lay stated commitments against documented contradictions.
+  // The entry is a rules-assembled ledger: each commitment, then the real
+  // events (with dates and the user's own verbatim words) that contradict it.
+  reckoning_confrontation: (params) => {
+    const n = Number(params?.contradictionCount);
+    const note = Number.isFinite(n) && n > 0 ? ` ${Math.floor(n)} contradiction(s) are documented below.` : "";
+    return `THE RECKONING.${note} The entry lists the user's stated commitments (Kill List targets he vowed to eliminate, rules he finalized) and, under each, the real logged events — with dates and his own words — that contradict them. Your job: hold his word against his act and name the gap. Rules: (1) Confront ONLY with the commitments and events provided. Invent no events, dates, numbers, or quotes; cite nothing not in the entry. (2) Name each contradiction plainly — the commitment, then what he actually did and when. (3) This is a confrontation in prose, NOT a metrics report — no scores, no bullet dashboards, no tallies. (4) No encouragement, no reassurance, no affirmation, no "but." (5) Close on the single decision he keeps making that lets word and act diverge. Stark, precise, unflinching.`;
+  },
+
   // BER-136 Oracle regen — same data, different angle. Data depth is a
   // numeric parameter; no free-form text is accepted.
   oracle_regen: (params) => {
@@ -61,6 +70,18 @@ const PROMPT_CONTEXT_REGISTRY = {
       ? ` The user has ${Math.floor(n)} total behavioral entries logged — calibrate confrontation depth accordingly.`
       : '';
     return `The user has already seen one perspective on this data. Approach the same data from a different confrontational angle. Do not repeat the same observation. Do not soften your assessment. Identify a different pattern, contradiction, or uncomfortable truth than the one already surfaced.${dataDepthNote}`;
+  },
+
+  // Predictive Relapse Radar — forward-looking confrontation fired when known
+  // antecedents of past relapses are active in the current window. The specific
+  // antecedents + lead times ride in the (computed) entryText; this template
+  // sets the posture. Only `activeCount` is accepted, coerced to a number.
+  relapse_forecast: (params) => {
+    const n = Number(params?.activeCount);
+    const note = Number.isFinite(n) && n > 0
+      ? ` ${Math.floor(n)} known antecedent(s) of his past relapses are active in the current window.`
+      : "";
+    return `FORWARD-LOOKING CONFRONTATION — this is a PRE-failure signal. No relapse has occurred yet.${note} The entry lists behavioral antecedents that have historically preceded his relapses and are active right now. Your job: name the convergence plainly and put the decision in front of him before it happens. Rules: (1) State the pattern as history, not destiny — "X has preceded your relapses; it is active now," never "you will relapse." (2) No alarmism, no catastrophizing, no urgency theater. (3) No encouragement, no reassurance, no affirmation. (4) Be precise about the named antecedent and its typical lead time as given; do not invent antecedents or numbers not in the entry. (5) One confrontation, not a list of tips. End with the single question he needs to sit with now.`;
   },
 
   // BER-136 Oracle challenge — user's own pushback, clamped to length.
@@ -167,6 +188,12 @@ exports.oracle = onCall(
     const userPrompt = buildUserPrompt(entryText, userContext);
 
     try {
+      // NO-TRAINING POSTURE: Anthropic does not train its models on inputs or
+      // outputs sent through the commercial Claude API by default — entry text
+      // and behavioral context sent here are not used for model training.
+      // VERIFY at the org level in the Anthropic Console (Settings → Privacy):
+      // confirm no opt-in to model training / data-sharing is enabled. (Zero
+      // data retention is a separate enterprise setting, not assumed here.)
       const message = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 600,
@@ -252,6 +279,9 @@ exports.oracleFollowUp = onCall(
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
     try {
+      // NO-TRAINING POSTURE: see the note at the oracle call site above —
+      // commercial API traffic is not used for model training by default;
+      // verify org-level data settings in the Anthropic Console.
       const message = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 400,
@@ -321,6 +351,56 @@ function ctxField(value) {
   return `«${s}»`;
 }
 
+// Temporal-correlation rendering. The correlation field is COMPUTED (not user-
+// authored), so it bypasses ctxField's per-field char clamp — but it is built
+// ONLY from server-side labels + coerced numbers, never echoed client strings,
+// so there is no prompt-injection surface. Unknown event-type keys are dropped.
+const CORRELATION_EVENT_LABELS = {
+  "relapse:relapse": "a relapse",
+  "relapse:signal": "a relapse precursor signal",
+  "hardlesson:violation": "breaking a hard-earned rule",
+  "killlist:escape": "a Kill List escape",
+  "killlist:checkin_broke": "a failed Kill List check-in",
+  "killlist:checkin_held": "a held Kill List check-in",
+  "killlist:killed": "killing a Kill List target",
+  "killlist:created": "naming a new Kill List target",
+  "journal:entry": "a journal entry",
+};
+const MAX_CORRELATIONS_RENDERED = 3;
+
+function renderTemporalCorrelations(temporalCorrelations) {
+  if (!temporalCorrelations || typeof temporalCorrelations !== "object") return "";
+  // Anything other than an explicit 'ok' with items injects NOTHING — the
+  // Oracle must not imply a pattern exists below the trust gate.
+  if (temporalCorrelations.status !== "ok") return "";
+  const items = Array.isArray(temporalCorrelations.items) ? temporalCorrelations.items : [];
+  if (items.length === 0) return "";
+
+  const lines = [...items]
+    .sort((a, b) => (Number(b.confidence) || 0) - (Number(a.confidence) || 0))
+    .slice(0, MAX_CORRELATIONS_RENDERED)
+    .map((c) => {
+      const a = CORRELATION_EVENT_LABELS[c.antecedent];
+      const b = CORRELATION_EVENT_LABELS[c.consequent];
+      if (!a || !b) return null; // drop unrecognized event types
+      const support = Math.max(0, Math.floor(Number(c.support) || 0));
+      // Kill-list-derived correlations are daily; never report hour precision
+      // for them. Trust the engine's resolution but coerce the unit to match.
+      const daily = c.resolution !== "sub-day";
+      const unit = daily ? "days" : "hours";
+      const lag = Math.max(0, Math.round(Number(c.lagMedian) || 0));
+      return `${a} tends to precede ${b} by ~${lag} ${unit} (seen ${support}x).`;
+    })
+    .filter(Boolean);
+
+  if (lines.length === 0) return "";
+  return (
+    `Temporal patterns from his own logs (approximate, computed — not invented):\n` +
+    lines.map((l) => `- ${l}`).join("\n") +
+    `\nWhere relevant, confront him with the sequence directly — name the antecedent as an early warning of what follows. The ~ is approximate; do not overstate it, and do not invent sequences beyond those listed.`
+  );
+}
+
 function buildBehavioralContextBlock(behavioralContext) {
   if (!behavioralContext || typeof behavioralContext !== "object") return "";
   const parts = [];
@@ -341,11 +421,15 @@ function buildBehavioralContextBlock(behavioralContext) {
     const rules = behavioralContext.violatedHardLessons.slice(0, MAX_CTX_ITEMS).map((l) => ctxField(l.rule)).join(", ");
     parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
   }
-  if (behavioralContext.journalMoodPattern) {
-    parts.push(`Dominant journal mood (last 7d): ${ctxField(behavioralContext.journalMoodPattern)}.`);
+  if (behavioralContext.journalLanguagePattern) {
+    parts.push(`Dominant journal language pattern (last 7d): ${ctxField(behavioralContext.journalLanguagePattern)}.`);
   }
   if (behavioralContext.identityDirection) {
     parts.push(`User's stated identity direction: ${ctxField(behavioralContext.identityDirection)}. If the user's current behavior contradicts this stated direction, name the contradiction explicitly. Do not soften it.`);
+  }
+  const correlationBlock = renderTemporalCorrelations(behavioralContext.temporalCorrelations);
+  if (correlationBlock) {
+    parts.push(correlationBlock);
   }
   if (parts.length === 0) return "";
   return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join("\n")}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
@@ -880,6 +964,29 @@ async function deleteOwnedDocs(db, collectionName, uid) {
   return deleted;
 }
 
+// eraseUserData — the actual erase + receipt logic, factored out of the
+// callable so it can be exercised directly against the Firestore emulator.
+// Returns a manifest of doc counts removed, per collection plus memory/profile.
+async function eraseUserData(db, uid) {
+  const summary = {};
+  for (const collectionName of USER_DATA_COLLECTIONS) {
+    summary[collectionName] = await deleteOwnedDocs(db, collectionName, uid);
+  }
+  // Count the doc-id-keyed + subcollection records BEFORE the recursive
+  // delete removes them, so the deletion receipt reflects what was erased.
+  // recursiveDelete itself returns void, so the count must be taken here.
+  const memSnap = await db.collection("users").doc(uid).collection("memory").get();
+  summary.memory = memSnap.size;
+  const profileSnap = await db.collection("userProfiles").doc(uid).get();
+  summary.userProfile = profileSnap.exists ? 1 : 0;
+
+  // Doc-id-keyed records + any admin subcollections under the user doc
+  // (_rateLimits, integrations, biometrics, memory) are removed recursively.
+  await db.recursiveDelete(db.collection("userProfiles").doc(uid));
+  await db.recursiveDelete(db.collection("users").doc(uid));
+  return summary;
+}
+
 // deleteUserData — permanently erase all of the caller's data. Auth-gated; a
 // user can only delete their own account (uid comes from the verified token,
 // never from the client payload). The client calls this, then deletes the
@@ -892,15 +999,9 @@ exports.deleteUserData = onCall({ timeoutSeconds: 120 }, async (request) => {
   const { getFirestore } = require("firebase-admin/firestore");
   const db = getFirestore();
 
-  const summary = {};
+  let summary;
   try {
-    for (const collectionName of USER_DATA_COLLECTIONS) {
-      summary[collectionName] = await deleteOwnedDocs(db, collectionName, uid);
-    }
-    // Doc-id-keyed records + any admin subcollections under the user doc
-    // (_rateLimits, integrations, biometrics) are removed recursively.
-    await db.recursiveDelete(db.collection("userProfiles").doc(uid));
-    await db.recursiveDelete(db.collection("users").doc(uid));
+    summary = await eraseUserData(db, uid);
   } catch (err) {
     // Never echo raw error detail to the client.
     console.error("deleteUserData failed", { uid, code: err?.code, message: err?.message });
@@ -908,7 +1009,9 @@ exports.deleteUserData = onCall({ timeoutSeconds: 120 }, async (request) => {
   }
 
   console.log("deleteUserData complete", { uid, summary });
-  return { ok: true, deleted: summary };
+  // `manifest` is the deletion receipt shown to the user; `deleted` is kept as
+  // a backward-compatible alias.
+  return { ok: true, manifest: summary, deleted: summary, completedAt: new Date().toISOString() };
 });
 
 // ─── Long-term AI memory callables ──────────────────────────────────────────
@@ -921,3 +1024,12 @@ exports.updateMemory = memory.updateMemory;
 exports.editMemory = memory.editMemory;
 exports.deleteMemoryReceipt = memory.deleteMemoryReceipt;
 exports.wipeMemory = memory.wipeMemory;
+
+// Pure prompt-assembly helpers exported for unit testing. Not registered as
+// Cloud Functions; safe to require() from a node:test harness.
+exports.buildBehavioralContextBlock = buildBehavioralContextBlock;
+exports.buildSystemPrompt = buildSystemPrompt;
+// Erase logic exported for emulator-backed verification of the deletion receipt.
+exports.eraseUserData = eraseUserData;
+// Prompt-context resolver exported for unit testing the registry.
+exports.resolvePromptContext = resolvePromptContext;

@@ -6,8 +6,27 @@ import {
   wipeMemory,
 } from '../utils/updateMemory';
 import { MEMORY_DOC_IDS, MEMORY_MODULE_LABELS } from '../utils/memoryConstants';
+import { resolveArchetypeLabel } from '../utils/relapseTaxonomy';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+
+// Confrontational recall tag from a receipt's write-time module-state snapshot.
+// Mirrors the server's priority (target → rule → archetype). Empty for legacy
+// receipts that predate snapshots.
+function snapshotTag(receipt) {
+  const s = receipt?.contextSnapshot;
+  if (!s) return '';
+  if (Array.isArray(s.activeTargets) && s.activeTargets.length) {
+    return `while "${s.activeTargets[0]}" was active`;
+  }
+  if (Array.isArray(s.violatedRules) && s.violatedRules.length) {
+    return `while breaking "${s.violatedRules[0]}"`;
+  }
+  if (s.dominantArchetype) {
+    return `while the ${resolveArchetypeLabel(s.dominantArchetype)} pattern was dominant`;
+  }
+  return '';
+}
 
 function formatDate(value) {
   try {
@@ -190,7 +209,12 @@ export default function TheRecord() {
                       <div key={`${id}-${i}`} className="flex items-start justify-between gap-3 border-l-2 border-[#2a2a2a] pl-3">
                         <div className="flex-1">
                           <p className="text-[#cfcfcf] text-sm italic">“{r.quote}”</p>
-                          {r.date && <p className="text-[#5a5a5a] text-[11px] mt-0.5">{r.date}</p>}
+                          {(r.date || snapshotTag(r)) && (
+                            <p className="text-[#5a5a5a] text-[11px] mt-0.5">
+                              {r.date}
+                              {snapshotTag(r) && <span className="text-[#6b5a3a]"> · {snapshotTag(r)}</span>}
+                            </p>
+                          )}
                         </div>
                         <button
                           onClick={() => removeReceipt(id, r.quote)}
