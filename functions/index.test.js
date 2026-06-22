@@ -12,7 +12,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
 
-const { buildBehavioralContextBlock, buildSystemPrompt, resolvePromptContext } = require("./index");
+const { buildBehavioralContextBlock, buildSystemPrompt, resolvePromptContext, parseOracleResponse } = require("./index");
 
 test("buildBehavioralContextBlock renders the journal language pattern when set", () => {
   const block = buildBehavioralContextBlock({
@@ -60,6 +60,60 @@ test("absent journal pattern produces no journal line but keeps other context", 
     !/journal/i.test(block),
     "no journal pattern line when journalLanguagePattern is unset"
   );
+});
+
+// ── Trust-gating of pattern-framed context lines ────────────────────────────
+
+test("below the trust threshold, archetype + journal-language lines are gated out", () => {
+  const bc = {
+    dominantRelapseArchetype: "the escape artist",
+    journalLanguagePattern: "commitment, pressure, decision",
+    recentRelapseCount: 2,
+  };
+  const block = buildBehavioralContextBlock(bc, 5); // 5 < TRUST_THRESHOLD (21)
+  assert.ok(!/Dominant relapse archetype/.test(block), "no archetype pattern claim below threshold");
+  assert.ok(!/Dominant journal language pattern/.test(block), "no journal-language pattern claim below threshold");
+  // A raw count is a fact, not a pattern — it stays.
+  assert.match(block, /Relapse entries in last 14 days: 2/);
+});
+
+test("at/above the trust threshold, archetype + journal-language lines render", () => {
+  const bc = {
+    dominantRelapseArchetype: "the escape artist",
+    journalLanguagePattern: "commitment, pressure, decision",
+  };
+  const block = buildBehavioralContextBlock(bc, 21);
+  assert.match(block, /Dominant relapse archetype \(last 14d\): «the escape artist»/);
+  assert.match(block, /Dominant journal language pattern \(last 7d\): «commitment, pressure, decision»/);
+});
+
+test("the gate reaches the live system prompt — thin user gets no archetype claim", () => {
+  const prompt = buildSystemPrompt(
+    "journal",
+    "stoic",
+    { dominantRelapseArchetype: "the escape artist", recentRelapseCount: 1 },
+    3, // below threshold
+    undefined
+  );
+  assert.ok(!/Dominant relapse archetype/.test(prompt), "thin-data prompt must not assert an archetype");
+});
+
+// ── Banned-tone output filter (live prose) ──────────────────────────────────
+
+test("parseOracleResponse strips banned encouragement phrases from live prose", () => {
+  const parsed = parseOracleResponse(
+    "You named the pattern plainly. I am proud of you for facing it. What changes tonight?"
+  );
+  assert.ok(!/proud of you/i.test(parsed.feedback), "banned phrase must be stripped from feedback");
+  assert.ok(/named the pattern plainly/.test(parsed.feedback), "surrounding prose is preserved");
+});
+
+test("parseOracleResponse strips banned tone from the extracted closing question too", () => {
+  const parsed = parseOracleResponse(
+    "The gap is visible. <closing_question>You got this — what rule do you enforce before midnight?</closing_question>"
+  );
+  assert.ok(!/you got this/i.test(parsed.feedback), "banned phrase gone from prose copy");
+  assert.ok(parsed.closingQuestion === null || !/you got this/i.test(parsed.closingQuestion), "banned phrase gone from closing question");
 });
 
 // ── Temporal correlations ──────────────────────────────────────────────────

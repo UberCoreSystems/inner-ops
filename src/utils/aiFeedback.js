@@ -366,39 +366,12 @@ const buildAntiRepetitionData = ({ userId, moduleName, entryText, themes, lenses
   };
 };
 
-const buildCrossModuleInstruction = (behavioralContext) => {
-  if (!behavioralContext) return '';
-  const parts = [];
-  // BER-194: pattern-referencing data requires the trust-gate entry count to be meaningful
-  const isHighData = (behavioralContext.totalEntryCount || 0) >= PATTERN_TRUST_MIN_ENTRIES;
-  if (behavioralContext.dominantRelapseArchetype && isHighData) {
-    parts.push(`Dominant relapse archetype (last 14d): ${behavioralContext.dominantRelapseArchetype}.`);
-  }
-  if (behavioralContext.recentRelapseCount > 0) {
-    parts.push(`Relapse entries in last 14 days: ${behavioralContext.recentRelapseCount}.`);
-  }
-  if (behavioralContext.activeKillTargets?.length) {
-    const targets = behavioralContext.activeKillTargets
-      .map(t => `${t.title} (streak: ${t.streak}, escapes: ${t.escapeCount})`)
-      .join('; ');
-    parts.push(`Active Kill List targets: ${targets}.`);
-  }
-  if (behavioralContext.violatedHardLessons?.length) {
-    const rules = behavioralContext.violatedHardLessons.map(l => `"${l.rule}"`).join(', ');
-    parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
-  }
-  if (behavioralContext.journalLanguagePattern) {
-    parts.push(`Dominant journal language pattern (last 7d): ${behavioralContext.journalLanguagePattern}.`);
-  }
-  // BER-137: identity direction contradiction detection
-  if (behavioralContext.identityDirection) {
-    parts.push(`User's stated identity direction: "${behavioralContext.identityDirection}". If the user's current behavior contradicts this stated direction, name the contradiction explicitly. Do not soften it.`);
-  }
-
-  if (parts.length === 0) return '';
-  return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join('\n')}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
-};
-
+// NOTE: cross-module behavioral context is assembled SERVER-SIDE in the Oracle
+// Cloud Function (functions/index.js buildBehavioralContextBlock) from the
+// `behavioralContext` object forwarded in userPrompt below. The client does not
+// author a system prompt — `callLLM` sends structured fields, not prose. The
+// former client-side `buildCrossModuleInstruction`/`systemPrompt` were never
+// sent and have been removed to prevent drift from the live server prompt.
 export const buildPrompt = ({
   moduleName,
   entryText,
@@ -409,11 +382,7 @@ export const buildPrompt = ({
   priorFeedbackSummary = '',
   userGoals = [],
   behavioralContext = null,
-  evasionNote = ''
 }) => {
-  const crossModuleInstruction = buildCrossModuleInstruction(behavioralContext);
-  const systemPrompt = `You are Inner Ops AI Feedback Engine. Voice: digital brother, direct, strategic, grounded.\nAvoid flattery, therapy tone, moralizing, and generic motivation.\nUse second-person voice.\nGround every claim in the user entry.\nPick 1-3 lenses only.\nNo fabricated quotes. Paraphrase thinkers only.\nIf context is missing, ask 1-2 pointed questions at the end.\nOutput strict JSON with keys: summary_mirror, core_pattern, chosen_lenses, analysis, prescriptions, journal_prompts, closing_charge.${crossModuleInstruction}${evasionNote}`;
-
   const userPrompt = {
     moduleName,
     entryText,
@@ -433,10 +402,7 @@ export const buildPrompt = ({
     priorFeedbackSummary
   };
 
-  return {
-    systemPrompt,
-    userPrompt
-  };
+  return { userPrompt };
 };
 
 const ensureSentenceCount = (text, min, max) => {
@@ -844,7 +810,6 @@ export const generateFeedback = async ({
   // entries under 20 chars internally, so this is safe for brief inputs.
   const evasionMarkers = detectEvasionMarkers(cleanEntry);
   const evasionBand = classifyEvasion(evasionMarkers);
-  const evasionNote = buildEvasionNote(evasionMarkers, evasionBand);
 
   // High-evasion entries harden the fallback frame to the closest in-catalog
   // "challenge" posture. Moderate/low keep the frame chosen by pickFrame.
@@ -872,7 +837,6 @@ export const generateFeedback = async ({
     priorFeedbackSummary,
     userGoals,
     behavioralContext,
-    evasionNote
   });
 
   try {

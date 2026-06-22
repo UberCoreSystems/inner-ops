@@ -116,6 +116,40 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
     const entryText = buildForecastEntryText(forecast.activeAntecedents, synthesis?.convergencePoint);
     setModalState({ isOpen: true, content: '', isLoading: true, entryCount: null });
 
+    // Write the dedupe marker BEFORE the (rate-limited) Oracle call. If the
+    // call or a later write fails, this convergence event is still recorded, so
+    // the card stays hidden and cannot trigger a second billed Oracle call.
+    const basePayload = {
+      [CONFRONTATION_FIELDS.CREATED_AT]: new Date().toISOString(),
+      [CONFRONTATION_FIELDS.SIGNAL_KEY]: forecast.signalKey,
+      [CONFRONTATION_FIELDS.SIGNAL_TYPE]: 'relapse_forecast',
+      [CONFRONTATION_FIELDS.SIGNAL_SNAPSHOT]: {
+        activeAntecedents: forecast.activeAntecedents.map((a) => ({
+          type: a.type, confidence: a.confidence, support: a.support,
+          lagMedian: a.lagMedian, lagUnit: a.lagUnit,
+        })),
+        convergenceScore: forecast.convergenceScore,
+      },
+      [CONFRONTATION_FIELDS.PROMPT]: entryText,
+      [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: null,
+      [CONFRONTATION_FIELDS.REACTION]: null,
+      [CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE]: null,
+      [CONFRONTATION_FIELDS.ORACLE_ENGAGED]: true,
+    };
+
+    let markerId = null;
+    try {
+      const saved = await writeData(COLLECTIONS.CONFRONTATIONS, basePayload);
+      if (saved?.id) {
+        markerId = saved.id;
+        setActiveDocId(saved.id);
+        // Feed the dedupe gate so the card hides for this convergence event.
+        setConfrontations((prev) => [{ ...basePayload, id: saved.id }, ...prev]);
+      }
+    } catch (err) {
+      logger.warn('RelapseForecastCard: confrontation marker write failed', err?.message);
+    }
+
     let response = '';
     try {
       const { text } = await generateAIFeedback({
@@ -132,32 +166,28 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
 
     setModalState({ isOpen: true, content: response, isLoading: false, entryCount: getCachedTotalEntryCount() });
 
-    const payload = {
-      [CONFRONTATION_FIELDS.CREATED_AT]: new Date().toISOString(),
-      [CONFRONTATION_FIELDS.SIGNAL_KEY]: forecast.signalKey,
-      [CONFRONTATION_FIELDS.SIGNAL_TYPE]: 'relapse_forecast',
-      [CONFRONTATION_FIELDS.SIGNAL_SNAPSHOT]: {
-        activeAntecedents: forecast.activeAntecedents.map((a) => ({
-          type: a.type, confidence: a.confidence, support: a.support,
-          lagMedian: a.lagMedian, lagUnit: a.lagUnit,
-        })),
-        convergenceScore: forecast.convergenceScore,
-      },
-      [CONFRONTATION_FIELDS.PROMPT]: entryText,
-      [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: response,
-      [CONFRONTATION_FIELDS.REACTION]: null,
-      [CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE]: null,
-      [CONFRONTATION_FIELDS.ORACLE_ENGAGED]: true,
-    };
+    // Persist the Oracle response onto the marker — or write a full doc if the
+    // marker never landed (so a transient first-write failure still records it).
     try {
-      const saved = await writeData(COLLECTIONS.CONFRONTATIONS, payload);
-      if (saved?.id) {
-        setActiveDocId(saved.id);
-        // Feed the dedupe gate so the card hides for this convergence event.
-        setConfrontations((prev) => [{ ...payload, id: saved.id }, ...prev]);
+      if (markerId) {
+        await updateData(COLLECTIONS.CONFRONTATIONS, markerId, {
+          [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: response,
+        });
+      } else {
+        const saved = await writeData(COLLECTIONS.CONFRONTATIONS, {
+          ...basePayload,
+          [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: response,
+        });
+        if (saved?.id) {
+          setActiveDocId(saved.id);
+          setConfrontations((prev) => [
+            { ...basePayload, [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: response, id: saved.id },
+            ...prev,
+          ]);
+        }
       }
     } catch (err) {
-      logger.warn('RelapseForecastCard: confrontation write failed', err?.message);
+      logger.warn('RelapseForecastCard: confrontation response write failed', err?.message);
     }
   };
 

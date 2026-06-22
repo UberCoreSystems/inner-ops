@@ -401,10 +401,19 @@ function renderTemporalCorrelations(temporalCorrelations) {
   );
 }
 
-function buildBehavioralContextBlock(behavioralContext) {
+function buildBehavioralContextBlock(behavioralContext, entryCount) {
   if (!behavioralContext || typeof behavioralContext !== "object") return "";
+  // Below the trust threshold there is not enough record to assert a "dominant"
+  // anything. Gate the two pattern-FRAMED lines (relapse archetype, journal
+  // language) the same way the temporal-correlation block is gated, so thin
+  // data can't yield a confident-sounding pattern claim that the trust-
+  // calibration block downstream then has to contradict. A raw relapse COUNT is
+  // a fact, not a pattern, so it stays. undefined entryCount → treat as
+  // high-data (the live caller always passes a number; this guard only matters
+  // for direct callers/tests).
+  const isHighData = entryCount == null || entryCount >= TRUST_THRESHOLD;
   const parts = [];
-  if (behavioralContext.dominantRelapseArchetype) {
+  if (isHighData && behavioralContext.dominantRelapseArchetype) {
     parts.push(`Dominant relapse archetype (last 14d): ${ctxField(behavioralContext.dominantRelapseArchetype)}.`);
   }
   if (behavioralContext.recentRelapseCount > 0) {
@@ -421,7 +430,7 @@ function buildBehavioralContextBlock(behavioralContext) {
     const rules = behavioralContext.violatedHardLessons.slice(0, MAX_CTX_ITEMS).map((l) => ctxField(l.rule)).join(", ");
     parts.push(`Hard Lessons rules being violated: ${rules}. Call these out by name if relevant.`);
   }
-  if (behavioralContext.journalLanguagePattern) {
+  if (isHighData && behavioralContext.journalLanguagePattern) {
     parts.push(`Dominant journal language pattern (last 7d): ${ctxField(behavioralContext.journalLanguagePattern)}.`);
   }
   if (behavioralContext.identityDirection) {
@@ -466,10 +475,10 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memo
   const toneNote = toneColors[tone] ? `\nTone color: ${toneColors[tone]}` : "";
   const isEmergency = normalizedModule === "emergency";
   const wordLimit = isEmergency ? "100–150 words." : "150–220 words.";
-  const behavioralContextBlock = buildBehavioralContextBlock(behavioralContext);
-
   // BER-167: trust calibration block — injected only when below threshold
   const count = typeof entryCount === "number" ? entryCount : 0;
+  const behavioralContextBlock = buildBehavioralContextBlock(behavioralContext, count);
+
   const trustCalibrationBlock = count < TRUST_THRESHOLD
     ? `\n\nTRUST CALIBRATION: This user has ${count} total behavioral entries logged — not enough data to support credible archetype or pattern claims. Adjust your confrontation frame accordingly:\n- Do NOT make claims about behavioral archetypes, dominant patterns, or systemic tendencies. You do not have enough signal.\n- DO identify the specific gap between what he committed to and what he actually did. Name it directly.\n- Frame: "You said X. You did Y. What happened?" — specific inconsistency confrontation, not pattern judgment.\n- Same directness. Same weight. Different attack vector.`
     : "";
@@ -867,6 +876,23 @@ function buildUserPrompt(entryText, userContext) {
   return prompt;
 }
 
+// ── Positioning: banned-tone output filter ───────────────────────────────────
+// The system prompts forbid therapeutic/encouragement phrasing, but prompt
+// instructions are not a guarantee. This is the OUTPUT-side enforcement applied
+// to every LIVE Oracle response (journal, emergency, Radar, Reckoning,
+// synthesis). Same regime as functions/memory.js (themes) and the fallback path
+// in src/utils/aiFeedback.js.
+const BANNED_TONE_REGEX =
+  /\b(proud of you|you got this|safe space|healing journey|you deserve|be gentle with yourself|everything happens for a reason)\b/gi;
+function stripBannedTone(text) {
+  if (typeof text !== "string") return "";
+  return text
+    .replace(BANNED_TONE_REGEX, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([.,;:])/g, "$1")
+    .trim();
+}
+
 const CLOSING_QUESTION_TAG_REGEX = /<closing_question>\s*([\s\S]*?)\s*<\/closing_question>/i;
 
 function extractClosingQuestionFromProse(prose) {
@@ -916,7 +942,13 @@ function parseOracleResponse(rawText) {
     closingQuestion = extractClosingQuestionFromProse(trimmed);
   }
 
-  return { feedback: trimmed, metacognitiveDepth, closingQuestion };
+  // Enforce the banned-tone ban on the live prose itself — prompt instructions
+  // alone are not a guarantee (this covers Radar/Reckoning/synthesis/journal).
+  return {
+    feedback: stripBannedTone(trimmed),
+    metacognitiveDepth,
+    closingQuestion: closingQuestion ? stripBannedTone(closingQuestion) : closingQuestion,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -984,6 +1016,12 @@ async function eraseUserData(db, uid) {
   // (_rateLimits, integrations, biometrics, memory) are removed recursively.
   await db.recursiveDelete(db.collection("userProfiles").doc(uid));
   await db.recursiveDelete(db.collection("users").doc(uid));
+  // Non-content admin subcollections (_rateLimits, integrations, biometrics)
+  // are purged by the recursive delete above but are not user-authored records,
+  // so they carry no count. Flag their removal for completeness. The deletion
+  // receipt UI renders only numeric fields, so this boolean is shown nowhere
+  // but is present in the returned manifest + server log.
+  summary.adminSubcollectionsPurged = true;
   return summary;
 }
 
@@ -1033,3 +1071,5 @@ exports.buildSystemPrompt = buildSystemPrompt;
 exports.eraseUserData = eraseUserData;
 // Prompt-context resolver exported for unit testing the registry.
 exports.resolvePromptContext = resolvePromptContext;
+// Response parser exported so the banned-tone output filter can be unit-tested.
+exports.parseOracleResponse = parseOracleResponse;

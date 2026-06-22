@@ -53,9 +53,14 @@ if (!hasJava(javaHome)) {
   }
 }
 
+// The rules suites (client-SDK, via rules-unit-testing) call clearFirestore()
+// between collections, so they must NOT run concurrently with the admin-SDK
+// deletion-receipt test. `&&` sequences them: rules first, then the erase test
+// seeds fresh data into the same emulator with no race.
 const command =
   'firebase emulators:exec --only firestore,storage --project=inner-ops-8ce36 ' +
-  '"node --test rules-tests/firestore.rules.test.mjs rules-tests/storage.rules.test.mjs"';
+  '"node --test rules-tests/firestore.rules.test.mjs rules-tests/storage.rules.test.mjs ' +
+  '&& node --test functions/eraseUserData.emulator.test.js"';
 
 const result = spawnSync(command, { stdio: 'inherit', shell: true });
 process.exit(result.status ?? 1);
