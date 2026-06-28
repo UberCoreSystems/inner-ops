@@ -12,7 +12,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
 
-const { buildBehavioralContextBlock, buildSystemPrompt, resolvePromptContext, parseOracleResponse } = require("./index");
+const { buildBehavioralContextBlock, buildSystemPrompt, buildSystemPromptBlocks, resolvePromptContext, parseOracleResponse } = require("./index");
 
 test("buildBehavioralContextBlock renders the journal language pattern when set", () => {
   const block = buildBehavioralContextBlock({
@@ -174,6 +174,84 @@ test("caps rendered correlations to the top 3 by confidence", () => {
   });
   const bulletCount = (block.match(/seen \d+x/g) || []).length;
   assert.strictEqual(bulletCount, 3, "only the top 3 correlations render");
+});
+
+// ── Prompt-cache segmentation (buildSystemPromptBlocks) ─────────────────────
+
+// Representative per-user / per-session inputs that produce a non-empty tail.
+const bcRich = { journalLanguagePattern: "commitment, pressure, decision", recentRelapseCount: 2 };
+const memRich = [{ label: "Journal", content: "Since ~April: externalizes every escape.", receipts: [{ date: "2026-01-02", quote: "not my fault" }] }];
+
+test("buildSystemPrompt output is unchanged: depth directive + trust block intact", () => {
+  const journal = buildSystemPrompt("journal", null, null, 50, []);
+  assert.match(journal, /METACOGNITIVE DEPTH CLASSIFICATION \(journal entries only\):/);
+  assert.match(journal, /DEPTH:Surface — the entry describes events or observations/);
+  const thin = buildSystemPrompt("journal", null, null, 3, []);
+  assert.match(thin, /TRUST CALIBRATION: This user has 3 total behavioral entries logged/);
+});
+
+test("segments recombine byte-for-byte into buildSystemPrompt for every tail path", () => {
+  for (const mod of ["journal", "killlist", "relapse", "hardlessons", "emergency"]) {
+    const full = buildSystemPrompt(mod, "stoic", bcRich, 50, memRich);
+    const { stable, dynamic } = buildSystemPromptBlocks(mod, "stoic", bcRich, 50, memRich);
+    assert.strictEqual(stable + dynamic, full, `${mod}: stable+dynamic must equal buildSystemPrompt`);
+  }
+});
+
+test("journal: per-user data lives in the dynamic suffix, never the cached prefix", () => {
+  const { stable, dynamic, cacheable } = buildSystemPromptBlocks("journal", "stoic", bcRich, 50, memRich);
+  assert.strictEqual(cacheable, true);
+  // Behavioral pattern + memory content must be in the dynamic (uncached) tail.
+  assert.ok(dynamic.includes("commitment, pressure, decision"), "behavioral pattern in dynamic");
+  assert.ok(dynamic.includes("externalizes every escape"), "memory theme in dynamic");
+  assert.ok(dynamic.includes("not my fault"), "memory receipt in dynamic");
+  // The cached prefix must carry none of it.
+  assert.ok(!stable.includes("commitment, pressure, decision"), "no behavioral data in cached prefix");
+  assert.ok(!stable.includes("externalizes every escape"), "no memory in cached prefix");
+  assert.ok(!stable.includes("not my fault"), "no receipt in cached prefix");
+});
+
+test("the cached prefix is byte-identical across users (cross-user shareable)", () => {
+  const userA = buildSystemPromptBlocks("journal", "stoic", bcRich, 50, memRich);
+  const userB = buildSystemPromptBlocks(
+    "journal", "stoic",
+    { journalLanguagePattern: "fear, delay, retreat", recentRelapseCount: 9 },
+    50,
+    [{ label: "Journal", content: "different theme", receipts: [{ date: "2026-02-02", quote: "later" }] }]
+  );
+  assert.strictEqual(userA.stable, userB.stable, "same module/tone → identical cached prefix across users");
+  assert.notStrictEqual(userA.dynamic, userB.dynamic, "per-user suffixes differ");
+});
+
+test("trust-calibration block (below threshold) stays in the dynamic suffix", () => {
+  const { stable, dynamic } = buildSystemPromptBlocks("journal", null, null, 3, []);
+  assert.ok(dynamic.includes("TRUST CALIBRATION: This user has 3 total"), "trust block in dynamic");
+  assert.ok(!stable.includes("TRUST CALIBRATION"), "trust block not in cached prefix");
+});
+
+test("emergency: behavioral tail split off; no memory block in emergency", () => {
+  const full = buildSystemPrompt("emergency", null, bcRich, 50, memRich);
+  const { stable, dynamic, cacheable } = buildSystemPromptBlocks("emergency", null, bcRich, 50, memRich);
+  assert.strictEqual(cacheable, true);
+  assert.strictEqual(stable + dynamic, full);
+  assert.ok(!dynamic.includes("externalizes every escape"), "emergency injects no memory");
+});
+
+test("extraction templates with embedded per-user data are not cacheable", () => {
+  for (const mod of ["killlistextraction", "killintentionsuggest", "targetframingcritique", "relapsedetection"]) {
+    const { stable, dynamic, cacheable } = buildSystemPromptBlocks(mod, null, bcRich, 50, []);
+    assert.strictEqual(cacheable, false, `${mod} must not be cached (per-user data mid-prompt)`);
+    assert.strictEqual(dynamic, "");
+    assert.strictEqual(stable, buildSystemPrompt(mod, null, bcRich, 50, []), `${mod} stable === full`);
+  }
+});
+
+test("fully-static templates are cacheable with no dynamic tail", () => {
+  for (const mod of ["entryclassification", "lessonextraction", "morningbrief"]) {
+    const { dynamic, cacheable } = buildSystemPromptBlocks(mod, null, null, 50, []);
+    assert.strictEqual(cacheable, true, `${mod} cacheable`);
+    assert.strictEqual(dynamic, "", `${mod} has no dynamic tail`);
+  }
 });
 
 // ── promptContextKey registry: relapse_forecast ────────────────────────────

@@ -53,7 +53,7 @@ function MirrorStack({
         className="oura-card p-6 border"
         style={{ borderColor: 'rgba(77, 166, 255, 0.15)' }}
       >
-        <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Mirror</h3>
+        <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Oracle</h3>
 
         {reading.direction && (
           <div>
@@ -144,7 +144,7 @@ function SeededMirror({ preview }) {
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
       <div className="oura-card p-6 border" style={{ borderColor: 'rgba(77, 166, 255, 0.15)' }}>
         <div className="flex items-baseline justify-between mb-5">
-          <h3 className="text-[#858585] text-xs uppercase tracking-widest">Mirror</h3>
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest">Oracle</h3>
           <span className="text-[#7a7a7a] text-[10px] uppercase tracking-widest">Preview</span>
         </div>
 
@@ -160,7 +160,7 @@ function SeededMirror({ preview }) {
         {preview.lines.length > 0 && (
           <div className={preview.direction ? 'mt-5 pt-5 border-t border-[#1a1a1a]' : ''}>
             <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-3">
-              What the mirror will read
+              What the Oracle will read
             </p>
             <div className="space-y-3">
               {preview.lines.map((line, i) => (

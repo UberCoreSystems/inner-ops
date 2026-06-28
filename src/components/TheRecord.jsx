@@ -128,7 +128,7 @@ export default function TheRecord() {
       <div className="mb-5">
         <h2 className="text-lg font-light text-white">The Record</h2>
         <p className="text-[#858585] text-xs mt-1">
-          What the mirror has on record — your own dated words and the patterns it has logged.
+          What the Oracle has on record — your own dated words and the patterns it has logged.
           Edit it and it argues from your edit. Wipe it and it starts blind.
         </p>
       </div>
@@ -249,7 +249,7 @@ export default function TheRecord() {
             ) : (
               <div className="space-y-3">
                 <p className="text-white text-sm">
-                  This deletes every memory the mirror holds. It cannot be recovered — only rebuilt from what you write next.
+                  This deletes every memory the Oracle holds. It cannot be recovered — only rebuilt from what you write next.
                 </p>
                 <label htmlFor="wipe-confirm" className="block text-[#858585] text-xs">
                   Type WIPE to confirm

@@ -79,6 +79,17 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // Server-managed token/cost telemetry — one row per Anthropic call
+      // (_usage) and a per-month rollup (_usageRollups). Written only by the
+      // Admin SDK in Cloud Functions; all client access denied. Contains token
+      // counts + derived cost + metadata only — never entry/prompt text.
+      match /_usage/{docId} {
+        allow read, write: if false;
+      }
+      match /_usageRollups/{docId} {
+        allow read, write: if false;
+      }
+
       // Third-party integration tokens (e.g. Oura OAuth). Currently no
       // server-side writer is wired up; this `deny` is defense in depth so
       // that even if a stale client renders the Connect Oura button the

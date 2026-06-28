@@ -17,6 +17,7 @@ const {
 
 const { checkAndIncrementOracleLimit } = require("./rateLimit");
 const memory = require("./memory");
+const usage = require("./usage");
 
 // Initialize the admin app at module load. The prior lazy guard checked
 // `getApps().length === 0`, but the v2 Cloud Functions runtime can register
@@ -180,11 +181,22 @@ exports.oracle = onCall(
       console.error("oracle.memory.fetch.error", { name: error.name });
     }
 
-    const baseSystemPrompt = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks);
+    // Split into a STABLE cacheable prefix + DYNAMIC per-user/per-session suffix.
+    const blocks = buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks);
     const promptContextFragment = resolvePromptContext(promptContextKey, promptContextParams);
-    const systemPrompt = promptContextFragment
-      ? `${baseSystemPrompt}\n\n${promptContextFragment}`
-      : baseSystemPrompt;
+    // The registry fragment is per-call-type (and may carry clamped user text),
+    // so it joins the dynamic suffix — never the cached prefix.
+    const dynamicSuffix = `${blocks.dynamic}${promptContextFragment ? `\n\n${promptContextFragment}` : ""}`;
+    // When cacheable, send `system` as content blocks with a cache_control
+    // breakpoint at the END of the stable prefix; the dynamic suffix is a second,
+    // uncached block. Otherwise send the byte-identical plain string. Either way,
+    // stable + dynamicSuffix reproduces the exact prior system prompt verbatim.
+    const systemPrompt = blocks.cacheable
+      ? [
+          { type: "text", text: blocks.stable, cache_control: { type: "ephemeral" } },
+          ...(dynamicSuffix ? [{ type: "text", text: dynamicSuffix }] : []),
+        ]
+      : `${blocks.stable}${dynamicSuffix}`;
     const userPrompt = buildUserPrompt(entryText, userContext);
 
     try {
@@ -216,6 +228,14 @@ exports.oracle = onCall(
         posture: parsed.metacognitiveDepth || null,
       });
 
+      // Fire-and-forget cost telemetry — adds no latency, fails silently.
+      usage.logUsage({
+        uid,
+        model: "claude-sonnet-4-6",
+        callType: promptContextKey || normalizedModuleForLimit || "oracle",
+        usage: message.usage,
+      });
+
       return parsed;
     } catch (error) {
       // Re-surface known HttpsError instances (e.g. from rate limiter).
@@ -235,6 +255,21 @@ exports.oracle = onCall(
     }
   }
 );
+
+// Static follow-up system prompt — identical across every user and call, so it
+// is sent as a single cache_control prefix block (no per-user data here).
+const FOLLOWUP_SYSTEM_PROMPT = `You are the Oracle — a direct, grounded advisor continuing a conversation.
+
+The user responded to your initial feedback. Read their response carefully before choosing your posture.
+
+If they pushed back or deflected → go one level deeper. Name what they are still protecting.
+If they agreed and added insight → build on what they said. Extend their thinking. Show them the next step.
+If they shared something vulnerable or new → receive it. Do not challenge vulnerability with more pressure.
+If they asked a genuine question → answer it directly. No redirecting it back to them.
+
+Do NOT repeat what you already said. Do NOT offer generic encouragement.
+Be specific. Reference their exact words. Max 3 sentences.
+No emojis. No therapeutic language. Never name a philosopher or tradition.`;
 
 /**
  * OracleFollowUp — second-layer reflection response.
@@ -285,18 +320,11 @@ exports.oracleFollowUp = onCall(
       const message = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 400,
-        system: `You are the Oracle — a direct, grounded advisor continuing a conversation.
-
-The user responded to your initial feedback. Read their response carefully before choosing your posture.
-
-If they pushed back or deflected → go one level deeper. Name what they are still protecting.
-If they agreed and added insight → build on what they said. Extend their thinking. Show them the next step.
-If they shared something vulnerable or new → receive it. Do not challenge vulnerability with more pressure.
-If they asked a genuine question → answer it directly. No redirecting it back to them.
-
-Do NOT repeat what you already said. Do NOT offer generic encouragement.
-Be specific. Reference their exact words. Max 3 sentences.
-No emojis. No therapeutic language. Never name a philosopher or tradition.`,
+        // Fully static across all users/calls → one cached prefix block. The
+        // per-user content (entry, feedback, response) rides in `messages`,
+        // uncached. (Below the 2048-token Sonnet floor today, so this no-ops
+        // until the prompt grows; harmless and future-proof.)
+        system: [{ type: "text", text: FOLLOWUP_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
         messages: [
           {
             role: "user",
@@ -317,6 +345,14 @@ Continue the conversation. Match your posture to what they actually said.`,
         inputTokens: message.usage?.input_tokens ?? null,
         outputTokens: message.usage?.output_tokens ?? null,
         latencyMs: Date.now() - startedAt,
+      });
+
+      // Fire-and-forget cost telemetry — adds no latency, fails silently.
+      usage.logUsage({
+        uid,
+        model: "claude-sonnet-4-6",
+        callType: "followup",
+        usage: message.usage,
       });
 
       return { followUp: message.content[0]?.text || "" };
@@ -444,6 +480,31 @@ function buildBehavioralContextBlock(behavioralContext, entryCount) {
   return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join("\n")}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
 }
 
+// Trust-calibration block — injected only below the record-density threshold.
+// It interpolates the entry count, so it is per-user and belongs in the dynamic,
+// uncached suffix. Extracted to a single source so buildSystemPromptBlocks can
+// reconstruct the exact same bytes and split them off the assembled prompt.
+function buildTrustCalibrationBlock(count) {
+  const n = typeof count === "number" ? count : 0;
+  return n < TRUST_THRESHOLD
+    ? `\n\nTRUST CALIBRATION: This user has ${n} total behavioral entries logged — not enough data to support credible archetype or pattern claims. Adjust your confrontation frame accordingly:\n- Do NOT make claims about behavioral archetypes, dominant patterns, or systemic tendencies. You do not have enough signal.\n- DO identify the specific gap between what he committed to and what he actually did. Name it directly.\n- Frame: "You said X. You did Y. What happened?" — specific inconsistency confrontation, not pattern judgment.\n- Same directness. Same weight. Different attack vector.`
+    : "";
+}
+
+// Journal-only metacognitive depth directive. Constant text appended at the very
+// end of the journal system prompt; extracted so buildSystemPromptBlocks rebuilds
+// the identical dynamic tail. Leads with a blank line, matching its inline use.
+const JOURNAL_DEPTH_DIRECTIVE = `
+
+METACOGNITIVE DEPTH CLASSIFICATION (journal entries only):
+Before your response, output exactly one classification line as the very first line:
+DEPTH:Surface — the entry describes events or observations ("what happened")
+DEPTH:Pattern — the entry identifies recurring dynamics ("this keeps happening because...")
+DEPTH:Identity — the entry addresses structural self-understanding ("this is how I operate")
+
+Output only one of: DEPTH:Surface, DEPTH:Pattern, or DEPTH:Identity.
+Then a blank line. Then your prose response. Do not mention the depth in your prose.`;
+
 function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks) {
   // Normalize: 'killList', 'Kill List', 'Kill_List' → 'killlist'
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -479,9 +540,7 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memo
   const count = typeof entryCount === "number" ? entryCount : 0;
   const behavioralContextBlock = buildBehavioralContextBlock(behavioralContext, count);
 
-  const trustCalibrationBlock = count < TRUST_THRESHOLD
-    ? `\n\nTRUST CALIBRATION: This user has ${count} total behavioral entries logged — not enough data to support credible archetype or pattern claims. Adjust your confrontation frame accordingly:\n- Do NOT make claims about behavioral archetypes, dominant patterns, or systemic tendencies. You do not have enough signal.\n- DO identify the specific gap between what he committed to and what he actually did. Name it directly.\n- Frame: "You said X. You did Y. What happened?" — specific inconsistency confrontation, not pattern judgment.\n- Same directness. Same weight. Different attack vector.`
-    : "";
+  const trustCalibrationBlock = buildTrustCalibrationBlock(count);
 
   // Morning Brief — operator-cadence daily readout.
   // Single paragraph, 3-5 sentences, no line breaks within it. No greeting,
@@ -808,16 +867,59 @@ Hard rules:
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
 - When you close with a question, wrap that single closing question inline in <closing_question>...</closing_question> tags. The tags must surround the question text exactly once. The question still reads as part of your prose; the tags are markers for downstream processing only.
-- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${normalizedModule === 'journal' ? `
+- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${normalizedModule === 'journal' ? JOURNAL_DEPTH_DIRECTIVE : ''}`;
+}
 
-METACOGNITIVE DEPTH CLASSIFICATION (journal entries only):
-Before your response, output exactly one classification line as the very first line:
-DEPTH:Surface — the entry describes events or observations ("what happened")
-DEPTH:Pattern — the entry identifies recurring dynamics ("this keeps happening because...")
-DEPTH:Identity — the entry addresses structural self-understanding ("this is how I operate")
+// Split the assembled system prompt into a STABLE cacheable prefix and a DYNAMIC
+// (per-user/per-session) suffix, for Anthropic prompt caching. Output is byte-
+// equivalent to buildSystemPrompt: stable + dynamic === buildSystemPrompt(...).
+//
+// The dynamic tail (behavioral context + trust calibration + memory + the journal
+// depth directive) is reconstructed from the SAME single-source helpers that
+// build it, then sliced off the end of the full prompt. The endsWith guard means
+// any drift degrades safely to "not cacheable" rather than corrupting the prompt.
+//
+// `cacheable` is false for templates that interpolate per-user data MID-prompt
+// (the extraction prompts) — their prefix is not user-identical, so we never put
+// a cache breakpoint on it. Returns { stable, dynamic, cacheable }.
+function buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks) {
+  const full = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks);
+  const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
+  const count = typeof entryCount === "number" ? entryCount : 0;
 
-Output only one of: DEPTH:Surface, DEPTH:Pattern, or DEPTH:Identity.
-Then a blank line. Then your prose response. Do not mention the depth in your prose.` : ''}`;
+  // Templates that embed per-user data (active targets, archetype) inside the
+  // body — never cache; send as a plain string, byte-identical to today.
+  const PER_USER_TEMPLATES = new Set([
+    "killlistextraction", "killintentionsuggest", "targetframingcritique", "relapsedetection",
+  ]);
+  if (PER_USER_TEMPLATES.has(normalizedModule)) {
+    return { stable: full, dynamic: "", cacheable: false };
+  }
+
+  // Fully-static templates: the whole prompt is the stable prefix, no dynamic tail.
+  const STATIC_TEMPLATES = new Set(["morningbrief", "entryclassification", "lessonextraction"]);
+  if (STATIC_TEMPLATES.has(normalizedModule)) {
+    return { stable: full, dynamic: "", cacheable: true };
+  }
+
+  // Main Oracle persona (journal / killlist / relapse / hardlessons / default)
+  // and the emergency prompt append a per-user/per-session tail.
+  const behavioralContextBlock = buildBehavioralContextBlock(behavioralContext, count);
+  const trustCalibrationBlock = buildTrustCalibrationBlock(count);
+  const isEmergency = normalizedModule === "emergency";
+  const memoryBlock = isEmergency ? "" : memory.buildMemoryBlock(memoryBlocks);
+  const depthDirective = normalizedModule === "journal" ? JOURNAL_DEPTH_DIRECTIVE : "";
+
+  const dynamic = isEmergency
+    ? `${behavioralContextBlock}${trustCalibrationBlock}`
+    : `${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${depthDirective}`;
+
+  if (dynamic && full.endsWith(dynamic)) {
+    return { stable: full.slice(0, full.length - dynamic.length), dynamic, cacheable: true };
+  }
+  // No per-user/per-session tail this call (or a guard mismatch) → the whole
+  // prompt is stable. Still cacheable as a single prefix.
+  return { stable: full, dynamic: "", cacheable: true };
 }
 
 const DRIVER_LABELS = {
@@ -1062,13 +1164,20 @@ exports.updateMemory = memory.updateMemory;
 exports.editMemory = memory.editMemory;
 exports.deleteMemoryReceipt = memory.deleteMemoryReceipt;
 exports.wipeMemory = memory.wipeMemory;
+// Read-only provenance for the Oracle modal: the validated receipts the Oracle
+// reasons from (Eng #3 — "what the Oracle has on record").
+exports.getOnRecord = memory.getOnRecord;
 
 // Pure prompt-assembly helpers exported for unit testing. Not registered as
 // Cloud Functions; safe to require() from a node:test harness.
 exports.buildBehavioralContextBlock = buildBehavioralContextBlock;
 exports.buildSystemPrompt = buildSystemPrompt;
+exports.buildSystemPromptBlocks = buildSystemPromptBlocks;
 // Erase logic exported for emulator-backed verification of the deletion receipt.
 exports.eraseUserData = eraseUserData;
+// Canonical list of owner-scoped collections wiped on account deletion. Exported
+// so the deletion-receipt test can assert every tracked collection is reported.
+exports.USER_DATA_COLLECTIONS = USER_DATA_COLLECTIONS;
 // Prompt-context resolver exported for unit testing the registry.
 exports.resolvePromptContext = resolvePromptContext;
 // Response parser exported so the banned-tone output filter can be unit-tested.

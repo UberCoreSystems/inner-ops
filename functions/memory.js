@@ -29,6 +29,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const AnthropicSDK = require("@anthropic-ai/sdk");
+const usage = require("./usage");
 
 const Anthropic = AnthropicSDK.default ?? AnthropicSDK;
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
@@ -371,6 +372,7 @@ async function callHaiku(client, systemPrompt, userPayload, maxTokens) {
     text: message.content?.[0]?.text || "",
     inputTokens: message.usage?.input_tokens ?? null,
     outputTokens: message.usage?.output_tokens ?? null,
+    usage: message.usage,
   };
 }
 
@@ -414,9 +416,11 @@ async function refreshGlobal(db, uid, client, logBase) {
   const { payload, allReceipts } = buildGlobalUserPayload(moduleDocs);
   if (!payload.trim()) return; // nothing to synthesize yet
 
-  const { text, inputTokens, outputTokens } = await callHaiku(
+  const { text, inputTokens, outputTokens, usage: globalUsage } = await callHaiku(
     client, GLOBAL_SYSTEM_PROMPT, payload, 900
   );
+  // Fire-and-forget cost telemetry — adds no latency, fails silently.
+  usage.logUsage({ uid, model: HAIKU_MODEL, callType: "memory:global", usage: globalUsage });
   const parsed = parseUpdaterJson(text);
   if (!parsed || typeof parsed.content !== "string") return;
 
@@ -510,6 +514,8 @@ const updateMemory = onCall(
       );
       inputTokens = res.inputTokens; outputTokens = res.outputTokens;
       parsed = parseUpdaterJson(res.text);
+      // Fire-and-forget cost telemetry — adds no latency, fails silently.
+      usage.logUsage({ uid, model: HAIKU_MODEL, callType: "memory:module", usage: res.usage });
     } catch (error) {
       console.error("memory.haiku.error", { name: error.name, status: error.status });
       throw new HttpsError("internal", "Memory update unavailable.");
@@ -726,14 +732,65 @@ function buildMemoryBlock(blocks) {
   return `\n\nMEMORY — your accumulated observations and the user's own dated words:\n${body}\n\nThese are receipts, not summaries. Use a receipt when it exposes a contradiction with the current entry — quote it exactly, with its date. If memory conflicts with what the user writes today, name the conflict; do not silently prefer either. Do not fabricate or alter a quote. If no receipt is relevant, ignore this section.`;
 }
 
+/**
+ * Flatten injected memory blocks into a client-safe provenance list — the
+ * user's own substring-VALIDATED words that the Oracle reasons from, shown at
+ * the point of feedback ("what the Oracle has on record"). Strips internal
+ * fields (sourceEntryId, raw contextSnapshot) so nothing but the validated
+ * quote, its date, and the source-module label crosses the wire. Deduped by
+ * quote, capped. This is the only honest per-call provenance: the live feedback
+ * prose is prompt-guarded, but these receipts are validation-guarded at write
+ * time (see reconcileReceipts), so they can be shown as "your words" safely.
+ */
+function collectReceiptsForClient(blocks, cap = MEMORY_MAX_RECEIPTS) {
+  if (!Array.isArray(blocks)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const b of blocks) {
+    for (const r of Array.isArray(b?.receipts) ? b.receipts : []) {
+      const quote = typeof r?.quote === "string" ? r.quote.trim() : "";
+      if (!quote) continue;
+      const key = quote.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ quote, date: r.date || null, source: b.label || null });
+      if (out.length >= cap) return out;
+    }
+  }
+  return out;
+}
+
+// getOnRecord — read-only provenance for the Oracle modal. Returns the same
+// validated receipts the Oracle is injected with (global + the entry's module),
+// flattened + stripped for display. No LLM call, no rate-limit draw; a plain
+// owner-scoped read of the user's own memory. Degrades to [] on any failure so
+// the modal simply omits the panel — never blocks feedback.
+const getOnRecord = onCall(
+  { region: "us-central1", timeoutSeconds: 15 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+    const moduleName = typeof request.data?.moduleName === "string" ? request.data.moduleName : "";
+    try {
+      const blocks = await fetchMemoryForInjection(uid, moduleName);
+      return { onRecord: collectReceiptsForClient(blocks) };
+    } catch (error) {
+      console.error("getOnRecord.error", { name: error.name });
+      return { onRecord: [] };
+    }
+  }
+);
+
 module.exports = {
   HAIKU_MODEL,
   updateMemory,
   editMemory,
   deleteMemoryReceipt,
   wipeMemory,
+  getOnRecord,
   fetchMemoryForInjection,
   buildMemoryBlock,
+  collectReceiptsForClient,
   // exported for unit tests
   reconcileReceipts,
   parseUpdaterJson,

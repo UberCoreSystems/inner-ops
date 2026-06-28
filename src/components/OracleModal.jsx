@@ -48,6 +48,21 @@ async function callOracleRaw(entryText, promptContext, entryModuleName) {
   }
 }
 
+// Eng #3: fetch the validated receipts the Oracle reasons from (global + this
+// entry's module), for provenance display. Read-only, server-assembled, no LLM
+// call. Degrades to [] so the modal simply omits the panel on any failure.
+async function fetchOnRecord(moduleName) {
+  try {
+    const functions = getFunctions();
+    const fn = httpsCallable(functions, 'getOnRecord', { timeout: 15000 });
+    const result = await fn({ moduleName: moduleName || '' });
+    return Array.isArray(result.data?.onRecord) ? result.data.onRecord : [];
+  } catch (err) {
+    logger.warn('getOnRecord failed:', err?.message);
+    return [];
+  }
+}
+
 const OracleModal = ({
   isOpen,
   onClose,
@@ -85,6 +100,8 @@ const OracleModal = ({
   const [followUpResponse, setFollowUpResponse] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpUsed, setFollowUpUsed] = useState(false);
+  // Eng #3: validated receipts the Oracle reasons from ("on record" provenance)
+  const [onRecord, setOnRecord] = useState([]);
 
   useEffect(() => {
     if (isOpen && target && moduleName && !feedback && !content) {
@@ -105,11 +122,16 @@ const OracleModal = ({
       setDisplayDepth(metacognitiveDepth);
       // BER-200: resolve confrontation criterion for this user
       setResolvedCriterion(null);
+      // Eng #3: reset, then fetch the validated receipts on record for this entry's module
+      setOnRecord([]);
       try {
         const uid = getAuth().currentUser?.uid;
         if (uid) {
           resolveTriggeredCriterion(uid)
             .then((result) => setResolvedCriterion(result))
+            .catch(() => {});
+          fetchOnRecord(entryModuleName || moduleName)
+            .then((items) => setOnRecord(items))
             .catch(() => {});
         }
       } catch { /* no-op */ }
@@ -324,6 +346,29 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               <div className="text-[#e0e0e0] text-[15px] leading-[1.75] font-light">
                 {currentFeedback || 'The Oracle awaits your query...'}
               </div>
+
+              {/* Eng #3: ON RECORD — the validated receipts the Oracle reasons from.
+                  These are substring-validated at write time (never fabricated),
+                  so they are shown as the user's own words. Omitted entirely when
+                  there is no record yet (cold start). */}
+              {onRecord.length > 0 && (
+                <div className="border-t border-[#1a1a1a] pt-5">
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-1">On record</div>
+                  <div className="text-[#6f6f6f] text-[11px] mb-3">Your own words, validated against your entries.</div>
+                  <div className="space-y-2">
+                    {onRecord.map((r, i) => (
+                      <div key={i} className="border-l-2 border-[#2a2a2a] pl-3">
+                        <p className="text-[#c0c0c0] text-sm leading-relaxed italic">“{r.quote}”</p>
+                        {(r.date || r.source) && (
+                          <p className="text-[#6f6f6f] text-[10px] uppercase tracking-widest mt-1">
+                            {[r.date, r.source].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Follow-up response */}
               {followUpResponse && (

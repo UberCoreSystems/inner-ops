@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { computeRelapseForecast } from '../utils/relapseForecast';
+import { composeConvergenceCountdown, countdownLine } from '../utils/composeConvergenceCountdown';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { readUserData, writeData, updateData } from '../utils/firebaseUtils';
@@ -38,13 +39,16 @@ function antecedentPhrase(a) {
   return `${label} (typically precedes by ~${n} ${unit})`;
 }
 
-function buildForecastEntryText(activeAntecedents, convergencePoint) {
+function buildForecastEntryText(activeAntecedents, convergencePoint, countdownText) {
   const phrases = activeAntecedents.map(antecedentPhrase).filter(Boolean);
   const list = phrases.join('; ');
   const conv = convergencePoint ? ` Standing convergence: ${convergencePoint}` : '';
+  // The countdown numbers ride in the entry so the relapse_forecast posture can
+  // cite them (the template forbids inventing numbers not present in the entry).
+  const cd = countdownText ? ` ${countdownText}` : '';
   return (
     `Pre-failure check. These antecedents of my past relapses are active right now: ${list}.` +
-    `${conv} No relapse has happened yet — this is the window before it.`
+    `${cd}${conv} No relapse has happened yet — this is the window before it.`
   );
 }
 
@@ -112,8 +116,23 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
     return `${phrases.length} known antecedent${phrases.length === 1 ? '' : 's'} of your past relapses ${phrases.length === 1 ? 'is' : 'are'} active right now: ${phrases.join('; ')}.`;
   }, [forecast]);
 
+  // Convergence countdown — the forward projection ("the window opens in ~D days")
+  // derived from each active antecedent's last occurrence + historical lead time.
+  const countdown = useMemo(
+    () => composeConvergenceCountdown(forecast, { now: Date.now() }),
+    [forecast]
+  );
+  const countdownText = useMemo(() => countdownLine(countdown), [countdown]);
+
+  // Built once so the initial confrontation and any regen/follow-up cite the same
+  // antecedents + countdown numbers.
+  const forecastEntryText = useMemo(
+    () => buildForecastEntryText(forecast.activeAntecedents, synthesis?.convergencePoint, countdownText),
+    [forecast, synthesis, countdownText]
+  );
+
   const handleConfront = async () => {
-    const entryText = buildForecastEntryText(forecast.activeAntecedents, synthesis?.convergencePoint);
+    const entryText = forecastEntryText;
     setModalState({ isOpen: true, content: '', isLoading: true, entryCount: null });
 
     // Write the dedupe marker BEFORE the (rate-limited) Oracle call. If the
@@ -224,7 +243,10 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
                 </svg>
               </button>
             </div>
-            <p className="text-white text-sm leading-relaxed mb-5">{headline}</p>
+            <p className="text-white text-sm leading-relaxed mb-3">{headline}</p>
+            {countdownText && (
+              <p className="text-[#b45309] text-xs leading-relaxed mb-5">{countdownText}</p>
+            )}
             <button
               onClick={handleConfront}
               disabled={modalState.isLoading}
@@ -242,7 +264,7 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
         content={modalState.content}
         isLoading={modalState.isLoading}
         moduleName="oracle"
-        entryText={modalState.isOpen ? headline : ''}
+        entryText={modalState.isOpen ? forecastEntryText : ''}
         entryModuleName="oracle"
         entryCount={modalState.entryCount}
         onReaction={handleReaction}

@@ -270,6 +270,38 @@ describe('admin-only: users/{uid}/_rateLimits', () => {
   });
 });
 
+describe('admin-only: users/{uid}/_usage + _usageRollups (cost telemetry)', () => {
+  before(clear);
+
+  it('owner: read _usage row denied', async () => {
+    await seed('users', [OWNER, '_usage', 'row1'], { uid: OWNER, costUSD: 0.01 });
+    await assertFails(getDoc(doc(ownerDb, 'users', OWNER, '_usage', 'row1')));
+  });
+
+  it('owner: write _usage row denied (cannot author cost rows)', async () => {
+    await assertFails(setDoc(doc(ownerDb, 'users', OWNER, '_usage', 'row1'), { uid: OWNER, costUSD: 0 }));
+  });
+
+  it('owner: read _usageRollups denied', async () => {
+    await seed('users', [OWNER, '_usageRollups', '2026-06'], { uid: OWNER, costUSD: 1.5 });
+    await assertFails(getDoc(doc(ownerDb, 'users', OWNER, '_usageRollups', '2026-06')));
+  });
+
+  it('owner: write _usageRollups denied', async () => {
+    await assertFails(setDoc(doc(ownerDb, 'users', OWNER, '_usageRollups', '2026-06'), { uid: OWNER, costUSD: 0 }));
+  });
+
+  it('non-owner: read another user\'s rollup denied', async () => {
+    await seed('users', [OWNER, '_usageRollups', '2026-06'], { uid: OWNER, costUSD: 1.5 });
+    await assertFails(getDoc(doc(otherDb, 'users', OWNER, '_usageRollups', '2026-06')));
+  });
+
+  it('unauthenticated: read _usage denied', async () => {
+    await seed('users', [OWNER, '_usage', 'row1'], { uid: OWNER, costUSD: 0.01 });
+    await assertFails(getDoc(doc(anonDb, 'users', OWNER, '_usage', 'row1')));
+  });
+});
+
 describe('admin-only: users/{uid}/integrations (OAuth tokens)', () => {
   before(clear);
 

@@ -68,6 +68,12 @@ export function computeRelapseForecast({
     return { status, fired: false, activeAntecedents: [], convergenceScore: 0, signalKey: null };
   }
 
+  // Total distinct relapse antecedents the engine knows about — the "K" in the
+  // convergence countdown's "M of K antecedents active" framing (additive field).
+  const knownRelapseAntecedents = correlations.filter(
+    (c) => c.consequent === RELAPSE_CONSEQUENT
+  ).length;
+
   // Most-recent event per type (events are time-sorted ascending).
   const lastByType = new Map();
   for (const e of events) lastByType.set(e.type, e);
@@ -96,7 +102,7 @@ export function computeRelapseForecast({
   }
 
   if (active.length === 0) {
-    return { status: 'ok', fired: false, activeAntecedents: [], convergenceScore: 0, signalKey: null };
+    return { status: 'ok', fired: false, activeAntecedents: [], convergenceScore: 0, signalKey: null, knownRelapseAntecedents };
   }
 
   // False-positive guard: a relapse already happened inside the lead window —
@@ -111,6 +117,7 @@ export function computeRelapseForecast({
       convergenceScore: 0,
       signalKey: null,
       suppressedBy: 'recent-relapse',
+      knownRelapseAntecedents,
     };
   }
 
@@ -124,7 +131,7 @@ export function computeRelapseForecast({
   const fired = signalDelta === 'improving' ? hasStrongSingle : hasMultiple || hasStrongSingle;
 
   if (!fired) {
-    return { status: 'ok', fired: false, activeAntecedents: active, convergenceScore, signalKey: null };
+    return { status: 'ok', fired: false, activeAntecedents: active, convergenceScore, signalKey: null, knownRelapseAntecedents };
   }
 
   // Episode-specific dedupe key: the active antecedent set + each one's
@@ -134,5 +141,5 @@ export function computeRelapseForecast({
     'forecast_' +
     active.map((a) => `${a.type}:${a.triggeringDayIndex}`).sort().join('|');
 
-  return { status: 'ok', fired: true, activeAntecedents: active, convergenceScore, signalKey };
+  return { status: 'ok', fired: true, activeAntecedents: active, convergenceScore, signalKey, knownRelapseAntecedents };
 }

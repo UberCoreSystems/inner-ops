@@ -4,7 +4,8 @@
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "usage": "node scripts/readUsage.js"
   },
   "engines": {
     "node": "20"

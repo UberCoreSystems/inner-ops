@@ -17,6 +17,7 @@ const {
   stripBannedTone,
   buildMemoryBlock,
   buildContextSnapshot,
+  collectReceiptsForClient,
 } = require("./memory");
 
 const ENTRY = {
@@ -201,4 +202,53 @@ test("buildContextSnapshot returns null when there is nothing to capture", async
   const db = fakeDb({ killTargets: [], relapseEntries: [], hardLessons: [] });
   const s = await buildContextSnapshot(db, "u1", Date.now());
   assert.equal(s, null);
+});
+
+// ── collectReceiptsForClient — the wire-safe provenance projection (Eng #3) ──
+// Guards what crosses to the OracleModal "on record" panel: only the validated
+// quote + date + source label, deduped and capped. Internal fields must never leak.
+test("collectReceiptsForClient projects quote/date/source and strips internal fields", () => {
+  const blocks = [
+    {
+      label: "Journal",
+      receipts: [
+        {
+          quote: "done blaming the schedule",
+          date: "2026-05-14",
+          sourceModule: "journal",
+          sourceEntryId: "entry-1",
+          contextSnapshot: { activeTargets: ["doomscroll"] },
+        },
+      ],
+    },
+  ];
+  const out = collectReceiptsForClient(blocks);
+  assert.deepEqual(out, [
+    { quote: "done blaming the schedule", date: "2026-05-14", source: "Journal" },
+  ]);
+  // No internal identifiers or raw snapshot cross the wire.
+  assert.equal("sourceEntryId" in out[0], false);
+  assert.equal("contextSnapshot" in out[0], false);
+});
+
+test("collectReceiptsForClient dedupes by quote (case-insensitive) and caps", () => {
+  const blocks = [
+    { label: "Through-line", receipts: [{ quote: "Same Words", date: "2026-01-01" }] },
+    { label: "Journal", receipts: [{ quote: "same words", date: "2026-02-02" }] }, // dup
+  ];
+  const out = collectReceiptsForClient(blocks);
+  assert.equal(out.length, 1, "case-insensitive duplicate quote is dropped");
+
+  const many = [{ label: "Journal", receipts: Array.from({ length: 9 }, (_, i) => ({ quote: `q${i}`, date: "2026-01-01" })) }];
+  assert.equal(collectReceiptsForClient(many, 5).length, 5, "respects the cap");
+});
+
+test("collectReceiptsForClient handles empty/blank input safely", () => {
+  assert.deepEqual(collectReceiptsForClient([]), []);
+  assert.deepEqual(collectReceiptsForClient(null), []);
+  assert.deepEqual(
+    collectReceiptsForClient([{ label: "Journal", receipts: [{ quote: "   " }] }]),
+    [],
+    "blank quotes are skipped"
+  );
 });
