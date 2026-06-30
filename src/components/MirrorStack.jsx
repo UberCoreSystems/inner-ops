@@ -19,6 +19,7 @@ function MirrorStack({
   behavioralContext,
   depthTrend = null,
   seededPreview = null,
+  children = null,
 }) {
   const reading = composeMirrorReading({
     killTargets,
@@ -34,7 +35,7 @@ function MirrorStack({
   // honest preview built from the user's onboarding answers (what the mirror
   // WILL read once they log). Never fabricated metrics — see composeSeededPreview.
   if (reading.isColdStart && !hasDepth && seededPreview && seededPreview.status !== 'empty') {
-    return <SeededMirror preview={seededPreview} />;
+    return <SeededMirror preview={seededPreview}>{children}</SeededMirror>;
   }
 
   const hasAnything =
@@ -45,7 +46,10 @@ function MirrorStack({
     !!reading.question ||
     hasDepth;
 
-  if (!hasAnything) return null;
+  // Render nothing only when there is neither an Oracle reading nor an
+  // embedded section (Trajectory) to host. With children present, the card
+  // still renders so the unified reading surface always has a home.
+  if (!hasAnything && !children) return null;
 
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
@@ -53,7 +57,7 @@ function MirrorStack({
         className="oura-card p-6 border"
         style={{ borderColor: 'rgba(77, 166, 255, 0.15)' }}
       >
-        <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Oracle</h3>
+        {hasAnything && <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Oracle</h3>}
 
         {reading.direction && (
           <div>
@@ -130,6 +134,12 @@ function MirrorStack({
             </p>
           </div>
         )}
+
+        {children && (
+          <div className={hasAnything ? 'mt-6 pt-6 border-t border-[#1a1a1a]' : ''}>
+            {children}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -139,7 +149,7 @@ function MirrorStack({
 // but every line is declarative intent drawn from onboarding answers, labeled so
 // the user knows this is what the surface WILL read once they log — not observed
 // behavior. No metrics, no fabrication (enforced in composeSeededPreview).
-function SeededMirror({ preview }) {
+function SeededMirror({ preview, children = null }) {
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
       <div className="oura-card p-6 border" style={{ borderColor: 'rgba(77, 166, 255, 0.15)' }}>
@@ -180,6 +190,12 @@ function SeededMirror({ preview }) {
             <p className="text-[#ababab] text-sm leading-relaxed italic">
               {preview.firstQuestion}
             </p>
+          </div>
+        )}
+
+        {children && (
+          <div className="mt-6 pt-6 border-t border-[#1a1a1a]">
+            {children}
           </div>
         )}
       </div>

@@ -406,7 +406,9 @@ export default function Dashboard() {
               <p className="text-[#858585] text-sm mt-1">What your record says today.</p>
             </header>
 
-        {/* Synthesis Briefing — Forced State (non-dismissible, must open before clearing) */}
+        {/* Synthesis Briefing — Forced State banner (non-dismissible, must open
+            before clearing). Full-width above the unified reading so a new
+            briefing keeps its prominence; only renders while unread. */}
         {latestSynthesisIsNew && (
           <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.02s' }}>
             <div className="oura-card p-6 border border-white/25 bg-[#0d0d0d]">
@@ -424,48 +426,34 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Mirror Stack + Trajectory — side by side on desktop, stacked on
-            narrow (Mirror first). Mirror is the layered reflective surface
-            (direction, observed, precursor, synthesis, question; selection in
-            composeMirrorReading.js). Trajectory is the consolidated progress
-            surface answering "is this working?" — Signal Report under its own
-            header with the latest Synthesis signal delta as the verdict. */}
-        <div className="grid lg:grid-cols-2 gap-6 items-start mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
-          <MirrorStack
-            killTargets={rawUserData?.killTargets || []}
-            hardLessons={rawUserData?.hardLessons || []}
-            relapseEntries={rawUserData?.relapseEntries || []}
-            signalReport={signalReport}
-            behavioralContext={behavioralContext}
-            depthTrend={depthTrend}
-            seededPreview={seededPreview}
-          />
-
-          <div>
-            {/* Trajectory header — "is this working?" Reuses the existing
-                Signal Report below; no new metrics computed here. */}
-            <div className="mb-6 flex items-end justify-between gap-4">
-              <div>
-                <h2 className="text-white text-lg font-light">Trajectory</h2>
-                <p className="text-[#858585] text-xs mt-0.5">Is the work moving you? Signal, record, and totals in one place.</p>
-              </div>
-              {latestSignalDelta && (
-                <div className="text-right shrink-0">
-                  <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">Signal Delta</p>
-                  <p className={`text-lg font-light ${SIGNAL_DELTA_COLORS[latestSignalDelta] || 'text-[#ababab]'}`}>
-                    {SIGNAL_DELTA_LABELS[latestSignalDelta] || latestSignalDelta}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Signal Report — prose-only, no score, no rank, no rings */}
-            <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40">
-              <p className="text-xs font-medium uppercase tracking-widest text-[#00d4aa] mb-3">Signal Report</p>
-              <SignalReport report={signalReport} />
-            </div>
+        {/* Unified reading — one card, two peer sections. Oracle is the layered
+            reflective surface (direction, observed, precursor, synthesis,
+            question; selection in composeMirrorReading.js). Trajectory, passed
+            as children, answers "is this working?" — the Signal Report under the
+            latest Synthesis signal delta. MirrorStack owns the card and divides
+            the sections with its own border-t rhythm. */}
+        <MirrorStack
+          killTargets={rawUserData?.killTargets || []}
+          hardLessons={rawUserData?.hardLessons || []}
+          relapseEntries={rawUserData?.relapseEntries || []}
+          signalReport={signalReport}
+          behavioralContext={behavioralContext}
+          depthTrend={depthTrend}
+          seededPreview={seededPreview}
+        >
+          <div className="flex items-baseline justify-between gap-4 mb-4">
+            <h2 className="text-[#858585] text-xs uppercase tracking-widest">Trajectory</h2>
+            {latestSignalDelta && (
+              <p className="text-[#858585] text-[10px] uppercase tracking-widest">
+                Signal Delta{' '}
+                <span className={SIGNAL_DELTA_COLORS[latestSignalDelta] || 'text-[#ababab]'}>
+                  {SIGNAL_DELTA_LABELS[latestSignalDelta] || latestSignalDelta}
+                </span>
+              </p>
+            )}
           </div>
-        </div>
+          <SignalReport report={signalReport} />
+        </MirrorStack>
 
         {/* Weekly Rule Review — Sunday-anchored sweep over finalized rules.
             Self-gating: visible Sun-Wed only; returns null on Thu/Fri/Sat,
