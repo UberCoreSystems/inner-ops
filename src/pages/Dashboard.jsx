@@ -34,6 +34,13 @@ import logger from '../utils/logger';
 const SIGNAL_DELTA_LABELS = { improving: 'Improving', stable: 'Stable', deteriorating: 'Deteriorating' };
 const SIGNAL_DELTA_COLORS = { improving: 'text-[#22c55e]', stable: 'text-[#ababab]', deteriorating: 'text-[#ef4444]' };
 
+// Accent bloom for the color-coded Dashboard cards — the hero-card treatment,
+// but the glow takes the card's own accent color. hex+alpha suffix (e.g.
+// `#ef44441f`) keeps it a whisper; pairs with the .oura-card top-sheen.
+const cardGlow = (hex) => ({
+  boxShadow: `inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 34px ${hex}1f`,
+});
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -391,8 +398,18 @@ export default function Dashboard() {
       </div>
 
       <div className={`fade-pane ${showShell ? 'hidden' : 'visible'}`}>
-        <div className="min-h-screen bg-black animate-fade-in">
-          <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="relative min-h-screen bg-black animate-fade-in">
+          {/* Ambient page glow — a single soft bloom behind the header so the
+              black canvas has a light source and cards read as lit, not flat. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-[440px]"
+            style={{
+              background:
+                'radial-gradient(ellipse 70% 100% at 50% 0%, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 68%)',
+            }}
+          />
+          <div className="relative max-w-6xl mx-auto px-4 py-8">
 
             {/* Operational header — the time-of-day greeting was removed: Inner Ops
                 is a command surface, not a cozy dashboard. Name + stark clause only. */}
@@ -400,7 +417,7 @@ export default function Dashboard() {
               <p className="text-[#858585] text-sm uppercase tracking-widest mb-2">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </p>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white break-words">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white break-words text-sheen">
                 {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Operator'}
               </h1>
               <p className="text-[#858585] text-sm mt-1">What your record says today.</p>
@@ -642,10 +659,10 @@ export default function Dashboard() {
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" />
-            <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" />
-            <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" />
-            <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" />
+            <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" glow />
+            <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" glow />
+            <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" glow />
+            <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" glow />
           </div>
         </section>
 
@@ -653,7 +670,7 @@ export default function Dashboard() {
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all">
+            <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all" style={cardGlow('#a855f7')}>
               <div className="w-12 h-12 rounded-2xl bg-[#a855f7]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="journal" size={28} color="#a855f7" />
               </div>
@@ -661,7 +678,7 @@ export default function Dashboard() {
               <p className="text-[#858585] text-sm">Today's reflection</p>
             </Link>
             
-            <Link to="/ledger" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all">
+            <Link to="/ledger" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all" style={cardGlow('#ef4444')}>
               <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="target" size={28} color="#ef4444" />
               </div>
@@ -669,7 +686,7 @@ export default function Dashboard() {
               <p className="text-[#858585] text-sm">Name what needs to die</p>
             </Link>
 
-            <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all">
+            <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all" style={cardGlow('#f59e0b')}>
               <div className="w-12 h-12 rounded-2xl bg-[#f59e0b]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="hardLessons" size={28} color="#f59e0b" />
               </div>
@@ -677,7 +694,7 @@ export default function Dashboard() {
               <p className="text-[#858585] text-sm">Convert cost into a rule</p>
             </Link>
 
-            <Link to="/relapse" className="oura-card p-5 group hover:border-[#00d4aa]/50 transition-all">
+            <Link to="/relapse" className="oura-card p-5 group hover:border-[#00d4aa]/50 transition-all" style={cardGlow('#00d4aa')}>
               <div className="w-12 h-12 rounded-2xl bg-[#00d4aa]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <AppIcon name="relapse" size={28} color="#00d4aa" />
               </div>

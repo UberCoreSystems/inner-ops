@@ -460,16 +460,19 @@ export default function Onboarding() {
               {saving ? 'Saving...' : step === TOTAL_STEPS - 1 ? 'Enter' : 'Continue'}
             </button>
           </div>
-
-          <p className="text-[#858585] text-xs mt-6">
-            What you record here is stored privately under your account. By continuing you
-            acknowledge how your data is handled and that journal text is sent to the Oracle
-            for feedback —{' '}
-            <Link to="/privacy" className="underline hover:text-[#ababab] transition-colors">
-              Privacy &amp; Data
-            </Link>.
-          </p>
         </div>
+
+        {/* Data-handling disclaimer — full width below the nav row. It must not
+            be a third child of the justify-between row above, or it lands in the
+            right column and overlaps the Continue button. */}
+        <p className="text-[#858585] text-xs mt-6">
+          What you record here is stored privately under your account. By continuing you
+          acknowledge how your data is handled and that journal text is sent to the Oracle
+          for feedback —{' '}
+          <Link to="/privacy" className="underline hover:text-[#ababab] transition-colors">
+            Privacy &amp; Data
+          </Link>.
+        </p>
 
       </div>
     </div>

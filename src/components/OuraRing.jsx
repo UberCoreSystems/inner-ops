@@ -179,7 +179,8 @@ export const ScoreCard = React.memo(function ScoreCard({
   icon,
   trend,
   size = 'medium',
-  onClick
+  onClick,
+  glow = false
 }) {
   const sizeClasses = {
     small: 'p-4',
@@ -196,6 +197,7 @@ export const ScoreCard = React.memo(function ScoreCard({
   return (
     <div
       className={`oura-card ${sizeClasses[size]}${onClick ? ' cursor-pointer' : ''} group`}
+      style={glow ? { boxShadow: `inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 30px ${color}1f` } : undefined}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
