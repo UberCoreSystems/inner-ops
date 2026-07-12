@@ -63,11 +63,7 @@ export default defineConfig({
         dead_code: true,
         passes: 2
       },
-      mangle: {
-        properties: {
-          regex: /^_/
-        }
-      }
+      mangle: {}
     },
     rollupOptions: {
       output: {
