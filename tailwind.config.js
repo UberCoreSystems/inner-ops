@@ -47,6 +47,8 @@ export default {
         'oura-glow-cyan': '0 0 30px rgba(0, 212, 170, 0.3)',
         'oura-glow-blue': '0 0 30px rgba(77, 166, 255, 0.3)',
         'oura-glow-purple': '0 0 30px rgba(168, 85, 247, 0.3)',
+        'oura-glow-red': '0 0 30px rgba(239, 68, 68, 0.3)',
+        'oura-glow-amber': '0 0 30px rgba(245, 158, 11, 0.3)',
       },
       animation: {
         'ring-pulse': 'ringPulse 2s ease-in-out infinite',

@@ -196,8 +196,8 @@ export const ScoreCard = React.memo(function ScoreCard({
 
   return (
     <div
-      className={`oura-card ${sizeClasses[size]}${onClick ? ' cursor-pointer' : ''} group`}
-      style={glow ? { boxShadow: `inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 30px ${color}1f` } : undefined}
+      className={`oura-card ${sizeClasses[size]}${onClick ? ' cursor-pointer' : ''}${glow ? ' oura-card-accent-hover' : ''} group`}
+      style={glow ? { '--card-accent-glow': `${color}4d` } : undefined}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -294,7 +294,7 @@ export const ActivityItem = React.memo(function ActivityItem({
         className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
         style={{ backgroundColor: `${color}15` }}
       >
-        <span className="text-lg">{icon}</span>
+        {icon}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-1">

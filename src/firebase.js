@@ -55,10 +55,19 @@ let db;
 let authInitialized = false;
 let dbInitialized = false;
 
+// Local visual-review / screenshot harness only. Vite resolves this to a
+// literal `false` in production builds, so the emulator wiring below is
+// dead-code-eliminated and never reaches the shipped bundle.
+const USE_EMULATORS = viteEnv.VITE_USE_EMULATORS === 'true' && !!viteEnv.DEV;
+
 const initializeAuth = async () => {
   if (!authInitialized) {
-    const { getAuth, signInAnonymously: signInAnon } = await import('firebase/auth');
+    const { getAuth, connectAuthEmulator, signInAnonymously: signInAnon } = await import('firebase/auth');
     auth = getAuth(app);
+    if (USE_EMULATORS) {
+      connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+      logger.log("🧪 Auth pointed at emulator (127.0.0.1:9099)");
+    }
     authInitialized = true;
     logger.log("✅ Firebase Auth initialized");
     return { auth, signInAnonymously: signInAnon };
@@ -69,8 +78,12 @@ const initializeAuth = async () => {
 
 const initializeFirestore = async () => {
   if (!dbInitialized) {
-    const { getFirestore } = await import('firebase/firestore');
+    const { getFirestore, connectFirestoreEmulator } = await import('firebase/firestore');
     db = getFirestore(app);
+    if (USE_EMULATORS) {
+      connectFirestoreEmulator(db, '127.0.0.1', 8080);
+      logger.log("🧪 Firestore pointed at emulator (127.0.0.1:8080)");
+    }
     dbInitialized = true;
     logger.log("✅ Firebase Firestore initialized");
   }

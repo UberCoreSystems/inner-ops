@@ -34,9 +34,9 @@ import logger from '../utils/logger';
 const SIGNAL_DELTA_LABELS = { improving: 'Improving', stable: 'Stable', deteriorating: 'Deteriorating' };
 const SIGNAL_DELTA_COLORS = { improving: 'text-[#22c55e]', stable: 'text-[#ababab]', deteriorating: 'text-[#ef4444]' };
 
-// Accent bloom for the color-coded Dashboard cards — the hero-card treatment,
-// but the glow takes the card's own accent color. hex+alpha suffix (e.g.
-// `#ef44441f`) keeps it a whisper; pairs with the .oura-card top-sheen.
+// Permanent accent bloom for the Quick Actions cards — intentionally always-on
+// (not hover-gated) so primary navigation stands apart from the content cards,
+// which use the module hover-glow. hex+alpha `1f` (~12%) keeps it a whisper.
 const cardGlow = (hex) => ({
   boxShadow: `inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 34px ${hex}1f`,
 });
@@ -384,11 +384,11 @@ export default function Dashboard() {
 
   const getActivityMeta = useCallback((type) => {
     const meta = {
-      journal: { icon: '📝', color: '#a855f7', label: 'Journal' },
-      relapse: { icon: '⚠️', color: '#f59e0b', label: 'Awareness' },
-      hardlesson: { icon: '⚡', color: '#f59e0b', label: 'Hard Lesson' }
+      journal: { icon: <AppIcon name="journal" size={18} color="#a855f7" glow={false} />, color: '#a855f7', label: 'Journal' },
+      relapse: { icon: <AppIcon name="relapse" size={18} color="#f59e0b" glow={false} />, color: '#f59e0b', label: 'Awareness' },
+      hardlesson: { icon: <AppIcon name="bolt" size={18} color="#f59e0b" glow={false} />, color: '#f59e0b', label: 'Hard Lesson' }
     };
-    return meta[type] || { icon: '📊', color: '#8a8a8a', label: 'Activity' };
+    return meta[type] || { icon: <AppIcon name="activity" size={18} color="#8a8a8a" glow={false} />, color: '#8a8a8a', label: 'Activity' };
   }, []);
 
   return (
@@ -472,6 +472,46 @@ export default function Dashboard() {
           <SignalReport report={signalReport} />
         </MirrorStack>
 
+        {/* Quick Actions — primary navigation. Kept as a permanent accent
+            bloom (cardGlow) so it stands apart from the content cards, and
+            placed high (directly below the Oracle reading) for accessibility. */}
+        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all" style={cardGlow('#a855f7')}>
+              <div className="w-12 h-12 rounded-2xl bg-[#a855f7]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <AppIcon name="journal" size={28} color="#a855f7" />
+              </div>
+              <h4 className="text-white font-medium mb-1">Journal</h4>
+              <p className="text-[#858585] text-sm">Today's reflection</p>
+            </Link>
+
+            <Link to="/ledger" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all" style={cardGlow('#ef4444')}>
+              <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <AppIcon name="target" size={28} color="#ef4444" />
+              </div>
+              <h4 className="text-white font-medium mb-1">General Ledger</h4>
+              <p className="text-[#858585] text-sm">Name what needs to die</p>
+            </Link>
+
+            <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all" style={cardGlow('#f59e0b')}>
+              <div className="w-12 h-12 rounded-2xl bg-[#f59e0b]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <AppIcon name="hardLessons" size={28} color="#f59e0b" />
+              </div>
+              <h4 className="text-white font-medium mb-1">Hard Lessons</h4>
+              <p className="text-[#858585] text-sm">Convert cost into a rule</p>
+            </Link>
+
+            <Link to="/relapse" className="oura-card p-5 group hover:border-[#00d4aa]/50 transition-all" style={cardGlow('#00d4aa')}>
+              <div className="w-12 h-12 rounded-2xl bg-[#00d4aa]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <AppIcon name="relapse" size={28} color="#00d4aa" />
+              </div>
+              <h4 className="text-white font-medium mb-1">The Signal</h4>
+              <p className="text-[#858585] text-sm">Catch the drift</p>
+            </Link>
+          </div>
+        </section>
+
         {/* Weekly Rule Review — Sunday-anchored sweep over finalized rules.
             Self-gating: visible Sun-Wed only; returns null on Thu/Fri/Sat,
             when there are no rules, when the user has already reviewed this
@@ -499,11 +539,14 @@ export default function Dashboard() {
         {/* Early Warning Widget */}
         {earlyWarning && (
           <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
-            <div className={`oura-card p-5 border-l-4 ${
-              earlyWarning.level === 'high' ? 'border-[#ef4444]' :
-              earlyWarning.level === 'elevated' ? 'border-[#f59e0b]' :
-              'border-[#22c55e]'
-            }`}>
+            <div
+              className={`oura-card oura-card-accent-hover p-5 border-l-4 transition-all ${
+                earlyWarning.level === 'high' ? 'border-[#ef4444]' :
+                earlyWarning.level === 'elevated' ? 'border-[#f59e0b]' :
+                'border-[#22c55e]'
+              }`}
+              style={{ '--card-accent-glow': `${earlyWarning.level === 'high' ? '#ef4444' : earlyWarning.level === 'elevated' ? '#f59e0b' : '#22c55e'}4d` }}
+            >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-3">
@@ -566,7 +609,7 @@ export default function Dashboard() {
         {/* Sunday Autopsy — weekly lesson capture */}
         {showAutopsy && (
           <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.09s' }}>
-            <div className="oura-card p-6 border-l-4 border-[#f59e0b]">
+            <div className="oura-card p-6 border-l-4 border-[#f59e0b] hover:shadow-oura-glow-amber transition-all">
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <h3 className="text-white text-sm font-medium mb-1">What did this week cost you?</h3>
@@ -622,7 +665,7 @@ export default function Dashboard() {
           if (held === 0 && escaped === 0 && untouched === 0) return null;
           return (
             <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.092s' }}>
-              <div className="oura-card p-5 border-l-4 border-[#00d4aa]">
+              <div className="oura-card p-5 border-l-4 border-[#00d4aa] hover:shadow-oura-glow-cyan transition-all">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="text-white text-sm font-medium mb-1">Last Week's Record</h3>
@@ -650,7 +693,7 @@ export default function Dashboard() {
             surface above. No scores, no ranks, no bars. Only non-zero lines. */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Behavioral Record</h3>
-          <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40">
+          <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40 hover:shadow-oura-glow-cyan transition-all">
             <BehavioralRecordDensity density={density} />
           </div>
         </section>
@@ -663,44 +706,6 @@ export default function Dashboard() {
             <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" glow />
             <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" glow />
             <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" glow />
-          </div>
-        </section>
-
-        {/* Quick Actions - Oura Style */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all" style={cardGlow('#a855f7')}>
-              <div className="w-12 h-12 rounded-2xl bg-[#a855f7]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <AppIcon name="journal" size={28} color="#a855f7" />
-              </div>
-              <h4 className="text-white font-medium mb-1">Journal</h4>
-              <p className="text-[#858585] text-sm">Today's reflection</p>
-            </Link>
-            
-            <Link to="/ledger" className="oura-card p-5 group hover:border-[#ef4444]/50 transition-all" style={cardGlow('#ef4444')}>
-              <div className="w-12 h-12 rounded-2xl bg-[#ef4444]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <AppIcon name="target" size={28} color="#ef4444" />
-              </div>
-              <h4 className="text-white font-medium mb-1">General Ledger</h4>
-              <p className="text-[#858585] text-sm">Name what needs to die</p>
-            </Link>
-
-            <Link to="/hardlessons" className="oura-card p-5 group hover:border-[#f59e0b]/50 transition-all" style={cardGlow('#f59e0b')}>
-              <div className="w-12 h-12 rounded-2xl bg-[#f59e0b]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <AppIcon name="hardLessons" size={28} color="#f59e0b" />
-              </div>
-              <h4 className="text-white font-medium mb-1">Hard Lessons</h4>
-              <p className="text-[#858585] text-sm">Convert cost into a rule</p>
-            </Link>
-
-            <Link to="/relapse" className="oura-card p-5 group hover:border-[#00d4aa]/50 transition-all" style={cardGlow('#00d4aa')}>
-              <div className="w-12 h-12 rounded-2xl bg-[#00d4aa]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <AppIcon name="relapse" size={28} color="#00d4aa" />
-              </div>
-              <h4 className="text-white font-medium mb-1">The Signal</h4>
-              <p className="text-[#858585] text-sm">Catch the drift</p>
-            </Link>
           </div>
         </section>
 
@@ -747,7 +752,7 @@ export default function Dashboard() {
                 })
               ) : (
                 <div className="oura-card p-8 text-center">
-                  <div className="text-4xl mb-3 opacity-30">📊</div>
+                  <div className="mb-3 flex justify-center opacity-40"><AppIcon name="insight" size={40} color="#5a5a5a" glow={false} /></div>
                   <p className="text-[#858585]">Nothing logged yet.</p>
                   <p className="text-[#858585] text-sm mt-1 max-w-sm mx-auto">The system has no signal to read. Start with the General Ledger — name what needs to die.</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">

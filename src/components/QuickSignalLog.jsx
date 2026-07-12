@@ -48,7 +48,7 @@ export default function QuickSignalLog({ onLogged }) {
         onClick={() => setOpen(true)}
         className="text-sm text-[#00d4aa] border border-[#00d4aa]/30 hover:border-[#00d4aa]/60 rounded-xl px-4 py-2 min-h-11 transition-colors"
       >
-        ⚡ Quick log
+        Quick log
       </button>
     );
   }

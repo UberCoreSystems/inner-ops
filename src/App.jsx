@@ -17,6 +17,7 @@ import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
 import OnboardingGate from './components/OnboardingGate';
 import BannerStack from './components/banner/BannerStack';
+import ScrollToTop from './components/ScrollToTop';
 
 // Oura Ring is deferred (post-v1), gated behind an env flag.
 // When false: the /oura/callback route is not mounted and the Oura UI in
@@ -44,8 +45,7 @@ const OuraCallback = OURA_ENABLED
 const PageLoader = () => (
   <div className="flex items-center justify-center h-screen bg-black text-white">
     <div className="text-center">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-500 mx-auto"></div>
-      <p className="mt-4 text-lg">Loading...</p>
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-oura-cyan mx-auto"></div>
     </div>
   </div>
 );
@@ -144,8 +144,8 @@ function App() {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-500 mx-auto"></div>
-          <p className="mt-4 text-lg">Initializing Inner Ops...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-oura-cyan mx-auto"></div>
+          <p className="mt-4 text-sm text-oura-textSecondary tracking-wide">Initializing Inner Ops</p>
         </div>
       </div>
     );
@@ -153,6 +153,7 @@ function App() {
 
   return (
     <Router>
+      <ScrollToTop />
       <div className="min-h-[100dvh] bg-gray-900 text-white pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         <Toaster {...toasterConfig} />
         <InlineErrorBoundary name="Navbar">

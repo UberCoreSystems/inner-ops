@@ -7,15 +7,6 @@ const TRAJECTORY_COPY = {
   stable: 'Direction: stable',
 };
 
-// Focal accent for the reading card — the Dashboard's centerpiece. A whisper of
-// blue bloom + a top sheen so it reads as luminous, not flat. Same blue as the
-// card border and the synthesis line, so it stays coherent with the surface.
-const HERO_CARD_STYLE = {
-  borderColor: 'rgba(77, 166, 255, 0.18)',
-  boxShadow:
-    'inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 28px rgba(0, 0, 0, 0.55), 0 0 44px rgba(77, 166, 255, 0.08)',
-};
-
 // MirrorStack — the Dashboard's reflective surface. Renders the layered
 // reading produced by composeMirrorReading: identity DIRECTION, OBSERVED
 // tension lines, optional PRECURSOR alert, SYNTHESIS, and a closing QUESTION.
@@ -62,10 +53,7 @@ function MirrorStack({
 
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
-      <div
-        className="oura-card p-6 border"
-        style={HERO_CARD_STYLE}
-      >
+      <div className="oura-card p-6 hover:shadow-oura-glow-blue hover:border-[#4da6ff]/40 transition-all">
         {hasAnything && <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Oracle</h3>}
 
         {reading.direction && (
@@ -161,7 +149,7 @@ function MirrorStack({
 function SeededMirror({ preview, children = null }) {
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
-      <div className="oura-card p-6 border" style={HERO_CARD_STYLE}>
+      <div className="oura-card p-6 hover:shadow-oura-glow-blue hover:border-[#4da6ff]/40 transition-all">
         <div className="flex items-baseline justify-between mb-5">
           <h3 className="text-[#858585] text-xs uppercase tracking-widest">Oracle</h3>
           <span className="text-[#7a7a7a] text-[10px] uppercase tracking-widest">Preview</span>

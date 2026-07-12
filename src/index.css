@@ -64,25 +64,19 @@ body {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.6);
 }
 
+/* Accent glow on hover for color-coded cards (Dashboard stat tiles), whose
+   accent is dynamic and passed as --card-accent-glow. Base stays the neutral
+   .oura-card shadow; the colored halo appears only on hover — matching the
+   module entry-card treatment (hover:shadow-oura-glow-*), never a permanent glow.
+   Defined after .oura-card:hover so it wins the box-shadow cascade. */
+.oura-card-accent-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.6), 0 0 30px var(--card-accent-glow, transparent);
+}
+
 .oura-card-elevated {
   background: linear-gradient(180deg, #111111 0%, #0a0a0a 100%);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-}
-
-/* Active card surface — subtle red accent. Used by Ledger's Active Targets
-   card on the Dashboard; carries the Ledger module theme forward. */
-.oura-card-active {
-  background: linear-gradient(180deg, #0a0a0a 0%, #050505 100%);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 20px;
-  box-shadow: 0 0 32px rgba(239, 68, 68, 0.06);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.oura-card-active:hover {
-  border-color: rgba(239, 68, 68, 0.35);
-  box-shadow: 0 0 40px rgba(239, 68, 68, 0.12);
-  transform: translateY(-2px);
 }
 
 /* Score Display */

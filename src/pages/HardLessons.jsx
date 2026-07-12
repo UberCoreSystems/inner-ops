@@ -1191,7 +1191,7 @@ export default function HardLessons() {
                 disabled={loading || (newLesson.eventDescription?.trim().length ?? 0) < 30}
                 className="px-6 py-3 bg-[#a855f7] hover:bg-[#9333ea] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
               >
-                {showAllFields ? '🔮 Re-extract with Oracle' : '🔮 Ask Oracle to Extract Lesson & Rule'}
+                {showAllFields ? 'Re-extract with Oracle' : 'Ask Oracle to Extract Lesson & Rule'}
               </button>
 
               {!showAllFields && (
@@ -1326,7 +1326,7 @@ export default function HardLessons() {
                 disabled={loadingNarrative}
                 className="px-4 py-1.5 text-xs bg-[#1a1a1a] text-[#a855f7] border border-[#a855f7]/30 rounded-lg hover:bg-[#a855f7]/10 transition-colors disabled:opacity-40"
               >
-                {loadingNarrative ? 'Analyzing...' : '🔮 Generate Pattern'}
+                {loadingNarrative ? 'Analyzing…' : 'Generate Pattern'}
               </button>
             </div>
             {costPatternNarrative ? (
@@ -1348,7 +1348,7 @@ export default function HardLessons() {
                 const lessonCosts = costCategories.filter(c => lesson.costs?.includes(c.value));
                 const aarOpen = aarPanel.ruleId === id;
                 return (
-                  <div key={id} className={`oura-card p-5 ${underReview ? 'border-[#b45309]/50' : violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
+                  <div key={id} className={`oura-card p-5 hover:shadow-oura-glow-amber transition-shadow duration-300 ${underReview ? 'border-[#b45309]/50' : violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <p className="text-[#fbbf24] font-medium leading-relaxed border-l-4 border-[#f59e0b] pl-3">{rule}</p>
@@ -1602,7 +1602,7 @@ export default function HardLessons() {
                   }
 
                   return (
-                    <div key={lesson.id} className={`oura-card p-6 ${
+                    <div key={lesson.id} className={`oura-card p-6 hover:shadow-oura-glow-amber transition-shadow duration-300 ${
                       lesson.isFinalized
                         ? 'border-[#f59e0b]/50'
                         : 'border-[#f59e0b]/20'

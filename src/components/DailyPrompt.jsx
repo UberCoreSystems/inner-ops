@@ -150,13 +150,14 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
 
   return (
     <div
-      className="oura-card p-6 relative overflow-hidden group transition-all duration-300 hover:border-[#2a2a2a]"
+      className="oura-card oura-card-accent-hover p-6 relative overflow-hidden group transition-all duration-300 hover:border-[#2a2a2a]"
+      style={{ '--card-accent-glow': `${meta.color}4d` }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Background glow effect */}
+      {/* Background wash — neutral at rest, blooms on hover to match the module cards */}
       <div
-        className="absolute inset-0 opacity-5 group-hover:opacity-10 transition-opacity duration-500"
+        className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500"
         style={{
           background: `radial-gradient(circle at top right, ${meta.color}, transparent 70%)`
         }}

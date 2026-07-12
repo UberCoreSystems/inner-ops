@@ -13,6 +13,7 @@ import { detectDriftSignals } from '../utils/detectDriftSignals';
 import RelapseForecastCard from './RelapseForecastCard';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
+import { AppIcon } from './AppIcons';
 import ArchiveToggle from './ArchiveToggle';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
@@ -1282,13 +1283,13 @@ const RelapseRadar = () => {
             </div>
           ) : (
             <div className="oura-card p-6 text-center">
-              <div className="text-2xl mb-2 opacity-40">🧭</div>
+              <div className="mb-2 flex justify-center opacity-40"><AppIcon name="compass" size={26} color="#5a5a5a" glow={false} /></div>
               <p className="text-gray-300 text-sm">
                 {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No entries to show yet.'}
               </p>
               {!searchQuery.trim() && (
                 <p className="text-[#858585] text-xs mt-2 max-w-md mx-auto leading-relaxed">
-                  Log a signal when you see drift; log a relapse when it lands. The Radar surfaces patterns before they become another failure.
+                  Log a signal when you see drift; log a relapse when it lands. The Signal surfaces patterns before they become another failure.
                 </p>
               )}
               {searchQuery.trim() && (
@@ -1326,8 +1327,8 @@ const RelapseRadar = () => {
         </div>
       ) : (
         <div className="mt-10 oura-card p-10 text-center">
-          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center text-2xl">
-            🧭
+          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-oura-darker flex items-center justify-center">
+            <AppIcon name="compass" size={26} color="#5a5a5a" glow={false} />
           </div>
           <h3 className="text-lg font-light text-white mb-2">No check-ins logged</h3>
           <p className="text-gray-400 text-sm">Log a signal above. Patterns only become visible once you track them.</p>

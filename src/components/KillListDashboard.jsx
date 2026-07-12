@@ -253,7 +253,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
     try {
       const currentReflection = reflectionNotes[targetId] || '';
       const separator = currentReflection ? '\n\n---\n\n' : '';
-      const updatedReflection = `${currentReflection}${separator}🔮 Oracle's Wisdom:\n${feedback}`;
+      const updatedReflection = `${currentReflection}${separator}Oracle:\n${feedback}`;
       
       await updateReflectionNote(targetId, updatedReflection);
       
@@ -336,7 +336,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
   }
 
   return (
-    <div className="oura-card p-6">
+    <div className="oura-card p-6 hover:shadow-oura-glow-red hover:border-[#ef4444]/40 transition-all">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-[#1a1a1a] flex items-center justify-center">
@@ -472,7 +472,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                       className="px-4 py-2 text-sm font-light bg-[#1a1a1a] text-[#a855f7] border border-[#2a2a2a] rounded-xl hover:border-[#a855f7]/50 transition-all flex items-center gap-2"
                     >
                       <AppIcon name="insight" size={14} color="#a855f7" glow={false} />
-                      Seek Oracle
+                      Oracle Read
                     </button>
                   </div>
 
@@ -481,7 +481,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                     <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#a855f7]/30 rounded-xl">
                       <h4 className="text-[#a855f7] font-light text-sm mb-2 flex items-center gap-2">
                         <AppIcon name="insight" size={14} color="#a855f7" />
-                        Oracle's Stored Wisdom
+                        Oracle Read
                       </h4>
                       <div className="text-[#ababab] text-sm leading-relaxed font-light italic">
                         {oracleFeedbacks[target.id]}
@@ -500,15 +500,15 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       <div className="mt-6 pt-6 border-t border-[#1a1a1a]">
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
-            <div className="text-2xl font-light tabular-nums text-white" style={{ textShadow: '0 0 12px rgba(77, 166, 255, 0.15)' }}>{stats.killed}</div>
+            <div className="text-2xl font-light tabular-nums text-white">{stats.killed}</div>
             <div className="text-xs text-[#858585] font-light mt-1">Killed</div>
           </div>
           <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
-            <div className="text-2xl font-light tabular-nums text-white" style={{ textShadow: '0 0 12px rgba(77, 166, 255, 0.15)' }}>{stats.escaped}</div>
+            <div className="text-2xl font-light tabular-nums text-white">{stats.escaped}</div>
             <div className="text-xs text-[#858585] font-light mt-1">Escaped</div>
           </div>
           <div className="text-center p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
-            <div className="text-2xl font-light tabular-nums text-white" style={{ textShadow: '0 0 12px rgba(77, 166, 255, 0.15)' }}>{stats.active}</div>
+            <div className="text-2xl font-light tabular-nums text-white">{stats.active}</div>
             <div className="text-xs text-[#858585] font-light mt-1">Active</div>
           </div>
         </div>

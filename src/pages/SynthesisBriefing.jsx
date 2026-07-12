@@ -248,7 +248,7 @@ export default function SynthesisBriefing() {
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-[#858585] text-sm">Loading...</div>
+        <div className="w-5 h-5 border-2 border-[#a855f7]/30 border-t-[#a855f7] rounded-full animate-spin" />
       </div>
     );
   }
@@ -327,7 +327,7 @@ export default function SynthesisBriefing() {
 
           {reckonings[0] && (
             <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-              <p className="text-white text-sm leading-relaxed whitespace-pre-line mb-4">
+              <p className="text-white text-sm leading-relaxed whitespace-pre-line mb-4 max-w-[68ch]">
                 {reckonings[0].reckoningConfrontation}
               </p>
               <ul className="space-y-2">
@@ -437,7 +437,7 @@ export default function SynthesisBriefing() {
             {/* Section 1: Convergence Point */}
             <div className="mb-8">
               <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">Convergence Point</div>
-              <p className="text-[#d1d1d1] text-base leading-relaxed break-words">{displayBriefing.convergencePoint}</p>
+              <p className="text-[#d1d1d1] text-base leading-relaxed break-words max-w-[68ch]">{displayBriefing.convergencePoint}</p>
             </div>
 
             {/* Section 2: Violated Rules */}
@@ -464,14 +464,14 @@ export default function SynthesisBriefing() {
                 {SIGNAL_DELTA_LABELS[displayBriefing.signalDelta] || displayBriefing.signalDelta}
               </div>
               {displayBriefing.signalDeltaNote && (
-                <p className="text-[#ababab] text-sm mt-3 leading-relaxed">{displayBriefing.signalDeltaNote}</p>
+                <p className="text-[#ababab] text-sm mt-3 leading-relaxed max-w-[68ch]">{displayBriefing.signalDeltaNote}</p>
               )}
             </div>
 
             {/* Section 4: Confrontation Question */}
             <div className="border-t border-[#1a1a1a] pt-8">
               <div className="text-[#858585] text-xs uppercase tracking-widest mb-5">Confrontation Question</div>
-              <p className="text-white text-lg sm:text-xl font-light leading-relaxed break-words">
+              <p className="text-white text-lg sm:text-xl font-light leading-relaxed break-words max-w-[68ch]">
                 {displayBriefing.confrontationQuestion}
               </p>
             </div>

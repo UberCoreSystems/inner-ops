@@ -1436,7 +1436,7 @@ const KillList = () => {
             onDismiss={() => handleBackfillDismiss(target)}
           />
         )}
-      <div className="oura-card p-5 hover:border-[#2a2a2a] transition-all duration-300">
+      <div className="oura-card p-5 hover:border-[#2a2a2a] hover:shadow-oura-glow-red transition-all duration-300">
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
@@ -2290,7 +2290,7 @@ const KillList = () => {
               <div>{filteredTargets.map((item, index) => renderTargetItem(item, index))}</div>
             ) : (
               <div className="oura-card p-12 text-center animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-                <div className="text-6xl mb-4 opacity-30">🎯</div>
+                <div className="mb-4 flex justify-center opacity-40"><AppIcon name="target" size={44} color="#ef4444" glow={false} /></div>
                 <h3 className="text-xl font-semibold text-[#ababab] mb-2">
                   {searchQuery.trim()
                     ? `No matches for “${searchQuery.trim()}”`

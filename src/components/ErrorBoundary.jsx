@@ -1,5 +1,6 @@
 import React from 'react';
 import logger from '../utils/logger';
+import { AppIcon } from './AppIcons';
 
 /**
  * ErrorBoundary Component
@@ -59,7 +60,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       const { error, errorInfo } = this.state;
-      const { fallback, showDetails = true } = this.props;
+      const { fallback, showDetails = import.meta.env.DEV } = this.props;
 
       // If custom fallback provided, use it
       if (fallback) {
@@ -70,56 +71,56 @@ class ErrorBoundary extends React.Component {
       return (
         <div className="min-h-screen bg-black flex items-center justify-center p-4">
           <div className="max-w-2xl w-full">
-            <div className="bg-gradient-to-br from-red-900/20 to-orange-900/20 border border-red-500/30 rounded-2xl p-8">
+            <div className="oura-card p-8">
               {/* Error Icon */}
               <div className="flex items-center justify-center mb-6">
-                <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center">
-                  <span className="text-5xl">⚠️</span>
+                <div className="w-16 h-16 rounded-2xl bg-[#ef4444]/10 border border-[#ef4444]/25 flex items-center justify-center">
+                  <AppIcon name="emergency" size={28} color="#ef4444" glow={false} />
                 </div>
               </div>
 
               {/* Error Title */}
-              <h1 className="text-3xl font-bold text-white text-center mb-4">
-                Something Went Wrong
+              <h1 className="text-2xl font-light text-white text-center mb-3 tracking-tight">
+                The system hit an error.
               </h1>
 
-              <p className="text-gray-300 text-center mb-8">
-                The app encountered an unexpected error. Don't worry, your data is safe.
+              <p className="text-[#858585] text-center text-sm mb-8">
+                Your data is intact. Reload, or return to where you were.
               </p>
 
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
                 <button
                   onClick={this.handleReset}
-                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:opacity-90 transition-opacity"
+                  className="px-6 py-2.5 bg-white text-black rounded-xl font-medium text-sm hover:bg-[#d1d1d1] transition-colors"
                 >
                   Try Again
                 </button>
                 <button
                   onClick={this.handleReload}
-                  className="px-6 py-3 bg-gray-700 text-white rounded-xl font-semibold hover:bg-gray-600 transition-colors"
+                  className="px-6 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] text-[#ababab] rounded-xl font-medium text-sm hover:text-white hover:border-[#3a3a3a] transition-colors"
                 >
-                  Reload App
+                  Reload
                 </button>
               </div>
 
-              {/* Error Details (collapsible) */}
+              {/* Error Details (collapsible) — dev only by default */}
               {showDetails && error && (
                 <details className="mt-6">
-                  <summary className="cursor-pointer text-sm text-gray-400 hover:text-gray-300 mb-2">
-                    🔍 Technical Details (for debugging)
+                  <summary className="cursor-pointer text-xs text-[#5a5a5a] hover:text-[#858585] mb-2">
+                    Technical details
                   </summary>
-                  <div className="bg-black/40 rounded-lg p-4 border border-gray-700">
+                  <div className="bg-[#050505] rounded-xl p-4 border border-[#1a1a1a]">
                     <div className="mb-4">
-                      <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Error Message</p>
-                      <p className="text-red-400 font-mono text-sm break-all">
+                      <p className="text-xs text-[#5a5a5a] uppercase tracking-wide mb-1">Error Message</p>
+                      <p className="text-[#ef4444] font-mono text-sm break-all">
                         {error.toString()}
                       </p>
                     </div>
                     {errorInfo && (
                       <div>
-                        <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Component Stack</p>
-                        <pre className="text-xs text-gray-400 overflow-auto max-h-48 font-mono">
+                        <p className="text-xs text-[#5a5a5a] uppercase tracking-wide mb-1">Component Stack</p>
+                        <pre className="text-xs text-[#858585] overflow-auto max-h-48 font-mono">
                           {errorInfo.componentStack}
                         </pre>
                       </div>
@@ -127,11 +128,6 @@ class ErrorBoundary extends React.Component {
                   </div>
                 </details>
               )}
-
-              {/* Help Text */}
-              <p className="text-xs text-gray-400 text-center mt-6">
-                If this problem persists, try clearing your browser cache or contact support.
-              </p>
             </div>
           </div>
         </div>
@@ -167,9 +163,9 @@ export class InlineErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-sm">
-            ⚠️ {this.props.name || 'Component'} failed to load
+        <div className="p-4 bg-[#ef4444]/10 border border-[#ef4444]/30 rounded-xl">
+          <p className="text-[#ef4444] text-sm">
+            {this.props.name || 'Component'} failed to load
           </p>
           {this.props.showError && (
             <p className="text-xs text-gray-400 mt-1 font-mono">

@@ -154,7 +154,7 @@ const EmergencyButton = () => {
               <div className="flex justify-between items-start">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">
-                    {step === 'main' && "You're Not Alone"}
+                    {step === 'main' && "Ground yourself first."}
                     {step === 'breathing' && "Box Breathing"}
                     {step === 'reflection' && "Quick Check-In"}
                     {step === 'complete' && "Protocol Complete"}
@@ -289,7 +289,7 @@ const EmergencyButton = () => {
 
                   {breathPhase === 'complete' && (
                     <div className="space-y-4 animate-fade-in-up">
-                      <p className="text-oura-cyan">Excellent work. Your nervous system thanks you.</p>
+                      <p className="text-oura-cyan">Cycle complete. The urge is lower than it was.</p>
                       <div className="flex gap-3">
                         <button
                           onClick={() => resetBreathing()}
@@ -364,8 +364,8 @@ const EmergencyButton = () => {
               {step === 'complete' && (
                 <div className="space-y-6 animate-fade-in-up text-center">
                   <div className="text-6xl">✓</div>
-                  <h3 className="text-2xl font-light text-white">Session complete. You controlled it.</h3>
-                  <p className="text-gray-400">Your struggle has been logged. The Oracle has guidance for you.</p>
+                  <h3 className="text-2xl font-light text-white">Session complete.</h3>
+                  <p className="text-gray-400">This is logged. The Oracle has a reading when you want it.</p>
                   
                   <div className="flex gap-3">
                     <button

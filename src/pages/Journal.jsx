@@ -1457,7 +1457,7 @@ export default function Journal() {
                     const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
 
                     return (
-                      <div key={entry.id} className="oura-card p-6">
+                      <div key={entry.id} className="oura-card p-6 hover:shadow-oura-glow-purple transition-shadow duration-300">
                         <div className="flex items-center justify-between mb-4">
                           {moodOption ? (
                             <div className="flex items-center space-x-3">
@@ -1608,8 +1608,8 @@ export default function Journal() {
                 </div>
               ) : (
                 <div className="oura-card p-12 text-center">
-                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center text-2xl">
-                    📝
+                  <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
+                    <AppIcon name="journal" size={26} color="#5a5a5a" glow={false} />
                   </div>
                   <h3 className="text-lg font-light text-white mb-2">
                     {searchQuery.trim() ? `No matches for “${searchQuery.trim()}”` : 'No journal entries yet'}

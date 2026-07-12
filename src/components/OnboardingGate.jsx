@@ -6,10 +6,7 @@ import logger from '../utils/logger';
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-screen bg-black text-white">
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-red-500 mx-auto"></div>
-      <p className="mt-4 text-lg">Loading...</p>
-    </div>
+    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-oura-cyan"></div>
   </div>
 );
 
