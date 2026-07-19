@@ -1,45 +1,17 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import RelapseRadar from '../components/RelapseRadar';
 import QuickSignalLog from '../components/QuickSignalLog';
-import { SkeletonBox } from '../components/SkeletonLoader';
 import { AppIcon } from '../components/AppIcons';
+import ModuleIntro from '../components/help/ModuleIntro';
 
+// This page owns no data. RelapseRadar fetches its own entries and renders its
+// own skeleton while it does, so there is no page-level loading state here — an
+// earlier fixed 50ms timer showed a skeleton unrelated to any real fetch.
 export default function Relapse() {
-  const [loading, setLoading] = useState(true);
-  const [showSkeleton, setShowSkeleton] = useState(false);
   // Bumped after a quick-log so RelapseRadar remounts and re-reads its pattern
   // data (it loads on mount). Cheap and keeps the wizard component untouched.
   const [radarKey, setRadarKey] = useState(0);
-
-  // Delay showing skeleton to prevent flicker on fast loads
-  useEffect(() => {
-    const skeletonTimer = setTimeout(() => {
-      if (loading) {
-        setShowSkeleton(true);
-      }
-    }, 250);
-
-    return () => clearTimeout(skeletonTimer);
-  }, [loading]);
-
-  // Keep skeleton visible briefly to avoid flicker on completion
-  useEffect(() => {
-    let dwellTimer;
-    if (!loading && showSkeleton) {
-      dwellTimer = setTimeout(() => setShowSkeleton(false), 300);
-    }
-    return () => clearTimeout(dwellTimer);
-  }, [loading, showSkeleton]);
-
-  // Initialize component
-  useEffect(() => {
-    // Simulate a brief initialization delay
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 50);
-    return () => clearTimeout(timer);
-  }, []);
 
   return (
     <div className="min-h-screen bg-black py-8">
@@ -60,21 +32,16 @@ export default function Relapse() {
             <QuickSignalLog onLogged={() => setRadarKey((k) => k + 1)} />
           </div>
         </div>
-        
-        <div className="relative">
-          <div className={`fade-pane ${loading || showSkeleton ? 'visible' : 'hidden'}`}>
-            <div className="space-y-4">
-              <SkeletonBox width="100%" height="3rem" />
-              <SkeletonBox width="100%" height="8rem" />
-              <SkeletonBox width="100%" height="3rem" />
-              <SkeletonBox width="100%" height="8rem" />
-            </div>
-          </div>
 
-          <div className={`fade-pane ${loading || showSkeleton ? 'hidden' : 'visible'}`}>
-            <RelapseRadar key={radarKey} />
-          </div>
-        </div>
+        <ModuleIntro
+          moduleId="relapse"
+          onAction={() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            document.querySelector('#quick-signal-input')?.focus();
+          }}
+        />
+
+        <RelapseRadar key={radarKey} />
       </div>
     </div>
   );

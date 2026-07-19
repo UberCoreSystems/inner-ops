@@ -4,18 +4,38 @@ import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { updateMemory } from '../utils/updateMemory';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
-import { generateAIFeedback } from '../utils/aiFeedback';
+import { generateAIFeedback, PROVENANCE } from '../utils/aiFeedback';
 import { extractHardLessonDirect } from '../utils/crossModuleExtraction';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
+import ModuleIntro from '../components/help/ModuleIntro';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import logger from '../utils/logger';
 import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
 import { isUnderReview, getHeldStreakDays, getMostRecentBreak } from '../utils/ruleState';
 import { toMs, localDateKey } from '../utils/dateUtils';
+
+// Scar-flow skip flag. localStorage throws in Safari private mode and can be
+// unavailable in a WKWebView, so both accessors swallow and fail toward showing
+// the flow rather than suppressing it on a storage error.
+const SCAR_FLOW_SKIPPED_KEY = 'inner_ops_scar_flow_skipped';
+
+const readScarFlowSkipped = () => {
+  try {
+    return localStorage.getItem(SCAR_FLOW_SKIPPED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const writeScarFlowSkipped = () => {
+  try {
+    localStorage.setItem(SCAR_FLOW_SKIPPED_KEY, 'true');
+  } catch { /* noop */ }
+};
 
 // Event categories for Hard Lessons
 const eventCategories = [
@@ -177,9 +197,11 @@ export default function HardLessons() {
     }
   };
 
-  // Show scar flow when lessons load empty (first time), unless skipped this session
+  // Show scar flow when lessons load empty (first time), unless previously skipped.
+  // Persisted in localStorage, not sessionStorage — a session-scoped flag brought
+  // the flow back in every new tab until a lesson was finally saved.
   useEffect(() => {
-    if (!initialLoading && lessons.length === 0 && !sessionStorage.getItem('scar_flow_skipped')) {
+    if (!initialLoading && lessons.length === 0 && !readScarFlowSkipped()) {
       setShowScarFlow(true);
     }
   }, [initialLoading, lessons.length]);
@@ -654,7 +676,15 @@ export default function HardLessons() {
       ].filter(Boolean).join('\n');
 
       setPendingOracleWisdom(wisdom);
-      openOracleWithContent(wisdom, getCachedTotalEntryCount(), null, description, 'hard_lessons');
+      // Reaching here means the extractor returned a real result — the null and
+      // throw paths above both bail out — so this is genuinely Claude's output.
+      openOracleWithContent({
+        content: wisdom,
+        entryCount: getCachedTotalEntryCount(),
+        entryText: description,
+        entryModuleName: 'hard_lessons',
+        provenance: PROVENANCE.ORACLE,
+      });
     } catch (error) {
       logger.error('Error seeking Oracle extraction:', error);
       closeOracle();
@@ -874,11 +904,19 @@ export default function HardLessons() {
           <p className="text-[#ababab] text-lg mb-4">
             Extract the lesson once, so you never pay for it twice.
           </p>
-          <div className="oura-card p-4 border-l-4 border-[#f59e0b]">
-            <p className="text-sm text-[#ababab]">
-              <span className="text-[#f59e0b] font-semibold">Purpose:</span> Ensure the same lesson is never paid for twice. Memory with teeth.
-            </p>
-          </div>
+          {/* The permanent "Purpose:" card that used to sit here was replaced
+              by the dismissible first-run intro — two stacked explainers under
+              one header read as clutter. */}
+          <ModuleIntro
+            moduleId="hardlessons"
+            onAction={() => {
+              setShowForm(true);
+              setTimeout(() => {
+                document.getElementById('hard-lessons-event')?.focus();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }, 0);
+            }}
+          />
           <p className="text-[#858585] text-xs mt-3">Lesson maps to active pattern → <Link to="/ledger" className="text-[#ababab] hover:text-white transition-colors">General Ledger</Link></p>
         </div>
 
@@ -1775,7 +1813,7 @@ export default function HardLessons() {
                       </button>
                       <button
                         onClick={() => {
-                          sessionStorage.setItem('scar_flow_skipped', 'true');
+                          writeScarFlowSkipped();
                           setShowScarFlow(false);
                           setShowForm(true);
                           setTimeout(() => {
@@ -1829,6 +1867,8 @@ export default function HardLessons() {
         entryCount={oracleModal.entryCount}
         entryText={oracleModal.entryText}
         entryModuleName={oracleModal.entryModuleName}
+        provenance={oracleModal.provenance}
+        fallbackReason={oracleModal.fallbackReason}
       />
       </div>
     </div>

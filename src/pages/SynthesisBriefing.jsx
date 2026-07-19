@@ -8,6 +8,7 @@ import { getUserProfile } from '../utils/userProfile';
 import { COLLECTIONS, KILL_TARGET_FIELDS, HARD_LESSON_FIELDS } from '../utils/schema';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import ModuleIntro from '../components/help/ModuleIntro';
 
 // Cap stored briefings per user. Anything older than the cap gets pruned
 // after a successful Generate Now so the archive can't grow unbounded.
@@ -263,6 +264,8 @@ export default function SynthesisBriefing() {
             Cross-module behavioral intelligence. What your own data reveals across domains.
           </p>
         </div>
+
+        <ModuleIntro moduleId="synthesis" onAction={handleGenerate} />
 
         {/* Generate controls — always visible. Manual trigger bypasses cadence. */}
         <div className="oura-card p-6 mb-8">

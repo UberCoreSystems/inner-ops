@@ -153,6 +153,53 @@ export const upsertUserSettings = async (data) => {
   return await writeData('userSettings', data);
 };
 
+// Expand { 'a.b.c': v } → { a: { b: { c: v } } }. Only needed on the create
+// branch below: updateDoc understands dotted keys as field paths, but a doc
+// created with one would get a field literally named "a.b.c".
+const expandDottedKeys = (dottedMap) => {
+  const out = {};
+  for (const [path, value] of Object.entries(dottedMap)) {
+    const segments = path.split('.');
+    let cursor = out;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const key = segments[i];
+      if (typeof cursor[key] !== 'object' || cursor[key] === null) cursor[key] = {};
+      cursor = cursor[key];
+    }
+    cursor[segments[segments.length - 1]] = value;
+  }
+  return out;
+};
+
+// Field-path variant of upsertUserSettings, for nested maps written from more
+// than one device.
+//
+// updateDoc REPLACES a nested object field wholesale — it does not deep-merge.
+// So the read-modify-write pattern (spread the local copy, write the whole map)
+// is last-write-wins: a device holding a stale copy silently discards another
+// device's entries. Passing dotted field paths instead makes Firestore merge
+// server-side at the leaf, which cannot clobber siblings.
+//
+//   upsertUserSettingsFields({ 'onboardingHelp.modules.journal': iso })
+//
+// Kept separate from upsertUserSettings rather than replacing it — existing
+// callers depend on whole-object write semantics.
+export const upsertUserSettingsFields = async (dottedMap) => {
+  const user = await ensureAuthenticated();
+  const db = await getDb();
+  const existing = await readUserData('userSettings');
+  if (existing.length > 0) {
+    const id = existing[0].id;
+    await updateDoc(doc(db, 'userSettings', id), {
+      ...dottedMap,
+      userId: user.uid,
+      lastUpdated: serverTimestamp(),
+    });
+    return { id };
+  }
+  return await writeData('userSettings', expandDottedKeys(dottedMap));
+};
+
 export const readUserData = async (collectionName, requireAuth = false) => {
   try {
     const auth = await getAuth();

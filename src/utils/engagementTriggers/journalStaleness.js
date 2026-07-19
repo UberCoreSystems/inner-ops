@@ -2,6 +2,9 @@ import { ENGAGEMENT_TRIGGERS } from '../schema.js';
 
 const HOURS = 60 * 60 * 1000;
 export const STALENESS_THRESHOLD_HOURS = 36;
+// Grace window after onboarding before staleness can fire for a user who has
+// never journaled. See the day-one guard in the evaluator.
+export const ONBOARDING_GRACE_HOURS = 24;
 
 const toMillis = (value) => {
   if (!value) return null;
@@ -49,6 +52,7 @@ export const evaluateJournalStaleness = ({
   bannerDismissals,
   now = Date.now(),
   thresholdHours = STALENESS_THRESHOLD_HOURS,
+  graceHours = ONBOARDING_GRACE_HOURS,
 }) => {
   const triggerId = ENGAGEMENT_TRIGGERS.JOURNAL_STALENESS;
   const enabled = notificationPreferences?.[triggerId]?.enabled !== false;
@@ -56,6 +60,16 @@ export const evaluateJournalStaleness = ({
 
   const thresholdMs = thresholdHours * HOURS;
   const latest = latestEntryMillis(journalEntries);
+
+  // Day-one grace. A user with no entries reads as infinitely stale, so
+  // without this the banner fires on the very first Dashboard render — seconds
+  // after finishing the wizard, before they have had any chance to write.
+  // Being nagged for not doing something you have not yet had the opportunity
+  // to do is the wrong first impression. Resumes after the grace window.
+  const onboardedAtMs = toMillis(userProfile?.onboardingCompletedAt);
+  if (latest === null && onboardedAtMs !== null && (now - onboardedAtMs) < graceHours * HOURS) {
+    return null;
+  }
 
   // Hours since last entry. With no entries at all, we treat the user as
   // having infinite staleness — the banner should appear immediately so

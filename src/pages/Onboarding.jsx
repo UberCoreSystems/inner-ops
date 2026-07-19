@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { saveUserProfile } from '../utils/userProfile';
+import { saveUserProfile, getUserProfile } from '../utils/userProfile';
 import { writeData } from '../utils/firebaseUtils';
 import { track } from '../utils/analytics';
 import logger from '../utils/logger';
@@ -37,6 +37,9 @@ export default function Onboarding() {
   // to the focus step with a stark nudge; skipNudged then exposes a non-coercive
   // "Skip anyway" escape so no one is trapped.
   const [skipNudged, setSkipNudged] = useState(false);
+  // Held true until the in-progress draft (if any) has been read back, so the
+  // wizard never renders step 0 and then jumps to the resumed step.
+  const [hydrating, setHydrating] = useState(true);
   const navigate = useNavigate();
 
   // BER-200: confrontation criteria setup (step 5)
@@ -59,6 +62,55 @@ export default function Onboarding() {
   // First optional step — from here the user can bail to the dashboard at any
   // time; handleComplete persists whatever has been captured so far.
   const FIRST_OPTIONAL_STEP = 4;
+
+  // Resume an abandoned wizard. Without this, a user who closes the tab mid-way
+  // has an auth account with no onboardingCompletedAt and is sent back to step 0
+  // on every login — permanently, since nothing they entered was ever persisted.
+  // Reads the draft written by handleNext and restores position and answers.
+  useEffect(() => {
+    let active = true;
+
+    getUserProfile()
+      .then((profile) => {
+        if (!active || !profile || profile.onboardingCompletedAt) return;
+
+        if (typeof profile.primaryDriver === 'string') setDriver(profile.primaryDriver);
+        if (typeof profile.feedbackStyle === 'string') setFeedbackStyle(profile.feedbackStyle);
+        if (typeof profile.focusStatement === 'string') setFocusStatement(profile.focusStatement);
+
+        // Clamp: a stored step outside the wizard's range would strand the user
+        // on a screen that no longer exists.
+        const saved = Number(profile.onboardingStep);
+        if (Number.isInteger(saved) && saved > 0 && saved < TOTAL_STEPS) {
+          setStep(saved);
+        }
+      })
+      .catch((err) => {
+        // Failing to resume is recoverable — the user restarts at the briefing.
+        logger.warn('Failed to read onboarding draft:', err);
+      })
+      .finally(() => {
+        if (active) setHydrating(false);
+      });
+
+    return () => { active = false; };
+    // Mount only — resuming mid-wizard would fight the user's own navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Best-effort draft write so progress survives an abandoned session. Never
+  // writes onboardingCompletedAt — the gate keys off that field, so writing it
+  // here would release an incomplete user to the dashboard.
+  const saveDraft = (nextStep) => {
+    saveUserProfile({
+      onboardingStep: nextStep,
+      primaryDriver: driver,
+      feedbackStyle,
+      focusStatement: focusStatement.trim(),
+    }).catch((err) => {
+      logger.warn('Failed to save onboarding draft:', err);
+    });
+  };
 
   const canAdvance = () => {
     if (step === 1) return !!driver;
@@ -183,11 +235,23 @@ export default function Onboarding() {
 
   const handleNext = () => {
     if (step < TOTAL_STEPS - 1) {
-      setStep(step + 1);
+      const nextStep = step + 1;
+      saveDraft(nextStep);
+      setStep(nextStep);
     } else {
       handleComplete();
     }
   };
+
+  // Hold the screen until the draft read settles, so a resuming user never sees
+  // the briefing flash before being returned to the step they left off on.
+  if (hydrating) {
+    return (
+      <div className="min-h-[100dvh] bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-oura-cyan" />
+      </div>
+    );
+  }
 
   // Step 0 (briefing) renders the standalone BriefingScreen so the same copy
   // is shown both here and from Settings → Replay briefing.

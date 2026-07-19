@@ -521,6 +521,20 @@ const parseLLMJsonSafely = (value) => {
   return null;
 };
 
+/**
+ * Where a piece of Oracle prose actually came from.
+ *
+ * `oracle` — Claude responded and this is its text.
+ * `local`  — the call failed and this was assembled by composeFeedback from
+ *            the entry alone, with no access to the user's record.
+ *
+ * This distinction is user-facing. Local prose renders under the same Oracle
+ * headers as real model output, so without an explicit marker the app claims
+ * authorship it does not have — and, because the text is persisted, keeps
+ * claiming it on every subsequent read.
+ */
+export const PROVENANCE = Object.freeze({ ORACLE: 'oracle', LOCAL: 'local' });
+
 export const callLLM = async (promptBundle, generationContext) => {
   const { userPrompt } = promptBundle;
 
@@ -598,7 +612,14 @@ export const callLLM = async (promptBundle, generationContext) => {
     track('oracle_called', { module: userPrompt.moduleName, tone });
 
     // Claude returned real prose — skip the template formatter entirely
-    return { _rawClaudeResponse: true, rawText: feedback || '', metacognitiveDepth, closingQuestion };
+    return {
+      _rawClaudeResponse: true,
+      rawText: feedback || '',
+      metacognitiveDepth,
+      closingQuestion,
+      _provenance: PROVENANCE.ORACLE,
+      _fallbackReason: null,
+    };
   } catch (error) {
     // Cloud Function unavailable (not yet deployed, network issue, rate limit) —
     // fall back to the local template system so the app stays functional.
@@ -628,7 +649,12 @@ export const callLLM = async (promptBundle, generationContext) => {
         : null,
     });
 
-    return parseLLMJsonSafely(draft);
+    const parsed = parseLLMJsonSafely(draft);
+    // Mark the origin so the UI can say so. `code` is empty for generic
+    // failures; normalize to 'unknown' rather than leaving it falsy.
+    parsed._provenance = PROVENANCE.LOCAL;
+    parsed._fallbackReason = code || 'unknown';
+    return parsed;
   }
 };
 
@@ -859,6 +885,11 @@ export const generateFeedback = async ({
     // Real Claude prose — skip validation/formatting entirely
     if (llmResponse._rawClaudeResponse) return llmResponse;
 
+    // validateAndFix rebuilds a fresh object from named fields, so the origin
+    // markers do not survive it. Capture them here and re-attach below.
+    const provenance = llmResponse._provenance || PROVENANCE.LOCAL;
+    const fallbackReason = llmResponse._fallbackReason || null;
+
     const checked = await validateAndFix(llmResponse, {
       entryText: cleanEntry,
       themes,
@@ -880,10 +911,15 @@ export const generateFeedback = async ({
     ];
 
     setRecentFeedbackFingerprints(userId, updated);
+    checked._provenance = provenance;
+    checked._fallbackReason = fallbackReason;
     return checked;
   } catch (error) {
     logger.error('generateFeedback failed:', error);
-    return buildFallbackFeedback(safeModuleName, cleanEntry);
+    const fallback = buildFallbackFeedback(safeModuleName, cleanEntry);
+    fallback._provenance = PROVENANCE.LOCAL;
+    fallback._fallbackReason = 'exception';
+    return fallback;
   }
 };
 
@@ -996,13 +1032,27 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
         text: feedback.rawText,
         metacognitiveDepth: feedback.metacognitiveDepth || null,
         closingQuestion: feedback.closingQuestion || null,
+        provenance: feedback._provenance || PROVENANCE.ORACLE,
+        fallbackReason: feedback._fallbackReason || null,
       };
     }
 
-    return { text: formatFeedbackAsText(feedback), metacognitiveDepth: null, closingQuestion: null };
+    return {
+      text: formatFeedbackAsText(feedback),
+      metacognitiveDepth: null,
+      closingQuestion: null,
+      provenance: feedback._provenance || PROVENANCE.LOCAL,
+      fallbackReason: feedback._fallbackReason || null,
+    };
   } catch (error) {
     logger.error('Error generating AI feedback:', error);
     const fallback = buildFallbackFeedback(moduleName, normalizeEntryText(resolvedInput));
-    return { text: formatFeedbackAsText(fallback), metacognitiveDepth: null, closingQuestion: null };
+    return {
+      text: formatFeedbackAsText(fallback),
+      metacognitiveDepth: null,
+      closingQuestion: null,
+      provenance: PROVENANCE.LOCAL,
+      fallbackReason: 'exception',
+    };
   }
 };

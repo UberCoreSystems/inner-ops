@@ -7,7 +7,8 @@ import {
   classifyEvasion,
   buildEvasionNote,
   EVASION_THRESHOLDS,
-  HIGH_EVASION_FRAME
+  HIGH_EVASION_FRAME,
+  PROVENANCE
 } from './aiFeedback.js';
 import { feedbackFixtures } from './aiFeedback.fixtures.js';
 
@@ -132,4 +133,27 @@ test('Spec 5: high evasion overrides frame to challenge posture and injects hard
   assert.match(note, /Do not offer reframes/);
   assert.match(note, /Do not .*soften/);
   assert.match(note, /one specific question/);
+});
+
+// Provenance. There is no Firebase in this environment, so every callLLM here
+// fails and falls back to the local template composer — which is precisely the
+// path that used to render under an "Oracle" header with nothing marking it as
+// locally assembled.
+test('local fallback is marked with local provenance and a reason', async () => {
+  const feedback = await generateFeedback({
+    moduleName: 'journal',
+    entryText: 'I let the deadline slip again and told myself the scope was unrealistic.',
+    userContext: { userId: 'test-user-provenance' },
+  });
+
+  assert.equal(feedback._provenance, PROVENANCE.LOCAL, 'fallback prose must be marked local');
+  assert.ok(feedback._fallbackReason, 'fallback must record why the Oracle call failed');
+});
+
+test('PROVENANCE values are the two the UI branches on', () => {
+  assert.equal(PROVENANCE.ORACLE, 'oracle');
+  assert.equal(PROVENANCE.LOCAL, 'local');
+  // Frozen: these strings are persisted to Firestore, so a typo'd or mutated
+  // member would silently mislabel historical entries.
+  assert.ok(Object.isFrozen(PROVENANCE));
 });

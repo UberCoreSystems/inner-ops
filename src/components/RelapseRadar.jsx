@@ -15,6 +15,7 @@ import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
 import { AppIcon } from './AppIcons';
 import ArchiveToggle from './ArchiveToggle';
+import { SkeletonList, SkeletonCard } from './SkeletonLoader';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { useOracleModal } from '../hooks/useOracleModal';
@@ -91,6 +92,10 @@ const RelapseRadar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  // Distinct from `loading`, which is the submit state. Without this the list
+  // renders its zero-data empty state during the initial fetch, so a returning
+  // user is told they have no entries before their entries arrive.
+  const [entriesLoaded, setEntriesLoaded] = useState(false);
   const [submitSuccess] = useState(false);
   const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
   const [currentEntryId, setCurrentEntryId] = useState(null);
@@ -152,6 +157,7 @@ const RelapseRadar = () => {
         } else {
           setRelapseEntries([]);
           setKillTargets([]);
+          setEntriesLoaded(true);
         }
       });
       if (mountedRef.current) {
@@ -220,6 +226,8 @@ const RelapseRadar = () => {
     } catch (error) {
       logger.error("Error loading relapse entries:", error);
       if (mountedRef.current) setLoadError(true);
+    } finally {
+      if (mountedRef.current) setEntriesLoaded(true);
     }
   };
 
@@ -476,7 +484,12 @@ const RelapseRadar = () => {
       const entryText = `Pattern: ${archetypeLabelForPrompt}, Habits: ${habitLabelsForPrompt}, Substances: ${substanceLabelsForPrompt}, Reflection: ${reflection}${selectedPrecursors.length ? `, Precursor conditions: ${selectedPrecursors.join(', ')}` : ''}${proximityNote}`;
       oracleEntryTextRef.current = entryText;
       const pastReflections = relapseEntries.slice(-3).map(entry => entry.reflection).filter(Boolean);
-      const { text: oracleFeedback, closingQuestion: oracleClosingQuestion } = await generateAIFeedback('relapse', entryText, pastReflections);
+      const {
+        text: oracleFeedback,
+        closingQuestion: oracleClosingQuestion,
+        provenance: oracleProvenance,
+        fallbackReason: oracleFallbackReason,
+      } = await generateAIFeedback('relapse', entryText, pastReflections);
 
       // BER-182: auto-include physiological precursor if Oura signals are below threshold
       const effectivePrecursors = isPhysiologicalAlert
@@ -492,6 +505,8 @@ const RelapseRadar = () => {
         reflection,
         oracleFeedback,
         ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
+        ...(oracleProvenance ? { oracleProvenance } : {}),
+        ...(oracleFallbackReason ? { oracleFallbackReason } : {}),
         precursorConditions: effectivePrecursors,
         precursorContext: precursorContext.trim() || null,
         eventOccurredAt: occurredAt.toISOString(),
@@ -518,7 +533,12 @@ const RelapseRadar = () => {
       updateMemory('relapse', savedEntry.id);
 
       // Show Oracle feedback in modal
-      openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());
+      openOracleWithContent({
+        content: oracleFeedback,
+        entryCount: getCachedTotalEntryCount(),
+        provenance: oracleProvenance,
+        fallbackReason: oracleFallbackReason,
+      });
 
       const isRelapseEvent = entryType === RELAPSE_ENTRY_TYPES.RELAPSE;
       ouraToast.success(isRelapseEvent ? 'Relapse logged' : 'Signal logged');
@@ -585,7 +605,7 @@ const RelapseRadar = () => {
     } catch (error) {
       logger.error("Error generating Oracle feedback:", error);
       if (redirectIfAuthLost(error)) return;
-      openOracleWithContent("Oracle unavailable. Check-in recorded.");
+      openOracleWithContent({ content: 'Oracle unavailable. Check-in recorded.' });
     } finally {
       setLoading(false);
       submittingRef.current = false;
@@ -1123,7 +1143,13 @@ const RelapseRadar = () => {
         <RelapseForecastCard relapseEntries={relapseEntries} killTargets={killTargets} />
       )}
 
-      {!loadError && ((relapseEntries.length > 0 || archivedEntries.length > 0) ? (
+      {!loadError && !entriesLoaded && (
+        <div className="mt-10">
+          <SkeletonList count={3} ItemComponent={SkeletonCard} />
+        </div>
+      )}
+
+      {!loadError && entriesLoaded && ((relapseEntries.length > 0 || archivedEntries.length > 0) ? (
         <div className="mt-10">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
             <div className="flex items-center gap-4 flex-wrap">
@@ -1345,6 +1371,8 @@ const RelapseRadar = () => {
         entryText={oracleEntryTextRef.current || ''}
         entryModuleName="Relapse Radar"
         entryCount={oracleModal.entryCount}
+        provenance={oracleModal.provenance}
+        fallbackReason={oracleModal.fallbackReason}
       />
     </div>
   );

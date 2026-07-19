@@ -125,7 +125,21 @@ export const USER_SETTINGS_FIELDS = Object.freeze({
   // trigger evaluator re-fires only when the underlying condition re-asserts.
   NOTIFICATION_PREFERENCES: 'notificationPreferences',
   BANNER_DISMISSALS: 'bannerDismissals',
+  // First-run help. Deliberately NOT folded into bannerDismissals: that map's
+  // contract is "re-fire once the condition re-asserts", whereas a module
+  // intro is shown exactly once and never returns.
+  //   onboardingHelp: {
+  //     version: 1,
+  //     modules:      { [moduleId]: ISO },   // dismissed-at, per module
+  //     walkthroughs: { [tourId]: { status: 'completed'|'skipped', at: ISO, atStep: number, version: number } }
+  //   }
+  // `version` is the reset lever: bump ONBOARDING_HELP_VERSION and every user
+  // sees the refreshed help once, with no data migration.
+  ONBOARDING_HELP: 'onboardingHelp',
 });
+
+// Bump to re-show all first-run help after a substantive copy or layout pass.
+export const ONBOARDING_HELP_VERSION = 1;
 
 // User-profile fields. Lives on userProfiles/{uid}, written by Onboarding,
 // Profile, and Settings. Read by Oracle for context.
@@ -133,6 +147,9 @@ export const USER_PROFILE_FIELDS = Object.freeze({
   // Onboarding state — written by Onboarding wizard on completion or skip.
   ONBOARDING_COMPLETED_AT: 'onboardingCompletedAt',
   ONBOARDING_SKIPPED: 'onboardingSkipped',
+  // In-progress wizard position, written on each step advance so an abandoned
+  // session resumes where it left off. Meaningless once COMPLETED_AT is set.
+  ONBOARDING_STEP: 'onboardingStep',           // integer, 1..TOTAL_STEPS-1
   // Personal context (Section 2.5 of the onboarding/engagement plan). All
   // optional. Drives banner copy enrichment (pre-deploy) and personalized
   // Daily Prompt rotation (v1.1).
@@ -180,4 +197,10 @@ export const ORACLE_FIELDS = Object.freeze({
   KILL_ESCAPE_RESPONSE: 'escapeOracleResponse',
   // Synthesis briefing — already structured and queryable.
   SYNTHESIS_QUESTION: 'confrontationQuestion',
+  // Origin of the stored prose: 'oracle' (Claude answered) or 'local' (the
+  // call failed and the text was composed from the entry alone). Absent on
+  // documents written before this field existed — treat undefined as unknown
+  // and render without a provenance claim rather than guessing.
+  PROVENANCE: 'oracleProvenance',
+  FALLBACK_REASON: 'oracleFallbackReason',
 });

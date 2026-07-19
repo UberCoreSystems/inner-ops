@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
-import { generateAIFeedback } from '../utils/aiFeedback';
+import { generateAIFeedback, PROVENANCE } from '../utils/aiFeedback';
 import { resolveTriggeredCriterion } from '../utils/confrontationCriteria';
 import logger from '../utils/logger';
 import { ouraToast } from '../utils/toast';
@@ -82,6 +82,12 @@ const OracleModal = ({
   entryCount = null,
   // BER-225: metacognitive depth classification (journal entries only)
   metacognitiveDepth = null,
+  // Origin of `content`/`feedback`. 'oracle' = Claude answered. 'local' = the
+  // call failed and this text was composed from the entry alone. null = not
+  // Oracle output (a system message) or a document written before the field
+  // existed — in both cases no claim is made either way.
+  provenance = null,
+  fallbackReason = null,
 }) => {
   // BER-200: resolved asynchronously on open — display the triggered criterion
   const [resolvedCriterion, setResolvedCriterion] = useState(null);
@@ -102,6 +108,10 @@ const OracleModal = ({
   const [followUpUsed, setFollowUpUsed] = useState(false);
   // Eng #3: validated receipts the Oracle reasons from ("on record" provenance)
   const [onRecord, setOnRecord] = useState([]);
+  // Local copy so a successful retry can clear the "Local" label without the
+  // parent having to re-render with a new prop.
+  const [displayProvenance, setDisplayProvenance] = useState(provenance);
+  const [retryLoading, setRetryLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && target && moduleName && !feedback && !content) {
@@ -120,6 +130,7 @@ const OracleModal = ({
       setDisplayFeedback('');
       // BER-229: reset depth to prop value on each open
       setDisplayDepth(metacognitiveDepth);
+      setDisplayProvenance(provenance);
       // BER-200: resolve confrontation criterion for this user
       setResolvedCriterion(null);
       // Eng #3: reset, then fetch the validated receipts on record for this entry's module
@@ -159,8 +170,14 @@ Status: ${target.status}
 Priority: ${target.priority}
 Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
-      const { text: generatedFeedback } = await generateAIFeedback(moduleName, feedbackContext, []);
+      const {
+        text: generatedFeedback,
+        provenance: generatedProvenance,
+      } = await generateAIFeedback(moduleName, feedbackContext, []);
       setOracleFeedback(generatedFeedback);
+      // This path generates inside the modal, so the parent has no provenance
+      // prop to pass — take it from the call itself.
+      setDisplayProvenance(generatedProvenance ?? null);
 
       if (onFeedbackGenerated) {
         onFeedbackGenerated(generatedFeedback);
@@ -170,6 +187,30 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       setOracleFeedback('The Oracle encounters interference... Please try again in a moment.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Retry after a local fallback. Deliberately does NOT consume a regeneration
+  // credit — the first attempt never reached the Oracle, so charging the user
+  // for it would penalize them for an outage.
+  const handleRetry = async () => {
+    if (retryLoading || !entryText) return;
+    setRetryLoading(true);
+    try {
+      const { feedback: retryFeedback, metacognitiveDepth: retryDepth } = await callOracleRaw(
+        entryText,
+        null,
+        entryModuleName
+      );
+      if (retryFeedback) {
+        setDisplayFeedback(retryFeedback);
+        setDisplayDepth(retryDepth);
+        setDisplayProvenance(PROVENANCE.ORACLE);
+      } else {
+        ouraToast.error('Oracle still unreachable.');
+      }
+    } finally {
+      setRetryLoading(false);
     }
   };
 
@@ -242,6 +283,15 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   const isCurrentlyLoading = isLoading || isGenerating;
   const canRegen = !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
   const canFollowUp = !!entryText && !followUpUsed && !followUpLoading && !isCurrentlyLoading && !!currentFeedback;
+
+  const isLocal = displayProvenance === PROVENANCE.LOCAL && !!currentFeedback && !isCurrentlyLoading;
+  // The two shapes the rate-limit code arrives in, depending on whether the
+  // error came from the callable wrapper or the raw functions client.
+  const isRateLimited = fallbackReason === 'resource-exhausted'
+    || fallbackReason === 'functions/resource-exhausted';
+  // Retrying a rate-limited call cannot succeed until the counter resets, so
+  // the affordance is withheld rather than offered and failed.
+  const canRetry = isLocal && !!entryText && !isRateLimited && !retryLoading;
 
   // a11y: trap keyboard focus inside the modal while open and restore focus on close.
   const trapRef = useFocusTrap(isOpen);
@@ -319,11 +369,14 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 </div>
               )}
 
-              {/* Oracle label */}
+              {/* Oracle label. A local reading is marked here rather than left
+                  to look like model output — see isLocal block below. */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#d1d1d1]" />
-                  <span className="text-[#858585] text-xs uppercase tracking-widest font-medium">Oracle</span>
+                  <div className={`w-1.5 h-1.5 rounded-full ${isLocal ? 'bg-[#5a5a5a]' : 'bg-[#d1d1d1]'}`} />
+                  <span className="text-[#858585] text-xs uppercase tracking-widest font-medium">
+                    {isLocal ? 'Oracle · Local' : 'Oracle'}
+                  </span>
                 </div>
                 <button
                   onClick={onClose}
@@ -339,6 +392,19 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {displayDepth && (
                 <div className="text-[#858585] text-xs uppercase tracking-widest">
                   Depth: {displayDepth}
+                </div>
+              )}
+
+              {/* Local-reading disclosure. Stated flatly, before the prose, so
+                  the user reads it knowing what produced it. No warning colour
+                  and no icon — this is a fact about the text, not an error. */}
+              {isLocal && (
+                <div className="border-l-2 border-[#5a5a5a] pl-3">
+                  <p className="text-[#858585] text-xs leading-relaxed">
+                    {isRateLimited
+                      ? 'Daily Oracle limit reached. Resets at midnight. This reading was assembled locally.'
+                      : 'The Oracle did not respond. This reading was assembled locally from this entry alone. It does not use your record.'}
+                  </p>
                 </div>
               )}
 
@@ -416,8 +482,17 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               )}
 
               {/* BER-136: Regenerate + Go Deeper buttons */}
-              {currentFeedback && (canRegen || canFollowUp) && (
+              {currentFeedback && (canRegen || canFollowUp || isLocal) && (
                 <div className="flex gap-2 flex-wrap">
+                  {isLocal && (
+                    <button
+                      onClick={handleRetry}
+                      disabled={!canRetry}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#2a2a2a] text-[#ababab] hover:border-[#3a3a3a] hover:text-white transition-all disabled:opacity-40"
+                    >
+                      {retryLoading ? 'Reaching the Oracle...' : 'Retry the Oracle'}
+                    </button>
+                  )}
                   {canRegen && (
                     <button
                       onClick={handleRegenerate}

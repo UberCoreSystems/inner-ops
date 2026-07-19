@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
+import { Link } from 'react-router-dom';
+import {
   updateDoc, 
   doc,
   serverTimestamp 
@@ -137,6 +138,10 @@ const KillListDashboard = React.memo(function KillListDashboard() {
         logger.error('Oracle closure response error:', err);
       }
       const { oracleResponse, oracleClosingQuestion } = composeClosureFeedback(feedback, mode);
+      // null when the Oracle call threw outright — composeClosureFeedback then
+      // supplies its own line, which is neither Claude's nor a local reading.
+      const oracleProvenance = feedback?.provenance ?? null;
+      const oracleFallbackReason = feedback?.fallbackReason ?? null;
 
       // Persist the Oracle line. Kill records live in confirmedKills;
       // escape records remain in killTargets.
@@ -147,6 +152,8 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           await updateDoc(killRef, {
             closureOracleResponse: oracleResponse,
             ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
+            ...(oracleProvenance ? { oracleProvenance } : {}),
+            ...(oracleFallbackReason ? { oracleFallbackReason } : {}),
             lastUpdated: serverTimestamp(),
           });
         } else if (mode === 'escape') {
@@ -154,6 +161,8 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           await updateDoc(targetRef, {
             escapeOracleResponse: oracleResponse,
             ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
+            ...(oracleProvenance ? { oracleProvenance } : {}),
+            ...(oracleFallbackReason ? { oracleFallbackReason } : {}),
             lastUpdated: serverTimestamp(),
           });
         }
@@ -324,12 +333,12 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           <h3 className="text-xl font-light text-white mb-2">No Active Contracts</h3>
           <p className="text-[#858585] text-sm mb-2 max-w-xs mx-auto">Name a pattern to eliminate and start building your streak.</p>
           <p className="text-[#828282] text-xs mb-6 max-w-xs mx-auto">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
-          <button
-            onClick={() => window.location.href = '/ledger'}
-            className="px-6 py-3 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] transition-colors"
+          <Link
+            to="/ledger"
+            className="inline-block px-6 py-3 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] transition-colors"
           >
             Start a Kill Contract
-          </button>
+          </Link>
         </div>
       </div>
     );

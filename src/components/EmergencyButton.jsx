@@ -101,15 +101,20 @@ const EmergencyButton = () => {
       openOracleLoading();
 
       const context = `Emergency struggle moment. Intensity: ${intensity}/10. Trigger: ${trigger || 'unspecified'}. Reflection: ${reflection || 'none provided'}`;
-      const { text: oracleFeedback } = await generateAIFeedback('emergency', context, []);
+      const { text: oracleFeedback, provenance, fallbackReason } = await generateAIFeedback('emergency', context, []);
 
-      openOracleWithContent(oracleFeedback, getCachedTotalEntryCount());
+      openOracleWithContent({
+        content: oracleFeedback,
+        entryCount: getCachedTotalEntryCount(),
+        provenance,
+        fallbackReason,
+      });
       setStep('complete');
     } catch (error) {
       // Finding 8: never log the error object directly — it may contain the
       // stringified payload. Surface only code + name for diagnostics.
       logger.error('Error logging emergency:', { code: error.code, name: error.name });
-      openOracleWithContent("Oracle unavailable. Entry recorded.");
+      openOracleWithContent({ content: 'Oracle unavailable. Entry recorded.' });
       setStep('complete');
     } finally {
       setLoading(false);
@@ -395,6 +400,8 @@ const EmergencyButton = () => {
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         entryCount={oracleModal.entryCount}
+        provenance={oracleModal.provenance}
+        fallbackReason={oracleModal.fallbackReason}
       />
     </>
   );

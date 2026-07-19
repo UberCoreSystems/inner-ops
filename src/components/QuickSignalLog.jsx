@@ -67,6 +67,7 @@ export default function QuickSignalLog({ onLogged }) {
       </div>
       <div className="relative">
         <textarea
+          id="quick-signal-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
           maxLength={20000}

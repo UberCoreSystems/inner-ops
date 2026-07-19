@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { composeMirrorReading } from '../utils/composeMirrorReading.js';
 
 const TRAJECTORY_COPY = {
@@ -36,6 +37,14 @@ function MirrorStack({
   // WILL read once they log). Never fabricated metrics — see composeSeededPreview.
   if (reading.isColdStart && !hasDepth && seededPreview && seededPreview.status !== 'empty') {
     return <SeededMirror preview={seededPreview}>{children}</SeededMirror>;
+  }
+
+  // Cold start with nothing to seed — the user skipped onboarding, so there are
+  // no declared answers to preview. Without this branch the entire surface
+  // silently disappears (hasAnything is false), leaving the Dashboard's primary
+  // card unexplained. State what the surface needs instead of vanishing.
+  if (reading.isColdStart && !hasDepth) {
+    return <ColdMirror>{children}</ColdMirror>;
   }
 
   const hasAnything =
@@ -134,6 +143,49 @@ function MirrorStack({
 
         {children && (
           <div className={hasAnything ? 'mt-6 pt-6 border-t border-[#1a1a1a]' : ''}>
+            {children}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ColdMirror — nothing logged and nothing declared. Reached when the user
+// skipped onboarding, so composeSeededPreview has no answers to reflect. States
+// what the surface reads and what it needs. No fabricated metrics, no
+// encouragement — the same honesty rules as composeSeededPreview.
+function ColdMirror({ children = null }) {
+  return (
+    <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
+      <div className="oura-card p-6 hover:shadow-oura-glow-blue hover:border-[#4da6ff]/40 transition-all">
+        <div className="flex items-baseline justify-between mb-5">
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest">Oracle</h3>
+          <span className="text-[#7a7a7a] text-[10px] uppercase tracking-widest">No record</span>
+        </div>
+
+        <p className="text-[#ababab] text-sm leading-relaxed">
+          Nothing on record yet. The Oracle reads what you log — entries, resets,
+          contracts, lessons. Write one entry and it starts.
+        </p>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link
+            to="/journal"
+            className="px-5 py-2.5 bg-[#4da6ff] hover:bg-[#3d8fd9] text-black rounded-xl transition-colors font-medium text-sm"
+          >
+            Write an entry
+          </Link>
+          <Link
+            to="/ledger"
+            className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all text-sm"
+          >
+            Name a contract
+          </Link>
+        </div>
+
+        {children && (
+          <div className="mt-6 pt-6 border-t border-[#1a1a1a]">
             {children}
           </div>
         )}

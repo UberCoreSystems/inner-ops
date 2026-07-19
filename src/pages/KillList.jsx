@@ -12,6 +12,7 @@ import OracleModal from '../components/OracleModal';
 import RedirectTargetModal from '../components/RedirectTargetModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
+import ModuleIntro from '../components/help/ModuleIntro';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
@@ -741,8 +742,8 @@ const KillList = () => {
       try {
         const categoryLabel = categories.find(c => c.value === targetData.category)?.label || targetData.category;
         const entryText = `I've just named a new target to eliminate: "${targetData.title}" — a ${categoryLabel}. I'm making a contract with myself to kill this pattern. I've been tolerating this long enough and I'm declaring it as something I will eliminate. This is kill contract number ${targetsRef.current.length + 1}.`;
-        const { text: feedback } = await generateAIFeedback('killList', entryText, targetsRef.current.slice(-3).map(t => t.title));
-        setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
+        const { text: feedback, provenance, fallbackReason } = await generateAIFeedback('killList', entryText, targetsRef.current.slice(-3).map(t => t.title));
+        setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount(), provenance, fallbackReason });
       } catch (error) {
         logger.error('Oracle feedback error:', error);
         setOracleModal({
@@ -932,7 +933,7 @@ const KillList = () => {
       // Start Oracle fetch in parallel with AVE prompt display
       const escapeText = `"${capturedTarget.title}" got me today. I was on a ${capturedTarget.streak || 0}-day streak. What happened: ${context.trim()}. What I told myself: ${rationalization.trim()}.${prevention.trim() ? ` What would have stopped it: ${prevention.trim()}.` : ''}${intentionContext}${autopsyPatternContext} This is escape number ${escapeData.length}.`;
       oracleEntryTextRef.current = escapeText;
-      const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).then(r => r.text).catch(() => null);
+      const oracleFetchPromise = generateAIFeedback('killList', escapeText, []).catch(() => null);
 
       // Show AVE circuit breaker — 3-second minimum lock before Oracle
       setAvePrompt(true);
@@ -940,8 +941,15 @@ const KillList = () => {
         setAvePrompt(false);
         setOracleModal({ isOpen: true, content: '', isLoading: true, entryCount: null });
         try {
-          const feedback = await oracleFetchPromise;
-          setOracleModal({ isOpen: true, content: feedback || 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false, entryCount: getCachedTotalEntryCount() });
+          const result = await oracleFetchPromise;
+          setOracleModal({
+            isOpen: true,
+            content: result?.text || 'The pattern survived this round. The autopsy is captured — use it next time.',
+            isLoading: false,
+            entryCount: getCachedTotalEntryCount(),
+            provenance: result?.provenance ?? null,
+            fallbackReason: result?.fallbackReason ?? null,
+          });
         } catch {
           setOracleModal({ isOpen: true, content: 'The pattern survived this round. The autopsy is captured — use it next time.', isLoading: false, entryCount: null });
         }
@@ -1317,12 +1325,14 @@ const KillList = () => {
     oracleEntryTextRef.current = entryText;
 
     try {
-      const { text: feedback, closingQuestion } = await generateAIFeedback('killList', entryText, []);
-      setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount() });
+      const { text: feedback, closingQuestion, provenance, fallbackReason } = await generateAIFeedback('killList', entryText, []);
+      setOracleModal({ isOpen: true, content: feedback, isLoading: false, entryCount: getCachedTotalEntryCount(), provenance, fallbackReason });
       await updateData('confirmedKills', kill.id, {
         oracleStatement: feedback,
         oracleRequestedAt: new Date(),
         ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
+        ...(provenance ? { oracleProvenance: provenance } : {}),
+        ...(fallbackReason ? { oracleFallbackReason: fallbackReason } : {}),
       });
       setConfirmedKills(prev => prev.map(k => k.id === kill.id ? { ...k, oracleStatement: feedback, ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}) } : k));
     } catch {
@@ -1781,6 +1791,18 @@ const KillList = () => {
             <p className="text-[#858585] text-xs mt-2">Patterns archived → <Link to="/hardlessons" className="text-[#ababab] hover:text-white transition-colors">Hard Lessons</Link></p>
           </div>
         </header>
+
+        {/* order-2 is required: this column is flex with explicit ordering, so
+            an unordered child would default to order-0 and render above the
+            header. */}
+        <ModuleIntro
+          moduleId="ledger"
+          className="order-2"
+          onAction={() => {
+            setShowAddForm(true);
+            setTimeout(() => newTargetInputRef.current?.focus(), 50);
+          }}
+        />
 
         {/* Stats — relocated below the active list (order-5) so the daily
             check-in loop leads and progress metrics stay secondary. */}
@@ -2302,8 +2324,8 @@ const KillList = () => {
                   {searchQuery.trim()
                     ? 'Try a different keyword or clear the search.'
                     : (filterStatus === 'all' ? 'Name what needs to die. No app can do this for you.' :
-                      filterStatus === 'active' ? 'All your contracts have been completed!' :
-                      'Complete some contracts to see them here')}
+                      filterStatus === 'active' ? 'Every contract you opened is closed. Name the next one.' :
+                      'Close a contract and it shows up here.')}
                 </p>
                 {!searchQuery.trim() && filterStatus !== 'completed' && (
                   <p className="text-[#828282] text-xs mb-6">A Kill Contract is a pattern you commit to eliminate, tracked by streak.</p>
@@ -2327,7 +2349,7 @@ const KillList = () => {
                     onClick={() => { setShowAddForm(true); setTimeout(() => newTargetInputRef.current?.focus(), 50); }}
                     className="px-6 py-2 bg-white hover:bg-[#d1d1d1] text-black rounded-lg transition-all duration-300 font-medium text-sm"
                   >
-                    {filterStatus === 'active' ? 'Create New Target' : 'Add Your First Target'}
+                    {filterStatus === 'active' ? 'Create New Contract' : 'Add Your First Contract'}
                   </button>
                 )}
               </div>
@@ -2517,6 +2539,8 @@ const KillList = () => {
           entryText={oracleEntryTextRef.current}
           entryModuleName="Kill List"
           entryCount={oracleModal.entryCount}
+          provenance={oracleModal.provenance}
+          fallbackReason={oracleModal.fallbackReason}
         />
 
         <RedirectTargetModal

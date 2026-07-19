@@ -9,6 +9,7 @@ import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
+import ModuleIntro from '../components/help/ModuleIntro';
 import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
 import { composeJournalSignal } from '../utils/composeJournalSignal';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
@@ -653,9 +654,12 @@ export default function Journal() {
       let feedbackText = null;
       let metacognitiveDepth;
       let closingQuestion;
+      let provenance = null;
+      let fallbackReason = null;
       let oracleFailed = false;
       try {
-        ({ text: feedbackText, metacognitiveDepth, closingQuestion } = await generateAIFeedback('journal', inputText, pastEntries));
+        ({ text: feedbackText, metacognitiveDepth, closingQuestion, provenance, fallbackReason } =
+          await generateAIFeedback('journal', inputText, pastEntries));
       } catch (aiError) {
         logger.error('Oracle feedback failed (entry will still be saved):', aiError);
         oracleFailed = true;
@@ -672,11 +676,15 @@ export default function Journal() {
           ...(feedbackText ? { oracleJudgment: feedbackText } : {}),
           ...(metacognitiveDepth ? { metacognitiveDepth } : {}),
           ...(closingQuestion ? { oracleClosingQuestion: closingQuestion } : {}),
+          // Records whether the saved judgment is Claude's or locally composed,
+          // so a reload can label it as accurately as the moment it was written.
+          ...(feedbackText && provenance ? { oracleProvenance: provenance } : {}),
+          ...(feedbackText && fallbackReason ? { oracleFallbackReason: fallbackReason } : {}),
         });
       } catch (writeError) {
         logger.error('Error saving journal entry:', writeError);
         if (redirectIfAuthLost(writeError)) return;
-        openOracleWithContent('Could not save your entry. Check your connection and try again.');
+        openOracleWithContent({ content: 'Could not save your entry. Check your connection and try again.' });
         ouraToast.error('Failed to save journal entry');
         return;
       }
@@ -692,9 +700,20 @@ export default function Journal() {
       updateMemory('journal', newEntry.id);
 
       if (oracleFailed) {
-        openOracleWithContent('Entry saved. Oracle is unavailable right now — submit again to request feedback.', getCachedTotalEntryCount());
+        openOracleWithContent({
+          content: 'Entry saved. Oracle is unavailable right now — submit again to request feedback.',
+          entryCount: getCachedTotalEntryCount(),
+        });
       } else {
-        openOracleWithContent(feedbackText, getCachedTotalEntryCount(), metacognitiveDepth, inputText, 'journal');
+        openOracleWithContent({
+          content: feedbackText,
+          entryCount: getCachedTotalEntryCount(),
+          metacognitiveDepth,
+          entryText: inputText,
+          entryModuleName: 'journal',
+          provenance,
+          fallbackReason,
+        });
       }
 
       ouraToast.success('Journal entry saved');
@@ -728,7 +747,7 @@ export default function Journal() {
     } catch (error) {
       logger.error("Error in journal submit:", error);
       if (redirectIfAuthLost(error)) return;
-      openOracleWithContent("Something went wrong. Please try again.");
+      openOracleWithContent({ content: 'Something went wrong. Please try again.' });
       ouraToast.error('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -955,6 +974,14 @@ export default function Journal() {
             <p className="text-[#ababab]">Write freely. The Oracle reads for signal.</p>
           </div>
         </header>
+
+        <ModuleIntro
+          moduleId="journal"
+          onAction={() => {
+            document.getElementById('journal-entry-input')?.focus();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
 
         {/* 30-Day Mood — strip + derived takeaway */}
         {entries.length > 0 && (
@@ -1640,8 +1667,12 @@ export default function Journal() {
                         </button>
                         <button
                           onClick={() => {
-                            document.getElementById('journal-entry-input')?.focus();
+                            const currentPrompt = journalPrompts[currentPromptIndex];
+                            if (currentPrompt) {
+                              setEntry(prev => prev + (prev ? '\n\n' : '') + currentPrompt + '\n');
+                            }
                             window.scrollTo({ top: 0, behavior: 'smooth' });
+                            document.getElementById('journal-entry-input')?.focus();
                           }}
                           className="px-6 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
                         >
@@ -1673,6 +1704,8 @@ export default function Journal() {
         metacognitiveDepth={oracleModal.metacognitiveDepth}
         entryText={oracleModal.entryText}
         entryModuleName={oracleModal.entryModuleName}
+        provenance={oracleModal.provenance}
+        fallbackReason={oracleModal.fallbackReason}
       />
     </div>
   );

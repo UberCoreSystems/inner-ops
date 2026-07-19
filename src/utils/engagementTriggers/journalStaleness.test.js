@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   evaluateJournalStaleness,
   STALENESS_THRESHOLD_HOURS,
+  ONBOARDING_GRACE_HOURS,
 } from './journalStaleness.js';
 import { ENGAGEMENT_TRIGGERS } from '../schema.js';
 
@@ -17,6 +18,45 @@ const baseArgs = (overrides = {}) => ({
   bannerDismissals: {},
   now: NOW,
   ...overrides,
+});
+
+describe('evaluateJournalStaleness — day-one grace', () => {
+  it('does not fire for a user who just finished onboarding and has no entries', () => {
+    const result = evaluateJournalStaleness(baseArgs({
+      journalEntries: [],
+      userProfile: { onboardingCompletedAt: new Date(NOW - 1 * HOURS).toISOString() },
+    }));
+    assert.equal(result, null, 'a brand-new user must not be nagged on day one');
+  });
+
+  it('fires once the grace window has passed with still no entries', () => {
+    const result = evaluateJournalStaleness(baseArgs({
+      journalEntries: [],
+      userProfile: {
+        onboardingCompletedAt: new Date(NOW - (ONBOARDING_GRACE_HOURS + 1) * HOURS).toISOString(),
+      },
+    }));
+    assert.ok(result, 'expected the banner after the grace window');
+    assert.match(result.copy, /No entries yet/);
+  });
+
+  it('does not suppress a user who has entries but has gone stale', () => {
+    // The grace only covers the never-journaled case. Someone who journaled
+    // during onboarding and then stopped should still be told.
+    const result = evaluateJournalStaleness(baseArgs({
+      journalEntries: [{ createdAt: new Date(NOW - 40 * HOURS).toISOString() }],
+      userProfile: { onboardingCompletedAt: new Date(NOW - 1 * HOURS).toISOString() },
+    }));
+    assert.ok(result, 'stale-with-entries must still fire inside the grace window');
+  });
+
+  it('fires normally when onboardingCompletedAt is absent', () => {
+    const result = evaluateJournalStaleness(baseArgs({
+      journalEntries: [],
+      userProfile: {},
+    }));
+    assert.ok(result, 'no onboarding stamp means no grace to apply');
+  });
 });
 
 describe('evaluateJournalStaleness — gating', () => {
