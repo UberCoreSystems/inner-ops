@@ -47,6 +47,12 @@ export const moodOptions = moodCategories.flatMap(cat =>
   cat.moods.map(m => ({ ...m, category: cat.name, color: cat.color }))
 );
 
+// Valence color for the compact surfaces that render a mood as a single cell
+// or dot (30-day strip, month strips, entry rows). Falls back to the neutral
+// empty-cell grey for an unknown or missing mood.
+export const getMoodStripColor = (mood) =>
+  moodCategories.find(cat => cat.moods.some(m => m.value === mood))?.color || '#3a3a3a';
+
 export const intensityLevels = [
   { value: 1, label: 'Subtle', description: 'A whisper in the background', rings: 1 },
   { value: 2, label: 'Present', description: 'Noticeable but manageable', rings: 2 },

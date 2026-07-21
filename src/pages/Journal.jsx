@@ -11,7 +11,12 @@ import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
 import ModuleIntro from '../components/help/ModuleIntro';
 import { getModuleIntro } from '../config/moduleIntros';
-import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
+import { moodCategories, moodOptions, intensityLevels, getMoodStripColor } from '../constants/moods';
+import { MoodIcons } from '../components/journal/MoodIcons';
+import JournalMonthGroup from '../components/journal/JournalMonthGroup';
+import JournalEntryRow from '../components/journal/JournalEntryRow';
+import JournalEntryDetail from '../components/journal/JournalEntryDetail';
+import { groupEntriesByMonth } from '../utils/groupEntriesByMonth';
 import { composeJournalSignal } from '../utils/composeJournalSignal';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import ouraToast from '../utils/toast';
@@ -19,7 +24,6 @@ import { useOracleModal } from '../hooks/useOracleModal';
 import { markDailyPromptAnswered } from '../utils/oracleQuestionPool.js';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
 import CrossModuleExtractionPrompts from '../components/CrossModuleExtractionPrompts';
-import { parseDate } from '../utils/dateUtils';
 import logger from '../utils/logger';
 import {
   classifyAndExtract,
@@ -45,80 +49,12 @@ const basePrompts = [
   "What would I do differently if I could replay today?",
 ];
 
-// Custom SVG mood icons - Oura-style geometric designs
-const MoodIcons = {
-  electric: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-    </svg>
-  ),
-  foggy: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 14h16M4 10h16M4 18h12" opacity="0.6" />
-      <circle cx="12" cy="8" r="4" opacity="0.3" />
-    </svg>
-  ),
-  sharp: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7l2-7z" />
-    </svg>
-  ),
-  hollow: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="4" opacity="0.3" />
-    </svg>
-  ),
-  chaotic: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10" />
-      <path d="M12 2c5.5 0 10 4.5 10 10s-4.5 10-10 10" opacity="0.5" />
-      <path d="M2 12h20M12 2v20" opacity="0.3" />
-    </svg>
-  ),
-  triumphant: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2l3 6 6 1-4.5 4 1.5 6-6-3.5L6 19l1.5-6L3 9l6-1 3-6z" />
-    </svg>
-  ),
-  heavy: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22V12M12 12L6 6M12 12l6-6" />
-      <circle cx="12" cy="22" r="2" fill="currentColor" />
-    </svg>
-  ),
-  light: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="5" />
-      <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
-      <path d="M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" opacity="0.5" />
-    </svg>
-  ),
-  focused: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" opacity="0.5" />
-      <circle cx="12" cy="12" r="2" fill="currentColor" />
-    </svg>
-  ),
-  radiant: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" />
-    </svg>
-  ),
-  steady: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 12h16" />
-      <path d="M8 8h8M8 16h8" opacity="0.5" />
-    </svg>
-  ),
-  calm: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12c2-2 4-3 6-3s4 2 6 2 4-1 6-3" />
-      <path d="M2 16c2-2 4-3 6-3s4 2 6 2 4-1 6-3" opacity="0.5" />
-    </svg>
-  ),
-};
+const JOURNAL_PAGE_SIZE = 50;
+
+// Ceiling on the pages a search will pull before it stops widening. 40 × 50 is
+// 2000 entries; hitting it is surfaced in the results header rather than
+// silently truncating the record being searched.
+const SEARCH_DRAIN_MAX_PAGES = 40;
 
 // Mood/intensity taxonomy lives in [src/constants/moods.js] so the
 // Journal page and the Today's Reflection modal stay in sync.
@@ -183,12 +119,6 @@ const MoodStrip = ({ entries }) => {
     if (isNaN(d.getTime())) return;
     entryMap[toLocalKey(d)] = e;
   });
-  const getMoodColor = (mood) => {
-    if (['electric', 'light', 'radiant', 'triumphant'].includes(mood)) return '#4da6ff';
-    if (['focused', 'sharp', 'steady', 'calm'].includes(mood)) return '#8a8a8a';
-    if (['heavy', 'hollow', 'foggy', 'chaotic'].includes(mood)) return '#b45309';
-    return '#3a3a3a';
-  };
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - (29 - i));
@@ -199,7 +129,7 @@ const MoodStrip = ({ entries }) => {
       {days.map((day) => {
         const k = toLocalKey(day);
         const e = entryMap[k];
-        const color = e ? getMoodColor(e.mood) : null;
+        const color = e ? getMoodStripColor(e.mood) : null;
         const intensity = e?.intensity || 3;
         const opacity = color ? 0.25 + (intensity / 5) * 0.75 : 1;
         const isToday = k === todayKey;
@@ -261,10 +191,17 @@ export default function Journal() {
   const entryTextareaRef = useRef(null);
   const [view, setView] = useState('active');
   const [archivedEntries, setArchivedEntries] = useState([]);
-  // Per-card expand/collapse state for long entry content + Oracle text.
-  // Keys: `${entry.id}_content`, `${entry.id}_oracle`, `${entry.id}_content_archive`.
+  // Per-card expand/collapse state for the archive list's long entry content.
+  // Keys: `${entry.id}_content_archive`. The active list uses compact rows plus
+  // a detail overlay instead, so it needs no clamp state.
   const [expandedJournalSections, setExpandedJournalSections] = useState({});
   const toggleJournalExpand = (key) => setExpandedJournalSections(prev => ({ ...prev, [key]: !prev[key] }));
+  // Month keys currently expanded in the active list. Seeded to the newest
+  // group once entries first arrive; every older month starts collapsed.
+  const [openMonths, setOpenMonths] = useState(() => new Set());
+  const monthSeedRef = useRef(false);
+  // Entry id shown in the full-entry overlay. null = closed.
+  const [detailEntryId, setDetailEntryId] = useState(null);
 
   // State for rotating prompts
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
@@ -371,6 +308,89 @@ export default function Journal() {
       return haystack.includes(normalizedQuery);
     });
   }, [entries, searchQuery]);
+
+  const searchActive = searchQuery.trim().length > 0;
+  const groupedEntries = useMemo(() => groupEntriesByMonth(entries), [entries]);
+  const detailEntry = useMemo(
+    () => (detailEntryId ? entries.find(e => e.id === detailEntryId) || null : null),
+    [entries, detailEntryId]
+  );
+
+  // Open the newest month once entries first arrive. Everything older stays
+  // collapsed — that omission is what keeps the list to about one screen.
+  useEffect(() => {
+    if (monthSeedRef.current) return;
+    if (groupedEntries.length === 0) return;
+    monthSeedRef.current = true;
+    setOpenMonths(new Set([groupedEntries[0].key]));
+  }, [groupedEntries]);
+
+  const toggleMonth = (key) => {
+    setOpenMonths(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  // Search covers the whole record, not just the first loaded page. The first
+  // search of a session pulls the remaining pages into `entries`; after that
+  // `hasMoreEntries` is false and every later query filters instantly.
+  const [searchDraining, setSearchDraining] = useState(false);
+  const [searchTruncated, setSearchTruncated] = useState(false);
+  const drainStartedRef = useRef(false);
+  const pageCursorRef = useRef(null);
+  const hasMoreRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    pageCursorRef.current = pageCursor;
+    hasMoreRef.current = hasMoreEntries;
+  }, [pageCursor, hasMoreEntries]);
+  // Setup must re-arm the flag, not just tear it down: StrictMode double-mounts
+  // in development, so a cleanup-only effect latches `false` for the lifetime of
+  // the component and every post-await guard below silently bails.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    // `loading` is a dep so a query typed before the first page lands still
+    // triggers the drain once that page resolves.
+    if (!searchActive || drainStartedRef.current) return;
+    if (!hasMoreRef.current || !pageCursorRef.current) return;
+    drainStartedRef.current = true;
+
+    (async () => {
+      setSearchDraining(true);
+      let cursor = pageCursorRef.current;
+      let pages = 0;
+      try {
+        while (cursor && pages < SEARCH_DRAIN_MAX_PAGES) {
+          const { items, cursor: nextCursor, hasMore } =
+            await readUserDataPage('journalEntries', { pageSize: JOURNAL_PAGE_SIZE, cursor });
+          if (!mountedRef.current) return;
+          setEntries(prev => {
+            const seen = new Set(prev.map(e => e.id));
+            return [...prev, ...items.filter(e => !seen.has(e.id))];
+          });
+          setPageCursor(nextCursor);
+          setHasMoreEntries(!!hasMore);
+          pages += 1;
+          cursor = hasMore ? nextCursor : null;
+        }
+        if (mountedRef.current && cursor) setSearchTruncated(true);
+      } catch (error) {
+        logger.error('❌ Error widening journal search across the record:', error);
+        // Allow a retry on the next query rather than leaving search
+        // permanently scoped to whatever loaded before the failure.
+        drainStartedRef.current = false;
+        if (mountedRef.current) ouraToast.error('Could not load your full record. Search may be incomplete.');
+      } finally {
+        if (mountedRef.current) setSearchDraining(false);
+      }
+    })();
+  }, [searchActive, loading]);
 
   // Pass 2 Finding 16 remediation: consolidated skeleton lifecycle. One
   // effect owns both the show-delay and the dwell timer, both timers are
@@ -541,8 +561,6 @@ export default function Journal() {
     return insights.slice(0, 3); // Limit to 3 insights max
   };
 
-  const JOURNAL_PAGE_SIZE = 50;
-
   const loadJournalEntries = async () => {
     setLoading(true);
     setLoadError(false);
@@ -598,6 +616,19 @@ export default function Journal() {
     if (cat) setSelectedCategory(cat.name);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     document.getElementById('journal-entry-input')?.focus();
+  };
+
+  // Edit and archive are reached through the detail overlay, so both close it
+  // first — editing scrolls the page to the form, archiving removes the row
+  // the overlay was showing.
+  const handleDetailEdit = (entryToEdit) => {
+    setDetailEntryId(null);
+    startEditEntry(entryToEdit);
+  };
+
+  const handleDetailArchive = (entryId) => {
+    setDetailEntryId(null);
+    archiveEntryById(entryId);
   };
 
   const handleSubmit = async (e) => {
@@ -1364,23 +1395,17 @@ export default function Journal() {
 
         {/* Previous Entries */}
         <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          {/* The eyebrow sits on its own line above the controls. It used to
+              share a row with the Active/Archive pills in identical styling,
+              which read as a third tab that did nothing. */}
+          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-3">The Record</h3>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <h3 className="text-[#858585] text-xs uppercase tracking-widest">
-                {view === 'archive' ? 'Archive' : 'Previous Entries'}
-                {searchQuery.trim() && view === 'active' && (
-                  <span className="text-[#858585] ml-2">
-                    ({filteredEntries.length}/{entries.length})
-                  </span>
-                )}
-              </h3>
-              <ArchiveToggle
-                view={view}
-                onChange={setView}
-                activeCount={entries.length}
-                archiveCount={archivedEntries.length}
-              />
-            </div>
+            <ArchiveToggle
+              view={view}
+              onChange={setView}
+              activeCount={entries.length}
+              archiveCount={archivedEntries.length}
+            />
             {view === 'active' && (
               <div className="relative w-full sm:w-80">
                 <input
@@ -1468,7 +1493,20 @@ export default function Journal() {
             </div>
 
             <div className={`fade-pane ${showSkeleton ? 'hidden' : 'visible'}`}>
-              {loadError ? (
+              {/* Search reaches past the loaded page, so say so while the rest
+                  of the record is pulled — and say it explicitly if the cap
+                  stopped us short rather than reporting a partial record as
+                  though it were the whole one. */}
+              {searchActive && !loadError && (searchDraining || searchTruncated) && (
+                <p className="text-[#858585] text-xs mb-3">
+                  {searchDraining
+                    ? 'Loading the rest of your record…'
+                    : `Searched your most recent ${(SEARCH_DRAIN_MAX_PAGES * JOURNAL_PAGE_SIZE).toLocaleString()} entries.`}
+                </p>
+              )}
+              {/* Nothing yet with more of the record still coming isn't "no
+                  matches" — hold the empty state until the search is whole. */}
+              {searchActive && searchDraining && filteredEntries.length === 0 ? null : loadError ? (
                 <div className="oura-card p-10 text-center">
                   <p className="text-[#b45309] mb-4 text-sm">Failed to load journal entries. Please check your connection.</p>
                   <button
@@ -1480,149 +1518,31 @@ export default function Journal() {
                 </div>
               ) : filteredEntries.length > 0 ? (
                 <div className="space-y-4">
-                  {filteredEntries.map((entry) => {
-                    const moodOption = moodOptions.find(m => m.value === entry.mood);
-                    const intensityLabel = intensityLevels.find(i => i.value === entry.intensity)?.label;
-
-                    return (
-                      <div key={entry.id} className="oura-card p-6 hover:shadow-oura-glow-purple transition-shadow duration-300">
-                        <div className="flex items-center justify-between mb-4">
-                          {moodOption ? (
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center" style={{ color: moodOption.color }}>
-                                <span className="w-5 h-5 block">{MoodIcons[moodOption.value]}</span>
-                              </div>
-                              <div>
-                                <p className="text-white text-sm font-medium">{moodOption.label}</p>
-                                {intensityLabel && <p className="text-[#858585] text-xs">{intensityLabel}</p>}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-[#858585] text-xs uppercase tracking-widest">Entry</div>
-                          )}
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-[#858585]">
-                              {(() => {
-                                const d = parseDate(entry.timestamp) || parseDate(entry.createdAt);
-                                return d
-                                  ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                                  : 'Unknown date';
-                              })()}
-                            </span>
-                            <button
-                              onClick={() => startEditEntry(entry)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
-                              aria-label="Edit this entry"
-                              title="Edit this entry"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => archiveEntryById(entry.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
-                              aria-label="Archive this entry"
-                              title="Archive this entry"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="3" y="4" width="18" height="4" rx="1" />
-                                <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
-                                <line x1="10" y1="12" x2="14" y2="12" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mb-4">
-                          <p className={`text-[#d1d1d1] leading-relaxed whitespace-pre-wrap ${expandedJournalSections[`${entry.id}_content`] ? '' : 'line-clamp-3'}`}>
-                            {entry.content}
-                          </p>
-                          {entry.content && entry.content.length > 220 && (
-                            <button
-                              type="button"
-                              onClick={() => toggleJournalExpand(`${entry.id}_content`)}
-                              className="text-[#858585] hover:text-[#ababab] text-xs mt-1.5 transition-colors"
-                            >
-                              {expandedJournalSections[`${entry.id}_content`] ? '▲ Show less' : '▼ Show more'}
-                            </button>
-                          )}
-                        </div>
-
-                        {entry.oracleJudgment && (
-                          <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#1a1a1a] border-l-2 border-l-[#a855f7] rounded-2xl">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="text-[#888] font-medium text-xs uppercase tracking-widest">Oracle</h4>
-                              {entry.oracleReaction && typeof entry.oracleReaction === 'string' && (
-                                <span className={`text-xs px-2 py-0.5 rounded-lg border ${
-                                  entry.oracleReaction === 'landed' ? 'text-white border-white/30 bg-transparent' :
-                                  entry.oracleReaction === 'disagree' ? 'text-[#b45309] border-[#b45309]/30 bg-transparent' :
-                                  entry.oracleReaction === 'sit' ? 'text-[#ababab] border-[#2a2a2a] bg-transparent' :
-                                  'text-[#858585] border-[#2a2a2a] bg-transparent'
-                                }`}>
-                                  {entry.oracleReaction === 'landed' && 'Landed'}
-                                  {entry.oracleReaction === 'disagree' && 'Disagreed'}
-                                  {entry.oracleReaction === 'sit' && 'Sitting with it'}
-                                  {entry.oracleReaction === 'missed' && 'Missed'}
-                                </span>
-                              )}
-                            </div>
-                            {(() => {
-                              const oracleText = typeof entry.oracleJudgment === 'string' ? entry.oracleJudgment : JSON.stringify(entry.oracleJudgment);
-                              const oracleExpanded = expandedJournalSections[`${entry.id}_oracle`];
-                              return (
-                                <>
-                                  <div className={`text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line ${oracleExpanded ? '' : 'line-clamp-3'}`}>
-                                    {oracleText}
-                                  </div>
-                                  {oracleText.length > 220 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleJournalExpand(`${entry.id}_oracle`)}
-                                      className="text-[#858585] hover:text-[#ababab] text-xs mt-1.5 transition-colors"
-                                    >
-                                      {oracleExpanded ? '▲ Show less' : '▼ Show more'}
-                                    </button>
-                                  )}
-                                </>
-                              );
-                            })()}
-
-                            {/* Persisted follow-up exchange (B1): the user's
-                                challenge and the Oracle's reply, saved via
-                                persistFollowUp so the conversation survives reload. */}
-                            {entry.userResponse && typeof entry.userResponse === 'string' && (
-                              <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                                <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Your Response</h5>
-                                <div className="text-[#d1d1d1] text-sm leading-relaxed whitespace-pre-line">
-                                  {entry.userResponse}
-                                </div>
-                              </div>
-                            )}
-
-                            {entry.oracleFollowUp && typeof entry.oracleFollowUp === 'string' && (
-                              <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                                <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Oracle — Reflection</h5>
-                                <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
-                                  {entry.oracleFollowUp}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Quiet Oracle attribution — the interactive
-                                interpretation card lives at the top of the
-                                entries list and dismisses after one use. */}
-                            {entry.classification?.reasoning && (
-                              <p className="text-[#828282] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
-                                Oracle: {entry.classification.reasoning}
-                              </p>
-                            )}
-                          </div>
-                        )}
+                  {/* A search reads across every month, so grouping by month
+                      would only fragment the results — matches render flat. */}
+                  {searchActive ? (
+                    <>
+                      <p className="text-[#858585] text-xs">
+                        {filteredEntries.length} {filteredEntries.length === 1 ? 'match' : 'matches'}
+                      </p>
+                      <div className="oura-card">
+                        {filteredEntries.map((entry) => (
+                          <JournalEntryRow key={entry.id} entry={entry} onOpen={setDetailEntryId} />
+                        ))}
                       </div>
-                    );
-                  })}
-                  {hasMoreEntries && !searchQuery.trim() && (
+                    </>
+                  ) : (
+                    groupedEntries.map((group) => (
+                      <JournalMonthGroup
+                        key={group.key}
+                        group={group}
+                        isOpen={openMonths.has(group.key)}
+                        onToggle={toggleMonth}
+                        onOpenEntry={setDetailEntryId}
+                      />
+                    ))
+                  )}
+                  {hasMoreEntries && !searchDraining && (
                     <div className="flex justify-center pt-2">
                       <button
                         onClick={loadMoreEntries}
@@ -1689,6 +1609,15 @@ export default function Journal() {
           )}
         </section>
       </div>
+
+      {/* Full entry — rows carry only a snippet, so this is where an entry and
+          its Oracle exchange are actually read. */}
+      <JournalEntryDetail
+        entry={detailEntry}
+        onClose={() => setDetailEntryId(null)}
+        onEdit={handleDetailEdit}
+        onArchive={handleDetailArchive}
+      />
 
       {/* Oracle Modal */}
       <OracleModal
