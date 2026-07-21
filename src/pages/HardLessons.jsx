@@ -11,6 +11,7 @@ import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
 import ModuleIntro from '../components/help/ModuleIntro';
+import { getModuleIntro } from '../config/moduleIntros';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import logger from '../utils/logger';
@@ -902,11 +903,13 @@ export default function HardLessons() {
             <h1 className="text-2xl sm:text-4xl font-bold text-white">Hard Lessons</h1>
           </div>
           <p className="text-[#ababab] text-lg mb-4">
-            Extract the lesson once, so you never pay for it twice.
+            {getModuleIntro('hardlessons').definition}
           </p>
           {/* The permanent "Purpose:" card that used to sit here was replaced
-              by the dismissible first-run intro — two stacked explainers under
-              one header read as clutter. */}
+              by the dismissible first-run intro. That lost the only lasting
+              statement of what this module is, since dismissal is permanent —
+              so the definition moved up into the header line above, which is
+              never dismissible. */}
           <ModuleIntro
             moduleId="hardlessons"
             onAction={() => {

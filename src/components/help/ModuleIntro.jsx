@@ -74,11 +74,11 @@ export default function ModuleIntro({ moduleId, className = '', onAction = null 
         </button>
       </div>
 
-      <p className="text-[#ababab] text-sm leading-relaxed mt-2">{intro.what}</p>
-
-      {/* Sample entry. Same treatment as the briefing screen's quoted sample —
-          it shows the expected shape of an answer, which is what new users
-          most often get wrong. */}
+      {/* No definition line here — the page header carries it permanently, and
+          repeating it directly beneath would say the same sentence twice on
+          first run. What this card adds is the sample entry: the expected
+          shape and depth of an answer, which is what new users most often get
+          wrong. Same quoted treatment as the briefing screen. */}
       <div className="mt-4 border-l-2 pl-4" style={{ borderLeftColor: `${intro.accent}66` }}>
         <p className="text-[#858585] text-sm leading-relaxed italic">“{intro.example}”</p>
       </div>

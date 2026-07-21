@@ -14,6 +14,8 @@ import {
 } from '../utils/schema';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import { resetHelp } from '../utils/onboardingHelp';
+import { track } from '../utils/analytics';
 import BriefingScreen from '../components/onboarding/BriefingScreen';
 import TheRecord from '../components/TheRecord';
 import { parseLines, linesToText, PERSONAL_CONTEXT_LIMITS } from '../utils/personalContext';
@@ -69,6 +71,44 @@ export default function Settings() {
   // page, which would otherwise hide the receipt before it could be read.
   const [deletionReceipt, setDeletionReceipt] = useState(null);
   const [finishing, setFinishing] = useState(false);
+
+  // First-run help resets
+  const [resettingHelp, setResettingHelp] = useState(false);
+
+  /**
+   * Unlike a dismissal — which fails toward staying dismissed and is
+   * deliberately fire-and-forget — a reset MUST reach Firestore to work.
+   * readOnboardingHelp merges remote over the local mirror, so clearing the
+   * mirror alone leaves the remote record saying "seen" and the reset silently
+   * does nothing. That is why these two report failure instead of swallowing
+   * it, and why they do not navigate on error.
+   */
+  const withHelpReset = async (scope, onSuccess) => {
+    setResettingHelp(true);
+    try {
+      const auth = await getAuth();
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error('Not signed in');
+      await resetHelp(uid, scope);
+      track('help_reset', { scope });
+      onSuccess();
+    } catch (err) {
+      logger.warn('Failed to reset first-run help:', err);
+      ouraToast.error('Could not reset. Try again.');
+    } finally {
+      setResettingHelp(false);
+    }
+  };
+
+  const restartWalkthrough = () =>
+    withHelpReset('walkthroughs', () =>
+      navigate('/dashboard', { state: { startWalkthrough: true } })
+    );
+
+  const showModuleIntrosAgain = () =>
+    withHelpReset('modules', () =>
+      ouraToast.success('Module intros will show again on your next visit.')
+    );
 
   useEffect(() => {
     let cancelled = false;
@@ -340,20 +380,37 @@ export default function Settings() {
           />
         </div>
 
-        {/* Briefing */}
+        {/* First-run help — the only way back to anything dismissed once.
+            Every surface here shows exactly once and a skip is permanent, so
+            without these three buttons the content would be unreachable. */}
         <div className="bg-[#0a0a0a] rounded-2xl p-6 border border-[#1a1a1a]">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-light text-white">Briefing</h2>
-              <p className="text-[#858585] text-xs mt-1">
-                Re-read the system framing you saw on first run.
-              </p>
-            </div>
+          <div className="mb-5">
+            <h2 className="text-lg font-light text-white">First-run help</h2>
+            <p className="text-[#858585] text-xs mt-1">
+              Re-show the framing, the guided walkthrough, or the per-module explainers.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
             <button
               onClick={() => setShowBriefing(true)}
-              className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors"
+              className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors min-h-11"
             >
               Replay briefing
+            </button>
+            <button
+              onClick={restartWalkthrough}
+              disabled={resettingHelp}
+              className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors min-h-11 disabled:opacity-50"
+            >
+              Restart dashboard walkthrough
+            </button>
+            <button
+              onClick={showModuleIntrosAgain}
+              disabled={resettingHelp}
+              className="px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] rounded-xl transition-colors min-h-11 disabled:opacity-50"
+            >
+              Show module intros again
             </button>
           </div>
         </div>

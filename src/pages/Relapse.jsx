@@ -4,6 +4,7 @@ import RelapseRadar from '../components/RelapseRadar';
 import QuickSignalLog from '../components/QuickSignalLog';
 import { AppIcon } from '../components/AppIcons';
 import ModuleIntro from '../components/help/ModuleIntro';
+import { getModuleIntro } from '../config/moduleIntros';
 
 // This page owns no data. RelapseRadar fetches its own entries and renders its
 // own skeleton while it does, so there is no page-level loading state here — an
@@ -26,7 +27,7 @@ export default function Relapse() {
             </h1>
           </div>
           <div className="border-l-4 border-[#00d4aa] pl-4 py-1">
-            <p className="text-[#ababab]">Catch the drift before it compounds.</p>
+            <p className="text-[#ababab]">{getModuleIntro('relapse').definition}</p>
           </div>
           <div className="mt-4">
             <QuickSignalLog onLogged={() => setRadarKey((k) => k + 1)} />

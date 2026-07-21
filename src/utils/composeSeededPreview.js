@@ -78,8 +78,8 @@ export function composeSeededPreview(profile) {
       watchFor: [],
       situations: [],
       firstQuestion: null,
-      lines: ['Nothing declared yet. Start with one contract or one focus statement.'],
-      routeHint: { label: 'Name your first target', to: '/ledger' },
+      lines: ['Nothing declared yet. Start with one entry.'],
+      routeHint: { label: 'Write your first entry', to: '/journal' },
     };
   }
 

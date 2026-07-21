@@ -1,13 +1,14 @@
 
-import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { readUserData, writeData } from '../utils/firebaseUtils';
 // Pass 2 Finding 7 remediation: privileged admin helpers (data migration,
 // duplicate cleanup, unfiltered inspection) are loaded dynamically inside
 // the dev-only debug effect below. In production they are not included in
 // the page's static import graph, so Vite/Terser can omit them entirely.
 import { authService } from '../utils/authService';
-import { composeSignalReport, getBehavioralRecordDensity } from '../utils/clarityScore';
+import { composeSignalReport } from '../utils/clarityScore';
+import { computeBehavioralRecord } from '../utils/behavioralRecord';
 import { getBehavioralContext } from '../utils/getBehavioralContext';
 import { computeDepthTrend } from '../utils/computeDepthTrend';
 import { composeSeededPreview } from '../utils/composeSeededPreview';
@@ -16,7 +17,7 @@ import { formatDriftSignalText } from '../utils/relapseTaxonomy';
 import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
 import { localDateKey } from '../utils/dateUtils';
 import SignalReport from '../components/SignalReport';
-import BehavioralRecordDensity from '../components/BehavioralRecordDensity';
+import BehavioralRecord from '../components/BehavioralRecord';
 import MorningBrief from '../components/MorningBrief';
 import KillListDashboard from '../components/KillListDashboard';
 import DailyPrompt from '../components/DailyPrompt';
@@ -28,6 +29,14 @@ import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
+import { useOnboardingHelp } from '../hooks/useOnboardingHelp';
+import { WALKTHROUGH_ID } from '../config/dashboardWalkthrough';
+import { track } from '../utils/analytics';
+
+// Lazy so a returning user — who will never see it again after one run — pays
+// nothing for the tutorial. Mounted inside Dashboard rather than App, so it
+// rides this page's existing chunk and self-gates on route by construction.
+const DashboardWalkthrough = lazy(() => import('../components/help/DashboardWalkthrough'));
 
 // Mirrors the Synthesis briefing's signal-delta vocabulary so the dashboard's
 // consolidated Trajectory header can show the same verdict without recomputing.
@@ -43,7 +52,14 @@ const cardGlow = (hex) => ({
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(null);
+  // Holds the launch source rather than a boolean: the replay path clears
+  // location.state as soon as it fires, so the source has to be captured at
+  // start or the analytics would attribute every Settings replay to the
+  // launcher card. null means the tour is closed.
+  const [walkthroughSource, setWalkthroughSource] = useState(null);
+  const { ready: helpReady, hasSeenWalkthrough, completeWalkthrough } = useOnboardingHelp();
   const [stats, setStats] = useState({
     journalEntries: 0,
     relapseEntries: 0,
@@ -58,8 +74,10 @@ export default function Dashboard() {
   // Signal report replaces the former numeric clarity score + rank.
   const [signalReport, setSignalReport] = useState(null);
 
-  // Behavioral Record Density — factual inventory of work produced.
-  const [density, setDensity] = useState(null);
+  // The Record — effort-weighted cross-module census rendered inside the Oracle
+  // card. Null until the deferred pass computes it; the component renders
+  // nothing while null or empty.
+  const [record, setRecord] = useState(null);
 
   // Behavioral context — feeds MirrorStack with identityDirection +
   // journalLanguagePattern. Same upstream as Oracle's context injection.
@@ -308,15 +326,27 @@ export default function Dashboard() {
             !(rawUserData.killTargets || []).length &&
             !(rawUserData.hardLessons || []).length &&
             !(rawUserData.relapseEntries || []).length;
-          const [report, densityResult, ctx, profile] = await Promise.all([
+          // confirmedKills and syntheses are NOT in rawUserData (the critical
+          // load fetches only the four core collections), so the record reads
+          // them fresh. Both are single userId-scoped queries, no index. Skipped
+          // for a truly cold account — the record would be empty regardless.
+          const [report, ctx, profile, confirmedKills, syntheses] = await Promise.all([
             composeSignalReport(user?.uid, { readUserData: inMemoryReader }),
-            getBehavioralRecordDensity(user?.uid, { readUserData: inMemoryReader }),
             getBehavioralContext(user?.uid, { readUserData: inMemoryReader, useCache: false }),
             isTrulyCold ? getUserProfile() : Promise.resolve(null),
+            isTrulyCold ? Promise.resolve([]) : readUserData('confirmedKills'),
+            isTrulyCold ? Promise.resolve([]) : readUserData('syntheses'),
           ]);
           setSignalReport(report);
-          setDensity(densityResult);
           setBehavioralContext(ctx);
+          setRecord(computeBehavioralRecord({
+            killTargets: rawUserData.killTargets || [],
+            hardLessons: rawUserData.hardLessons || [],
+            journalEntries: rawUserData.journalEntries || [],
+            relapseEntries: rawUserData.relapseEntries || [],
+            confirmedKills: confirmedKills || [],
+            syntheses: syntheses || [],
+          }));
           setDepthTrend(computeDepthTrend(rawUserData.journalEntries || []));
           // Non-null only when truly cold, so MirrorStack shows the seeded
           // preview exclusively on a genuine day-one.
@@ -372,6 +402,24 @@ export default function Dashboard() {
 
   const showShell = loading || showSkeleton || !user;
 
+  // The launcher only exists for a user who has never run or skipped the tour.
+  // `helpReady` gates it so an already-dismissed card never flashes on load.
+  const showWalkthroughLauncher = helpReady && !hasSeenWalkthrough(WALKTHROUGH_ID) && !showShell;
+
+  const finishWalkthrough = useCallback(({ status, atStep }) => {
+    setWalkthroughSource(null);
+    completeWalkthrough(WALKTHROUGH_ID, { status, atStep });
+  }, [completeWalkthrough]);
+
+  // Settings hands the tour back via navigation state, the same mechanism this
+  // page already uses to seed a prompt into Journal. Cleared immediately so a
+  // reload or a back-navigation does not silently restart it.
+  useEffect(() => {
+    if (!location.state?.startWalkthrough || showShell) return;
+    setWalkthroughSource('settings');
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.state, location.pathname, showShell, navigate]);
+
   const formatTimeAgo = useCallback((date) => {
     const now = new Date();
     const diff = now - new Date(date);
@@ -397,7 +445,13 @@ export default function Dashboard() {
         <SkeletonDashboard />
       </div>
 
-      <div className={`fade-pane ${showShell ? 'hidden' : 'visible'}`}>
+      {/* data-tour-ready is the walkthrough's start gate: it must not measure
+          anything until the skeleton→content cross-fade has settled, or it
+          spotlights the skeleton's geometry. */}
+      <div
+        className={`fade-pane ${showShell ? 'hidden' : 'visible'}`}
+        {...(!showShell && { 'data-tour-ready': 'true' })}
+      >
         <div className="relative min-h-screen bg-black animate-fade-in">
           {/* Ambient page glow — a single soft bloom behind the header so the
               black canvas has a light source and cards read as lit, not flat. */}
@@ -422,6 +476,39 @@ export default function Dashboard() {
               </h1>
               <p className="text-[#858585] text-sm mt-1">What your record says today.</p>
             </header>
+
+        {/* First-run launcher. Tap to start, never auto-start: a tour that
+            seizes the screen unannounced is the single most resented pattern
+            in onboarding. One skip is permanent — Settings is the way back. */}
+        {showWalkthroughLauncher && (
+          <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.04s' }}>
+            <div className="oura-card p-5 border-l-4 border-[#4da6ff]">
+              <p className="text-[#858585] text-xs uppercase tracking-widest">First run</p>
+              <p className="text-[#ababab] text-sm leading-relaxed mt-2">
+                What your record says today. Nothing here is entered — every line is read back
+                from what you logged.
+              </p>
+              <p className="text-[#858585] text-sm mt-2">Four things on this screen. Sixty seconds.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => {
+                    track('walkthrough_launcher_clicked', {});
+                    setWalkthroughSource('launcher');
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium text-black bg-[#4da6ff] hover:opacity-90 transition-opacity min-h-11"
+                >
+                  Walk me through it
+                </button>
+                <button
+                  onClick={() => completeWalkthrough(WALKTHROUGH_ID, { status: 'skipped', atStep: null })}
+                  className="text-[#858585] hover:text-[#ababab] text-sm transition-colors min-h-11 px-1"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Synthesis Briefing — Forced State banner (non-dismissible, must open
             before clearing). Full-width above the unified reading so a new
@@ -449,6 +536,12 @@ export default function Dashboard() {
             as children, answers "is this working?" — the Signal Report under the
             latest Synthesis signal delta. MirrorStack owns the card and divides
             the sections with its own border-t rhythm. */}
+        {/* Plain wrapper purely as a tour anchor — wrapping here rather than
+            adding the attribute inside MirrorStack keeps that component
+            untouched. No animation class: `animate-fade-in-up` uses a
+            persisting transform, which would make this a containing block for
+            the spotlight's `position: fixed` children. */}
+        <div data-tour="mirror">
         <MirrorStack
           killTargets={rawUserData?.killTargets || []}
           hardLessons={rawUserData?.hardLessons || []}
@@ -470,12 +563,17 @@ export default function Dashboard() {
             )}
           </div>
           <SignalReport report={signalReport} />
+          {/* The Record — third peer section of the Oracle card, via the
+              children slot. Renders nothing until there is real work; no tour
+              anchor (tour step 1 already frames the whole card). */}
+          <BehavioralRecord record={record} />
         </MirrorStack>
+        </div>
 
         {/* Quick Actions — primary navigation. Kept as a permanent accent
             bloom (cardGlow) so it stands apart from the content cards, and
             placed high (directly below the Oracle reading) for accessibility. */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
+        <section data-tour="quick-actions" className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all" style={cardGlow('#a855f7')}>
@@ -688,18 +786,14 @@ export default function Dashboard() {
           );
         })()}
 
-        {/* Behavioral Record Density — factual inventory of work produced.
-            Leads the factual-metrics surface; SignalReport leads the trajectory
-            surface above. No scores, no ranks, no bars. Only non-zero lines. */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Behavioral Record</h3>
-          <div className="oura-card p-6 border-l-2 border-[#00d4aa]/40 hover:shadow-oura-glow-cyan transition-all">
-            <BehavioralRecordDensity density={density} />
-          </div>
-        </section>
+        {/* The Record lives in the Oracle card above (MirrorStack's children
+            slot), so the census reads as part of the unified reading rather
+            than a detached section. It carries no tour anchor of its own —
+            step 1 already frames the whole card. The raw per-module totals
+            below are a separate surface and deliberately stay. */}
 
         {/* Stats Grid - Oura Score Cards */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+        <section data-tour="stats" className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" glow />
@@ -754,19 +848,19 @@ export default function Dashboard() {
                 <div className="oura-card p-8 text-center">
                   <div className="mb-3 flex justify-center opacity-40"><AppIcon name="insight" size={40} color="#5a5a5a" glow={false} /></div>
                   <p className="text-[#858585]">Nothing logged yet.</p>
-                  <p className="text-[#858585] text-sm mt-1 max-w-sm mx-auto">The system has no signal to read. Start with the General Ledger — name what needs to die.</p>
+                  <p className="text-[#858585] text-sm mt-1 max-w-sm mx-auto">The system has no signal to read. Start with the journal — the Oracle reads what you write.</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
                     <Link
-                      to="/ledger"
-                      className="px-5 py-2.5 bg-[#00d4aa] hover:bg-[#00e6b8] text-black rounded-xl transition-all duration-300 font-medium text-sm"
+                      to="/journal"
+                      className="px-5 py-2.5 bg-[#4da6ff] hover:bg-[#3d8fd9] text-black rounded-xl transition-all duration-300 font-medium text-sm"
                     >
-                      Add a Kill Contract
+                      Write an entry
                     </Link>
                     <Link
-                      to="/journal"
+                      to="/ledger"
                       className="px-5 py-2.5 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-xl transition-all duration-300 font-medium text-sm"
                     >
-                      Today's Reflection
+                      Name a contract
                     </Link>
                   </div>
                 </div>
@@ -775,6 +869,24 @@ export default function Dashboard() {
           </section>
 
           </div>
+
+        {/* This is the mount point, not the render location: the overlay
+            portals itself to <body>. Two separate hazards on this page make
+            that necessary, and both were caught only by driving a browser —
+            `animate-fade-in-up` leaves an identity transform behind, which
+            establishes a containing block for `position: fixed`, and
+            `animate-fade-in` on the page wrapper establishes a stacking
+            context that traps z-index. See SpotlightOverlay.jsx.
+            What this location still buys: the tutorial rides Dashboard's lazy
+            chunk, self-gates on route by construction, and leaves App.jsx
+            alone. Suspense falls back to null — a spinner over a dimmed page
+            is worse than a beat of nothing. */}
+        {walkthroughSource && (
+          <Suspense fallback={null}>
+            <DashboardWalkthrough source={walkthroughSource} onFinish={finishWalkthrough} />
+          </Suspense>
+        )}
+
         </div>
 
         {/* Debug panel and window.debugDashboard surface removed.

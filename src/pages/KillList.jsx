@@ -13,6 +13,7 @@ import RedirectTargetModal from '../components/RedirectTargetModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
 import ModuleIntro from '../components/help/ModuleIntro';
+import { getModuleIntro } from '../config/moduleIntros';
 import ouraToast from '../utils/toast';
 import { SkeletonList, SkeletonKillTarget } from '../components/SkeletonLoader';
 import logger from '../utils/logger';
@@ -1787,7 +1788,7 @@ const KillList = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">General Ledger</h1>
           </div>
           <div className="border-l-4 border-[#ef4444] pl-4 py-1">
-            <p className="text-[#ababab]">Name what needs to die. Hold the contract.</p>
+            <p className="text-[#ababab]">{getModuleIntro('ledger').definition}</p>
             <p className="text-[#858585] text-xs mt-2">Patterns archived → <Link to="/hardlessons" className="text-[#ababab] hover:text-white transition-colors">Hard Lessons</Link></p>
           </div>
         </header>

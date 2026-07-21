@@ -22,6 +22,10 @@ import {
 export const ACCOUNTS = {
   operator: { email: 'operator@inner.local', password: 'test-pass-123' },
   empty: { email: 'empty@inner.local', password: 'test-pass-123' },
+  // Finished the wizard minutes ago, has written nothing. The only state in
+  // which journalStaleness's day-one grace window is observable: `empty` was
+  // onboarded 30 days back, so its grace has long since expired.
+  fresh: { email: 'fresh@inner.local', password: 'test-pass-123' },
 };
 
 const PROJECT_ID = process.env.VR_PROJECT_ID || 'inner-ops-8ce36';
@@ -54,9 +58,9 @@ async function ensureUser(auth, { email, password }) {
   }
 }
 
-async function seedProfile(db, uid, populated) {
+async function seedProfile(db, uid, populated, onboardedAtIso = isoDaysAgo(30)) {
   await setDoc(doc(db, 'userProfiles', uid), {
-    onboardingCompletedAt: isoDaysAgo(30),
+    onboardingCompletedAt: onboardedAtIso,
     onboardingSkipped: false,
     primaryDriver: 'discipline',
     feedbackStyle: 'direct',
@@ -73,9 +77,9 @@ async function seedModules(db, uid) {
 
   // --- Journal ---
   const journal = [
-    { content: 'Skipped the gym again. Told myself I was too tired. The tired was a story.', mood: 'foggy', intensity: 3, oracleJudgment: 'You keep negotiating with the version of you that loses. Name the trade you actually made.', oracleClosingQuestion: 'What did "too tired" actually cost you today?', category: 'Grounded', ts: 0 },
+    { content: 'Skipped the gym again. Told myself I was too tired. The tired was a story.', mood: 'foggy', intensity: 3, oracleJudgment: 'You keep negotiating with the version of you that loses. Name the trade you actually made.', oracleClosingQuestion: 'What did "too tired" actually cost you today?', category: 'Grounded', metacognitiveDepth: 'Identity', ts: 0 },
     { content: 'Shipped the auth refactor. Clean. Held the line on scope for once.', mood: 'sharp', intensity: 4, oracleJudgment: 'Competence is not the problem. Consistency is. One clean day is a sample, not a trend.', ts: 1 },
-    { content: 'Stayed up until 3am scrolling. Knew it was avoidance by midnight and did it anyway.', mood: 'hollow', intensity: 2, oracleJudgment: 'You saw the exit at midnight and chose the maze. That is the pattern, not the scrolling.', category: 'Drift', ts: 2 },
+    { content: 'Stayed up until 3am scrolling. Knew it was avoidance by midnight and did it anyway.', mood: 'hollow', intensity: 2, oracleJudgment: 'You saw the exit at midnight and chose the maze. That is the pattern, not the scrolling.', category: 'Drift', metacognitiveDepth: 'Pattern', ts: 2 },
     { content: 'Hard conversation with a co-founder. Said the thing I usually swallow.', mood: 'steady', intensity: 4, ts: 4 },
     { content: 'Woke early. Cold, quiet, no phone for the first hour. Clearest I have felt in a week.', mood: 'focused', intensity: 5, oracleJudgment: 'The clarity was not the morning. It was the absence of the thing you keep reaching for.', ts: 6 },
   ];
@@ -124,6 +128,44 @@ async function seedModules(db, uid) {
     await add('relapseEntries', { ...rest, timestamp: daysAgo(ts), createdAt: daysAgo(ts) });
   }
 
+  // --- Confirmed Kills — the effort-weighted record reads these (the old
+  //     counter's fatal miss: kills leave killTargets for this collection).
+  //     One held ≥60 days, one ≥21; the first carries an escape autopsy. ---
+  const confirmedKills = [
+    { title: 'Nicotine', description: 'The reset that never reset.', category: 'addiction', status: 'active',
+      streak: 64, longestStreak: 64, totalTrackedDays: 66, consecutiveDaysRequired: 60,
+      escapeData: [{ date: isoDaysAgo(50), context: 'Launch week; reached for it past midnight.', rationalization: 'Told myself one would not restart the count.', prevention: 'Threw out the backup pack.', streakAtEscape: 0 }],
+      killedAt: daysAgo(2), activeDuration: 66, createdAt: isoDaysAgo(66), lastUpdated: isoDaysAgo(2) },
+    { title: 'Skipping breakfast', description: 'Running on fumes by 11am.', category: 'bad-habit', status: 'active',
+      streak: 30, longestStreak: 30, totalTrackedDays: 33, consecutiveDaysRequired: 21,
+      escapeData: [], killedAt: daysAgo(6), activeDuration: 33, createdAt: isoDaysAgo(33), lastUpdated: isoDaysAgo(6) },
+  ];
+  for (const k of confirmedKills) {
+    await add('confirmedKills', { ...k, checkIns: [], lastCheckIn: null });
+  }
+
+  // --- Syntheses — Intelligence group. One briefing (no `type` field, as the
+  //     app writes it) and one reckoning carrying meta.contradictionCount. ---
+  await add('syntheses', {
+    generatedAt: isoDaysAgo(3), cadencePeriod: 'weekly', isNew: false, readAt: isoDaysAgo(3),
+    convergencePoint: 'Isolation precedes every escape you have logged.',
+    violatedRules: [], signalDelta: 'improving', signalDeltaNote: '',
+    confrontationQuestion: 'What are you avoiding when you go quiet?',
+    meta: { recentRelapseCount: 1, dominantArchetype: 'The Addict', journalEntriesPerWeek: 4, activeTargetCount: 2, highEscapeTargetCount: 0, finalizedRuleCount: 2, identityDirection: '' },
+    timestamp: daysAgo(3), createdAt: isoDaysAgo(3),
+  });
+  await add('syntheses', {
+    type: 'reckoning', generatedAt: isoDaysAgo(12), cadencePeriod: 'biweekly',
+    period: { start: isoDaysAgo(40), end: isoDaysAgo(12), days: 28 }, isNew: false, readAt: isoDaysAgo(12),
+    contradictions: [
+      { type: 'escape_vs_kill', commitment: { kind: 'killTarget', id: 'seed-k', text: 'No phone in bed' }, evidence: [{ collection: 'relapseEntries', eventId: 'seed-r', date: isoDaysAgo(15), kind: 'relapse', quote: null }] },
+      { type: 'violation_vs_rule', commitment: { kind: 'hardLesson', id: 'seed-l', text: 'Delay every yes by 24 hours' }, evidence: [{ collection: 'hardLessons', eventId: 'seed-h', date: isoDaysAgo(18), kind: 'violation', quote: null }] },
+    ],
+    languageDrift: null, reckoningConfrontation: 'You committed, then did the opposite. Twice.',
+    meta: { contradictionCount: 2, commitmentCount: 2, evidenceCount: 2, identityDirection: '' },
+    timestamp: daysAgo(12), createdAt: isoDaysAgo(12),
+  });
+
   // --- userSettings (exactly one) ---
   await add('userSettings', {
     identityDirection: 'A man who does what he said he would, whether or not anyone is watching.',
@@ -143,6 +185,11 @@ export async function seed() {
   const emptyUid = await ensureUser(auth, ACCOUNTS.empty);
   await seedProfile(db, emptyUid, false);
   console.log(`  seeded empty ${emptyUid} (no module data)`);
+
+  // Onboarded 10 minutes ago: inside the 24h grace, no entries.
+  const freshUid = await ensureUser(auth, ACCOUNTS.fresh);
+  await seedProfile(db, freshUid, false, new Date(Date.now() - 10 * 60 * 1000).toISOString());
+  console.log(`  seeded fresh ${freshUid} (onboarded 10m ago, inside grace)`);
 }
 
 // Allow standalone run: `node scripts/visual-review/seed.mjs`

@@ -10,6 +10,7 @@ import OracleModal from '../components/OracleModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
 import ModuleIntro from '../components/help/ModuleIntro';
+import { getModuleIntro } from '../config/moduleIntros';
 import { moodCategories, moodOptions, intensityLevels } from '../constants/moods';
 import { composeJournalSignal } from '../utils/composeJournalSignal';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
@@ -971,7 +972,7 @@ export default function Journal() {
             <h1 className="text-3xl font-bold text-white">Journal</h1>
           </div>
           <div className="border-l-4 border-[#a855f7] pl-4 py-1">
-            <p className="text-[#ababab]">Write freely. The Oracle reads for signal.</p>
+            <p className="text-[#ababab]">{getModuleIntro('journal').definition}</p>
           </div>
         </header>
 

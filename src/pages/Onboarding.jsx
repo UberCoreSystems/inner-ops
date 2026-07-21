@@ -95,7 +95,6 @@ export default function Onboarding() {
 
     return () => { active = false; };
     // Mount only — resuming mid-wizard would fight the user's own navigation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Best-effort draft write so progress survives an abandoned session. Never

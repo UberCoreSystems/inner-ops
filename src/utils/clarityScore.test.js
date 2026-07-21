@@ -4,7 +4,6 @@ import {
   getConfrontationRate,
   getActiveDriftSignals,
   getRuleIntegrityStatus,
-  getBehavioralRecordDensity,
   composeSignalReport,
   clarityScoreUtils,
 } from './clarityScore.js';
@@ -383,152 +382,6 @@ test('trajectory delta: prior and current identical — delta clause omitted by 
   assert.equal(result.prior.percentage, 100, 'identical → UI omits delta clause');
 });
 
-// ─── getBehavioralRecordDensity ───────────────────────────────────────────────
-
-test('getBehavioralRecordDensity returns zeroed inventory for empty collections', async () => {
-  const result = await getBehavioralRecordDensity('u1', {
-    readUserData: makeReader(emptyCollections()),
-    detectDriftSignals: () => ({ signals: [], skippedCount: 0 }),
-  });
-  assert.deepEqual(result, {
-    autopsies: 0,
-    rulesFinalized: 0,
-    kills60Plus: 0,
-    kills21Plus: 0,
-    activeDriftSignals: 0,
-    structuredJournalEntries: 0,
-  });
-});
-
-test('getBehavioralRecordDensity counts escape entries with autopsy content across targets', async () => {
-  const collections = emptyCollections();
-  collections.killTargets = [
-    {
-      id: 't1',
-      status: 'active',
-      escapeData: [
-        { context: 'late night', rationalization: 'deserved a break' },
-        { context: 'stress', rationalization: 'one time', prevention: 'phone in other room' },
-        // Empty entry should not count — protects against legacy/partial records.
-        { context: '', rationalization: '', prevention: '' },
-      ],
-    },
-    {
-      id: 't2',
-      status: 'escaped',
-      escapeData: [
-        { context: 'boredom', rationalization: 'just once' },
-      ],
-    },
-    { id: 't3', status: 'active' }, // no escapeData → 0
-  ];
-  const result = await getBehavioralRecordDensity('u1', {
-    readUserData: makeReader(collections),
-    detectDriftSignals: () => ({ signals: [], skippedCount: 0 }),
-  });
-  assert.equal(result.autopsies, 3);
-});
-
-test('getBehavioralRecordDensity counts finalized rules with non-empty text only', async () => {
-  const collections = emptyCollections();
-  collections.hardLessons = [
-    { isFinalized: true, ruleGoingForward: 'No email before coffee.' },
-    { isFinalized: true, ruleGoingForward: '' }, // empty rule excluded
-    { isFinalized: false, ruleGoingForward: 'Draft rule.' }, // draft excluded
-    { isFinalized: true, ruleGoingForward: 'Sleep by 11.' },
-  ];
-  const result = await getBehavioralRecordDensity('u1', {
-    readUserData: makeReader(collections),
-    detectDriftSignals: () => ({ signals: [], skippedCount: 0 }),
-  });
-  assert.equal(result.rulesFinalized, 2);
-});
-
-test('getBehavioralRecordDensity separates kills at ≥60 and ≥21 with legacy difficulty shim', async () => {
-  const collections = emptyCollections();
-  collections.killTargets = [
-    // Numeric field, explicit 60.
-    { status: 'killed', consecutiveDaysRequired: 60 },
-    // Numeric 90 — also ≥60.
-    { status: 'killed', consecutiveDaysRequired: 90 },
-    // Numeric 30 — only counted in ≥21 bucket.
-    { status: 'killed', consecutiveDaysRequired: 30 },
-    // Legacy difficulty 'core' maps to 60.
-    { status: 'killed', difficulty: 'core' },
-    // Legacy difficulty 'surface' maps to 21 — counted in ≥21 only.
-    { status: 'killed', difficulty: 'surface' },
-    // Status not killed — excluded from both.
-    { status: 'active', consecutiveDaysRequired: 60 },
-    { status: 'escaped', consecutiveDaysRequired: 90 },
-  ];
-  const result = await getBehavioralRecordDensity('u1', {
-    readUserData: makeReader(collections),
-    detectDriftSignals: () => ({ signals: [], skippedCount: 0 }),
-  });
-  assert.equal(result.kills60Plus, 3);
-  assert.equal(result.kills21Plus, 5);
-});
-
-test('getBehavioralRecordDensity counts active drift signals from injected detector', async () => {
-  const collections = emptyCollections();
-  collections.relapseEntries = [{ id: 'r1' }];
-  collections.killTargets = [{ id: 'k1' }];
-  const result = await getBehavioralRecordDensity('u1', {
-    readUserData: makeReader(collections),
-    detectDriftSignals: () => ({
-      signals: [
-        { type: 'archetype_frequency' },
-        { type: 'precursor_pattern' },
-      ],
-      skippedCount: 0,
-    }),
-  });
-  assert.equal(result.activeDriftSignals, 2);
-});
-
-test('getBehavioralRecordDensity counts only journal entries meeting 30/40 char frame', async () => {
-  const collections = emptyCollections();
-  collections.journalEntries = [
-    {
-      event: 'I snapped at my partner over dishes.', // 36 chars, ≥30
-      attribution: 'I was running on three hours of sleep and projected onto them.', // >40
-    },
-    {
-      event: 'short event text not enough', // <30
-      attribution: 'this attribution is plenty long enough to qualify on its own easily',
-    },
-    {
-      event: 'I missed the deadline again on the client report today.',
-      attribution: 'too short here', // <40
-    },
-    {
-      event: 'This is exactly thirty chars ok', // 31 chars — passes
-      attribution: 'And this is exactly forty chars just barely', // 43 — passes
-    },
-  ];
-  const result = await getBehavioralRecordDensity('u1', {
-    readUserData: makeReader(collections),
-    detectDriftSignals: () => ({ signals: [], skippedCount: 0 }),
-  });
-  assert.equal(result.structuredJournalEntries, 2);
-});
-
-test('getBehavioralRecordDensity handles read failure gracefully with zeroed fallback', async () => {
-  const failingReader = async () => { throw new Error('firestore offline'); };
-  const result = await getBehavioralRecordDensity('u1', {
-    readUserData: failingReader,
-    detectDriftSignals: () => ({ signals: [], skippedCount: 0 }),
-  });
-  assert.deepEqual(result, {
-    autopsies: 0,
-    rulesFinalized: 0,
-    kills60Plus: 0,
-    kills21Plus: 0,
-    activeDriftSignals: 0,
-    structuredJournalEntries: 0,
-  });
-});
-
 // ─── Legacy compatibility shim ────────────────────────────────────────────────
 
 test('clarityScoreUtils shim exposes only non-numeric, report-shaped helpers', () => {
@@ -537,7 +390,6 @@ test('clarityScoreUtils shim exposes only non-numeric, report-shaped helpers', (
   assert.ok(typeof clarityScoreUtils.getConfrontationRate === 'function');
   assert.ok(typeof clarityScoreUtils.getActiveDriftSignals === 'function');
   assert.ok(typeof clarityScoreUtils.getRuleIntegrityStatus === 'function');
-  assert.ok(typeof clarityScoreUtils.getBehavioralRecordDensity === 'function');
 
   assert.equal(clarityScoreUtils.calculateClarityScore, undefined, 'numeric score must not exist');
   assert.equal(clarityScoreUtils.getClarityRank, undefined, 'rank system must not exist');

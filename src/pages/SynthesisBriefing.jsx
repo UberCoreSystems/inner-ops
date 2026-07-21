@@ -9,6 +9,7 @@ import { COLLECTIONS, KILL_TARGET_FIELDS, HARD_LESSON_FIELDS } from '../utils/sc
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import ModuleIntro from '../components/help/ModuleIntro';
+import { getModuleIntro } from '../config/moduleIntros';
 
 // Cap stored briefings per user. Anything older than the cap gets pruned
 // after a successful Generate Now so the archive can't grow unbounded.
@@ -261,7 +262,7 @@ export default function SynthesisBriefing() {
         <div className="mb-10">
           <h1 className="text-2xl sm:text-4xl font-light text-white tracking-tight mb-3">Synthesis Briefing</h1>
           <p className="text-[#858585] text-sm leading-relaxed">
-            Cross-module behavioral intelligence. What your own data reveals across domains.
+            {getModuleIntro('synthesis').definition}
           </p>
         </div>
 

@@ -13,8 +13,8 @@ import logger from '../utils/logger';
  *   - Plain prose paragraph. No quote marks, no author attribution, no
  *     visible timestamp.
  *   - Date label in the established Dashboard section-header style
- *     (small, uppercase, wide tracking, subdued color) — matches
- *     BehavioralRecordDensity / SignalReport section headers.
+ *     (small, uppercase, wide tracking, subdued color) — matches the
+ *     SignalReport / Trajectory section headers.
  *   - No regenerate button. Deliberate — protects against dopamine-checking.
  *   - On failure: a single-line error message. No automatic retry.
  *

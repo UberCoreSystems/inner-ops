@@ -4,6 +4,19 @@
  * Pure data, no JSX, so copy edits produce readable diffs and can be reviewed
  * as writing rather than as code.
  *
+ * `definition` is rendered by the PAGE HEADER, not by the intro card, and it
+ * is the reason this file is not purely about first-run. A definition that
+ * disappears the moment the intro is dismissed is a definition the user can
+ * never look up again — and dismissal is permanent here. The headers
+ * previously carried mottos ("Write freely", "Catch the drift before it
+ * compounds"), which tell you what to do without ever saying what the thing
+ * is. Both live in one place so the two cannot drift apart.
+ *
+ * The intro card therefore leads with `example`: with the definition already
+ * overhead, a sample entry is the part that is genuinely additive, and it
+ * teaches the shape and depth of an answer, which is what new users most often
+ * get wrong.
+ *
  * Voice rules (non-negotiable, see CLAUDE.md): second person, declarative,
  * short. No encouragement, no wellness framing, no exclamation marks, no
  * emoji. Every `example` is a sample of what a real entry looks like — it
@@ -22,7 +35,7 @@ export const MODULE_INTROS = Object.freeze([
     id: 'journal',
     accent: '#a855f7',
     eyebrow: 'Journal',
-    what: 'Raw input. Everything the system knows about you starts here.',
+    definition: 'Raw input. Everything the system knows about you starts here.',
     example: 'Skipped the gym again. Told myself I was tired. I wasn’t — I was avoiding the call with my father.',
     actionLabel: 'Write today’s entry',
     actionRoute: null,
@@ -31,7 +44,7 @@ export const MODULE_INTROS = Object.freeze([
     id: 'ledger',
     accent: '#ef4444',
     eyebrow: 'General Ledger',
-    what: 'Contracts against the patterns costing you the most. One line each, held daily.',
+    definition: 'Contracts against the patterns costing you the most. One line each, held daily.',
     example: 'No phone in bed. Sixty consecutive days. Checked in every night — held or escaped. There is no third option.',
     actionLabel: 'Name your first target',
     actionRoute: null,
@@ -40,7 +53,7 @@ export const MODULE_INTROS = Object.freeze([
     id: 'hardlessons',
     accent: '#f59e0b',
     eyebrow: 'Hard Lessons',
-    what: 'A cost you already paid, converted into a rule you carry forward.',
+    definition: 'A cost you already paid, converted into a rule you carry forward.',
     example: 'Cost: lost the contract by going quiet for three weeks. Rule: when I want to disappear, I send the email first.',
     actionLabel: 'Record a lesson',
     actionRoute: null,
@@ -49,7 +62,7 @@ export const MODULE_INTROS = Object.freeze([
     id: 'relapse',
     accent: '#00d4aa',
     eyebrow: 'The Signal',
-    what: 'Where you log the slip and what preceded it. Drift is read from the pattern, not the incident.',
+    definition: 'Where you log the slip and what preceded it. Drift is read from the pattern, not the incident.',
     example: '11:40pm. Alone. Third night this week. The trigger was the argument, not the boredom.',
     actionLabel: 'Log a signal',
     actionRoute: null,
@@ -58,7 +71,13 @@ export const MODULE_INTROS = Object.freeze([
     id: 'synthesis',
     accent: '#4da6ff',
     eyebrow: 'Synthesis Briefing',
-    what: 'A cross-module read. What your journal, ledger, lessons, and signals say when compared against each other.',
+    // Synthesis is the one module whose header already stated what it is
+    // rather than what to do, so its existing wording is kept verbatim. The
+    // alternative drafted during the copy pass — "A cross-module read. What
+    // your journal, ledger, lessons, and signals say when compared against
+    // each other." — names the inputs more concretely if this ever reads as
+    // too abstract.
+    definition: 'Cross-module behavioral intelligence. What your own data reveals across domains.',
     example: 'Your ledger says the target is discipline. Your journal says you have not written since the day you set it.',
     actionLabel: 'Run a briefing',
     actionRoute: null,

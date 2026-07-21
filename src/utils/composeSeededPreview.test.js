@@ -57,7 +57,7 @@ describe('composeSeededPreview', () => {
     const r = composeSeededPreview(null);
     assert.equal(r.status, 'empty');
     assert.equal(r.direction, null);
-    assert.ok(r.routeHint && r.routeHint.to === '/ledger');
+    assert.ok(r.routeHint && r.routeHint.to === '/journal');
     assert.ok(r.lines.length === 1 && /Nothing declared yet/.test(r.lines[0]));
     assertNoFabrication(r);
   });
@@ -65,7 +65,7 @@ describe('composeSeededPreview', () => {
   it('empty object profile → empty', () => {
     const r = composeSeededPreview({});
     assert.equal(r.status, 'empty');
-    assert.equal(r.routeHint.label, 'Name your first target');
+    assert.equal(r.routeHint.label, 'Write your first entry');
     assertNoFabrication(r);
   });
 

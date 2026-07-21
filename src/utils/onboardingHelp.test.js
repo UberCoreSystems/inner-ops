@@ -82,11 +82,14 @@ describe('module intro config', () => {
       assert.ok(intro.id, 'intro needs an id');
       assert.ok(intro.accent?.startsWith('#'), `${intro.id}: accent must be a hex colour`);
       assert.ok(intro.eyebrow, `${intro.id}: missing eyebrow`);
-      assert.ok(intro.what?.length > 20, `${intro.id}: 'what' is too short to teach anything`);
+      // Rendered by the page header, permanently — a module whose definition
+      // is missing or thin leaves the user with no lasting statement of what
+      // the module is, since the first-run card is dismissed for good.
+      assert.ok(intro.definition?.length > 20, `${intro.id}: 'definition' is too short to teach anything`);
       assert.ok(intro.example?.length > 20, `${intro.id}: missing a concrete example`);
       assert.ok(intro.actionLabel, `${intro.id}: missing actionLabel`);
 
-      for (const field of ['eyebrow', 'what', 'example', 'actionLabel']) {
+      for (const field of ['eyebrow', 'definition', 'example', 'actionLabel']) {
         assert.doesNotMatch(intro[field], banned, `${intro.id}.${field} violates the voice rules`);
       }
     }

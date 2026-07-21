@@ -64,7 +64,7 @@ export default function BriefingScreen({
                 The Oracle reads what you actually write and responds to it directly. No generic advice. No comfort. The more honest you are, the more useful it becomes.
               </p>
               <p className="text-[#858585] text-sm leading-relaxed mb-2">
-                <span className="text-[#ababab] font-medium">Where to start:</span> Ledger first — name what needs to die. Then journal daily. When something costs you badly, Hard Lessons. The Signal when you slip.
+                <span className="text-[#ababab] font-medium">Where to start:</span> Journal first. Your own awareness and honesty are the real input. From what you write, you draw the contracts, lessons, and signals yourself — the Oracle guides what you miss, it does not decide for you.
               </p>
               <p className="text-[#858585] text-sm mt-6">External enforcement is not self-governance. Self-command cannot be outsourced. This system is built on that distinction.</p>
             </>
