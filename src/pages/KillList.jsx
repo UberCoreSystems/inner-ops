@@ -8,7 +8,9 @@ import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { coerceClosureResponseText } from '../utils/composeClosureFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
+import { runClosureOracle, persistClosureOracle } from '../utils/submitKillClosure';
 import OracleModal from '../components/OracleModal';
+import ContractClosedModal from '../components/ContractClosedModal';
 import RedirectTargetModal from '../components/RedirectTargetModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
@@ -304,7 +306,17 @@ const KillList = () => {
 
   // AVE circuit breaker prompt — shown after autopsy, before Oracle
   const [avePrompt, setAvePrompt] = useState(false);
-  
+
+  // Threshold-close sequence. `record` is the archived confirmedKills doc
+  // (including its new id) so the dossier can render the run it just completed.
+  const [closedContract, setClosedContract] = useState({
+    isOpen: false,
+    record: null,
+    oraclePhase: 'idle',
+    oracleResponse: '',
+  });
+  const closureDismissedRef = useRef(false);
+
   // Reflection notes state
   const [user, setUser] = useState(null);
 
@@ -790,6 +802,42 @@ const KillList = () => {
     draftWithOracle(title, category);
   };
 
+  // Single archive path for a confirmed kill. Three routes reach the threshold
+  // — the daily check-in, an all-held gap reconciliation, and the held prefix
+  // before a backfilled escape — and every one of them must produce the same
+  // confirmedKills shape, the same memory write, and the same closing sequence.
+  // Previously each inlined its own copy and ended at a toast.
+  const archiveConfirmedKill = useCallback(async (target, targetUpdate) => {
+    const killedAt = new Date();
+    const createdAtMs = target.createdAt?.toDate
+      ? target.createdAt.toDate().getTime()
+      : new Date(target.createdAt || 0).getTime();
+    const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / 86400000);
+    const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
+
+    const { id: _removeId, ...targetFields } = target;
+    const killFields = { ...targetFields, ...targetUpdate, killedAt, activeDuration };
+    // Atomic: confirmedKills create + killTargets delete commit together, so a
+    // retry/double-tap can never write a second kill record or orphan the delete.
+    const killDoc = await moveDocAtomic('killTargets', target.id, 'confirmedKills', killFields);
+
+    setTargets(prev => prev.filter(t => t.id !== target.id));
+
+    // Memory parity with the escape path — Oracle's model of the user was
+    // previously built only from failures, because this call was missing here.
+    updateMemory('killList', killDoc.id);
+
+    closureDismissedRef.current = false;
+    setClosedContract({
+      isOpen: true,
+      record: { id: killDoc.id, ...killFields },
+      oraclePhase: 'idle',
+      oracleResponse: '',
+    });
+
+    return killDoc.id;
+  }, []);
+
   // Daily check-in: "Held the line" or "It got me"
   const dailyCheckIn = useCallback(async (targetId, held, note = '') => {
     // Synchronous re-entry guard FIRST — the lastCheckIn === today check below
@@ -827,21 +875,7 @@ const KillList = () => {
       };
 
       if (isKill) {
-        const killedAt = new Date();
-        const createdAtMs = target.createdAt?.toDate
-          ? target.createdAt.toDate().getTime()
-          : new Date(target.createdAt || 0).getTime();
-        const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / (1000 * 60 * 60 * 24));
-        const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
-
-        const { id: _removeId, ...targetFields } = target;
-        // Atomic: confirmedKills create + killTargets delete commit together, so
-        // a retry/double-tap can never write a second kill record or orphan the
-        // delete.
-        await moveDocAtomic('killTargets', targetId, 'confirmedKills', { ...targetFields, ...targetUpdate, killedAt, activeDuration });
-
-        setTargets(prev => prev.filter(t => t.id !== targetId));
-        ouraToast.success('Target killed. Record updated.');
+        await archiveConfirmedKill(target, targetUpdate);
       } else {
         await updateData('killTargets', targetId, targetUpdate);
         setTargets(prev => prev.map(t => t.id === targetId ? { ...t, ...targetUpdate } : t));
@@ -862,7 +896,7 @@ const KillList = () => {
     } finally {
       checkingInRef.current.delete(targetId);
     }
-  }, []);
+  }, [archiveConfirmedKill]);
 
   // Submit escape autopsy
   const submitAutopsy = useCallback(async () => {
@@ -990,16 +1024,7 @@ const KillList = () => {
       };
 
       if (isKill) {
-        const killedAt = new Date();
-        const createdAtMs = target.createdAt?.toDate
-          ? target.createdAt.toDate().getTime()
-          : new Date(target.createdAt || 0).getTime();
-        const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / 86400000);
-        const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
-        const { id: _removeId, ...targetFields } = target;
-        await moveDocAtomic('killTargets', target.id, 'confirmedKills', { ...targetFields, ...targetUpdate, killedAt, activeDuration });
-        setTargets(prev => prev.filter(t => t.id !== target.id));
-        ouraToast.success(`Target killed. ${missedDates.length} day${missedDates.length !== 1 ? 's' : ''} reconciled.`);
+        await archiveConfirmedKill(target, targetUpdate);
       } else {
         await updateData('killTargets', target.id, targetUpdate);
         setTargets(prev => prev.map(t => t.id === target.id ? { ...t, ...targetUpdate } : t));
@@ -1011,7 +1036,7 @@ const KillList = () => {
     } finally {
       setBackfillBusy(prev => ({ ...prev, [target.id]: false }));
     }
-  }, []);
+  }, [archiveConfirmedKill]);
 
   // Backfill: open the autopsy modal with eventDate pre-set to the picked day.
   // Any days before the picked escape day in the gap are treated as held and
@@ -1105,16 +1130,7 @@ const KillList = () => {
       };
 
       if (isKill) {
-        const killedAt = new Date();
-        const createdAtMs = target.createdAt?.toDate
-          ? target.createdAt.toDate().getTime()
-          : new Date(target.createdAt || 0).getTime();
-        const rawDuration = Math.floor((killedAt.getTime() - createdAtMs) / 86400000);
-        const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
-        const { id: _removeId, ...targetFields } = target;
-        await moveDocAtomic('killTargets', target.id, 'confirmedKills', { ...targetFields, ...preEscapeUpdate, killedAt, activeDuration });
-        setTargets(prev => prev.filter(t => t.id !== target.id));
-        ouraToast.success(`Target killed. ${heldPrefix.length} day${heldPrefix.length !== 1 ? 's' : ''} reconciled.`);
+        await archiveConfirmedKill(target, preEscapeUpdate);
         return;
       }
 
@@ -1144,7 +1160,7 @@ const KillList = () => {
     } finally {
       setBackfillBusy(prev => ({ ...prev, [target.id]: false }));
     }
-  }, []);
+  }, [archiveConfirmedKill]);
 
   const handleBackfillDismiss = useCallback((target) => {
     try {
@@ -1314,6 +1330,64 @@ const KillList = () => {
   const cancelEdit = useCallback(() => {
     setEditingTarget(null);
     setEditValue('');
+  }, []);
+
+  // Threshold close, step 2: persist the user's closing entry, then let the
+  // Oracle read it. Mirrors the Dashboard quick-kill flow (shared helpers in
+  // submitKillClosure.js) — the archive write already landed in
+  // archiveConfirmedKill, so nothing here can lose the kill.
+  const handleContractClosureSubmit = useCallback(async ({ note, tags }) => {
+    const record = closedContract.record;
+    if (!record) return;
+
+    const closureTags = Array.isArray(tags) ? tags : [];
+    try {
+      await updateData('confirmedKills', record.id, {
+        closureNote: note,
+        closureTags,
+        closedAt: new Date(),
+        lastUpdated: new Date(),
+      });
+      setConfirmedKills(prev => prev.map(k =>
+        k.id === record.id ? { ...k, closureNote: note, closureTags } : k
+      ));
+    } catch (err) {
+      logger.error('Error persisting contract closure:', err);
+      ouraToast.error('Failed to record the closure. The kill is still archived.');
+      return;
+    }
+
+    setClosedContract(prev => ({ ...prev, oraclePhase: 'loading' }));
+
+    const oracle = await runClosureOracle({
+      mode: 'kill',
+      title: record.title,
+      note,
+      pastTitles: targetsRef.current.slice(0, 3).map(t => t.title),
+    });
+    await persistClosureOracle({
+      collectionName: 'confirmedKills',
+      docId: record.id,
+      mode: 'kill',
+      ...oracle,
+    });
+    setConfirmedKills(prev => prev.map(k =>
+      k.id === record.id
+        ? { ...k, closureOracleResponse: oracle.oracleResponse, ...(oracle.oracleClosingQuestion ? { oracleClosingQuestion: oracle.oracleClosingQuestion } : {}) }
+        : k
+    ));
+
+    // Dismissed mid-call — surface the reading rather than dropping it.
+    if (closureDismissedRef.current) {
+      ouraToast.info(`Oracle: ${oracle.oracleResponse}`);
+    } else {
+      setClosedContract(prev => ({ ...prev, oraclePhase: 'done', oracleResponse: oracle.oracleResponse }));
+    }
+  }, [closedContract.record]);
+
+  const handleContractClosureClose = useCallback(() => {
+    closureDismissedRef.current = true;
+    setClosedContract({ isOpen: false, record: null, oraclePhase: 'idle', oracleResponse: '' });
   }, []);
 
   const requestKillOracleStatement = useCallback(async (kill) => {
@@ -1799,10 +1873,7 @@ const KillList = () => {
         <ModuleIntro
           moduleId="ledger"
           className="order-2"
-          onAction={() => {
-            setShowAddForm(true);
-            setTimeout(() => newTargetInputRef.current?.focus(), 50);
-          }}
+          onAction={() => setShowAddForm(true)}
         />
 
         {/* Stats — relocated below the active list (order-5) so the daily
@@ -2369,6 +2440,11 @@ const KillList = () => {
                 const killDateStr = killedAtDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 const killThreshold = getConsecutiveDaysRequired(kill);
                 const category = CATEGORIES.find(c => c.value === kill.category);
+                // Closure responses come from the close sequence; oracleStatement
+                // is the older on-demand archive request. Either can be present.
+                const killOracleLine =
+                  coerceClosureResponseText(kill.closureOracleResponse) ||
+                  coerceClosureResponseText(kill.oracleStatement);
                 return (
                   <div key={kill.id} className="oura-card p-5 border-[#1a1a1a]">
                     <div className="flex items-start justify-between mb-2">
@@ -2388,8 +2464,14 @@ const KillList = () => {
                         </p>
                       </div>
                     </div>
-                    {kill.oracleStatement ? (
-                      <p className="text-[#858585] text-sm mt-3 leading-relaxed border-l-2 border-[#1a1a1a] pl-3">{kill.oracleStatement}</p>
+                    {kill.closureNote && (
+                      <div className="mt-3 p-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl">
+                        <div className="text-[#858585] text-[10px] uppercase tracking-widest mb-1.5">What ended it</div>
+                        <p className="text-[#d1d1d1] text-sm leading-relaxed">{kill.closureNote}</p>
+                      </div>
+                    )}
+                    {killOracleLine ? (
+                      <p className="text-[#858585] text-sm mt-3 leading-relaxed border-l-2 border-[#1a1a1a] pl-3">{killOracleLine}</p>
                     ) : (
                       <button
                         onClick={() => requestKillOracleStatement(kill)}
@@ -2399,12 +2481,37 @@ const KillList = () => {
                         {requestingOracleForKillId === kill.id ? 'Requesting...' : 'Request Oracle statement'}
                       </button>
                     )}
+                    <button
+                      onClick={() => {
+                        closureDismissedRef.current = false;
+                        setClosedContract({
+                          isOpen: true,
+                          record: kill,
+                          oraclePhase: kill.closureNote ? 'done' : 'idle',
+                          oracleResponse: killOracleLine,
+                        });
+                      }}
+                      className="mt-3 ml-4 text-xs text-[#858585] hover:text-white transition-colors"
+                    >
+                      View the record
+                    </button>
                   </div>
                 );
               })}
             </div>
           </section>
         )}
+
+        {/* Threshold close — the dossier, the closing entry, the Oracle reading */}
+        <ContractClosedModal
+          isOpen={closedContract.isOpen}
+          target={closedContract.record}
+          threshold={getConsecutiveDaysRequired(closedContract.record)}
+          onClose={handleContractClosureClose}
+          onSubmit={handleContractClosureSubmit}
+          oraclePhase={closedContract.oraclePhase}
+          oracleResponse={closedContract.oracleResponse}
+        />
 
         {/* AVE Circuit Breaker — static prompt between autopsy and Oracle */}
         {avePrompt && (

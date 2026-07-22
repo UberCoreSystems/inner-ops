@@ -268,8 +268,9 @@ export default function SynthesisBriefing() {
 
         <ModuleIntro moduleId="synthesis" onAction={handleGenerate} />
 
-        {/* Generate controls — always visible. Manual trigger bypasses cadence. */}
-        <div className="oura-card p-6 mb-8">
+        {/* Generate controls — always visible. Manual trigger bypasses cadence.
+            id is the intro card's entrySelector (moduleIntros.js). */}
+        <div id="synthesis-generate" className="oura-card p-6 mb-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-[#ababab] text-sm mb-1">Run a briefing on-the-spot.</p>

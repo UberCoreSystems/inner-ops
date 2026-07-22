@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { getModuleIntro } from '../../config/moduleIntros';
 import { useOnboardingHelp } from '../../hooks/useOnboardingHelp';
 import { track } from '../../utils/analytics';
+import { scrollToEntryPoint } from '../../utils/scrollToEntryPoint';
 import { useEffect, useRef } from 'react';
 
 /**
@@ -53,6 +54,10 @@ export default function ModuleIntro({ moduleId, className = '', onAction = null 
     track('module_intro_action_clicked', { moduleId });
     dismissModule(moduleId);
     if (onAction) onAction();
+    // The action button names the entry ("Write today's entry"), so the page
+    // has to land on the field that does it. Runs after onAction so a collapsed
+    // form has been opened before we look for its input.
+    scrollToEntryPoint(intro.entrySelector);
   };
 
   return (

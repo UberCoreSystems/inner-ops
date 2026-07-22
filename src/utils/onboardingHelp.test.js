@@ -88,6 +88,14 @@ describe('module intro config', () => {
       assert.ok(intro.definition?.length > 20, `${intro.id}: 'definition' is too short to teach anything`);
       assert.ok(intro.example?.length > 20, `${intro.id}: missing a concrete example`);
       assert.ok(intro.actionLabel, `${intro.id}: missing actionLabel`);
+      // The action button names the entry, so it has to land on the control
+      // that makes it. A missing selector fails silently at runtime — the
+      // click would dismiss the card and leave the user where they were.
+      assert.match(
+        intro.entrySelector || '',
+        /^#[\w-]+$/,
+        `${intro.id}: entrySelector must be an id selector for the entry control`,
+      );
 
       for (const field of ['eyebrow', 'definition', 'example', 'actionLabel']) {
         assert.doesNotMatch(intro[field], banned, `${intro.id}.${field} violates the voice rules`);

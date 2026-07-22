@@ -1007,13 +1007,7 @@ export default function Journal() {
           </div>
         </header>
 
-        <ModuleIntro
-          moduleId="journal"
-          onAction={() => {
-            document.getElementById('journal-entry-input')?.focus();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
+        <ModuleIntro moduleId="journal" />
 
         {/* 30-Day Mood — strip + derived takeaway */}
         {entries.length > 0 && (

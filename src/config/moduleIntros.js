@@ -28,6 +28,12 @@
  *
  * `actionRoute: null` means the action is in-page; ModuleIntro then requires
  * an `onAction` handler and renders a button instead of a link.
+ *
+ * `entrySelector` is the control the action promises — the field where the
+ * entry is actually made. ModuleIntro scrolls it into view and focuses it after
+ * `onAction` runs, so the page lands on the input rather than at the top. The
+ * page handler's only job is the state change (open a collapsed form); it does
+ * not scroll or focus.
  */
 
 export const MODULE_INTROS = Object.freeze([
@@ -39,6 +45,7 @@ export const MODULE_INTROS = Object.freeze([
     example: 'Skipped the gym again. Told myself I was tired. I wasn’t — I was avoiding the call with my father.',
     actionLabel: 'Write today’s entry',
     actionRoute: null,
+    entrySelector: '#journal-entry-input',
   },
   {
     id: 'ledger',
@@ -48,6 +55,7 @@ export const MODULE_INTROS = Object.freeze([
     example: 'No phone in bed. Sixty consecutive days. Checked in every night — held or escaped. There is no third option.',
     actionLabel: 'Name your first target',
     actionRoute: null,
+    entrySelector: '#kill-target-name',
   },
   {
     id: 'hardlessons',
@@ -57,6 +65,7 @@ export const MODULE_INTROS = Object.freeze([
     example: 'Cost: lost the contract by going quiet for three weeks. Rule: when I want to disappear, I send the email first.',
     actionLabel: 'Record a lesson',
     actionRoute: null,
+    entrySelector: '#hard-lessons-event',
   },
   {
     id: 'relapse',
@@ -66,6 +75,7 @@ export const MODULE_INTROS = Object.freeze([
     example: '11:40pm. Alone. Third night this week. The trigger was the argument, not the boredom.',
     actionLabel: 'Log a signal',
     actionRoute: null,
+    entrySelector: '#quick-signal-input',
   },
   {
     id: 'synthesis',
@@ -81,6 +91,7 @@ export const MODULE_INTROS = Object.freeze([
     example: 'Your ledger says the target is discipline. Your journal says you have not written since the day you set it.',
     actionLabel: 'Run a briefing',
     actionRoute: null,
+    entrySelector: '#synthesis-generate',
   },
 ]);
 

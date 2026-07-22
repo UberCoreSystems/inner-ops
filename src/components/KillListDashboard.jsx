@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  updateDoc, 
-  doc,
-  serverTimestamp 
-} from 'firebase/firestore';
+import { updateDoc, doc } from 'firebase/firestore';
 import { getDb } from '../firebase';
 import { moveDocAtomic } from '../utils/firebaseUtils';
 import { useActiveKillTargets } from '../hooks/useKillTargets';
@@ -14,8 +10,7 @@ import { AppIcon } from './AppIcons';
 import { SkeletonList, SkeletonKillTarget } from './SkeletonLoader';
 import logger from '../utils/logger';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
-import { generateAIFeedback } from '../utils/aiFeedback';
-import { composeClosureFeedback } from '../utils/composeClosureFeedback';
+import { runClosureOracle, persistClosureOracle } from '../utils/submitKillClosure';
 import ouraToast from '../utils/toast';
 import { KillTargetSummary } from './KillTargetCard';
 
@@ -126,49 +121,23 @@ const KillListDashboard = React.memo(function KillListDashboard() {
 
       // 3. Oracle one-line response — runs regardless of whether modal
       //    stays open. If dismissed mid-call, we surface via toast instead.
-      const entryText = mode === 'kill'
-        ? `I just closed a kill contract: "${target.title}". What ended it: ${note}`
-        : `A kill contract just broke on me: "${target.title}". What caught me: ${note}`;
-      const pastTitles = todaysTargets.slice(0, 3).map(t => t.title);
+      //    Shared with the Kill List page's threshold close so both write the
+      //    same fields into the same collections.
+      const oracle = await runClosureOracle({
+        mode,
+        title: target.title,
+        note,
+        pastTitles: todaysTargets.slice(0, 3).map(t => t.title),
+      });
+      const { oracleResponse } = oracle;
 
-      let feedback = null;
-      try {
-        feedback = await generateAIFeedback('killList', entryText, pastTitles);
-      } catch (err) {
-        logger.error('Oracle closure response error:', err);
-      }
-      const { oracleResponse, oracleClosingQuestion } = composeClosureFeedback(feedback, mode);
-      // null when the Oracle call threw outright — composeClosureFeedback then
-      // supplies its own line, which is neither Claude's nor a local reading.
-      const oracleProvenance = feedback?.provenance ?? null;
-      const oracleFallbackReason = feedback?.fallbackReason ?? null;
-
-      // Persist the Oracle line. Kill records live in confirmedKills;
-      // escape records remain in killTargets.
-      try {
-        const db = await getDb();
-        if (mode === 'kill' && confirmedKillId) {
-          const killRef = doc(db, 'confirmedKills', confirmedKillId);
-          await updateDoc(killRef, {
-            closureOracleResponse: oracleResponse,
-            ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
-            ...(oracleProvenance ? { oracleProvenance } : {}),
-            ...(oracleFallbackReason ? { oracleFallbackReason } : {}),
-            lastUpdated: serverTimestamp(),
-          });
-        } else if (mode === 'escape') {
-          const targetRef = doc(db, 'killTargets', target.id);
-          await updateDoc(targetRef, {
-            escapeOracleResponse: oracleResponse,
-            ...(oracleClosingQuestion ? { oracleClosingQuestion } : {}),
-            ...(oracleProvenance ? { oracleProvenance } : {}),
-            ...(oracleFallbackReason ? { oracleFallbackReason } : {}),
-            lastUpdated: serverTimestamp(),
-          });
-        }
-      } catch (err) {
-        logger.error('Error persisting Oracle closure response:', err);
-      }
+      // Kill records live in confirmedKills; escapes remain in killTargets.
+      await persistClosureOracle({
+        collectionName: mode === 'kill' ? 'confirmedKills' : 'killTargets',
+        docId: mode === 'kill' ? confirmedKillId : target.id,
+        mode,
+        ...oracle,
+      });
 
       if (closureDismissedRef.current) {
         ouraToast.info(`Oracle: ${oracleResponse}`);

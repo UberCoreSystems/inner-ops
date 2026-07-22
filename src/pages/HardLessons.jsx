@@ -910,16 +910,7 @@ export default function HardLessons() {
               statement of what this module is, since dismissal is permanent —
               so the definition moved up into the header line above, which is
               never dismissible. */}
-          <ModuleIntro
-            moduleId="hardlessons"
-            onAction={() => {
-              setShowForm(true);
-              setTimeout(() => {
-                document.getElementById('hard-lessons-event')?.focus();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }, 0);
-            }}
-          />
+          <ModuleIntro moduleId="hardlessons" onAction={() => setShowForm(true)} />
           <p className="text-[#858585] text-xs mt-3">Lesson maps to active pattern → <Link to="/ledger" className="text-[#ababab] hover:text-white transition-colors">General Ledger</Link></p>
         </div>
 

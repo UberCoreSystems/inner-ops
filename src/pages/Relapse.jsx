@@ -34,13 +34,7 @@ export default function Relapse() {
           </div>
         </div>
 
-        <ModuleIntro
-          moduleId="relapse"
-          onAction={() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            document.querySelector('#quick-signal-input')?.focus();
-          }}
-        />
+        <ModuleIntro moduleId="relapse" />
 
         <RelapseRadar key={radarKey} />
       </div>
