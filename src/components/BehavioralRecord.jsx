@@ -49,6 +49,8 @@ function BehavioralRecord({ record }) {
     },
   ].filter(Boolean);
 
+  const bothGroups = executionLines.length > 0 && intelligenceLines.length > 0;
+
   const Line = ({ value, label }) => (
     <li className="flex items-baseline gap-3">
       <span className="text-white tabular-nums font-medium min-w-[3ch] text-right">{value}</span>
@@ -70,9 +72,14 @@ function BehavioralRecord({ record }) {
   return (
     <div className="mt-6 pt-6 border-t border-[#1a1a1a]">
       <h2 className="text-[#858585] text-xs uppercase tracking-widest mb-4">The Record</h2>
-      <div className="space-y-4">
+      {/* Side by side from sm up so the card stays short; stacked below that.
+          A hairline rule divides the columns only when both groups are present
+          — a lone group stays full-width rather than a widowed half. */}
+      <div className={`grid gap-4 ${bothGroups ? 'sm:grid-cols-2 sm:gap-x-8' : ''}`}>
         <Group label="Execution" lines={executionLines} />
-        <Group label="Intelligence" lines={intelligenceLines} />
+        <div className={bothGroups ? 'sm:border-l sm:border-[#1a1a1a] sm:pl-8' : ''}>
+          <Group label="Intelligence" lines={intelligenceLines} />
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { CONFRONTATION_FIELDS } from '../utils/schema';
 import { resolveArchetypeLabel } from '../utils/relapseTaxonomy';
+import { AppIcon } from './AppIcons';
 
 /**
  * ConfrontationHistoryPanel — collapsible inline archive of past Pattern
@@ -162,14 +163,43 @@ export default function ConfrontationHistoryPanel({ confrontations = [] }) {
 
   return (
     <section className="mb-10 -mt-6 animate-fade-in-up" style={{ animationDelay: '0.075s' }}>
+      {/* Collapsed, the header carries the Pattern Confrontation accent and an
+          icon so it reads as a closed drawer rather than a stray label —
+          matching the General Ledger toggle on the Dashboard. Expanded, it
+          drops back to the quiet row so it doesn't compete with the group
+          cards beneath it. */}
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 oura-card hover:border-[#2a2a2a] transition-colors"
+        className={`w-full flex items-center justify-between oura-card group transition-all ${
+          expanded ? 'px-4 py-2.5 hover:border-[#2a2a2a]' : 'px-5 py-4 hover:border-[#b45309]/50'
+        }`}
+        style={expanded ? undefined : {
+          boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 34px #b453091f',
+        }}
       >
-        <span className="text-[#858585] text-xs uppercase tracking-widest">
-          Past Confrontations ({totalConfrontations} across {groups.length} pattern{groups.length !== 1 ? 's' : ''})
-        </span>
-        <span className="text-[#858585] text-xs">{expanded ? '▲' : '▼'}</span>
+        <div className="flex items-center gap-3">
+          {!expanded && (
+            <div className="w-9 h-9 rounded-xl bg-[#b45309]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <AppIcon name="insight" size={20} color="#b45309" />
+            </div>
+          )}
+          <div className="text-left">
+            <span className={`block uppercase tracking-widest text-xs ${expanded ? 'text-[#858585]' : 'text-white font-medium'}`}>
+              Past Confrontations{expanded && ` (${totalConfrontations} across ${groups.length} pattern${groups.length !== 1 ? 's' : ''})`}
+            </span>
+            {!expanded && (
+              <p className="text-[#858585] text-sm mt-0.5">
+                {totalConfrontations} across {groups.length} pattern{groups.length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+        </div>
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          className={`transition-all duration-200 ${expanded ? 'rotate-180 text-[#858585]' : 'text-[#b45309]'}`}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </button>
 
       {expanded && (

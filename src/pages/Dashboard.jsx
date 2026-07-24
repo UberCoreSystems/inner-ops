@@ -811,20 +811,56 @@ export default function Dashboard() {
             are a separate surface and deliberately stay — now paired with
             Recent Activity in the row below. */}
 
-        {/* Kill List Dashboard — collapsible */}
+        {/* Kill List Dashboard — collapsible. Collapsed, the header carries the
+            module accent and the active-contract count so the section reads as
+            a closed drawer with content behind it, not a stray label. Expanded,
+            it drops back to the plain section-label rhythm so it doesn't
+            compete with the cards it opens onto. */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-          <button
-            onClick={() => setKillListExpanded(prev => !prev)}
-            className="flex items-center justify-between w-full mb-4 group"
-          >
-            <h3 className="text-[#858585] text-xs uppercase tracking-widest group-hover:text-[#ababab] transition-colors">General Ledger</h3>
-            <svg
-              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className={`text-[#858585] group-hover:text-[#858585] transition-all duration-200 ${killListExpanded ? 'rotate-180' : ''}`}
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
+          {(() => {
+            const activeCount = (rawUserData?.killTargets || []).filter(t => t.status === 'active').length;
+            return (
+              <button
+                onClick={() => setKillListExpanded(prev => !prev)}
+                className={`flex items-center justify-between w-full mb-4 group transition-all ${
+                  killListExpanded
+                    ? ''
+                    : 'oura-card px-5 py-4 hover:border-[#ef4444]/50'
+                }`}
+                style={killListExpanded ? undefined : cardGlow('#ef4444')}
+              >
+                <div className="flex items-center gap-3">
+                  {!killListExpanded && (
+                    <div className="w-9 h-9 rounded-xl bg-[#ef4444]/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <AppIcon name="target" size={20} color="#ef4444" />
+                    </div>
+                  )}
+                  <div className="text-left">
+                    <h3 className={`uppercase tracking-widest transition-colors ${
+                      killListExpanded
+                        ? 'text-[#858585] text-xs group-hover:text-[#ababab]'
+                        : 'text-white text-xs font-medium'
+                    }`}>General Ledger</h3>
+                    {!killListExpanded && (
+                      <p className="text-[#858585] text-sm mt-0.5">
+                        {activeCount > 0
+                          ? `${activeCount} active kill contract${activeCount === 1 ? '' : 's'}`
+                          : 'No active kill contracts'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <svg
+                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  className={`transition-all duration-200 ${
+                    killListExpanded ? 'rotate-180 text-[#858585]' : 'text-[#ef4444]'
+                  }`}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            );
+          })()}
           {killListExpanded && <KillListDashboard />}
         </section>
 
