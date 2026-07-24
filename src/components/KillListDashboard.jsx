@@ -314,7 +314,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
   }
 
   return (
-    <div className="oura-card p-6 hover:shadow-oura-glow-red hover:border-[#ef4444]/40 transition-all">
+    <div className="oura-card oura-card-lit p-6 transition-all" style={{ '--lit-accent': '#ef4444' }}>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-[#1a1a1a] flex items-center justify-center">

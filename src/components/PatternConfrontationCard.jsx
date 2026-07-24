@@ -238,8 +238,8 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
       {showCard && (
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.07s' }}>
           <div
-            className="oura-card p-6 border-l-2 border-[#b45309] hover:shadow-oura-glow-amber transition-all"
-            style={{ background: 'linear-gradient(90deg, rgba(180, 83, 9, 0.05) 0%, transparent 40%), linear-gradient(180deg, #0a0a0a 0%, #050505 100%)' }}
+            className="oura-card oura-card-lit p-6 border-l-2 border-[#b45309] transition-all"
+            style={{ '--lit-accent': '#f59e0b', background: 'linear-gradient(90deg, rgba(180, 83, 9, 0.05) 0%, transparent 40%), linear-gradient(180deg, #0a0a0a 0%, #050505 100%)' }}
           >
             <div className="flex items-start justify-between mb-3">
               <p className="text-[#b45309] text-xs font-medium uppercase tracking-widest">

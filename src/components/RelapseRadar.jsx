@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
@@ -89,6 +89,37 @@ const RelapseRadar = () => {
   const [reflection, setReflection] = useState('');
   const [relapseEntries, setRelapseEntries] = useState([]);
   const [searchInput, setSearchInput] = useState('');
+  const location = useLocation();
+
+  // Deep-link from the Dashboard's Recent Activity: scroll to an entry's card
+  // and flash a highlight ring. The id rides in router state; capture it, then
+  // clear the state so a refresh does not re-fire.
+  const [pendingFocusId, setPendingFocusId] = useState(null);
+  const [highlightId, setHighlightId] = useState(null);
+
+  useEffect(() => {
+    const focusId = location.state?.focusEntryId;
+    if (!focusId) return;
+    setPendingFocusId(focusId);
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Once the entry is loaded and its card rendered (active view shows the top
+  // 3), scroll to it and flash the ring for ~1.8s. If the entry isn't in the
+  // rendered window, getElementById is null and this is a graceful no-op.
+  useEffect(() => {
+    if (!pendingFocusId) return;
+    if (!relapseEntries.some(e => e.id === pendingFocusId)) return;
+    const id = pendingFocusId;
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(`relapse-entry-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setHighlightId(id);
+    setPendingFocusId(null);
+    const timer = setTimeout(() => setHighlightId(null), 1800);
+    return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
+  }, [pendingFocusId, relapseEntries]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -1243,7 +1274,7 @@ const RelapseRadar = () => {
           {view === 'active' && (filteredRelapseEntries.length > 0 ? (
             <div className="space-y-3">
               {filteredRelapseEntries.slice(0, 3).map((entry) => (
-                <div key={entry.id} className="oura-card p-5 hover:shadow-oura-glow-cyan transition-shadow duration-300">
+                <div key={entry.id} id={`relapse-entry-${entry.id}`} style={{ '--lit-accent': '#00d4aa' }} className={`oura-card p-5 hover:shadow-oura-glow-cyan transition-shadow duration-300${highlightId === entry.id ? ' entry-focus' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="text-oura-cyan font-light text-lg">{resolveArchetypeLabel(entry.selectedSelf)}</div>

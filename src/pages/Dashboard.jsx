@@ -439,6 +439,21 @@ export default function Dashboard() {
     return meta[type] || { icon: <AppIcon name="activity" size={18} color="#8a8a8a" glow={false} />, color: '#8a8a8a', label: 'Activity' };
   }, []);
 
+  // Recent Activity click-through — open the source event in its module for
+  // review. Journal opens its detail overlay; HardLessons and Relapse scroll
+  // to and highlight the card (they have no overlay). The target id rides in
+  // router state, read + cleared by a mount effect on each destination page.
+  const openActivity = useCallback((entry) => {
+    if (!entry?.id) return;
+    if (entry.type === 'journal') {
+      navigate('/journal', { state: { openEntryId: entry.id } });
+    } else if (entry.type === 'hardlesson') {
+      navigate('/hardlessons', { state: { focusLessonId: entry.id } });
+    } else if (entry.type === 'relapse') {
+      navigate('/relapse', { state: { focusEntryId: entry.id } });
+    }
+  }, [navigate]);
+
   return (
     <div className="min-h-screen bg-black">
       <div className={`fade-pane ${showShell ? 'visible' : 'hidden'}`}>
@@ -570,6 +585,18 @@ export default function Dashboard() {
         </MirrorStack>
         </div>
 
+        {/* Today's Reflection — the day's Oracle-sourced prompt and the primary
+            journaling entry point. Placed directly under the Oracle reading and
+            above Quick Actions: journaling is the module everything else is
+            drawn from, so the day's question leads the module launcher. */}
+        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+          <DailyPrompt
+            onJournalClick={(promptText) => {
+              navigate('/journal', { state: { seedPrompt: promptText || '', fromDailyPrompt: true } });
+            }}
+          />
+        </section>
+
         {/* Quick Actions — primary navigation. Kept as a permanent accent
             bloom (cardGlow) so it stands apart from the content cards, and
             placed high (directly below the Oracle reading) for accessibility. */}
@@ -624,15 +651,6 @@ export default function Dashboard() {
           signalReport={signalReport}
           hardLessons={rawUserData?.hardLessons || []}
         />
-
-        {/* Daily Prompt Section */}
-        <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-          <DailyPrompt
-            onJournalClick={(promptText) => {
-              navigate('/journal', { state: { seedPrompt: promptText || '', fromDailyPrompt: true } });
-            }}
-          />
-        </section>
 
         {/* Early Warning Widget */}
         {earlyWarning && (
@@ -790,18 +808,8 @@ export default function Dashboard() {
             slot), so the census reads as part of the unified reading rather
             than a detached section. It carries no tour anchor of its own —
             step 1 already frames the whole card. The raw per-module totals
-            below are a separate surface and deliberately stay. */}
-
-        {/* Stats Grid - Oura Score Cards */}
-        <section data-tour="stats" className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" glow />
-            <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" glow />
-            <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" glow />
-            <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" glow />
-          </div>
-        </section>
+            are a separate surface and deliberately stay — now paired with
+            Recent Activity in the row below. */}
 
         {/* Kill List Dashboard — collapsible */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
@@ -820,9 +828,10 @@ export default function Dashboard() {
           {killListExpanded && <KillListDashboard />}
         </section>
 
-        {/* Two Column: Activity + Insights */}
+        {/* Recent Activity + All-Time Stats — paired in one row to keep the
+            page compact. Stats sit as a 2×2 square in the right column. */}
         <div className="grid lg:grid-cols-2 gap-6 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
-          
+
           {/* Recent Activity */}
           <section>
             <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Recent Activity</h3>
@@ -834,13 +843,14 @@ export default function Dashboard() {
                     <ActivityItem
                       key={index}
                       type={meta.label}
-                      title={entry.type === 'hardlesson' 
+                      title={entry.type === 'hardlesson'
                         ? (entry.extractedLesson || entry.eventDescription || 'Hard lesson extracted')
                         : (entry.content || entry.reflection || entry.notes || 'Entry recorded')}
                       description={entry.type === 'hardlesson' && entry.ruleGoingForward ? `Rule: ${entry.ruleGoingForward}` : null}
                       time={formatTimeAgo(entry.createdAt)}
                       icon={meta.icon}
                       color={meta.color}
+                      onClick={() => openActivity(entry)}
                     />
                   );
                 })
@@ -865,6 +875,21 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+            </div>
+          </section>
+
+          {/* All-Time Stats — 2×2 square. Retains the data-tour="stats" anchor
+              the walkthrough's final step targets. The grid fills the column so
+              the square matches Recent Activity's height instead of running
+              short; cards stretch and center their content (auto-rows-fr +
+              ScoreCard h-full). */}
+          <section data-tour="stats" className="flex flex-col">
+            <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
+            <div className="grid grid-cols-2 auto-rows-fr gap-4 flex-1">
+              <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" glow />
+              <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" glow />
+              <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" glow />
+              <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" glow />
             </div>
           </section>
 

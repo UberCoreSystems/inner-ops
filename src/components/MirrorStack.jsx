@@ -62,7 +62,7 @@ function MirrorStack({
 
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
-      <div className="oura-card p-6 hover:shadow-oura-glow-blue hover:border-[#4da6ff]/40 transition-all">
+      <div className="oura-card oura-card-lit p-6 transition-all">
         {hasAnything && <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-5">Oracle</h3>}
 
         {reading.direction && (
@@ -158,7 +158,7 @@ function MirrorStack({
 function ColdMirror({ children = null }) {
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
-      <div className="oura-card p-6 hover:shadow-oura-glow-blue hover:border-[#4da6ff]/40 transition-all">
+      <div className="oura-card oura-card-lit p-6 transition-all">
         <div className="flex items-baseline justify-between mb-5">
           <h3 className="text-[#858585] text-xs uppercase tracking-widest">Oracle</h3>
           <span className="text-[#7a7a7a] text-[10px] uppercase tracking-widest">No record</span>
@@ -201,7 +201,7 @@ function ColdMirror({ children = null }) {
 function SeededMirror({ preview, children = null }) {
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.06s' }}>
-      <div className="oura-card p-6 hover:shadow-oura-glow-blue hover:border-[#4da6ff]/40 transition-all">
+      <div className="oura-card oura-card-lit p-6 transition-all">
         <div className="flex items-baseline justify-between mb-5">
           <h3 className="text-[#858585] text-xs uppercase tracking-widest">Oracle</h3>
           <span className="text-[#7a7a7a] text-[10px] uppercase tracking-widest">Preview</span>

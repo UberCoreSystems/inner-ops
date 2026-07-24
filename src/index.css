@@ -58,20 +58,64 @@ body {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.oura-card:hover {
-  border-color: #2a2a2a;
-  transform: translateY(-2px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.6);
+/* Hover treatments are gated behind (hover: hover) so a touch tap — which
+   browsers report as a :hover and leave stuck until the next tap — never
+   pins the lift/border/glow on a phone. Pointer devices are unaffected. */
+@media (hover: hover) {
+  .oura-card:hover {
+    border-color: #2a2a2a;
+    transform: translateY(-2px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Accent glow on hover for color-coded cards (Dashboard stat tiles), whose
+     accent is dynamic and passed as --card-accent-glow. Base stays the neutral
+     .oura-card shadow; the colored halo appears only on hover — matching the
+     module entry-card treatment (hover:shadow-oura-glow-*), never a permanent glow.
+     Defined after .oura-card:hover so it wins the box-shadow cascade. */
+  .oura-card-accent-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.6), 0 0 30px var(--card-accent-glow, transparent);
+  }
 }
 
-/* Accent glow on hover for color-coded cards (Dashboard stat tiles), whose
-   accent is dynamic and passed as --card-accent-glow. Base stays the neutral
-   .oura-card shadow; the colored halo appears only on hover — matching the
-   module entry-card treatment (hover:shadow-oura-glow-*), never a permanent glow.
-   Defined after .oura-card:hover so it wins the box-shadow cascade. */
-.oura-card-accent-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.6), 0 0 30px var(--card-accent-glow, transparent);
+/* Lit card — a content card with a fixed accent, for surfaces that must read
+   as lit on both a pointer and a touchscreen. A pointer device gets the glow
+   on hover. A touch device has nothing to hover with, so the same glow simply
+   rests on, at a lower alpha than the Quick Actions bloom (12%) so navigation
+   still outranks content on mobile. One var per card; the alphas derive from
+   it, so a caller sets a color, not three shadows. Default is Oracle blue. */
+.oura-card-lit {
+  --lit-accent: #4da6ff;
+}
+
+@media (hover: hover) {
+  .oura-card-lit:hover {
+    border-color: color-mix(in srgb, var(--lit-accent) 40%, transparent);
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 10px 28px rgba(0, 0, 0, 0.6),
+      0 0 30px color-mix(in srgb, var(--lit-accent) 30%, transparent);
+  }
+}
+
+@media (hover: none) {
+  .oura-card-lit {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 6px 20px rgba(0, 0, 0, 0.55),
+      0 0 24px color-mix(in srgb, var(--lit-accent) 8%, transparent);
+  }
+}
+
+/* Transient focus ring for a card deep-linked from Recent Activity — a solid
+   accent outline plus a soft halo, driven by the same --lit-accent var the
+   lit cards use. Toggled for ~1.8s, then removed so it fades. */
+.entry-focus {
+  box-shadow:
+    0 0 0 2px var(--lit-accent),
+    0 0 24px color-mix(in srgb, var(--lit-accent) 45%, transparent) !important;
 }
 
 .oura-card-elevated {

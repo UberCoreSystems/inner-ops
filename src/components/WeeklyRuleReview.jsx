@@ -195,7 +195,7 @@ export default function WeeklyRuleReview() {
 
   return (
     <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
-      <div className="oura-card p-6">
+      <div className="oura-card oura-card-lit p-6">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-[#858585] text-xs uppercase tracking-widest">Weekly Rule Review</h3>
           <button

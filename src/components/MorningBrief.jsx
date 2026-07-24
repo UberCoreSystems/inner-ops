@@ -62,7 +62,7 @@ export default function MorningBrief({ userId }) {
       <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">
         {label}
       </h3>
-      <div className="oura-card p-6">
+      <div className="oura-card oura-card-lit p-6">
         {status === 'loading' && (
           <p className="text-[#858585] text-sm">Generating today's brief…</p>
         )}

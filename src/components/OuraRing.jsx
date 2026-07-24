@@ -196,7 +196,7 @@ export const ScoreCard = React.memo(function ScoreCard({
 
   return (
     <div
-      className={`oura-card ${sizeClasses[size]}${onClick ? ' cursor-pointer' : ''}${glow ? ' oura-card-accent-hover' : ''} group`}
+      className={`oura-card ${sizeClasses[size]} h-full flex flex-col justify-center${onClick ? ' cursor-pointer' : ''}${glow ? ' oura-card-accent-hover' : ''} group`}
       style={glow ? { '--card-accent-glow': `${color}4d` } : undefined}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
@@ -280,17 +280,26 @@ export const InsightCard = React.memo(function InsightCard({
 /**
  * Activity Item - For recent activity feed
  */
-export const ActivityItem = React.memo(function ActivityItem({ 
-  type, 
-  title, 
-  description, 
-  time, 
+export const ActivityItem = React.memo(function ActivityItem({
+  type,
+  title,
+  description,
+  time,
   icon,
-  color 
+  color,
+  onClick
 }) {
   return (
-    <div className="flex gap-4 p-4 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] hover:border-[#2a2a2a] transition-all duration-300">
-      <div 
+    <button
+      type="button"
+      onClick={onClick}
+      // Lit card with a per-module accent — glows on hover (desktop) / at rest
+      // (touch) exactly like the other dashboard cards. The whole row is the
+      // tap target so review is one click from here.
+      className="oura-card oura-card-lit flex gap-4 p-4 w-full text-left group cursor-pointer transition-all"
+      style={{ '--lit-accent': color }}
+    >
+      <div
         className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
         style={{ backgroundColor: `${color}15` }}
       >
@@ -298,7 +307,7 @@ export const ActivityItem = React.memo(function ActivityItem({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-1">
-          <span 
+          <span
             className="text-xs font-medium uppercase tracking-wider"
             style={{ color }}
           >
@@ -311,7 +320,7 @@ export const ActivityItem = React.memo(function ActivityItem({
           <p className="text-[#858585] text-sm mt-1 line-clamp-2">{description}</p>
         )}
       </div>
-    </div>
+    </button>
   );
 });
 

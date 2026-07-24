@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { updateMemory } from '../utils/updateMemory';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
@@ -63,6 +63,22 @@ const costCategories = [
 
 export default function HardLessons() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Deep-link from the Dashboard's Recent Activity: scroll to a lesson's card
+  // and flash a highlight ring. The id rides in router state; capture it into
+  // pendingFocusId and clear the state so a refresh does not re-fire.
+  const [pendingFocusId, setPendingFocusId] = useState(null);
+  const [highlightId, setHighlightId] = useState(null);
+
+  useEffect(() => {
+    const focusId = location.state?.focusLessonId;
+    if (!focusId) return;
+    setPendingFocusId(focusId);
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Form state for new lesson
   const [newLesson, setNewLesson] = useState({
     eventCategory: '',
@@ -82,6 +98,22 @@ export default function HardLessons() {
   const [lessons, setLessons] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Once the deep-linked lesson is loaded and rendered, scroll to its card and
+  // flash the ring for ~1.8s. Runs when the pending id or the loaded list
+  // changes, so it fires as soon as the target exists in the DOM.
+  useEffect(() => {
+    if (!pendingFocusId) return;
+    if (!lessons.some(l => l.id === pendingFocusId)) return;
+    const id = pendingFocusId;
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(`lesson-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setHighlightId(id);
+    setPendingFocusId(null);
+    const timer = setTimeout(() => setHighlightId(null), 1800);
+    return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
+  }, [pendingFocusId, lessons]);
   const [loadError, setLoadError] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
@@ -1574,7 +1606,7 @@ export default function HardLessons() {
                   // Weekly autopsy stubs get a compact card with "Expand Autopsy" CTA
                   if (lesson.isWeeklyAutopsy && !lesson.isFinalized) {
                     return (
-                      <div key={lesson.id} className="oura-card p-5 border-dashed border-[#6366f1]/30">
+                      <div key={lesson.id} id={`lesson-${lesson.id}`} style={{ '--lit-accent': '#f59e0b' }} className={`oura-card p-5 border-dashed border-[#6366f1]/30 transition-all${highlightId === lesson.id ? ' entry-focus' : ''}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
@@ -1605,7 +1637,7 @@ export default function HardLessons() {
                   // Scar stubs get a compact card
                   if (lesson.isScarStub && !lesson.extractedLesson) {
                     return (
-                      <div key={lesson.id} className="oura-card p-5 border-dashed border-[#f59e0b]/30">
+                      <div key={lesson.id} id={`lesson-${lesson.id}`} style={{ '--lit-accent': '#f59e0b' }} className={`oura-card p-5 border-dashed border-[#f59e0b]/30 transition-all${highlightId === lesson.id ? ' entry-focus' : ''}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
@@ -1634,11 +1666,11 @@ export default function HardLessons() {
                   }
 
                   return (
-                    <div key={lesson.id} className={`oura-card p-6 hover:shadow-oura-glow-amber transition-shadow duration-300 ${
+                    <div key={lesson.id} id={`lesson-${lesson.id}`} style={{ '--lit-accent': '#f59e0b' }} className={`oura-card p-6 hover:shadow-oura-glow-amber transition-shadow duration-300 ${
                       lesson.isFinalized
                         ? 'border-[#f59e0b]/50'
                         : 'border-[#f59e0b]/20'
-                    }`}>
+                    }${highlightId === lesson.id ? ' entry-focus' : ''}`}>
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex items-center space-x-3">
                           <div className="w-12 h-12 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">

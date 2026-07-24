@@ -237,6 +237,18 @@ export default function Journal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Deep-link from the Dashboard's Recent Activity: open the entry's detail
+  // overlay. detailEntry is a memo over `entries`, so setting the id before the
+  // list has loaded is fine — the overlay populates once the entry arrives.
+  // State is cleared so a refresh or back-nav does not re-open it.
+  useEffect(() => {
+    const openId = location.state?.openEntryId;
+    if (!openId) return;
+    setDetailEntryId(openId);
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Entry editing state
   const [editingEntryId, setEditingEntryId] = useState(null);
 
