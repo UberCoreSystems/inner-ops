@@ -325,6 +325,29 @@ function parseUpdaterJson(raw) {
 }
 
 /**
+ * Decide how to treat a parsed updater response's themes.
+ *
+ * A null parse (`json_null`) is genuinely fatal — nothing to write, and leaving
+ * the entry unprocessed lets a later trigger retry it. But a parsed object that
+ * merely omits (or nulls) `content` is RECOVERABLE: the updater sometimes
+ * returns valid receipts with no themes, and the old code discarded the whole
+ * update — throwing those receipts away, which left memory empty. Memory is
+ * revision, not regeneration, so we carry the prior themes forward and still
+ * capture the receipts.
+ *
+ * Returns { fatal } or { fatal:false, contentProvided, content }.
+ */
+function resolveUpdaterContent(parsed, prior) {
+  if (!parsed || typeof parsed !== "object") return { fatal: true };
+  const contentProvided = typeof parsed.content === "string";
+  return {
+    fatal: false,
+    contentProvided,
+    content: contentProvided ? parsed.content : (prior?.content || ""),
+  };
+}
+
+/**
  * Reconcile Haiku output against authoritative sources:
  *  - "new" receipts: must substring-match the entry text → stamped with entry
  *    date + sourceEntryId + module.
@@ -541,9 +564,22 @@ const updateMemory = onCall(
       throw new HttpsError("internal", "Memory update unavailable.");
     }
 
-    if (!parsed || typeof parsed.content !== "string") {
-      structuredLog({ fn: "updateMemory", uid, module, stage: "module", parse: "fail", latencyMs: Date.now() - startedAt });
+    // Only a completely unparseable response is fatal. A parsed object missing
+    // `content` is recovered (receipts kept, prior themes carried) rather than
+    // discarded — the `reason` field is the diagnostic that tells the two modes
+    // apart in the logs without ever exposing entry text.
+    const resolved = resolveUpdaterContent(parsed, prior);
+    if (resolved.fatal) {
+      structuredLog({ fn: "updateMemory", uid, module, stage: "module", parse: "fail", reason: "json_null", latencyMs: Date.now() - startedAt });
       return { updated: false, reason: "unparseable" };
+    }
+    if (!resolved.contentProvided) {
+      structuredLog({
+        fn: "updateMemory", uid, module, stage: "module",
+        parse: "recovered", reason: "no_content",
+        hadReceipts: Array.isArray(parsed.receipts) && parsed.receipts.length > 0,
+        latencyMs: Date.now() - startedAt,
+      });
     }
 
     // Capture the module-state snapshot only when the model proposed at least
@@ -564,9 +600,10 @@ const updateMemory = onCall(
       parsed, entry, module, priorReceipts, entryId, contextSnapshot
     );
 
-    // userEdited content is the new base — keep it; merge forward only when the
-    // model returned fresh themes and the user has not overridden them.
-    const content = stripBannedTone(parsed.content).slice(0, MEMORY_MODULE_CONTENT_MAX_CHARS);
+    // Fresh themes when the model returned them; otherwise prior themes carried
+    // forward (see resolveUpdaterContent) so a missing `content` never wipes
+    // memory or drops the receipts alongside it.
+    const content = stripBannedTone(resolved.content).slice(0, MEMORY_MODULE_CONTENT_MAX_CHARS);
     const nextProcessed = [...processed, entry.dedupeKey].slice(-MEMORY_PROCESSED_IDS_CAP);
 
     await memoryRef.set({
@@ -814,6 +851,7 @@ module.exports = {
   // exported for unit tests
   reconcileReceipts,
   parseUpdaterJson,
+  resolveUpdaterContent,
   stripBannedTone,
   loadEntryFacts,
   buildContextSnapshot,

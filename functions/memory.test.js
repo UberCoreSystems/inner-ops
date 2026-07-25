@@ -14,6 +14,7 @@ const assert = require("node:assert");
 const {
   reconcileReceipts,
   parseUpdaterJson,
+  resolveUpdaterContent,
   stripBannedTone,
   buildMemoryBlock,
   buildContextSnapshot,
@@ -186,6 +187,40 @@ test("relativeDateLabel treats a future-dated receipt as earlier today (no negat
 
 test("relativeDateLabel falls back to the raw string when unparseable", () => {
   assert.equal(relativeDateLabel("not-a-date", "2026-07-27"), "not-a-date");
+});
+
+test("resolveUpdaterContent: a null parse is fatal", () => {
+  assert.deepEqual(resolveUpdaterContent(null, { content: "prior" }), { fatal: true });
+});
+
+test("resolveUpdaterContent: content present is used as-is", () => {
+  const r = resolveUpdaterContent({ content: "fresh themes", receipts: [] }, { content: "prior" });
+  assert.equal(r.fatal, false);
+  assert.equal(r.contentProvided, true);
+  assert.equal(r.content, "fresh themes");
+});
+
+test("resolveUpdaterContent: missing content is recovered by carrying prior themes forward", () => {
+  // The likely parse:"fail" cause — valid receipts, no `content` field. This
+  // must NOT be fatal, and the receipts must survive.
+  const r = resolveUpdaterContent({ receipts: [{ quote: "x", source: "new" }] }, { content: "prior themes" });
+  assert.equal(r.fatal, false);
+  assert.equal(r.contentProvided, false);
+  assert.equal(r.content, "prior themes");
+});
+
+test("resolveUpdaterContent: missing content with no prior yields empty string, still not fatal", () => {
+  const r = resolveUpdaterContent({ receipts: [] }, null);
+  assert.equal(r.fatal, false);
+  assert.equal(r.contentProvided, false);
+  assert.equal(r.content, "");
+});
+
+test("resolveUpdaterContent: non-string content (null) is treated as missing, not fatal", () => {
+  const r = resolveUpdaterContent({ content: null, receipts: [] }, { content: "prior" });
+  assert.equal(r.fatal, false);
+  assert.equal(r.contentProvided, false);
+  assert.equal(r.content, "prior");
 });
 
 // Minimal fake Firestore for buildContextSnapshot (where() is ignored; the
