@@ -9,6 +9,14 @@
   box-sizing: border-box;
 }
 
+html, body {
+  /* clip (not hidden) so it does not create a scroll container that would
+     break the sticky top nav; kills horizontal pan into the black void */
+  overflow-x: clip;
+  /* stop iOS rubber-band overscroll from revealing the void, both axes */
+  overscroll-behavior: none;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',

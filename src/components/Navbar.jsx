@@ -88,7 +88,7 @@ export default function Navbar({ onLogout }) {
   return (
     <>
       {/* Top bar */}
-      <nav className="bg-black border-b border-oura-border sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
+      <nav className="bg-black border-b border-oura-border sticky top-0 z-50 backdrop-blur-sm bg-opacity-95 pt-[env(safe-area-inset-top)]">
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
