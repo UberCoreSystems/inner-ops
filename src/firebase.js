@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import logger from './utils/logger.js';
 
 // Vite injects `import.meta.env`; Node (test runner) does not. Guard here so
@@ -37,12 +38,47 @@ const firebaseConfig = {
   appId: viteEnv.VITE_FIREBASE_APP_ID
 };
 
+// App Check proves a request originates from the genuine app before it reaches
+// Firestore / callable Functions. The reCAPTCHA v3 site key is public and safe
+// to ship. Init is skipped when the key is unset so the app still boots before
+// App Check is provisioned in the Firebase console — enforcement is turned on
+// server-side (per-function `enforceAppCheck`) only once real traffic is
+// verified in monitoring mode. Never runs in the Node test context.
+const initAppCheck = (firebaseApp) => {
+  const siteKey = viteEnv.VITE_APPCHECK_SITE_KEY;
+  if (!siteKey) {
+    if (viteEnv.DEV) {
+      logger.warn("⚠️ App Check skipped — VITE_APPCHECK_SITE_KEY is unset");
+    }
+    return;
+  }
+  // Dev: register this printed token (or a fixed VITE_APPCHECK_DEBUG_TOKEN) in
+  // console → App Check → Manage debug tokens so localhost is attested. Must be
+  // set before initializeAppCheck. Never set in production builds.
+  if (viteEnv.DEV) {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = viteEnv.VITE_APPCHECK_DEBUG_TOKEN || true;
+  }
+  try {
+    initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+    logger.log("✅ Firebase App Check initialized");
+  } catch (error) {
+    // Non-fatal: App Check failing must not take down the app while
+    // enforcement is still off. It surfaces as unverified traffic in the
+    // console dashboard, which is exactly what monitoring mode is for.
+    logger.error("❌ App Check initialization failed:", error);
+  }
+};
+
 // Initialize Firebase app. Skipped in Node test context so transitive imports
 // don't attempt real Firebase initialization without credentials.
 let app;
 if (!isNodeTestContext) {
   try {
     app = initializeApp(firebaseConfig);
+    initAppCheck(app);
   } catch (error) {
     logger.error("❌ Firebase initialization failed:", error);
     throw new Error("Failed to initialize Firebase app");

@@ -19,6 +19,11 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
     if (!entry) return;
     previousFocusRef.current = document.activeElement;
 
+    // Lock background scroll while the sheet is open so touch drags scroll the
+    // entry, not the page behind the fixed overlay.
+    const priorBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         onClose?.();
@@ -45,6 +50,7 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = priorBodyOverflow;
       const prior = previousFocusRef.current;
       if (prior && typeof prior.focus === 'function') {
         try { prior.focus(); } catch { /* element may have been removed */ }
@@ -76,33 +82,47 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
         role="dialog"
         aria-modal="true"
         aria-label={`Journal entry from ${dateLabel}`}
-        className="flex flex-col h-full sm:h-auto w-full sm:max-w-2xl bg-[#0a0a0a] sm:border sm:border-[#2a2a2a] sm:rounded-2xl sm:max-h-[85vh] shadow-2xl"
+        className="flex flex-col h-[100dvh] sm:h-auto w-full sm:max-w-2xl bg-[#0a0a0a] sm:border sm:border-[#2a2a2a] sm:rounded-2xl sm:max-h-[85vh] overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 p-5 border-b border-[#1a1a1a] shrink-0">
-          {moodOption ? (
-            <div className="flex items-center space-x-3 min-w-0">
-              <div
-                className="w-10 h-10 rounded-full bg-black border border-[#1a1a1a] flex items-center justify-center shrink-0"
-                style={{ color: moodOption.color }}
-              >
-                <span className="w-5 h-5 block">{MoodIcons[moodOption.value]}</span>
+        <div className="flex items-center justify-between gap-3 p-5 border-b border-[#1a1a1a] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Mobile back control — desktop keeps the top-right X below. */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="sm:hidden shrink-0 flex items-center gap-1 -ml-1 pr-1 text-[#858585] hover:text-white transition-colors"
+              aria-label="Back"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              <span className="text-sm">Back</span>
+            </button>
+            {moodOption ? (
+              <div className="flex items-center space-x-3 min-w-0">
+                <div
+                  className="w-10 h-10 rounded-full bg-black border border-[#1a1a1a] flex items-center justify-center shrink-0"
+                  style={{ color: moodOption.color }}
+                >
+                  <span className="w-5 h-5 block">{MoodIcons[moodOption.value]}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white text-sm font-medium">{moodOption.label}</p>
+                  <p className="text-[#858585] text-xs">
+                    {dateLabel}{intensityLabel ? ` · ${intensityLabel}` : ''}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-white text-sm font-medium">{moodOption.label}</p>
-                <p className="text-[#858585] text-xs">
-                  {dateLabel}{intensityLabel ? ` · ${intensityLabel}` : ''}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="text-[#858585] text-xs uppercase tracking-widest">{dateLabel}</div>
-          )}
+            ) : (
+              <div className="text-[#858585] text-xs uppercase tracking-widest">{dateLabel}</div>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
+            className="w-8 h-8 shrink-0 hidden sm:flex items-center justify-center rounded-full text-[#858585] hover:text-white hover:bg-[#1a1a1a] transition-colors"
             aria-label="Close entry"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -113,7 +133,7 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-4">
           <p className="text-[#d1d1d1] leading-relaxed whitespace-pre-wrap">
             {entry.content}
           </p>
