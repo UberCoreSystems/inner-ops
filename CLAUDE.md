@@ -2,7 +2,7 @@
 
 ## Project State
 
-- **Status:** Pre-deploy. Nothing is live. No migrations, no hotfix urgency. Aggressive changes are safe.
+- **Status:** Live — deployed 2026-07-25 (closed beta). Production Firestore holds real user data: schema changes need migration thinking, and rules/functions changes must be deployed and verified via logs, not just merged.
 - **Build:** Clean. BER-1 through BER-13 closed. QA and CI agents operational.
 - **v1 Scope (locked):** Journaling + Kill List + Hard Lessons + Relapse Radar + Synthesis
 - **Open items (post-launch):** Oracle UI redesign, engagement notifications, AI interaction layer (Command Brief — extends Synthesis cross-module reading to session-level prompts), MCP/skills integration
@@ -96,16 +96,21 @@ UI · UX · AI quality · feature completeness — **equal weight.**
 - **Visualize what you track.** If a module stores data, it must be surfaced somewhere (trends, history, rates). Flag gaps when you see them.
 - **No speculative generality.** Don't add features, abstractions, or infrastructure beyond the task.
 
-## Pre-Deploy Checklist
+## Deploy Status
+
+Shipped 2026-07-25 — all launch items confirmed:
 
 - [x] Add Firebase Hosting config to `firebase.json`
-- [ ] Verify `.env` / environment variables are set for production Firebase project
-- [ ] Run `npm run build` and confirm clean production build
-- [ ] Deploy Firestore rules (`firestore.rules`)
-- [ ] Deploy Cloud Functions (oracle, oracleFollowUp)
-- [ ] Set `ANTHROPIC_API_KEY` secret in Firebase Functions config
-- [ ] Smoke test: auth flow, journal CRUD, Kill List operations, Hard Lessons extraction, Relapse Radar entry, Synthesis briefing generation
-- [ ] Email deliverability: default `noreply@inner-ops-8ce36.firebaseapp.com` sender lands in Gmail spam for new projects (confirmed 2026-05-25 — verification + reset emails were in spam, not missing). Before public launch, configure custom SMTP (SendGrid/Postmark/Resend) with SPF/DKIM on a real domain. Closed beta on default sender is acceptable but warn testers to check spam.
+- [x] Verify `.env` / environment variables are set for production Firebase project
+- [x] Run `npm run build` and confirm clean production build
+- [x] Deploy Firestore rules (`firestore.rules`)
+- [x] Deploy Cloud Functions (oracle, oracleFollowUp)
+- [x] Set `ANTHROPIC_API_KEY` secret in Firebase Functions config
+- [x] Smoke test: auth flow, journal CRUD, Kill List operations, Hard Lessons extraction, Relapse Radar entry, Synthesis briefing generation
+
+### Outstanding before public launch
+
+- [ ] Email deliverability: default `noreply@inner-ops-8ce36.firebaseapp.com` sender lands in Gmail spam for new projects (confirmed 2026-05-25 — verification + reset emails were in spam, not missing). Real fix (custom domain + Resend/SendGrid with SPF/DKIM) deferred to expanded beta. Closed beta on default sender is acceptable but warn testers to check spam.
 
 ## How Bo Works
 

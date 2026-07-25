@@ -11,6 +11,7 @@ import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { runClosureOracle, persistClosureOracle } from '../utils/submitKillClosure';
 import OracleModal from '../components/OracleModal';
 import ContractClosedModal from '../components/ContractClosedModal';
+import ColdCaseModal from '../components/ColdCaseModal';
 import RedirectTargetModal from '../components/RedirectTargetModal';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
@@ -23,6 +24,7 @@ import KillListBackfillCard from '../components/KillListBackfillCard';
 import { KillTargetSummary } from '../components/KillTargetCard';
 import { categories as CATEGORIES } from '../utils/killListCategories';
 import { suggestImplementationIntentions, critiqueTargetFraming } from '../utils/crossModuleExtraction';
+import { buildColdCaseEntryText, buildReengagePrefill, engagementLineageLabel } from '../utils/coldCase';
 import { localDateKey } from '../utils/dateUtils';
 
 // Stable icon definitions to avoid recreating objects on every render
@@ -316,6 +318,19 @@ const KillList = () => {
     oracleResponse: '',
   });
   const closureDismissedRef = useRef(false);
+
+  // Cold Case Protocol — reopening a confirmed kill forks on intent.
+  // Reference hands off to ContractClosedModal; "It's moving again" runs the
+  // Oracle comparison and can end in a lineage-linked re-engagement. The
+  // pending payload survives until the new contract is actually signed.
+  const [coldCase, setColdCase] = useState({
+    isOpen: false,
+    kill: null,
+    oraclePhase: 'idle',
+    oracleResponse: '',
+  });
+  const [pendingReengage, setPendingReengage] = useState(null);
+  const coldCaseDismissedRef = useRef(false);
 
   // Reflection notes state
   const [user, setUser] = useState(null);
@@ -710,6 +725,15 @@ const KillList = () => {
         lastUpdated: new Date().toISOString(),
         reflectionNotes: '',
         ...(pendingFromHardLessonId ? { fromHardLessonId: pendingFromHardLessonId } : {}),
+        // Re-engagement lineage. Prior-kill facts are denormalized so the
+        // card renders without an archive lookup; engagementCount carries
+        // into the next confirmedKills doc via archiveConfirmedKill's spread.
+        ...(pendingReengage ? {
+          fromConfirmedKillId: pendingReengage.fromConfirmedKillId,
+          engagementCount: pendingReengage.engagementCount,
+          priorKillDays: pendingReengage.priorKillDays,
+          ...(pendingReengage.priorKilledAt ? { priorKilledAt: pendingReengage.priorKilledAt } : {}),
+        } : {}),
       };
 
       logger.log("📝 Target data to save:", targetData);
@@ -723,11 +747,26 @@ const KillList = () => {
 
       ouraToast.success('Target added to the Ledger');
 
+      // Stamp the archive record the contract was drafted from. Non-fatal:
+      // the new contract stands even if the marker write fails.
+      if (pendingReengage) {
+        try {
+          const marker = { reengagedAt: new Date(), reengagedTargetId: savedTarget.id, lastUpdated: new Date() };
+          await updateData('confirmedKills', pendingReengage.fromConfirmedKillId, marker);
+          setConfirmedKills(prev => prev.map(k =>
+            k.id === pendingReengage.fromConfirmedKillId ? { ...k, ...marker } : k
+          ));
+        } catch (err) {
+          logger.error('Re-engage marker write failed:', err?.message);
+        }
+      }
+
       setNewTarget('');
       setNewTargetCategory('bad-habit');
       setNewTargetDays(30);
       setPendingFromHardLessonId(null);
       setPendingTargetDescription(null);
+      setPendingReengage(null);
       setNewIntention({ trigger: '', response: '' });
       setOracleOptions([]);
       setDraftIdx(0);
@@ -1417,6 +1456,124 @@ const KillList = () => {
     }
   }, [categories]);
 
+  // ——— Cold Case Protocol ———————————————————————————————————————————————
+
+  // The read-only record view, exactly as before the fork existed.
+  const openKillRecord = useCallback((kill) => {
+    const killOracleLine =
+      coerceClosureResponseText(kill.closureOracleResponse) ||
+      coerceClosureResponseText(kill.oracleStatement);
+    closureDismissedRef.current = false;
+    setClosedContract({
+      isOpen: true,
+      record: kill,
+      oraclePhase: kill.closureNote ? 'done' : 'idle',
+      oracleResponse: killOracleLine,
+    });
+  }, []);
+
+  const openColdCase = useCallback((kill) => {
+    coldCaseDismissedRef.current = false;
+    setColdCase({ isOpen: true, kill, oraclePhase: 'idle', oracleResponse: '' });
+  }, []);
+
+  const closeColdCase = useCallback(() => {
+    coldCaseDismissedRef.current = true;
+    setColdCase({ isOpen: false, kill: null, oraclePhase: 'idle', oracleResponse: '' });
+  }, []);
+
+  const handleColdCaseReference = useCallback(() => {
+    const kill = coldCase.kill;
+    closeColdCase();
+    if (kill) openKillRecord(kill);
+  }, [coldCase.kill, closeColdCase, openKillRecord]);
+
+  // One Oracle call: the user's report compared against the full file —
+  // closure note, pre-committed clause, and the escape rationalizations
+  // verbatim. The record is stamped resurfaced even if the Oracle is out;
+  // running the protocol is itself the event of record.
+  const runColdCaseProtocol = useCallback(async (description) => {
+    const kill = coldCase.kill;
+    if (!kill) return;
+    coldCaseDismissedRef.current = false;
+    setColdCase(prev => ({ ...prev, oraclePhase: 'loading' }));
+
+    let responseText = 'Oracle unavailable. The file stands.';
+    let provenance = null;
+    let fallbackReason = null;
+    try {
+      const entryText = buildColdCaseEntryText(kill, description);
+      const result = await generateAIFeedback('killList', entryText, []);
+      if (result?.text) responseText = result.text;
+      provenance = result?.provenance || null;
+      fallbackReason = result?.fallbackReason || null;
+    } catch (err) {
+      logger.error('Cold case Oracle call failed:', err?.message);
+    }
+
+    const stamp = {
+      resurfacedAt: new Date(),
+      coldCaseNote: description,
+      coldCaseOracleResponse: responseText,
+      ...(provenance ? { coldCaseProvenance: provenance } : {}),
+      ...(fallbackReason ? { coldCaseFallbackReason: fallbackReason } : {}),
+      lastUpdated: new Date(),
+    };
+    try {
+      await updateData('confirmedKills', kill.id, stamp);
+      setConfirmedKills(prev => prev.map(k => (k.id === kill.id ? { ...k, ...stamp } : k)));
+    } catch (err) {
+      logger.error('Cold case stamp failed:', err?.message);
+    }
+
+    // Dismissed mid-read — surface the comparison rather than dropping it.
+    // It is persisted on the record either way.
+    if (coldCaseDismissedRef.current) {
+      ouraToast.info(`Oracle: ${responseText}`);
+    } else {
+      setColdCase(prev => ({ ...prev, oraclePhase: 'done', oracleResponse: responseText }));
+    }
+  }, [coldCase.kill]);
+
+  // Re-engage: draft a NEW contract from the file. The kill is never
+  // un-killed — lineage links the two records instead.
+  const reengageFromKill = useCallback(() => {
+    const kill = coldCase.kill;
+    if (!kill) return;
+    const prefill = buildReengagePrefill(kill);
+    const titleKey = prefill.title.trim().toLowerCase();
+
+    setNewTarget(prefill.title);
+    setNewTargetCategory(prefill.category);
+    if (Number.isFinite(prefill.days) && prefill.days >= MIN_DAYS_REQUIRED) {
+      setNewTargetDays(prefill.days);
+    }
+    setNewIntention(prefill.intention);
+    if (prefill.description) setPendingTargetDescription(prefill.description);
+
+    // The seeds are deliberate: the clause is user-owned (auto-draft must not
+    // overwrite it) and the title already survived a full contract — the
+    // framing gate would be noise on a proven target.
+    intentionEditedRef.current = true;
+    framingApprovedTitleRef.current = titleKey;
+    autoDraftSigRef.current = `${titleKey}|${prefill.category}`;
+
+    setPendingReengage({
+      fromConfirmedKillId: kill.id,
+      engagementCount: prefill.engagementCount,
+      priorKillDays: prefill.priorKillDays,
+      priorKilledAt: prefill.priorKilledAt,
+    });
+
+    closeColdCase();
+    setShowAddForm(true);
+    setTimeout(() => {
+      newTargetInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      newTargetInputRef.current?.focus();
+    }, 250);
+    ouraToast.success('Contract drafted from the file. Sign it below.');
+  }, [coldCase.kill, closeColdCase]);
+
   const saveRevisedIntention = useCallback(async () => {
     if (!reviseTarget) return;
     if (!reviseIntention.trigger.trim() || !reviseIntention.response.trim()) {
@@ -1505,6 +1662,7 @@ const KillList = () => {
     const streak = target.streak || 0;
     const checkedInToday = target.lastCheckIn === todayKey();
     const latestEscape = target.escapeData?.length ? target.escapeData[target.escapeData.length - 1] : null;
+    const lineage = engagementLineageLabel(target);
     const missedDates = target.status === 'active' ? computeMissedDates(target) : [];
     const showBackfill = missedDates.length >= 2 && !backfillDismissed[target.id];
 
@@ -1532,7 +1690,15 @@ const KillList = () => {
                 <button onClick={cancelEdit} className="px-3 py-2 bg-[#1a1a1a] text-[#858585] rounded-xl text-xs">Cancel</button>
               </div>
             ) : (
-              <KillTargetSummary target={target} />
+              <>
+                {lineage && (
+                  <div className="text-[10px] uppercase tracking-widest mb-1">
+                    <span className="text-[#ef4444]">{lineage.ordinal}</span>
+                    {lineage.detail && <span className="text-[#858585]"> — {lineage.detail}</span>}
+                  </div>
+                )}
+                <KillTargetSummary target={target} />
+              </>
             )}
           </div>
 
@@ -2481,19 +2647,18 @@ const KillList = () => {
                         {requestingOracleForKillId === kill.id ? 'Requesting...' : 'Request Oracle statement'}
                       </button>
                     )}
+                    {kill.resurfacedAt && (
+                      <p className="text-[#858585] text-xs mt-3">
+                        Resurfaced {(kill.resurfacedAt?.toDate ? kill.resurfacedAt.toDate() : new Date(kill.resurfacedAt))
+                          .toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}.
+                        {kill.reengagedTargetId ? ' Re-engaged.' : ''}
+                      </p>
+                    )}
                     <button
-                      onClick={() => {
-                        closureDismissedRef.current = false;
-                        setClosedContract({
-                          isOpen: true,
-                          record: kill,
-                          oraclePhase: kill.closureNote ? 'done' : 'idle',
-                          oracleResponse: killOracleLine,
-                        });
-                      }}
+                      onClick={() => openColdCase(kill)}
                       className="mt-3 ml-4 text-xs text-[#858585] hover:text-white transition-colors"
                     >
-                      View the record
+                      Open the record
                     </button>
                   </div>
                 );
@@ -2511,6 +2676,18 @@ const KillList = () => {
           onSubmit={handleContractClosureSubmit}
           oraclePhase={closedContract.oraclePhase}
           oracleResponse={closedContract.oracleResponse}
+        />
+
+        {/* Cold Case Protocol — the intent fork on a reopened confirmed kill */}
+        <ColdCaseModal
+          isOpen={coldCase.isOpen}
+          kill={coldCase.kill}
+          oraclePhase={coldCase.oraclePhase}
+          oracleResponse={coldCase.oracleResponse}
+          onReference={handleColdCaseReference}
+          onRunProtocol={runColdCaseProtocol}
+          onReengage={reengageFromKill}
+          onClose={closeColdCase}
         />
 
         {/* AVE Circuit Breaker — static prompt between autopsy and Oracle */}
