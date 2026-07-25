@@ -18,7 +18,12 @@ const {
   buildMemoryBlock,
   buildContextSnapshot,
   collectReceiptsForClient,
+  relativeDateLabel,
 } = require("./memory");
+
+// A UTC YYYY-MM-DD string N days before today — lets buildMemoryBlock tests
+// assert the relative label deterministically regardless of when they run.
+const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
 const ENTRY = {
   text: "I told myself I was done blaming the schedule. Then I blamed the schedule again.",
@@ -147,12 +152,40 @@ test("buildMemoryBlock renders the recall tag when a snapshot is present", () =>
   assert.match(block, /written while "Doomscroll" was active/);
 });
 
-test("buildMemoryBlock renders a legacy receipt unchanged (no tag)", () => {
+test("buildMemoryBlock renders a receipt with a relative label and no tag", () => {
   const block = buildMemoryBlock([
-    { label: "Journal", content: "", receipts: [{ date: "2026-05-14", quote: "again" }] },
+    { label: "Journal", content: "", receipts: [{ date: daysAgo(3), quote: "again" }] },
   ]);
-  assert.match(block, /- \(2026-05-14\) "again"/);
+  assert.match(block, /- \(3 days ago\) "again"/);
   assert.ok(!/written while/.test(block));
+  // The raw ISO date must never reach the prompt — it reads as mechanical history.
+  assert.ok(!new RegExp(daysAgo(3)).test(block));
+});
+
+test("buildMemoryBlock labels a same-day receipt 'earlier today', never a past date", () => {
+  const block = buildMemoryBlock([
+    { label: "Journal", content: "", receipts: [{ date: daysAgo(0), quote: "done for good" }] },
+  ]);
+  assert.match(block, /- \(earlier today\) "done for good"/);
+});
+
+test("relativeDateLabel buckets days into natural, relative phrasing", () => {
+  const today = "2026-07-27";
+  assert.equal(relativeDateLabel("2026-07-27", today), "earlier today");
+  assert.equal(relativeDateLabel("2026-07-26", today), "yesterday");
+  assert.equal(relativeDateLabel("2026-07-24", today), "3 days ago");
+  assert.equal(relativeDateLabel("2026-07-18", today), "last week");   // 9 days
+  assert.equal(relativeDateLabel("2026-07-06", today), "3 weeks ago"); // 21 days
+  assert.equal(relativeDateLabel("2026-06-17", today), "last month");  // 40 days
+  assert.equal(relativeDateLabel("2026-03-29", today), "back in March"); // 120 days
+});
+
+test("relativeDateLabel treats a future-dated receipt as earlier today (no negative)", () => {
+  assert.equal(relativeDateLabel("2026-07-28", "2026-07-27"), "earlier today");
+});
+
+test("relativeDateLabel falls back to the raw string when unparseable", () => {
+  assert.equal(relativeDateLabel("not-a-date", "2026-07-27"), "not-a-date");
 });
 
 // Minimal fake Firestore for buildContextSnapshot (where() is ignored; the

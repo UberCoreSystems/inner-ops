@@ -86,7 +86,7 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 p-5 border-b border-[#1a1a1a] shrink-0">
+        <div className="flex items-center justify-between gap-3 px-5 pb-5 pt-[calc(1.25rem+env(safe-area-inset-top))] sm:pt-5 border-b border-[#1a1a1a] shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             {/* Mobile back control — desktop keeps the top-right X below. */}
             <button

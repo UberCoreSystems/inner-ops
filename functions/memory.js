@@ -111,6 +111,26 @@ function toDateString(value) {
   return utcDayKey();
 }
 
+// Human, relative time label for a receipt date (YYYY-MM-DD, UTC) measured
+// against today. Keeps same-day references honest — a receipt minted from an
+// entry logged earlier today reads as "earlier today", never a past date — and
+// lets the Oracle weave contradictions in naturally instead of stamping an ISO
+// date. Falls back to the raw string if either date is unparseable.
+function relativeDateLabel(dateStr, todayStr = utcDayKey()) {
+  const then = Date.parse(`${dateStr}T00:00:00Z`);
+  const now = Date.parse(`${todayStr}T00:00:00Z`);
+  if (Number.isNaN(then) || Number.isNaN(now)) return dateStr;
+  const days = Math.round((now - then) / 86400000);
+  if (days <= 0) return "earlier today";
+  if (days === 1) return "yesterday";
+  if (days <= 6) return `${days} days ago`;
+  if (days <= 13) return "last week";
+  if (days <= 34) return `${Math.round(days / 7)} weeks ago`;
+  if (days <= 75) return "last month";
+  const month = new Date(then).toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  return `back in ${month}`;
+}
+
 /**
  * Separate daily cap for memory Haiku calls (off the Oracle pool).
  * Counter doc: users/{uid}/_rateLimits/memory_{YYYY-MM-DD}.
@@ -718,7 +738,7 @@ function buildMemoryBlock(blocks) {
   const rendered = blocks.map((b) => {
     const lines = [`[${b.label}]`];
     if (b.content) lines.push(b.content);
-    for (const r of b.receipts) lines.push(`- (${r.date}${snapshotTag(r)}) "${r.quote}"`);
+    for (const r of b.receipts) lines.push(`- (${relativeDateLabel(r.date)}${snapshotTag(r)}) "${r.quote}"`);
     return lines.join("\n");
   });
 
@@ -729,7 +749,7 @@ function buildMemoryBlock(blocks) {
   }
   if (!body.trim()) return "";
 
-  return `\n\nMEMORY — your accumulated observations and the user's own dated words:\n${body}\n\nThese are receipts, not summaries. Use a receipt when it exposes a contradiction with the current entry — quote it exactly, with its date. If memory conflicts with what the user writes today, name the conflict; do not silently prefer either. Do not fabricate or alter a quote. If no receipt is relevant, ignore this section.`;
+  return `\n\nMEMORY — your accumulated observations and the user's own past words, each tagged with when it was written (relative to now):\n${body}\n\nThese are receipts, not summaries. Use one when it exposes a contradiction with the current entry: quote the user's exact words and weave them into your response naturally, referring to the time the way a person would — "earlier today", "last week", "a few weeks back" — never a raw date and never the mechanical "on [date] you said". A receipt tagged "earlier today" is from TODAY; treat it as something just said, never as past history. If memory conflicts with what the user writes now, name the conflict; do not silently prefer either. Do not fabricate or alter a quote. If no receipt is relevant, ignore this section.`;
 }
 
 /**
@@ -797,4 +817,5 @@ module.exports = {
   stripBannedTone,
   loadEntryFacts,
   buildContextSnapshot,
+  relativeDateLabel,
 };
