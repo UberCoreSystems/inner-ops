@@ -140,7 +140,7 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
     } else if (violatedRule?.ruleGoingForward) {
       entryText = `A rule I committed to is showing violations: "${violatedRule.ruleGoingForward}". What made me believe this time would be different, and what decision is required now?`;
     } else {
-      entryText = `${violatedInWindow} of my finalized rules have been violated in the last 14 days. What pattern am I most reluctant to name precisely?`;
+      entryText = `${violatedInWindow} of my finalized rules have been violated in the last 30 days. What pattern am I most reluctant to name precisely?`;
     }
 
     setModalState({ isOpen: true, content: '', isLoading: true, entryCount: null });
@@ -201,6 +201,7 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
       ));
     } catch (err) {
       logger.warn('PatternConfrontationCard: reaction write failed', err?.message);
+      throw err;
     }
   };
 
@@ -218,9 +219,25 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
     }
   };
 
+  // A regenerated confrontation replaces the one on record. Without this the
+  // history panel and any stored follow-up keep quoting the discarded reading.
+  const handleFeedbackReplaced = async (newFeedback) => {
+    if (!activeDocId || !newFeedback) return;
+    try {
+      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, {
+        [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback,
+      });
+      setConfrontations((prev) => prev.map((c) =>
+        c.id === activeDocId ? { ...c, [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback } : c
+      ));
+    } catch (err) {
+      logger.warn('PatternConfrontationCard: replaced-response write failed', err?.message);
+    }
+  };
+
   const headline = activeSignal
     ? formatDriftSignalText(activeSignal)
-    : `${violatedInWindow} of your finalized rules have been violated in the last 14 days.`;
+    : `${violatedInWindow} of your finalized rules have been violated in the last 30 days.`;
 
   const label = activeSignal
     ? activeSignal.type.replace(/_/g, ' ')
@@ -281,6 +298,7 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
         entryCount={modalState.entryCount}
         onReaction={handleReaction}
         onFollowUpStored={handleFollowUpStored}
+        onFeedbackReplaced={handleFeedbackReplaced}
       />
     </>
   );

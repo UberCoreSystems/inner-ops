@@ -20,7 +20,7 @@
 import { readUserData, writeData } from './firebaseUtils.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import logger from './logger.js';
-import { getEntryTimestamp as getTimestamp } from './dateUtils.js';
+import { getEntryTimestamp as getTimestamp, parseDateOnlyLocal, parseDate } from './dateUtils.js';
 import { getViolatedRules } from './ruleState.js';
 import {
   COLLECTIONS,
@@ -34,6 +34,11 @@ import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 import { deriveLanguagePattern } from './getBehavioralContext.js';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
+
+// Kill-target escapes store a date-only `YYYY-MM-DD` key; anchor those at local
+// noon so window math doesn't shift them a day. Older full-ISO values pass
+// through parseDate unchanged.
+const escapeMs = (value) => (parseDateOnlyLocal(value) || parseDate(value))?.getTime() ?? NaN;
 
 // The Reckoning looks back over a fixed period when laying stated commitments
 // against documented behavior. Matches the synthesis 28-day analysis window.
@@ -155,7 +160,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
   const activeTargets = (killTargets || []).filter(t => t[KILL_TARGET_FIELDS.STATUS] === 'active');
   const highEscapeTargets = activeTargets.filter(t => (t[KILL_TARGET_FIELDS.ESCAPES] || []).length >= 3);
   const totalEscapes28d = (killTargets || []).reduce((sum, t) => {
-    const recent = (t[KILL_TARGET_FIELDS.ESCAPES] || []).filter(e => e.date && now - new Date(e.date).getTime() < windowMs28);
+    const recent = (t[KILL_TARGET_FIELDS.ESCAPES] || []).filter(e => e.date && now - escapeMs(e.date) < windowMs28);
     return sum + recent.length;
   }, 0);
 
@@ -359,7 +364,7 @@ export function assembleReckoning({
   for (const t of killTargets) {
     if (t[KILL_TARGET_FIELDS.STATUS] !== 'active') continue;
     const escapes = (t[KILL_TARGET_FIELDS.ESCAPES] || []).filter(
-      (e) => e?.date && inPeriod(new Date(e.date).getTime())
+      (e) => e?.date && inPeriod(escapeMs(e.date))
     );
     if (escapes.length === 0 || !t.id) continue;
     contradictions.push({

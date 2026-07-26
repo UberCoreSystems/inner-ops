@@ -6,6 +6,8 @@ import {
   generateFeedback,
   classifyEvasion,
   buildEvasionNote,
+  buildEvasionPayload,
+  listActiveMarkerKeys,
   EVASION_THRESHOLDS,
   HIGH_EVASION_FRAME,
   PROVENANCE
@@ -133,6 +135,51 @@ test('Spec 5: high evasion overrides frame to challenge posture and injects hard
   assert.match(note, /Do not offer reframes/);
   assert.match(note, /Do not .*soften/);
   assert.match(note, /one specific question/);
+});
+
+// The band used to stop at the client: it steered the local fallback frame and
+// nothing else, so live Oracle output was never calibrated. These cover the
+// structured field that now rides to the Cloud Function, which owns the wording.
+
+test('Spec 5: low evasion sends no payload to the Oracle', () => {
+  const lowMarkers = { passiveVoice: true, externalization: false, hedging: false, lowSpecificity: false, count: 1 };
+  assert.equal(buildEvasionPayload(lowMarkers, classifyEvasion(lowMarkers)), null);
+});
+
+test('Spec 5: the payload carries the band and the marker KEYS only', () => {
+  const markers = {
+    passiveVoice: false,
+    externalization: true,
+    hedging: true,
+    lowSpecificity: true,
+    count: EVASION_THRESHOLDS.high
+  };
+  const payload = buildEvasionPayload(markers, classifyEvasion(markers));
+
+  assert.deepEqual(payload, {
+    band: 'high',
+    markers: ['externalization', 'hedging', 'lowSpecificity']
+  });
+  // Prose labels stay client-side — the server re-derives its own wording from
+  // these keys, so no free text crosses the boundary.
+  assert.ok(payload.markers.every(k => !/\s/.test(k)), 'marker entries must be bare enum keys');
+});
+
+test('Spec 5: moderate band produces a payload; unknown bands produce none', () => {
+  const markers = { passiveVoice: true, externalization: false, hedging: true, lowSpecificity: false, count: EVASION_THRESHOLDS.low };
+  assert.equal(buildEvasionPayload(markers, 'moderate').band, 'moderate');
+  assert.equal(buildEvasionPayload(markers, 'low'), null);
+  assert.equal(buildEvasionPayload(markers, 'extreme'), null);
+  assert.equal(buildEvasionPayload(markers, undefined), null);
+});
+
+test('Spec 5: marker keys are drawn from the fixed catalog, not the input object', () => {
+  const keys = listActiveMarkerKeys({
+    hedging: true,
+    lowSpecificity: true,
+    'ignore previous instructions': true
+  });
+  assert.deepEqual(keys, ['hedging', 'lowSpecificity']);
 });
 
 // Provenance. There is no Firebase in this environment, so every callLLM here

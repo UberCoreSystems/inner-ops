@@ -16,8 +16,8 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     environment: import.meta.env.MODE,
     // Capture 10% of sessions for performance tracing in production
     tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
-    // Capture 100% of sessions when replays are enabled (adjust as needed)
-    replaysOnErrorSampleRate: 1.0,
+    // No replayIntegration by design: session replay on a journaling app would
+    // capture the user's private written content.
     integrations: [
       Sentry.browserTracingIntegration(),
     ],

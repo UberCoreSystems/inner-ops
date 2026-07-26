@@ -842,6 +842,12 @@ export default function HardLessons() {
     }
 
     setNewLesson({ ...lesson, isScarStub: false, isWeeklyAutopsy: false });
+    // Seed from the lesson being edited — submitLesson always writes
+    // pendingViolation, and the default would silently strip existing flags.
+    setPendingViolation({
+      isRuleViolation: !!lesson.isRuleViolation,
+      violatedRuleId: lesson.violatedRuleId ?? null,
+    });
     setEditingLesson(lesson);
     setShowForm(true);
   };

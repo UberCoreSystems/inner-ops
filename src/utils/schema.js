@@ -17,6 +17,9 @@ export const COLLECTIONS = Object.freeze({
   USER_SETTINGS: 'userSettings',
   SYNTHESES: 'syntheses',
   CONFRONTATIONS: 'confrontations',
+  // Archived kills — a confirmed kill is MOVED here from killTargets, so any
+  // reader that wants kill events must read this collection too.
+  CONFIRMED_KILLS: 'confirmedKills',
 });
 
 // Pattern-trust gate (BER-194): minimum total behavioral entries before

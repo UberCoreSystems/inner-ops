@@ -28,4 +28,4 @@ npm test         # node:test on aiFeedback and clarityScore
 
 ## Status
 
-Pre-deploy. v1 scope is locked to the three modules above. Relapse Radar and Black Mirror exist in the codebase but are post-launch.
+Live since 2026-07-25 (closed beta). v1 scope is locked to Journaling, Kill List, Hard Lessons, Relapse Radar, and Synthesis.

@@ -72,10 +72,6 @@ post-collapse logging.
 Converts suffering into structure. A serious personal record, not a
 journal entry.
 
-**Black Mirror** — Attention sovereignty tracker. Exposes mindless phone
-use, doom scrolling, and compulsive digital behavior. Frame is reclaiming
-stolen attention, not managing screen time.
-
 ***
 
 ## Research Scope
@@ -107,8 +103,6 @@ modules. Focus on:
   insight vs. noise
 * Pain-to-pattern conversion (Hard Lessons) — how structured reflection
   encodes learning
-* Attention and digital compulsion research (Black Mirror) — reclamation
-  frameworks
 
 Flag any finding that translates into a concrete UX or feature improvement.
 
@@ -155,7 +149,7 @@ Top 10-15 opportunities ranked by impact. Each entry:
 
 ### Section 2 — Module-by-Module Improvement Report
 
-Per module: Journaling, Kill List, Hard Lessons, Relapse Radar, Black Mirror
+Per module: Journaling, Kill List, Hard Lessons, Relapse Radar
 
 * Current state assessment
 * Identified gaps

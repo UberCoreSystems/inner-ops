@@ -1,4 +1,6 @@
 import { categories } from '../utils/killListCategories';
+import { getConsecutiveDaysRequired } from '../utils/killTargetThreshold';
+import { parseDateOnlyLocal, parseDate } from '../utils/dateUtils';
 
 /**
  * KillTargetSummary — shared summary block for a single Kill List / General
@@ -23,13 +25,6 @@ import { categories } from '../utils/killListCategories';
  * page never visually drift on the elements that describe the target.
  */
 
-const MIN_DAYS_REQUIRED = 30;
-
-function getConsecutiveDaysRequired(target) {
-  const raw = parseInt(target?.consecutiveDaysRequired, 10);
-  return Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED ? raw : MIN_DAYS_REQUIRED;
-}
-
 // Days since the target's most recent escape — used in the paused-state copy.
 // Reads from escapeData[].date (canonical, written when autopsy submits) and
 // falls back to escapedAt for safety.
@@ -37,7 +32,7 @@ function daysSinceEscape(target) {
   const escapes = target?.escapeData || [];
   const latestDateStr = escapes.length > 0 ? escapes[escapes.length - 1]?.date : null;
   const ts = latestDateStr
-    ? new Date(latestDateStr).getTime()
+    ? ((parseDateOnlyLocal(latestDateStr) || parseDate(latestDateStr))?.getTime() ?? null)
     : (target?.escapedAt?.toDate?.()?.getTime?.() ?? null);
   if (!Number.isFinite(ts)) return null;
   return Math.max(0, Math.floor((Date.now() - ts) / 86400000));

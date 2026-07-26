@@ -56,12 +56,13 @@ export async function getBehavioralContext(userId, deps = {}) {
         return [];
       });
 
-    const [killTargets, relapseEntries, hardLessons, journalEntries, userSettings] = await Promise.all([
+    const [killTargets, relapseEntries, hardLessons, journalEntries, userSettings, confirmedKills] = await Promise.all([
       loadCollection(COLLECTIONS.KILL_TARGETS),
       loadCollection(COLLECTIONS.RELAPSE_ENTRIES),
       loadCollection(COLLECTIONS.HARD_LESSONS),
       loadCollection(COLLECTIONS.JOURNAL_ENTRIES),
       loadCollection(COLLECTIONS.USER_SETTINGS),
+      loadCollection(COLLECTIONS.CONFIRMED_KILLS),
     ]);
 
     // BER-137: identity direction from user settings
@@ -135,7 +136,20 @@ export async function getBehavioralContext(userId, deps = {}) {
     // arrays (no extra reads). A COMPUTED field (not user-authored), so it
     // bypasses the server's per-field char clamp, but kept tiny here: top-3 by
     // confidence, scalar fields only.
-    const events = extractEvents({ killTargets, relapseEntries, hardLessons, journalEntries });
+    // Kills live in confirmedKills, not killTargets — feed them to the
+    // correlation layer too. Docs archived before the status stamp still carry
+    // status:'active', so normalize to 'killed' here rather than in the schema.
+    const confirmedKillRecords = (confirmedKills || []).map(k =>
+      k?.[KILL_TARGET_FIELDS.STATUS] === 'killed'
+        ? k
+        : { ...k, [KILL_TARGET_FIELDS.STATUS]: 'killed' }
+    );
+    const events = extractEvents({
+      killTargets: [...(killTargets || []), ...confirmedKillRecords],
+      relapseEntries,
+      hardLessons,
+      journalEntries,
+    });
     const temporalCorrelations = boundCorrelations(
       computeCorrelations(events, { entryCount: totalEntryCount })
     );

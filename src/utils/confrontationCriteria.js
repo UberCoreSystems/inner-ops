@@ -11,7 +11,6 @@
 
 import { saveUserProfile, getUserProfile } from './userProfile.js';
 import { readUserData } from './firebaseUtils.js';
-import { getAuth as getFirebaseAuth } from 'firebase/auth';
 import {
   ARCHETYPE_IDS,
   resolveArchetypeLabel,
@@ -97,22 +96,6 @@ export async function resolveTriggeredCriterion(uid) {
       readUserData('relapseEntries').catch(() => []),
     ]);
     return checkTriggeredCriteria(criteria, relapseEntries || []);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Convenience wrapper — resolves uid from Firebase Auth, then delegates to
- * resolveTriggeredCriterion. Returns null silently on any failure.
- *
- * @returns {Promise<{ criterion: object, matchCount: number, dataSummary: string } | null>}
- */
-export async function resolveTriggeredCriterionForCurrentUser() {
-  try {
-    const auth = getFirebaseAuth();
-    const uid = auth.currentUser?.uid;
-    return resolveTriggeredCriterion(uid);
   } catch {
     return null;
   }

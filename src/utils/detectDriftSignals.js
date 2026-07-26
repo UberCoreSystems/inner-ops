@@ -14,7 +14,7 @@
  */
 import logger from './logger.js';
 import { RELAPSE_FIELDS, KILL_TARGET_FIELDS } from './schema.js';
-import { localDateKey } from './dateUtils.js';
+import { localDateKey, parseDateOnlyLocal, parseDate } from './dateUtils.js';
 
 // Finding 22 remediation: magic threshold promoted to a named constant.
 // Three consecutive calendar days of the same archetype / precursor state is
@@ -119,7 +119,7 @@ export function detectDriftSignals(relapseEntries = [], killTargets = [], streak
   killTargets.forEach(target => {
     (target[KILL_TARGET_FIELDS.ESCAPES] || []).forEach(escape => {
       if (!escape.date) return;
-      const escapeTime = new Date(escape.date).getTime();
+      const escapeTime = (parseDateOnlyLocal(escape.date) || parseDate(escape.date))?.getTime() ?? NaN;
 
       relapseEntries.forEach(entry => {
         const entryTime = getTime(entry);

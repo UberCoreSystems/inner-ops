@@ -15,7 +15,7 @@ import { composeSeededPreview } from '../utils/composeSeededPreview';
 import { getUserProfile } from '../utils/userProfile';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
 import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
-import { localDateKey } from '../utils/dateUtils';
+import { localDateKey, parseDateOnlyLocal, parseDate } from '../utils/dateUtils';
 import SignalReport from '../components/SignalReport';
 import BehavioralRecord from '../components/BehavioralRecord';
 import MorningBrief from '../components/MorningBrief';
@@ -767,15 +767,15 @@ export default function Dashboard() {
           const weekAgo = now - 7 * 86400000;
           const activeTargets = rawUserData.killTargets.filter(t => t.status === 'active');
           const held = activeTargets.filter(t => {
-            const recentChecks = (t.checkIns || []).filter(c => new Date(c.date).getTime() > weekAgo);
+            const recentChecks = (t.checkIns || []).filter(c => ((parseDateOnlyLocal(c.date) || parseDate(c.date))?.getTime() ?? 0) > weekAgo);
             return recentChecks.length > 0 && recentChecks.every(c => c.held);
           }).length;
           const escaped = activeTargets.filter(t => {
-            const recentChecks = (t.checkIns || []).filter(c => new Date(c.date).getTime() > weekAgo);
+            const recentChecks = (t.checkIns || []).filter(c => ((parseDateOnlyLocal(c.date) || parseDate(c.date))?.getTime() ?? 0) > weekAgo);
             return recentChecks.some(c => !c.held);
           }).length;
           const untouched = activeTargets.filter(t => {
-            const recentChecks = (t.checkIns || []).filter(c => new Date(c.date).getTime() > weekAgo);
+            const recentChecks = (t.checkIns || []).filter(c => ((parseDateOnlyLocal(c.date) || parseDate(c.date))?.getTime() ?? 0) > weekAgo);
             return recentChecks.length === 0;
           }).length;
           if (held === 0 && escaped === 0 && untouched === 0) return null;

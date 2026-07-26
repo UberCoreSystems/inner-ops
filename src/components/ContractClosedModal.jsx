@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { AppIcon } from './AppIcons';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { coerceClosureResponseText } from '../utils/composeClosureFeedback';
+import { parseDateOnlyLocal, parseDate } from '../utils/dateUtils';
 
 // Shared vocabulary with KillClosureModal's kill mode — both write `closureTags`
 // into the same confirmedKills records, so the values must not diverge.
@@ -20,17 +21,12 @@ const BREACH = '#b45309';
 const RIBBON_MAX = 60;
 
 const formatDate = (value) => {
-  if (!value) return '';
-  // Date-only strings parse as UTC midnight and render a day early in western
-  // timezones. Anchor them at local noon, matching the day-key convention the
-  // rest of the Kill List uses.
-  const raw = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? `${value}T12:00:00`
-    : value;
-  const d = raw?.toDate ? raw.toDate() : new Date(raw);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // Date-only strings anchor at local noon (parseDateOnlyLocal) so they never
+  // render a day early; everything else falls through to parseDate.
+  const d = parseDateOnlyLocal(value) || parseDate(value);
+  return d
+    ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
 };
 
 function Ribbon({ checkIns }) {

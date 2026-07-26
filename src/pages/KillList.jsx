@@ -25,7 +25,8 @@ import { KillTargetSummary } from '../components/KillTargetCard';
 import { categories as CATEGORIES } from '../utils/killListCategories';
 import { suggestImplementationIntentions, critiqueTargetFraming } from '../utils/crossModuleExtraction';
 import { buildColdCaseEntryText, buildReengagePrefill, engagementLineageLabel } from '../utils/coldCase';
-import { localDateKey } from '../utils/dateUtils';
+import { getConsecutiveDaysRequired, MIN_DAYS_REQUIRED } from '../utils/killTargetThreshold';
+import { localDateKey, parseDateOnlyLocal, parseDate } from '../utils/dateUtils';
 
 // Stable icon definitions to avoid recreating objects on every render
 const CATEGORY_ICONS = {
@@ -174,12 +175,6 @@ function aggregateAutopsyPatterns(escapeData) {
   };
 }
 
-// Read-time shim for consecutiveDaysRequired — historic docs used a three-tier
-// difficulty field (surface/deep/core) and an older priority field. Map both to
-// the numeric field so nothing needs a Firestore migration.
-const LEGACY_DIFFICULTY_TO_DAYS = { surface: 21, deep: 30, core: 60 };
-const LEGACY_PRIORITY_TO_DAYS = { high: 60, medium: 30, low: 21 };
-const MIN_DAYS_REQUIRED = 21;
 // A kill-target title is a short noun-phrase, not a rule statement. Cap
 // keeps Mirror and other surfaces that quote the title in prose readable.
 const TITLE_MAX_LENGTH = 100;
@@ -187,17 +182,6 @@ const TITLE_MAX_LENGTH = 100;
 // in the moment. Hard cap forces brevity; the fields are required (non-empty)
 // but have no minimum length.
 const INTENTION_MAX_LENGTH = 50;
-const getConsecutiveDaysRequired = (target) => {
-  const raw = Number(target?.consecutiveDaysRequired);
-  if (Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED) return Math.floor(raw);
-  if (target?.difficulty && LEGACY_DIFFICULTY_TO_DAYS[target.difficulty]) {
-    return LEGACY_DIFFICULTY_TO_DAYS[target.difficulty];
-  }
-  if (target?.priority && LEGACY_PRIORITY_TO_DAYS[target.priority]) {
-    return LEGACY_PRIORITY_TO_DAYS[target.priority];
-  }
-  return 30;
-};
 
 // All KillList day-keys use LOCAL date (via the canonical localDateKey helper)
 // so check-ins, streaks, and backfill agree with the rest of the app (Journal,
@@ -228,11 +212,17 @@ const daysBetweenKeys = (fromKey, toKey) => {
 
 // Compute the list of YYYY-MM-DD strings that were "missed" since the last
 // meaningful date, up to and including today. Returns [] if no gap ≥ 2.
+// Reactivation re-anchors the gap: the dormant escaped period is not a run of
+// missed check-ins, so the anchor is the LATER of lastCheckIn and reactivatedAt.
 const computeMissedDates = (target) => {
   const today = todayKey();
   const lastCheckInKey = toDateKey(target?.lastCheckIn);
+  const reactivatedKey = toDateKey(target?.reactivatedAt);
   const createdKey = toDateKey(target?.createdAt);
-  const anchor = lastCheckInKey || createdKey;
+  const anchorCandidates = [lastCheckInKey, reactivatedKey].filter(Boolean);
+  const anchor = anchorCandidates.length
+    ? anchorCandidates.reduce((a, b) => (a > b ? a : b))
+    : createdKey;
   if (!anchor) return [];
   const gap = daysBetweenKeys(anchor, today);
   if (gap < 2) return [];
@@ -274,6 +264,20 @@ const KillList = () => {
     } catch { /* sessionStorage unavailable — fine */ }
     return all;
   });
+  // Hard Lessons bridge dismissals — state mirror of the sessionStorage flag
+  // (same pattern as backfillDismissed) so the × click actually re-renders.
+  const [hlBridgeDismissed, setHlBridgeDismissed] = useState(() => {
+    const all = {};
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('hl_bridge_dismissed_')) {
+          all[key.slice('hl_bridge_dismissed_'.length)] = true;
+        }
+      }
+    } catch { /* sessionStorage unavailable — fine */ }
+    return all;
+  });
   const [editingTarget, setEditingTarget] = useState(null);
   const [editValue, setEditValue] = useState('');
   // Inline-threshold edit state for the "Reactivate with new threshold" CTA
@@ -303,6 +307,10 @@ const KillList = () => {
   // record. These refs block reentry immediately.
   const checkingInRef = useRef(new Set());
   const submittingAutopsyRef = useRef(false);
+  // Same synchronous guard for the backfill handlers — backfillBusy state
+  // updates too late to stop a rapid double-tap from duplicating check-ins
+  // or racing two archive moves for the same target.
+  const backfillingRef = useRef(new Set());
   const newTargetInputRef = useRef(null);
   
 
@@ -568,6 +576,16 @@ const KillList = () => {
       logger.log(`📋 KillList: Received ${data.length} kill targets from snapshot`);
       setTargets(data);
       setLoading(false);
+    }, {
+      // B29: a dead listener used to leave the Ledger showing stale contracts
+      // indefinitely. Surface it instead of silently freezing.
+      onError: (error) => {
+        if (!mounted) return;
+        logger.error('❌ KillList: Live listener stopped:', error?.code || error?.message);
+        ouraToast.error('Live updates stopped. Refresh to reconnect.');
+        setLoadError(true);
+        setLoading(false);
+      },
     }).then((unsub) => {
       if (mounted) {
         unsubscribe = unsub;
@@ -855,7 +873,9 @@ const KillList = () => {
     const activeDuration = isNaN(rawDuration) || rawDuration < 0 ? 0 : rawDuration;
 
     const { id: _removeId, ...targetFields } = target;
-    const killFields = { ...targetFields, ...targetUpdate, killedAt, activeDuration };
+    // status:'killed' — the archived doc must self-identify as a kill so
+    // correlation/forecast readers don't depend on which collection it sits in.
+    const killFields = { ...targetFields, ...targetUpdate, killedAt, activeDuration, status: 'killed' };
     // Atomic: confirmedKills create + killTargets delete commit together, so a
     // retry/double-tap can never write a second kill record or orphan the delete.
     const killDoc = await moveDocAtomic('killTargets', target.id, 'confirmedKills', killFields);
@@ -1042,6 +1062,8 @@ const KillList = () => {
   // Reuses the kill-threshold archive path from dailyCheckIn.
   const handleBackfillAllHeld = useCallback(async (target, missedDates) => {
     if (!target || !missedDates?.length) return;
+    if (backfillingRef.current.has(target.id)) return;
+    backfillingRef.current.add(target.id);
     setBackfillBusy(prev => ({ ...prev, [target.id]: true }));
     try {
       const today = todayKey();
@@ -1073,6 +1095,7 @@ const KillList = () => {
       logger.error('Error during backfill all-held:', error);
       ouraToast.error('Failed to reconcile days');
     } finally {
+      backfillingRef.current.delete(target.id);
       setBackfillBusy(prev => ({ ...prev, [target.id]: false }));
     }
   }, [archiveConfirmedKill]);
@@ -1137,6 +1160,8 @@ const KillList = () => {
   // If all held and streak reaches threshold, archive as confirmed kill.
   const handleBackfillLogEach = useCallback(async (target, dayEntries) => {
     if (!target || !dayEntries?.length) return;
+    if (backfillingRef.current.has(target.id)) return;
+    backfillingRef.current.add(target.id);
     setBackfillBusy(prev => ({ ...prev, [target.id]: true }));
     try {
       const heldPrefix = [];
@@ -1197,6 +1222,7 @@ const KillList = () => {
       logger.error('Error during backfill log-each:', error);
       ouraToast.error('Failed to reconcile days');
     } finally {
+      backfillingRef.current.delete(target.id);
       setBackfillBusy(prev => ({ ...prev, [target.id]: false }));
     }
   }, [archiveConfirmedKill]);
@@ -1206,6 +1232,13 @@ const KillList = () => {
       sessionStorage.setItem(`kl_backfill_dismissed_${target.id}_${todayKey()}`, '1');
     } catch { /* ignore */ }
     setBackfillDismissed(prev => ({ ...prev, [target.id]: true }));
+  }, []);
+
+  const handleHlBridgeDismiss = useCallback((targetId) => {
+    try {
+      sessionStorage.setItem(`hl_bridge_dismissed_${targetId}`, '1');
+    } catch { /* ignore */ }
+    setHlBridgeDismissed(prev => ({ ...prev, [targetId]: true }));
   }, []);
 
   const deleteTarget = useCallback(async (targetId) => {
@@ -1258,15 +1291,13 @@ const KillList = () => {
     try {
       logger.log("🎯 KillList: Reactivating escaped target:", targetId);
 
-      // Reset the streak and seed lastCheckIn to today so the Reconcile-Gap
-      // card does not immediately re-fire on a freshly-reactivated target.
-      // computeMissedDates reads lastCheckIn; if it's stale (pointing to the
-      // pre-escape window), the gap detector flags every day since as missed.
-      const today = todayKey();
+      // Reset the streak. lastCheckIn is NOT touched: seeding it to today
+      // faked a check-in that blocked the real day-one check-in all day.
+      // The gap detector instead anchors on reactivatedAt (computeMissedDates)
+      // so the dormant escaped period never reads as missed days.
       const targetUpdate = {
         status: 'active',
         streak: 0,
-        lastCheckIn: today,
         reactivatedAt: new Date(),
         lastUpdated: new Date(),
       };
@@ -1396,7 +1427,12 @@ const KillList = () => {
       return;
     }
 
-    setClosedContract(prev => ({ ...prev, oraclePhase: 'loading' }));
+    // Guard every async modal update by record id — the user can close this
+    // record and open another while the Oracle call is in flight, and the
+    // response must never land on the wrong record's modal.
+    setClosedContract(prev => (
+      prev.record?.id === record.id ? { ...prev, oraclePhase: 'loading' } : prev
+    ));
 
     const oracle = await runClosureOracle({
       mode: 'kill',
@@ -1420,7 +1456,11 @@ const KillList = () => {
     if (closureDismissedRef.current) {
       ouraToast.info(`Oracle: ${oracle.oracleResponse}`);
     } else {
-      setClosedContract(prev => ({ ...prev, oraclePhase: 'done', oracleResponse: oracle.oracleResponse }));
+      setClosedContract(prev => (
+        prev.record?.id === record.id
+          ? { ...prev, oraclePhase: 'done', oracleResponse: oracle.oracleResponse }
+          : prev
+      ));
     }
   }, [closedContract.record]);
 
@@ -1524,6 +1564,7 @@ const KillList = () => {
       setConfirmedKills(prev => prev.map(k => (k.id === kill.id ? { ...k, ...stamp } : k)));
     } catch (err) {
       logger.error('Cold case stamp failed:', err?.message);
+      ouraToast.error('Cold case review shown but not stamped to the record.');
     }
 
     // Dismissed mid-read — surface the comparison rather than dropping it.
@@ -1990,7 +2031,7 @@ const KillList = () => {
             })()}
 
             {/* BER-131: Repeated escape bridge to Hard Lessons (3+ escapes) */}
-            {(target.escapeData || []).length >= 3 && !sessionStorage.getItem(`hl_bridge_dismissed_${target.id}`) && (
+            {(target.escapeData || []).length >= 3 && !hlBridgeDismissed[target.id] && (
               <div className="mt-3 flex items-start gap-3 px-4 py-3 bg-[#0a0a0a] border-l-2 border-[#b45309] border-t border-r border-b border-[#1a1a1a] rounded-xl">
                 <div className="flex-1">
                   <p className="text-[#ababab] text-xs leading-relaxed">This pattern has repeated {target.escapeData.length} times without resolution. Document it in Hard Lessons?</p>
@@ -1999,7 +2040,7 @@ const KillList = () => {
                   <Link to="/hardlessons" onClick={() => {
                     sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({ eventDescription: `${target.title} — ${target.escapeData.length} escapes recorded` }));
                   }} className="px-3 py-1.5 bg-transparent text-[#b45309] border border-[#b45309]/30 rounded-lg text-xs hover:bg-[#b45309]/10 transition-colors">Document</Link>
-                  <button onClick={() => sessionStorage.setItem(`hl_bridge_dismissed_${target.id}`, '1')} className="px-3 py-1.5 bg-[#1a1a1a] text-[#858585] rounded-lg text-xs hover:text-white transition-colors">×</button>
+                  <button onClick={() => handleHlBridgeDismiss(target.id)} className="px-3 py-1.5 bg-[#1a1a1a] text-[#858585] rounded-lg text-xs hover:text-white transition-colors">×</button>
                 </div>
               </div>
             )}
@@ -2011,6 +2052,7 @@ const KillList = () => {
     }, [editingTarget, editValue, startEditing, saveEdit, cancelEdit, deleteTarget, reactivateTarget, recontractTarget, dailyCheckIn,
       showIntention, setShowIntention, setReviseTarget, setReviseIntention,
       showAutopsyPattern, setShowAutopsyPattern, backfillBusy, backfillDismissed, handleBackfillAllHeld, handleBackfillLogEscape, handleBackfillLogEach, handleBackfillDismiss,
+      hlBridgeDismissed, handleHlBridgeDismiss,
       thresholdEditingId, thresholdEditValue]);
 
   return (
@@ -2129,7 +2171,7 @@ const KillList = () => {
 
               // Escape events
               (t.escapeData || []).forEach(e => {
-                const escapeMs = new Date(e.date || 0).getTime();
+                const escapeMs = (parseDateOnlyLocal(e.date) || parseDate(e.date))?.getTime() ?? 0;
                 if (!Number.isFinite(escapeMs) || escapeMs <= 0) return;
                 rows.push({
                   ts: escapeMs,

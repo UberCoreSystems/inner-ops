@@ -125,10 +125,6 @@ function App() {
   const handleAuthSuccess = (authResult) => {
     logger.log("✅ Authentication successful:", authResult);
     // User state will be updated automatically by onAuthStateChanged listener
-    
-    if (authResult.migrationReport?.success?.length > 0) {
-      logger.log("🚀 Data migration completed during authentication");
-    }
   };
 
   const handleLogout = async () => {

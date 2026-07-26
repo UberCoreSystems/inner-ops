@@ -22,6 +22,8 @@ import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import ouraToast from '../utils/toast';
 import { useOracleModal } from '../hooks/useOracleModal';
 import { markDailyPromptAnswered } from '../utils/oracleQuestionPool.js';
+import { toDatetimeLocalString } from '../utils/dateUtils';
+import { ORACLE_FIELDS } from '../utils/schema';
 import { SkeletonList, SkeletonJournalEntry } from '../components/SkeletonLoader';
 import CrossModuleExtractionPrompts from '../components/CrossModuleExtractionPrompts';
 import logger from '../utils/logger';
@@ -50,6 +52,17 @@ const basePrompts = [
 ];
 
 const JOURNAL_PAGE_SIZE = 50;
+
+// Backfill back-off for entries whose classification keeps failing.
+const CLASSIFY_MAX_FAILURES = 3;
+const CLASSIFY_RETRY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+// Form defaults for a fresh entry. Mood and category have to move together —
+// resetting mood to a value outside the selected category leaves the grid with
+// nothing highlighted while the next save silently records that unseen mood.
+const DEFAULT_MOOD = 'focused';
+const DEFAULT_MOOD_CATEGORY =
+  moodCategories.find(c => c.moods.some(m => m.value === DEFAULT_MOOD))?.name || moodCategories[0].name;
 
 // Ceiling on the pages a search will pull before it stops widening. 40 × 50 is
 // 2000 entries; hitting it is surfaced in the results header rather than
@@ -111,13 +124,18 @@ const MoodStrip = ({ entries }) => {
   const toLocalKey = (d) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const todayKey = toLocalKey(today);
+  // A day can hold several entries. The cell shows the LATEST one — writing
+  // unconditionally let whichever entry came last in the (newest-first) list
+  // win, so the strip reported the day's oldest mood.
   const entryMap = {};
   entries.forEach((e) => {
     const raw = e.createdAt || e.timestamp;
     if (!raw) return;
     const d = raw.toDate ? raw.toDate() : new Date(raw);
     if (isNaN(d.getTime())) return;
-    entryMap[toLocalKey(d)] = e;
+    const key = toLocalKey(d);
+    const held = entryMap[key];
+    if (!held || d.getTime() > held.ms) entryMap[key] = { entry: e, ms: d.getTime() };
   });
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(today);
@@ -128,7 +146,7 @@ const MoodStrip = ({ entries }) => {
     <div className="flex w-full gap-0.5">
       {days.map((day) => {
         const k = toLocalKey(day);
-        const e = entryMap[k];
+        const e = entryMap[k]?.entry;
         const color = e ? getMoodStripColor(e.mood) : null;
         const intensity = e?.intensity || 3;
         const opacity = color ? 0.25 + (intensity / 5) * 0.75 : 1;
@@ -154,10 +172,10 @@ export default function Journal() {
   // answered so it hides on the dashboard for the rest of the day.
   const fromDailyPromptRef = useRef(false);
   const [entry, setEntry] = useState('');
-  const [eventOccurredAt, setEventOccurredAt] = useState(() => new Date().toISOString().slice(0, 16));
-  const [mood, setMood] = useState('focused');
+  const [eventOccurredAt, setEventOccurredAt] = useState(() => toDatetimeLocalString());
+  const [mood, setMood] = useState(DEFAULT_MOOD);
   const [intensity, setIntensity] = useState(3);
-  const [selectedCategory, setSelectedCategory] = useState('Grounded');
+  const [selectedCategory, setSelectedCategory] = useState(DEFAULT_MOOD_CATEGORY);
   const [entries, setEntries] = useState([]);
   // Pagination: entries are loaded a page at a time (most-recent first) so a
   // heavy journaler never downloads/renders their entire history on mount.
@@ -278,6 +296,13 @@ export default function Journal() {
     [oraclePrompts]
   );
 
+  // The carousel index survives changes to the prompt list — and the list
+  // shrinks whenever the Oracle-question slice does. An out-of-range index
+  // renders the literal string "undefined" into the entry.
+  useEffect(() => {
+    setCurrentPromptIndex(prev => (prev < journalPrompts.length ? prev : 0));
+  }, [journalPrompts]);
+
   useEffect(() => {
     loadJournalEntries();
   }, []);
@@ -307,11 +332,12 @@ export default function Journal() {
 
     return entries.filter((entry) => {
       const moodLabel = moodOptions.find(m => m.value === entry.mood)?.label || '';
+      // `category` is not a field on journalEntries — the mood category is a
+      // form-only tab, never persisted — so searching it matched nothing.
       const haystack = [
         entry.content,
         entry.oracleJudgment,
-        moodLabel,
-        entry.category
+        moodLabel
       ]
         .filter(Boolean)
         .join(' ')
@@ -613,7 +639,8 @@ export default function Journal() {
   const cancelEdit = () => {
     setEditingEntryId(null);
     setEntry('');
-    setMood(moodOptions[0].value);
+    setMood(DEFAULT_MOOD);
+    setSelectedCategory(DEFAULT_MOOD_CATEGORY);
     setIntensity(3);
     setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
   };
@@ -621,11 +648,12 @@ export default function Journal() {
   const startEditEntry = (entryToEdit) => {
     setEditingEntryId(entryToEdit.id);
     setEntry(entryToEdit.content || '');
-    setMood(entryToEdit.mood || moodOptions[0].value);
+    const editMood = entryToEdit.mood || DEFAULT_MOOD;
+    setMood(editMood);
     setIntensity(entryToEdit.intensity || 3);
     // Switch category tab to match the saved mood
-    const cat = moodCategories.find(c => c.moods.some(m => m.value === entryToEdit.mood));
-    if (cat) setSelectedCategory(cat.name);
+    const cat = moodCategories.find(c => c.moods.some(m => m.value === editMood));
+    setSelectedCategory(cat?.name || DEFAULT_MOOD_CATEGORY);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     document.getElementById('journal-entry-input')?.focus();
   };
@@ -688,7 +716,10 @@ export default function Journal() {
         : '';
 
       const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}${proximityNote}`;
-      const pastEntries = entries.slice(-3).map(e => e.content);
+      // `entries` is newest-first, so the Oracle's "recent entries" context is
+      // the HEAD of the list. slice(-3) took the tail — the three oldest loaded
+      // entries, up to a page back.
+      const pastEntries = entries.slice(0, 3).map(e => e.content);
 
       openOracleLoading();
 
@@ -744,9 +775,15 @@ export default function Journal() {
       updateMemory('journal', newEntry.id);
 
       if (oracleFailed) {
+        // Never tell the user to resubmit — that writes a duplicate entry and
+        // the edit path does not regenerate. The retry runs against the entry
+        // that was just saved and persists onto it.
         openOracleWithContent({
-          content: 'Entry saved. Oracle is unavailable right now — submit again to request feedback.',
+          content: 'Entry saved. The Oracle did not respond, so this entry has no reading yet.',
           entryCount: getCachedTotalEntryCount(),
+          entryText: inputText,
+          entryModuleName: 'journal',
+          oracleUnavailable: true,
         });
       } else {
         openOracleWithContent({
@@ -767,9 +804,10 @@ export default function Journal() {
       const savedEntryId = newEntry.id;
 
       setEntry('');
-      setMood(moodOptions[0].value);
+      setMood(DEFAULT_MOOD);
+      setSelectedCategory(DEFAULT_MOOD_CATEGORY);
       setIntensity(3);
-      setEventOccurredAt(new Date().toISOString().slice(0, 16));
+      setEventOccurredAt(toDatetimeLocalString());
       setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
 
       // Auto-classify into one of: General Ledger, Hard Lesson, Signal, or nothing.
@@ -862,6 +900,7 @@ export default function Journal() {
       logger.log('Oracle reaction saved:', reactionId, 'for entry:', currentEntryId);
     } catch (error) {
       logger.error('Error saving oracle reaction:', error);
+      throw error;
     }
   };
 
@@ -886,6 +925,27 @@ export default function Journal() {
       );
     } catch (error) {
       logger.error('Error saving oracle follow-up:', error);
+      ouraToast.error('Exchange shown but not saved to the entry.');
+    }
+  };
+
+  // Persist a reading that replaced the one shown when the modal opened —
+  // a retry after a failed call, or a regeneration. Without this the modal
+  // showed one judgment while the document kept another (or none), which a
+  // stored follow-up would then answer out of context after a reload.
+  const persistReplacedFeedback = async (newFeedback, newProvenance, { metacognitiveDepth: newDepth } = {}) => {
+    if (!currentEntryId || !newFeedback) return;
+    const patch = {
+      oracleJudgment: newFeedback,
+      ...(newProvenance ? { [ORACLE_FIELDS.PROVENANCE]: newProvenance } : {}),
+      ...(newDepth ? { metacognitiveDepth: newDepth } : {}),
+    };
+    try {
+      await updateData('journalEntries', currentEntryId, patch);
+      setEntries(prev => prev.map(e => (e.id === currentEntryId ? { ...e, ...patch } : e)));
+    } catch (error) {
+      logger.error('Error saving replaced oracle reading:', error);
+      ouraToast.error('Reading shown but not saved to the entry.');
     }
   };
 
@@ -895,11 +955,26 @@ export default function Journal() {
   // When called with `surfaceTopOfList: true` (save + edit flows), also
   // populates the top-of-list prompt card. Backfill leaves the flag off so
   // old entries don't pop a fresh card on every page mount.
-  const classifyAndPersist = async (entryId, entryText, { forceRefresh = false, surfaceTopOfList = false } = {}) => {
+  const classifyAndPersist = async (entryId, entryText, { forceRefresh = false, surfaceTopOfList = false, priorClassification = null } = {}) => {
     if (!entryId || !entryText) return;
     try {
       const results = await classifyAndExtract(entryText, { forceRefresh });
+      // null means the per-session dedupe skipped the call: nothing ran, so
+      // there is nothing to record. Writing the failure shell here marked a
+      // healthy entry as failed and offered a Retry for a call never made.
+      if (results === null) {
+        if (surfaceTopOfList) setClassifierStatus('idle');
+        return;
+      }
       const classification = buildClassificationPayload(results);
+      // Track consecutive failures on the doc so the backfill can back off.
+      // Each classification pass costs up to four Oracle calls against a
+      // shared daily pool; retrying five entries on every mount during an
+      // outage burns the budget the user needs for actual entries.
+      if (classification.status === 'failed') {
+        classification.failureCount = (Number(priorClassification?.failureCount) || 0) + 1;
+        classification.lastFailureAt = classification.classifiedAt;
+      }
       try {
         await updateData('journalEntries', entryId, { classification });
       } catch (writeErr) {
@@ -969,6 +1044,11 @@ export default function Journal() {
   // Silent backfill — runs once per page load. Picks up to 5 recent entries
   // (last 14 days) that are missing a classification or have one marked
   // `status: 'failed'` and re-runs the classifier serially. No toasts, no UI.
+  //
+  // Entries that keep failing are held back: a classification pass costs up to
+  // four Oracle calls, so an outage otherwise re-burned ~20 calls of the shared
+  // daily pool on every visit to this page. The explicit Retry button calls
+  // classifyAndPersist directly and is not subject to either limit.
   const backfillRanRef = useRef(false);
   useEffect(() => {
     if (backfillRanRef.current) return;
@@ -982,8 +1062,16 @@ export default function Journal() {
         || e.timestamp
         || 0;
       if (tsMs < fourteenDaysAgoMs) return false;
-      const status = e.classification?.status;
-      return !status || status === 'failed';
+      const classification = e.classification;
+      const status = classification?.status;
+      if (status && status !== 'failed') return false;
+      if (status === 'failed') {
+        if ((Number(classification.failureCount) || 0) >= CLASSIFY_MAX_FAILURES) return false;
+        const lastFailureMs = new Date(classification.lastFailureAt || classification.classifiedAt || 0).getTime();
+        if (Number.isFinite(lastFailureMs) && lastFailureMs > 0
+            && Date.now() - lastFailureMs < CLASSIFY_RETRY_COOLDOWN_MS) return false;
+      }
+      return true;
     }).slice(0, 5);
 
     if (candidates.length === 0) return;
@@ -992,7 +1080,10 @@ export default function Journal() {
       for (const e of candidates) {
         if (!e.id || !e.content) continue;
         try {
-          await classifyAndPersist(e.id, e.content, { forceRefresh: true });
+          await classifyAndPersist(e.id, e.content, {
+            forceRefresh: true,
+            priorClassification: e.classification,
+          });
         } catch (err) {
           logger.warn('backfill classify failed for entry', { id: e.id, err: err?.message });
         }
@@ -1231,6 +1322,7 @@ export default function Journal() {
                       type="button"
                       onClick={() => {
                         const currentPrompt = journalPrompts[currentPromptIndex];
+                        if (!currentPrompt) return;
                         setEntry(prev => prev + (prev ? '\n\n' : '') + currentPrompt + '\n');
                       }}
                       className={`text-center p-5 ${
@@ -1300,7 +1392,7 @@ export default function Journal() {
                   <input
                     type="datetime-local"
                     value={eventOccurredAt}
-                    max={new Date().toISOString().slice(0, 16)}
+                    max={toDatetimeLocalString()}
                     onChange={(e) => setEventOccurredAt(e.target.value)}
                     className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none transition-colors text-sm"
                   />
@@ -1636,12 +1728,14 @@ export default function Journal() {
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
         onFollowUpStored={persistFollowUp}
+        onFeedbackReplaced={persistReplacedFeedback}
         entryCount={oracleModal.entryCount}
         metacognitiveDepth={oracleModal.metacognitiveDepth}
         entryText={oracleModal.entryText}
         entryModuleName={oracleModal.entryModuleName}
         provenance={oracleModal.provenance}
         fallbackReason={oracleModal.fallbackReason}
+        oracleUnavailable={oracleModal.oracleUnavailable}
       />
     </div>
   );

@@ -1,11 +1,11 @@
-import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
-import { getDb, getAuth } from '../firebase.js';
+import { getDb, getAuth, getFirestoreLib } from '../firebase.js';
 
 export const saveUserProfile = async (profile) => {
   const auth = await getAuth();
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated');
   const db = await getDb();
+  const { doc, setDoc } = await getFirestoreLib();
   await setDoc(doc(db, 'userProfiles', user.uid), {
     ...profile,
     updatedAt: new Date().toISOString(),
@@ -18,6 +18,7 @@ export const getUserProfile = async () => {
     const user = auth.currentUser;
     if (!user) return null;
     const db = await getDb();
+    const { doc, getDoc } = await getFirestoreLib();
     const snap = await getDoc(doc(db, 'userProfiles', user.uid));
     return snap.exists() ? snap.data() : null;
   } catch {
@@ -43,6 +44,7 @@ export const subscribeUserProfile = async (callback) => {
     return () => {};
   }
   const db = await getDb();
+  const { doc, onSnapshot } = await getFirestoreLib();
   const ref = doc(db, 'userProfiles', user.uid);
   return onSnapshot(
     ref,

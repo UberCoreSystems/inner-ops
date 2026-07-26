@@ -9,6 +9,25 @@ import logger from './logger.js';
 
 const archiveNameFor = (collectionName) => `${collectionName}Archive`;
 
+// Entries arrive with timestamps in mixed shapes depending on the caller:
+// Firestore Timestamp (raw doc data), JS Date (subscribeToUserData
+// normalization), or ISO string (legacy writes). Return a value Firestore
+// stores as a proper Timestamp so the original entry date survives the
+// archive→restore round trip; fall back to serverTimestamp() only when the
+// entry carries no usable timestamp at all.
+const preserveTimestamp = (entry) => {
+  const value = entry?.timestamp ?? entry?.createdAt;
+  if (value?.toDate) return value;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? serverTimestamp() : value;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return serverTimestamp();
+};
+
 const ensureAuthenticated = async () => {
   const auth = await getAuth();
   if (!auth.currentUser) {
@@ -33,7 +52,7 @@ export const archiveEntry = async (collectionName, entry) => {
     ...rest,
     userId: user.uid,
     archivedAt: new Date().toISOString(),
-    timestamp: serverTimestamp(),
+    timestamp: preserveTimestamp(entry),
   };
 
   const archiveRef = doc(db, archiveNameFor(collectionName), id);
@@ -59,10 +78,12 @@ export const restoreEntry = async (collectionName, archivedEntry) => {
   const db = await getDb();
 
   const { id, archivedAt: _archivedAt, createdAt: _createdAt, timestamp: _timestamp, ...rest } = archivedEntry;
+  // preserveTimestamp falls back to serverTimestamp() for legacy archived
+  // docs whose originals were already overwritten at archive time.
   const restorePayload = {
     ...rest,
     userId: user.uid,
-    timestamp: serverTimestamp(),
+    timestamp: preserveTimestamp(archivedEntry),
   };
 
   const activeRef = doc(db, collectionName, id);

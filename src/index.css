@@ -27,34 +27,6 @@ body {
   color: #ffffff;
 }
 
-/* Oura-style Circular Progress Ring */
-.oura-ring {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.oura-ring svg {
-  transform: rotate(-90deg);
-}
-
-.oura-ring-track {
-  stroke: #1a1a1a;
-  fill: none;
-}
-
-.oura-ring-progress {
-  fill: none;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 1s ease-out;
-}
-
-.oura-ring-glow {
-  filter: blur(8px);
-  opacity: 0.5;
-}
-
 /* Oura Card Styles */
 .oura-card {
   background: linear-gradient(180deg, #0a0a0a 0%, #050505 100%);
@@ -337,8 +309,8 @@ html {
 }
 
 /* Honor prefers-reduced-motion across all custom animations and transitions.
-   Tailwind's `animate-*` utilities and our `@keyframes` (spin, ringPulse,
-   scoreCount, fadeInUp, fadeIn, glowPulse, priority-pulse, skel-breathe)
+   Tailwind's `animate-*` utilities and our `@keyframes` (spin, fadeInUp,
+   fadeIn, priority-pulse, skel-breathe, borderBreathe)
    all collapse to no-op for users who have the OS setting enabled. */
 @media (prefers-reduced-motion: reduce) {
   *,

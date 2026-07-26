@@ -1,5 +1,4 @@
-import { doc, collection, query, where, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, writeBatch, orderBy, limit as fbLimit, startAfter } from 'firebase/firestore';
-import { getAuth, getDb } from '../firebase.js';
+import { getAuth, getDb, getFirestoreLib } from '../firebase.js';
 import logger from './logger.js';
 
 // Pass 2 Finding 18 remediation: removed the hardcoded `DEV_MODE` boolean
@@ -37,6 +36,7 @@ export const writeData = async (collectionName, data, options = {}) => {
   try {
     const user = await ensureAuthenticated();
     const db = await getDb();
+    const { collection, addDoc, serverTimestamp } = await getFirestoreLib();
 
     const payload = {
       ...data,
@@ -72,6 +72,7 @@ export const updateData = async (collectionName, docId, data) => {
   try {
     const user = await ensureAuthenticated();
     const db = await getDb();
+    const { doc, updateDoc, serverTimestamp } = await getFirestoreLib();
 
     const updatePayload = {
       ...data,
@@ -96,6 +97,7 @@ export const deleteData = async (collectionName, docId) => {
   try {
     await ensureAuthenticated();
     const db = await getDb();
+    const { doc, deleteDoc } = await getFirestoreLib();
 
     await deleteDoc(doc(db, collectionName, docId));
     logger.log("✅ Data deleted successfully from", collectionName, "for doc:", docId);
@@ -110,25 +112,36 @@ export const deleteData = async (collectionName, docId) => {
 };
 
 // Atomically create a document in `toCollection` and delete `docId` from
-// `fromCollection` in a single batched commit. Used by the kill-confirmation
-// path (confirmedKills create + killTargets delete) so a crash or rapid
-// double-invocation can never leave a duplicate kill record or an orphaned
-// delete. Stamps userId/timestamp on the new doc exactly like writeData.
+// `fromCollection` in a single transaction. Used by the kill-confirmation
+// path (confirmedKills create + killTargets delete). The transaction reads
+// the source doc first and aborts when it no longer exists — a batched write
+// would blindly mint a second destination doc on a double-invocation whose
+// first move already deleted the source. Stamps userId/timestamp on the new
+// doc exactly like writeData.
 export const moveDocAtomic = async (fromCollection, docId, toCollection, newData) => {
   const user = await ensureAuthenticated();
   const db = await getDb();
-  const batch = writeBatch(db);
-  const newRef = doc(collection(db, toCollection));
-  batch.set(newRef, {
-    ...newData,
-    userId: user.uid,
-    timestamp: serverTimestamp(),
-    isAnonymous: user.isAnonymous || false,
+  const { doc, collection, runTransaction, serverTimestamp } = await getFirestoreLib();
+  const fromRef = doc(db, fromCollection, docId);
+  const newId = await runTransaction(db, async (transaction) => {
+    const sourceSnap = await transaction.get(fromRef);
+    if (!sourceSnap.exists()) {
+      const err = new Error(`moveDocAtomic: source ${fromCollection}/${docId} no longer exists`);
+      err.code = 'source-missing';
+      throw err;
+    }
+    const newRef = doc(collection(db, toCollection));
+    transaction.set(newRef, {
+      ...newData,
+      userId: user.uid,
+      timestamp: serverTimestamp(),
+      isAnonymous: user.isAnonymous || false,
+    });
+    transaction.delete(fromRef);
+    return newRef.id;
   });
-  batch.delete(doc(db, fromCollection, docId));
-  await batch.commit();
-  logger.log("✅ Atomic move:", fromCollection, "→", toCollection, "new id:", newRef.id);
-  return { id: newRef.id, ...newData };
+  logger.log("✅ Atomic move:", fromCollection, "→", toCollection, "new id:", newId);
+  return { id: newId, ...newData };
 };
 
 // userSettings is a per-user singleton, but historically several independent
@@ -140,6 +153,7 @@ export const moveDocAtomic = async (fromCollection, docId, toCollection, newData
 export const upsertUserSettings = async (data) => {
   const user = await ensureAuthenticated();
   const db = await getDb();
+  const { doc, updateDoc, serverTimestamp } = await getFirestoreLib();
   const existing = await readUserData('userSettings');
   if (existing.length > 0) {
     const id = existing[0].id;
@@ -187,6 +201,7 @@ const expandDottedKeys = (dottedMap) => {
 export const upsertUserSettingsFields = async (dottedMap) => {
   const user = await ensureAuthenticated();
   const db = await getDb();
+  const { doc, updateDoc, serverTimestamp } = await getFirestoreLib();
   const existing = await readUserData('userSettings');
   if (existing.length > 0) {
     const id = existing[0].id;
@@ -204,6 +219,7 @@ export const readUserData = async (collectionName, requireAuth = false) => {
   try {
     const auth = await getAuth();
     const db = await getDb();
+    const { collection, query, where, getDocs } = await getFirestoreLib();
     let user = auth.currentUser;
 
     if (!user && requireAuth) {
@@ -261,8 +277,6 @@ export const readUserData = async (collectionName, requireAuth = false) => {
   }
 };
 
-export const readData = readUserData;
-
 // Bounded, ordered, cursor-paginated read. Unlike readUserData (which pulls a
 // user's ENTIRE collection and sorts client-side), this fetches at most
 // `pageSize` docs ordered by `orderByField`, and returns a cursor for "load
@@ -290,6 +304,9 @@ export const readUserDataPage = async (collectionName, options = {}) => {
   try {
     const auth = await getAuth();
     const db = await getDb();
+    const {
+      collection, query, where, orderBy, startAfter, getDocs, limit: fbLimit,
+    } = await getFirestoreLib();
     const user = auth.currentUser;
     if (!user) {
       logger.warn('⚠️ User not authenticated - blocking paginated read');
@@ -347,10 +364,30 @@ const readUserDataOffsetPage = async (collectionName, pageSize, offset) => {
 // Subscribe to real-time updates for a user-scoped collection.
 // Calls `callback(data)` immediately on first snapshot and on every change.
 // Returns a Promise that resolves to an unsubscribe function.
-export const subscribeToUserData = async (collectionName, callback) => {
+//
+// Options (all optional — omitting them reproduces the original unbounded,
+// client-sorted behaviour exactly):
+//   orderByField / orderDirection — server-side ordering. Requires a composite
+//     index (userId ASC, <orderByField> <direction>) in firestore.indexes.json.
+//   limit — caps the number of documents the listener holds. Only applied
+//     together with orderByField; an unordered limit would return an arbitrary
+//     subset.
+//   onError — called after teardown when the listener dies, so callers can
+//     surface an error state instead of showing stale data forever (B29).
+export const subscribeToUserData = async (collectionName, callback, options = {}) => {
+  const {
+    orderByField = null,
+    orderDirection = 'desc',
+    limit: maxDocs = null,
+    onError = null,
+  } = options;
+
   try {
     const auth = await getAuth();
     const db = await getDb();
+    const {
+      collection, query, where, onSnapshot, orderBy, limit: fbLimit,
+    } = await getFirestoreLib();
     const user = auth.currentUser;
 
     if (!user) {
@@ -360,7 +397,14 @@ export const subscribeToUserData = async (collectionName, callback) => {
     }
 
     const colRef = collection(db, collectionName);
-    const q = query(colRef, where("userId", "==", user.uid));
+    const buildQuery = (ordered) => {
+      const constraints = [where("userId", "==", user.uid)];
+      if (ordered) {
+        constraints.push(orderBy(orderByField, orderDirection));
+        if (maxDocs) constraints.push(fbLimit(maxDocs));
+      }
+      return query(colRef, ...constraints);
+    };
 
     // Finding 15 remediation: the error callback MUST invoke the unsubscribe
     // handle before returning — otherwise a permission-denied error leaves
@@ -374,26 +418,43 @@ export const subscribeToUserData = async (collectionName, callback) => {
       try { unsubscribe(); } catch (err) { logger.warn('listener teardown failed', err?.message); }
     };
 
-    unsubscribe = onSnapshot(q, (snapshot) => {
-      if (torndown) return;
-      const data = snapshot.docs.map(docSnap => {
-        const docData = docSnap.data();
-        const createdAt = normalizeDocTimestamp(docData);
-        // docSnap.id LAST — see readUserData: canonical path id must win over a
-        // persisted `id` field.
-        return {
-          ...docData,
-          id: docSnap.id,
-          createdAt,
-          timestamp: createdAt,
-        };
+    const listen = (ordered) => {
+      unsubscribe = onSnapshot(buildQuery(ordered), (snapshot) => {
+        if (torndown) return;
+        const data = snapshot.docs.map(docSnap => {
+          const docData = docSnap.data();
+          const createdAt = normalizeDocTimestamp(docData);
+          // docSnap.id LAST — see readUserData: canonical path id must win over a
+          // persisted `id` field.
+          return {
+            ...docData,
+            id: docSnap.id,
+            createdAt,
+            timestamp: createdAt,
+          };
+        });
+        data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        callback(data);
+      }, (error) => {
+        if (torndown) return;
+        logger.error(`❌ Firestore subscription error for ${collectionName}:`, error);
+        // Same degrade path as readUserDataPage: a missing composite index
+        // surfaces as failed-precondition. Fall back to the unbounded listener
+        // rather than leaving the caller with no data at all.
+        if (ordered && error.code === 'failed-precondition') {
+          logger.warn(`⚠️ Missing composite index for ${collectionName} (userId, ${orderByField}). Degrading to unbounded listener.`);
+          try { unsubscribe(); } catch { /* noop */ }
+          listen(false);
+          return;
+        }
+        safeUnsubscribe();
+        if (typeof onError === 'function') {
+          try { onError(error); } catch (err) { logger.warn('subscription onError handler threw', err?.message); }
+        }
       });
-      data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      callback(data);
-    }, (error) => {
-      logger.error(`❌ Firestore subscription error for ${collectionName}:`, error);
-      safeUnsubscribe();
-    });
+    };
+
+    listen(Boolean(orderByField));
 
     return safeUnsubscribe;
   } catch (error) {
@@ -408,6 +469,7 @@ export const writeUserData = async (collectionName, dataArray) => {
   try {
     const user = await ensureAuthenticated();
     const db = await getDb();
+    const { collection, addDoc, serverTimestamp } = await getFirestoreLib();
     logger.log(`📝 Writing user data collection: ${collectionName} with ${Array.isArray(dataArray) ? dataArray.length : 1} items`);
     
     if (Array.isArray(dataArray)) {

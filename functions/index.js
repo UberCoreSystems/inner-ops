@@ -118,7 +118,7 @@ function logOracleCall(fields) {
  *
  * Called from the client via Firebase callable function.
  * Expects: { entryText, moduleName, userContext, tone, behavioralContext,
- *           entryCount, promptContextKey, promptContextParams }
+ *           entryCount, promptContextKey, promptContextParams, evasion }
  * Returns: { feedback, lensUsed, prescriptions }
  */
 exports.oracle = onCall(
@@ -160,6 +160,7 @@ exports.oracle = onCall(
       entryCount,
       promptContextKey,
       promptContextParams,
+      evasion,
     } = request.data;
 
     if (!entryText || typeof entryText !== "string" || entryText.trim().length < 10) {
@@ -182,7 +183,7 @@ exports.oracle = onCall(
     }
 
     // Split into a STABLE cacheable prefix + DYNAMIC per-user/per-session suffix.
-    const blocks = buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks);
+    const blocks = buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion);
     const promptContextFragment = resolvePromptContext(promptContextKey, promptContextParams);
     // The registry fragment is per-call-type (and may carry clamped user text),
     // so it joins the dynamic suffix — never the cached prefix.
@@ -322,8 +323,8 @@ exports.oracleFollowUp = onCall(
         max_tokens: 400,
         // Fully static across all users/calls → one cached prefix block. The
         // per-user content (entry, feedback, response) rides in `messages`,
-        // uncached. (Below the 2048-token Sonnet floor today, so this no-ops
-        // until the prompt grows; harmless and future-proof.)
+        // uncached. (Below Sonnet's 1024-token minimum cacheable prefix today,
+        // so this no-ops until the prompt grows; harmless and future-proof.)
         system: [{ type: "text", text: FOLLOWUP_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
         messages: [
           {
@@ -484,11 +485,53 @@ function buildBehavioralContextBlock(behavioralContext, entryCount) {
 // It interpolates the entry count, so it is per-user and belongs in the dynamic,
 // uncached suffix. Extracted to a single source so buildSystemPromptBlocks can
 // reconstruct the exact same bytes and split them off the assembled prompt.
+//
+// An unknown entry count (non-number) yields NO block. This block softens the
+// confrontation frame, so it must require positive evidence of a thin record
+// rather than firing on a missing field — which is also the semantic
+// buildBehavioralContextBlock already applies. The two gates previously
+// disagreed inside one prompt: a caller that omitted entryCount got the
+// high-data behavioral context AND the low-data trust caveat.
 function buildTrustCalibrationBlock(count) {
-  const n = typeof count === "number" ? count : 0;
+  if (typeof count !== "number") return "";
+  const n = count;
   return n < TRUST_THRESHOLD
     ? `\n\nTRUST CALIBRATION: This user has ${n} total behavioral entries logged — not enough data to support credible archetype or pattern claims. Adjust your confrontation frame accordingly:\n- Do NOT make claims about behavioral archetypes, dominant patterns, or systemic tendencies. You do not have enough signal.\n- DO identify the specific gap between what he committed to and what he actually did. Name it directly.\n- Frame: "You said X. You did Y. What happened?" — specific inconsistency confrontation, not pattern judgment.\n- Same directness. Same weight. Different attack vector.`
     : "";
+}
+
+// Evasion-aware tone calibration (UXR-002 Spec 5). The client detects
+// linguistic avoidance markers in the entry and forwards a band + the marker
+// keys that fired; the instruction text is authored HERE, never client-side.
+//
+// Same defensive posture as the behavioral-context fields: the payload is
+// user-influenced, so nothing from it is interpolated. `band` must match one of
+// two literals, and the marker labels are produced by iterating the server-side
+// whitelist and testing membership — a client string that is not a known key
+// can never reach the prompt. A malformed or hostile payload degrades to no
+// calibration at all.
+const EVASION_MARKER_LABELS = {
+  passiveVoice: "passive voice (actions without an actor)",
+  externalization: "externalization (circumstances framed as the cause)",
+  hedging: "hedged language (softeners, epistemic retreat)",
+  lowSpecificity: "abstraction without concrete detail",
+};
+const MAX_EVASION_MARKERS_RENDERED = 3;
+
+function buildEvasionCalibrationBlock(evasion) {
+  if (!evasion || typeof evasion !== "object" || Array.isArray(evasion)) return "";
+  const band = evasion.band === "high" || evasion.band === "moderate" ? evasion.band : "";
+  if (!band) return "";
+  const claimed = Array.isArray(evasion.markers) ? evasion.markers : [];
+  const labels = Object.keys(EVASION_MARKER_LABELS)
+    .filter((key) => claimed.includes(key))
+    .map((key) => EVASION_MARKER_LABELS[key])
+    .slice(0, MAX_EVASION_MARKERS_RENDERED);
+  const markerList = labels.length > 0 ? labels.join("; ") : "nonspecific avoidance patterning";
+  if (band === "high") {
+    return `\n\nEVASION CALIBRATION (high): The entry shows linguistic markers of avoidance — specifically: ${markerList}. Name the evasion pattern directly by citing the user's own language. Do not offer reframes, do not build content, do not soften. Ask one specific question that cannot be answered without the user taking a position on what they actually did.`;
+  }
+  return `\n\nEVASION CALIBRATION (moderate): Evasion markers present — ${markerList}. Reference them if relevant to your feedback.`;
 }
 
 // Journal-only metacognitive depth directive. Constant text appended at the very
@@ -505,7 +548,7 @@ DEPTH:Identity — the entry addresses structural self-understanding ("this is h
 Output only one of: DEPTH:Surface, DEPTH:Pattern, or DEPTH:Identity.
 Then a blank line. Then your prose response. Do not mention the depth in your prose.`;
 
-function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks) {
+function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion) {
   // Normalize: 'killList', 'Kill List', 'Kill_List' → 'killlist'
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
 
@@ -520,7 +563,6 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memo
     relapse: "This is a relapse entry — the user fell back into a pattern he is fighting to break. He is examining what happened.",
     hardlessons: "This is a Hard Lesson extraction — the user is converting a painful experience into an enforceable rule.",
     emergency: "This is an EMERGENCY — the user is in the middle of an acute struggle right now. An urge, a crisis, intense pressure. He reached for help instead of acting out.",
-    lessonextraction: "STRUCTURED_EXTRACTION",
   };
 
   const toneColors = {
@@ -536,11 +578,14 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memo
   const toneNote = toneColors[tone] ? `\nTone color: ${toneColors[tone]}` : "";
   const isEmergency = normalizedModule === "emergency";
   const wordLimit = isEmergency ? "100–150 words." : "150–220 words.";
-  // BER-167: trust calibration block — injected only when below threshold
-  const count = typeof entryCount === "number" ? entryCount : 0;
+  // BER-167: trust calibration block — injected only when below threshold.
+  // A non-number entryCount stays null so both gates below read "unknown" the
+  // same way: high-data, no low-data caveat.
+  const count = typeof entryCount === "number" ? entryCount : null;
   const behavioralContextBlock = buildBehavioralContextBlock(behavioralContext, count);
 
   const trustCalibrationBlock = buildTrustCalibrationBlock(count);
+  const evasionBlock = buildEvasionCalibrationBlock(evasion);
 
   // Morning Brief — operator-cadence daily readout.
   // Single paragraph, 3-5 sentences, no line breaks within it. No greeting,
@@ -803,7 +848,7 @@ Hard rules:
 - No headers, bullets, or lists. Flowing prose only.
 - Never name any philosopher, tradition, or framework.
 - Never use: "healing journey", "be kind to yourself", "proud of you", "validate", "sit with."
-- 100–150 words.${behavioralContextBlock}${trustCalibrationBlock}`;
+- 100–150 words.${behavioralContextBlock}${trustCalibrationBlock}${evasionBlock}`;
   }
 
   return `You are the Oracle — a direct, grounded advisor for a man doing serious inner work. You speak like someone who has seen these patterns before — not a therapist, not a coach, not a motivational speaker. A straight-talking advisor who respects this man enough to be honest, and smart enough to know that honest does not always mean hard.
@@ -867,7 +912,7 @@ Hard rules:
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
 - When you close with a question, wrap that single closing question inline in <closing_question>...</closing_question> tags. The tags must surround the question text exactly once. The question still reads as part of your prose; the tags are markers for downstream processing only.
-- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${normalizedModule === 'journal' ? JOURNAL_DEPTH_DIRECTIVE : ''}`;
+- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${normalizedModule === 'journal' ? JOURNAL_DEPTH_DIRECTIVE : ''}${evasionBlock}`;
 }
 
 // Split the assembled system prompt into a STABLE cacheable prefix and a DYNAMIC
@@ -882,10 +927,10 @@ Hard rules:
 // `cacheable` is false for templates that interpolate per-user data MID-prompt
 // (the extraction prompts) — their prefix is not user-identical, so we never put
 // a cache breakpoint on it. Returns { stable, dynamic, cacheable }.
-function buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks) {
-  const full = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks);
+function buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion) {
+  const full = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion);
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
-  const count = typeof entryCount === "number" ? entryCount : 0;
+  const count = typeof entryCount === "number" ? entryCount : null;
 
   // Templates that embed per-user data (active targets, archetype) inside the
   // body — never cache; send as a plain string, byte-identical to today.
@@ -909,10 +954,13 @@ function buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount
   const isEmergency = normalizedModule === "emergency";
   const memoryBlock = isEmergency ? "" : memory.buildMemoryBlock(memoryBlocks);
   const depthDirective = normalizedModule === "journal" ? JOURNAL_DEPTH_DIRECTIVE : "";
+  // Per-entry, so it belongs in the uncached suffix — putting it in the stable
+  // prefix would invalidate the shared cache on every differently-worded entry.
+  const evasionBlock = buildEvasionCalibrationBlock(evasion);
 
   const dynamic = isEmergency
-    ? `${behavioralContextBlock}${trustCalibrationBlock}`
-    : `${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${depthDirective}`;
+    ? `${behavioralContextBlock}${trustCalibrationBlock}${evasionBlock}`
+    : `${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${depthDirective}${evasionBlock}`;
 
   if (dynamic && full.endsWith(dynamic)) {
     return { stable: full.slice(0, full.length - dynamic.length), dynamic, cacheable: true };
@@ -1171,6 +1219,7 @@ exports.getOnRecord = memory.getOnRecord;
 // Pure prompt-assembly helpers exported for unit testing. Not registered as
 // Cloud Functions; safe to require() from a node:test harness.
 exports.buildBehavioralContextBlock = buildBehavioralContextBlock;
+exports.buildEvasionCalibrationBlock = buildEvasionCalibrationBlock;
 exports.buildSystemPrompt = buildSystemPrompt;
 exports.buildSystemPromptBlocks = buildSystemPromptBlocks;
 // Erase logic exported for emulator-backed verification of the deletion receipt.

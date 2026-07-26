@@ -126,6 +126,16 @@ const initializeFirestore = async () => {
   return db;
 };
 
+// Firestore SDK accessor. Modules needing Firestore functions (collection,
+// query, onSnapshot, …) go through this instead of importing
+// 'firebase/firestore' statically, so the ~450kB SDK stays out of the eagerly
+// modulepreloaded boot graph and is fetched on the first data call instead.
+let firestoreLib = null;
+const getFirestoreLib = async () => {
+  if (!firestoreLib) firestoreLib = await import('firebase/firestore');
+  return firestoreLib;
+};
+
 // Synchronous getters for cached instances (initialize on first async call)
 const getCachedAuth = () => {
   if (!auth) {
@@ -224,7 +234,7 @@ export const checkFirebaseConnection = () => {
 };
 
 // Export lazy-loading functions
-export { initializeAuth, initializeFirestore };
+export { initializeAuth, initializeFirestore, getFirestoreLib };
 
 // Get auth (lazy init with async, returns cached instance)
 export const getAuth = async () => {

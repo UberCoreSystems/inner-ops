@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js src/utils/behavioralRecord.test.js src/utils/dailyBrief.test.js src/utils/oracleQuestionExtractor.test.js src/utils/dateUtils.test.js src/utils/groupEntriesByMonth.test.js src/utils/detectDriftSignals.test.js src/utils/getBehavioralContext.test.js src/utils/generateSynthesisBriefing.test.js src/utils/ruleState.test.js src/utils/crossModuleExtraction.test.js src/utils/composeMirrorReading.test.js src/utils/composeSeededPreview.test.js src/utils/buildQuickSignalEntry.test.js src/utils/composeJournalSignal.test.js src/utils/composeClosureFeedback.test.js src/utils/coldCase.test.js src/utils/computeDepthTrend.test.js src/utils/engagementTriggers/journalStaleness.test.js src/utils/engagementTriggers/synthesisReady.test.js src/utils/engagementTriggers/index.test.js src/utils/personalContext.test.js src/utils/routeGating.test.js src/utils/onboardingHelp.test.js src/utils/exportData.test.js src/utils/crossModuleCorrelation.test.js src/utils/relapseForecast.test.js src/utils/composeConvergenceCountdown.test.js functions/index.test.js functions/memory.test.js functions/usage.test.js functions/deleteUserData.test.js",
+    "test": "node --test src/utils/aiFeedback.test.js src/utils/clarityScore.test.js src/utils/behavioralRecord.test.js src/utils/dailyBrief.test.js src/utils/oracleQuestionExtractor.test.js src/utils/oracleQuestionPool.test.js src/utils/dateUtils.test.js src/utils/groupEntriesByMonth.test.js src/utils/detectDriftSignals.test.js src/utils/getBehavioralContext.test.js src/utils/generateSynthesisBriefing.test.js src/utils/ruleState.test.js src/utils/crossModuleExtraction.test.js src/utils/composeMirrorReading.test.js src/utils/composeSeededPreview.test.js src/utils/buildQuickSignalEntry.test.js src/utils/composeJournalSignal.test.js src/utils/composeClosureFeedback.test.js src/utils/coldCase.test.js src/utils/computeDepthTrend.test.js src/utils/engagementTriggers/journalStaleness.test.js src/utils/engagementTriggers/synthesisReady.test.js src/utils/engagementTriggers/index.test.js src/utils/personalContext.test.js src/utils/routeGating.test.js src/utils/onboardingHelp.test.js src/utils/exportData.test.js src/utils/crossModuleCorrelation.test.js src/utils/relapseForecast.test.js src/utils/composeConvergenceCountdown.test.js functions/index.test.js functions/memory.test.js functions/usage.test.js functions/deleteUserData.test.js",
     "lint": "eslint . --ext .js,.jsx --report-unused-disable-directives --max-warnings 0",
     "test:rules": "node scripts/run-rules-tests.mjs",
     "visual-review": "firebase emulators:exec --only auth,firestore --project inner-ops-8ce36 \"node scripts/visual-review/run.mjs\""
@@ -19,26 +19,25 @@
     "@firebase/rules-unit-testing": "^5.0.1",
     "@playwright/test": "^1.61.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "10.4.20",
     "eslint": "8.57.1",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "4.6.2",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "postcss": "8.4.47",
     "sharp": "^0.33.5",
+    "tailwindcss": "3.4.13",
     "terser": "5.46.0",
     "vite": "5.4.21",
     "vite-plugin-pwa": "^0.20.5"
   },
   "dependencies": {
     "@sentry/react": "10.45.0",
-    "autoprefixer": "10.4.20",
     "firebase": "^12.14.0",
-    "postcss": "8.4.47",
     "posthog-js": "1.364.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-hot-toast": "2.6.0",
-    "react-refresh": "0.17.0",
-    "react-router-dom": "^7.17.0",
-    "tailwindcss": "3.4.13"
+    "react-router-dom": "^7.17.0"
   },
   "overrides": {
     "protobufjs": "^7.6.2"

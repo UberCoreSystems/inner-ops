@@ -9,17 +9,21 @@ const MonthStrip = ({ group }) => {
   if (typeof group.year !== 'number') return null;
   const daysInMonth = new Date(group.year, group.month + 1, 0).getDate();
 
+  // Days with several entries show the LATEST one. Writing unconditionally let
+  // the last item of the (newest-first) list win, i.e. the day's oldest mood.
   const byDay = {};
   group.entries.forEach((e) => {
     const d = parseDate(e.timestamp) || parseDate(e.createdAt);
-    if (d) byDay[d.getDate()] = e;
+    if (!d) return;
+    const held = byDay[d.getDate()];
+    if (!held || d.getTime() > held.ms) byDay[d.getDate()] = { entry: e, ms: d.getTime() };
   });
 
   return (
     <div className="flex flex-1 gap-px min-w-0">
       {Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
-        const e = byDay[day];
+        const e = byDay[day]?.entry;
         return (
           <div
             key={day}

@@ -10,6 +10,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { updateMemory } from '../utils/updateMemory';
 import { detectDriftSignals } from '../utils/detectDriftSignals';
+import { toDatetimeLocalString, parseDateOnlyLocal, parseDate } from '../utils/dateUtils';
 import RelapseForecastCard from './RelapseForecastCard';
 import VoiceInputButton from './VoiceInputButton';
 import OracleModal from './OracleModal';
@@ -33,7 +34,7 @@ import {
   resolveSubstanceLabel,
   formatDriftSignalText,
 } from '../utils/relapseTaxonomy';
-import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
+import { RELAPSE_ENTRY_TYPES, ORACLE_FIELDS } from '../utils/schema';
 
 // UXR-002 Spec 4: archetype IDs, habit IDs, and substance options live in
 // src/utils/relapseTaxonomy.js. See that file for the rationale (self-
@@ -141,7 +142,7 @@ const RelapseRadar = () => {
   const [archetypeMatchPrompt, setArchetypeMatchPrompt] = useState(null); // { targetName, targetId, archetype }
 
   // BER-139: event timestamp
-  const [eventOccurredAt, setEventOccurredAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [eventOccurredAt, setEventOccurredAt] = useState(() => toDatetimeLocalString());
 
   // BER-136: capture entry text for Oracle regen
   const oracleEntryTextRef = useRef(null);
@@ -358,7 +359,7 @@ const RelapseRadar = () => {
     killTargets.forEach(target => {
       (target.escapeData || []).forEach(escape => {
         if (!escape.date) return;
-        const t = new Date(escape.date).getTime();
+        const t = (parseDateOnlyLocal(escape.date) || parseDate(escape.date))?.getTime() ?? NaN;
         if (now - t < windowMs) {
           events.push({ type: 'escape', date: t, label: target.title, id: `${target.id}-${escape.date}` });
         }
@@ -380,7 +381,7 @@ const RelapseRadar = () => {
       .map(target => {
         const correlatedEscapes = (target.escapeData || []).filter(escape => {
           if (!escape.date) return false;
-          const escapeTime = new Date(escape.date).getTime();
+          const escapeTime = (parseDateOnlyLocal(escape.date) || parseDate(escape.date))?.getTime() ?? NaN;
           return archetypeEntries.some(entry => {
             const entryTime = entry.createdAt?.toDate?.()?.getTime() ?? entry.timestamp ?? 0;
             return Math.abs(escapeTime - entryTime) < windowMs;
@@ -476,6 +477,25 @@ const RelapseRadar = () => {
       await updateData('relapseEntries', currentEntryId, { oracleReaction: reactionId });
     } catch (error) {
       logger.error('Error saving Oracle reaction:', error);
+      throw error;
+    }
+  };
+
+  // A retried or regenerated reading replaces the one saved with the entry.
+  // Without this the check-in keeps the reading the user discarded — and, after
+  // a retry, keeps claiming 'local' provenance for prose the Oracle wrote.
+  const persistReplacedFeedback = async (newFeedback, newProvenance) => {
+    if (!currentEntryId || !newFeedback) return;
+    const patch = {
+      [ORACLE_FIELDS.RELAPSE_PROSE]: newFeedback,
+      ...(newProvenance ? { [ORACLE_FIELDS.PROVENANCE]: newProvenance } : {}),
+    };
+    try {
+      await updateData('relapseEntries', currentEntryId, patch);
+      setRelapseEntries(prev => prev.map(e => (e.id === currentEntryId ? { ...e, ...patch } : e)));
+    } catch (error) {
+      logger.error('Error saving replaced Oracle reading:', error);
+      ouraToast.error('Reading shown but not saved to the check-in.');
     }
   };
 
@@ -555,7 +575,19 @@ const RelapseRadar = () => {
         } : {}),
       };
 
-      const savedEntry = await writeData('relapseEntries', entry);
+      // A failed write must never read as a recorded check-in. Keep the form
+      // populated so nothing the user typed is lost, and stop here — the
+      // outer catch only handles genuine post-save failures.
+      let savedEntry;
+      try {
+        savedEntry = await writeData('relapseEntries', entry);
+      } catch (writeError) {
+        logger.error('Error saving relapse entry:', writeError);
+        if (redirectIfAuthLost(writeError)) return;
+        closeOracle();
+        ouraToast.error('Save failed — this check-in was not recorded.');
+        return;
+      }
       setCurrentEntryId(savedEntry.id);
       const now = new Date();
       setRelapseEntries(prev => [{ ...savedEntry, createdAt: now, timestamp: now }, ...prev]);
@@ -604,7 +636,8 @@ const RelapseRadar = () => {
         if (dismissedAt && archNow - parseInt(dismissedAt, 10) < sevenDaysMs) continue;
         const hasCorrelatedEscape = (target.escapeData || []).some(escape => {
           if (!escape.date) return false;
-          return Math.abs(new Date(escape.date).getTime() - archNow) < windowMs;
+          const escapeTime = (parseDateOnlyLocal(escape.date) || parseDate(escape.date))?.getTime() ?? NaN;
+          return Math.abs(escapeTime - archNow) < windowMs;
         });
         if (hasCorrelatedEscape) {
           setArchetypeMatchPrompt({ targetName: target.title, targetId: target.id, archetype: submittedArchetype });
@@ -620,7 +653,7 @@ const RelapseRadar = () => {
       setReflection('');
       setSelectedPrecursors([]);
       setPrecursorContext('');
-      setEventOccurredAt(new Date().toISOString().slice(0, 16));
+      setEventOccurredAt(toDatetimeLocalString());
 
       // Post-save action surface. Replaces the prior 3s banner + 3.5s auto-
       // navigate. Signal entries get inline grounding tools and a two-button
@@ -1039,7 +1072,7 @@ const RelapseRadar = () => {
             <input
               type="datetime-local"
               value={eventOccurredAt}
-              max={new Date().toISOString().slice(0, 16)}
+              max={toDatetimeLocalString()}
               onChange={(e) => setEventOccurredAt(e.target.value)}
               className="w-full px-4 py-2.5 bg-oura-card text-white rounded-xl border border-oura-border focus:border-oura-cyan focus:outline-none transition-colors text-sm"
             />
@@ -1399,6 +1432,7 @@ const RelapseRadar = () => {
         content={oracleModal.content}
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
+        onFeedbackReplaced={persistReplacedFeedback}
         entryText={oracleEntryTextRef.current || ''}
         entryModuleName="Relapse Radar"
         entryCount={oracleModal.entryCount}

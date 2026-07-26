@@ -167,5 +167,3 @@ export async function resetHelp(uid, scope = 'all') {
   clearMirror(uid, scope);
   await upsertUserSettingsFields({ [`onboardingHelp.${scope}`]: {} });
 }
-
-export const __testables = { readMirror, mirrorKey };

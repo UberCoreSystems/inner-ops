@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { readUserData } from '../utils/firebaseUtils';
-import { generateSynthesisBriefing } from '../utils/generateSynthesisBriefing';
 import { COLLECTIONS } from '../utils/schema';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
@@ -37,6 +36,14 @@ export function useSynthesisAutoGenerate(userId) {
         const dueForSynthesis = !lastBriefing?.generatedAt ||
           (Date.now() - new Date(lastBriefing.generatedAt).getTime()) / (1000 * 60 * 60 * 24) >= cadenceDays;
 
+        const reckoningAuto = Boolean(userSettings?.[0]?.reckoningAuto);
+        if (!dueForSynthesis && !reckoningAuto) return;
+
+        // Loaded here, not at module scope: the synthesis engine pulls in the
+        // Oracle client, behavioral context and drift detection, none of which
+        // belong in the boot chunk for a hook that only runs post-login.
+        const { generateSynthesisBriefing } = await import('../utils/generateSynthesisBriefing');
+
         if (dueForSynthesis) {
           // Finding 13: discriminated result instead of thrown CADENCE_LOCK string.
           const result = await generateSynthesisBriefing(userId, cadence);
@@ -51,7 +58,7 @@ export function useSynthesisAutoGenerate(userId) {
 
         // Optional periodic Reckoning — off by default, toggled in Settings.
         // Uses its own cadence and the engine's own type-scoped cadence gate.
-        if (userSettings?.[0]?.reckoningAuto) {
+        if (reckoningAuto) {
           const reckoningCadence = userSettings?.[0]?.reckoningCadence || 'biweekly';
           const reckoning = await generateSynthesisBriefing(userId, reckoningCadence, { mode: 'reckoning' });
           if (reckoning?.status === 'ok') {

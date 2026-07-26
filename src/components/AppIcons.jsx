@@ -265,9 +265,4 @@ export const AppIcon = ({
   );
 };
 
-// Mapping for ScoreCard compatibility - returns JSX instead of emoji
-export const getScoreCardIcon = (iconName, size = 20, color = 'currentColor') => {
-  return <AppIcon name={iconName} size={size} color={color} glow={true} glowIntensity={0.5} />;
-};
-
 export default Icons;

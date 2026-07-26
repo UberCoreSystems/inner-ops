@@ -27,36 +27,31 @@
 
 import { isFinalizedRule, getHeldStreakDays } from './ruleState.js';
 import { RELAPSE_ENTRY_TYPES } from './schema.js';
+import { getConsecutiveDaysRequired as resolveThreshold } from './killTargetThreshold.js';
+import { toMs } from './dateUtils.js';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
-// Held-threshold resolver — mirrors getConsecutiveDaysRequired in KillList.jsx.
-// Legacy targets used string `difficulty`/`priority` before the numeric
-// `consecutiveDaysRequired` field existed; resolve to the committed day count.
-const LEGACY_DIFFICULTY_TO_DAYS = { surface: 21, deep: 30, core: 60 };
-const LEGACY_PRIORITY_TO_DAYS = { high: 60, medium: 30, low: 21 };
-const MIN_DAYS_REQUIRED = 21;
-
-const resolveThreshold = (target) => {
-  const raw = Number(target?.consecutiveDaysRequired);
-  if (Number.isFinite(raw) && raw >= MIN_DAYS_REQUIRED) return Math.floor(raw);
-  if (target?.difficulty && LEGACY_DIFFICULTY_TO_DAYS[target.difficulty]) {
-    return LEGACY_DIFFICULTY_TO_DAYS[target.difficulty];
-  }
-  if (target?.priority && LEGACY_PRIORITY_TO_DAYS[target.priority]) {
-    return LEGACY_PRIORITY_TO_DAYS[target.priority];
-  }
-  return 30;
-};
-
 // Days a confirmed kill was actually held: the realized consecutive streak at
 // kill time. A kill only fires when streak >= threshold (>= 21), so a valid
-// streak is authoritative; fall back to the completed threshold for legacy
-// docs missing it. Never activeDuration (calendar age, overstates).
+// streak is authoritative. When the streak is 0/absent, the completed-threshold
+// fallback is honored ONLY if the contract's calendar age at kill time could
+// have contained that streak — a quick-kill minutes after creation held
+// nothing and must not census as held ≥ threshold. When the age is shorter,
+// the age itself (capped at threshold) is the ceiling. Docs with no dates at
+// all (pure legacy) keep the threshold fallback. Never activeDuration alone
+// (calendar age, overstates).
 const heldDays = (kill) => {
   const s = Number(kill?.streak);
   if (Number.isFinite(s) && s > 0) return Math.floor(s);
-  return resolveThreshold(kill);
+  const threshold = resolveThreshold(kill);
+  const killedMs = toMs(kill?.killedAt) || toMs(kill?.archivedAt) || toMs(kill?.timestamp);
+  const createdMs = toMs(kill?.createdAt);
+  if (killedMs && createdMs) {
+    const ageDays = Math.floor((killedMs - createdMs) / MS_PER_DAY);
+    return Math.max(0, Math.min(ageDays, threshold));
+  }
+  return threshold;
 };
 
 // Escape autopsies on a set of targets: entries carrying any written analysis.

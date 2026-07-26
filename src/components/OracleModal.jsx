@@ -22,7 +22,10 @@ const MAX_REGEN = 3;
 // BER-229: accept entryModuleName so journal regen gets DEPTH instruction from CF.
 // Finding 3 remediation: the system-prompt fragment is now requested by key,
 // not supplied as free text. The server-side registry owns the template.
-async function callOracleRaw(entryText, promptContext, entryModuleName) {
+// BER-194 follow-up: entryCount is forwarded so the server's trust-calibration
+// gate reads the same record density the modal was opened with. Omitting it
+// made every regen/retry run as if the user had zero entries logged.
+async function callOracleRaw(entryText, promptContext, entryModuleName, entryCount = null) {
   try {
     const functions = getFunctions();
     const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
@@ -31,6 +34,7 @@ async function callOracleRaw(entryText, promptContext, entryModuleName) {
       moduleName: entryModuleName === 'journal' ? 'journal' : 'oracle',
       userContext: {},
       tone: 'stoic',
+      ...(typeof entryCount === 'number' ? { entryCount } : {}),
       ...(promptContext?.key
         ? {
             promptContextKey: promptContext.key,
@@ -63,6 +67,10 @@ const OracleModal = ({
   entryText = '',
   entryModuleName = '',
   onFollowUpStored = null,
+  // Called when a retry or regeneration replaces the displayed reading, so the
+  // owning page can persist it. Follow-ups are already persisted; without this
+  // a reload paired a stored follow-up with the judgment it replaced.
+  onFeedbackReplaced = null,
   // BER-194: data-depth calibration — null = unknown (no constraint applied)
   entryCount = null,
   // BER-225: metacognitive depth classification (journal entries only)
@@ -73,6 +81,10 @@ const OracleModal = ({
   // existed — in both cases no claim is made either way.
   provenance = null,
   fallbackReason = null,
+  // The Oracle call failed outright and no reading was recorded. `content` is
+  // then a system message, not prose — so it carries no provenance, but the
+  // retry machinery still applies: the entry exists and can still be read.
+  oracleUnavailable = false,
 }) => {
   // BER-200: resolved asynchronously on open — display the triggered criterion
   const [resolvedCriterion, setResolvedCriterion] = useState(null);
@@ -178,12 +190,14 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       const { feedback: retryFeedback, metacognitiveDepth: retryDepth } = await callOracleRaw(
         entryText,
         null,
-        entryModuleName
+        entryModuleName,
+        entryCount
       );
       if (retryFeedback) {
         setDisplayFeedback(retryFeedback);
         setDisplayDepth(retryDepth);
         setDisplayProvenance(PROVENANCE.ORACLE);
+        onFeedbackReplaced?.(retryFeedback, PROVENANCE.ORACLE, { metacognitiveDepth: retryDepth });
       } else {
         ouraToast.error('Oracle still unreachable.');
       }
@@ -203,15 +217,18 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       const { feedback: regenFeedback, metacognitiveDepth: regenDepth } = await callOracleRaw(
         entryText,
         { key: 'oracle_regen', params: { entryCount } },
-        entryModuleName
+        entryModuleName,
+        entryCount
       );
       if (regenFeedback) {
         setDisplayFeedback(regenFeedback);
         setDisplayDepth(regenDepth);
+        setDisplayProvenance(PROVENANCE.ORACLE);
         setRegenCount(prev => prev + 1);
         setFollowUpResponse('');
         setShowFollowUp(false);
         setFollowUpUsed(false);
+        onFeedbackReplaced?.(regenFeedback, PROVENANCE.ORACLE, { metacognitiveDepth: regenDepth });
       } else {
         ouraToast.error('Oracle unavailable. Try again.');
       }
@@ -229,7 +246,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       // Server-side template wraps it into the challenge instruction.
       const { feedback: followUpFeedback } = await callOracleRaw(
         `Original context: ${entryText}\n\nUser's challenge: ${followUpText.trim()}`,
-        { key: 'oracle_challenge', params: { pushback: followUpText.trim() } }
+        { key: 'oracle_challenge', params: { pushback: followUpText.trim() } },
+        // Module deliberately left unset — a follow-up is not a journal entry
+        // and must not pick up the DEPTH directive. entryCount still applies.
+        undefined,
+        entryCount
       );
       const response = followUpFeedback || 'Oracle unavailable. Challenge recorded.';
       setFollowUpResponse(response);
@@ -246,6 +267,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   };
 
   const handleReaction = async (reactionId) => {
+    const previousReaction = selectedReaction;
     setSelectedReaction(reactionId);
     if (onReaction) {
       try {
@@ -253,14 +275,20 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         ouraToast.success('Reaction saved', { duration: 1500 });
       } catch (error) {
         logger.error('Failed to save Oracle reaction:', error);
+        setSelectedReaction(previousReaction);
+        ouraToast.error('Reaction not saved.');
       }
     }
   };
 
   const currentFeedback = displayFeedback || feedback || content || oracleFeedback;
   const isCurrentlyLoading = isLoading || isGenerating;
-  const canRegen = !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
-  const canFollowUp = !!entryText && !followUpUsed && !followUpLoading && !isCurrentlyLoading && !!currentFeedback;
+  // While the entry has no reading at all there is nothing to regenerate from
+  // and nothing to push back on — only the retry below applies. A successful
+  // retry clears the flag by setting real prose + Oracle provenance.
+  const isUnanswered = oracleUnavailable && !isCurrentlyLoading && displayProvenance !== PROVENANCE.ORACLE;
+  const canRegen = !isUnanswered && !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
+  const canFollowUp = !isUnanswered && !!entryText && !followUpUsed && !followUpLoading && !isCurrentlyLoading && !!currentFeedback;
 
   const isLocal = displayProvenance === PROVENANCE.LOCAL && !!currentFeedback && !isCurrentlyLoading;
   // The two shapes the rate-limit code arrives in, depending on whether the
@@ -269,7 +297,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     || fallbackReason === 'functions/resource-exhausted';
   // Retrying a rate-limited call cannot succeed until the counter resets, so
   // the affordance is withheld rather than offered and failed.
-  const canRetry = isLocal && !!entryText && !isRateLimited && !retryLoading;
+  const canRetry = (isLocal || isUnanswered) && !!entryText && !isRateLimited && !retryLoading;
 
   // a11y: trap keyboard focus inside the modal while open and restore focus on close.
   const trapRef = useFocusTrap(isOpen);
@@ -351,9 +379,9 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   to look like model output — see isLocal block below. */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full ${isLocal ? 'bg-[#5a5a5a]' : 'bg-[#d1d1d1]'}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${isLocal || isUnanswered ? 'bg-[#5a5a5a]' : 'bg-[#d1d1d1]'}`} />
                   <span className="text-[#858585] text-xs uppercase tracking-widest font-medium">
-                    {isLocal ? 'Oracle · Local' : 'Oracle'}
+                    {isUnanswered ? 'Oracle · No reading' : isLocal ? 'Oracle · Local' : 'Oracle'}
                   </span>
                 </div>
                 <button
@@ -437,9 +465,9 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               )}
 
               {/* BER-136: Regenerate + Go Deeper buttons */}
-              {currentFeedback && (canRegen || canFollowUp || isLocal) && (
+              {currentFeedback && (canRegen || canFollowUp || isLocal || isUnanswered) && (
                 <div className="flex gap-2 flex-wrap">
-                  {isLocal && (
+                  {(isLocal || isUnanswered) && (
                     <button
                       onClick={handleRetry}
                       disabled={!canRetry}

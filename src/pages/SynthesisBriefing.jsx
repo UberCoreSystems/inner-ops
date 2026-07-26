@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
-import { readUserData, updateData, deleteData } from '../utils/firebaseUtils';
+import { readUserData, updateData, deleteData, upsertUserSettings } from '../utils/firebaseUtils';
 import { generateSynthesisBriefing } from '../utils/generateSynthesisBriefing';
 import { composeSeededPreview } from '../utils/composeSeededPreview';
 import { getUserProfile } from '../utils/userProfile';
@@ -39,7 +39,11 @@ export default function SynthesisBriefing() {
   const [runningReckoning, setRunningReckoning] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  // Mirrors userSettings.synthesisCadence — the field useSynthesisAutoGenerate
+  // reads. Hydrated on load and written on selection; before this the control
+  // set local state only, so the auto-generation cadence never changed.
   const [cadence, setCadence] = useState('weekly');
+  const [savingCadence, setSavingCadence] = useState(false);
   const [selectedArchive, setSelectedArchive] = useState(null);
   // hasCrossModuleData gates the Generate Now button. Synthesis is a
   // cross-module read; with only journal entries the briefing has nothing
@@ -88,6 +92,14 @@ export default function SynthesisBriefing() {
       setInitialLoading(false);
     }
 
+    try {
+      const settings = await readUserData(COLLECTIONS.USER_SETTINGS);
+      const stored = settings?.[0]?.synthesisCadence;
+      if (CADENCE_OPTIONS.some(o => o.value === stored)) setCadence(stored);
+    } catch (err) {
+      logger.warn('synthesis cadence read failed:', err?.message);
+    }
+
     // Determine whether the user has any cross-module signal for synthesis.
     // The Generate Now button is disabled when all three are empty — a
     // journal-only user gets boilerplate convergence and a generic question.
@@ -105,6 +117,22 @@ export default function SynthesisBriefing() {
       logger.warn('cross-module data check failed:', err?.message);
       // Fail open — don't lock the user out on a transient read error.
       setHasCrossModuleData(true);
+    }
+  };
+
+  const selectCadence = async (value) => {
+    if (value === cadence || savingCadence) return;
+    const previous = cadence;
+    setCadence(value);
+    setSavingCadence(true);
+    try {
+      await upsertUserSettings({ synthesisCadence: value });
+    } catch (err) {
+      logger.error('Failed to save synthesis cadence:', err);
+      setCadence(previous);
+      ouraToast.error('Cadence not saved. Try again.');
+    } finally {
+      setSavingCadence(false);
     }
   };
 
@@ -302,8 +330,9 @@ export default function SynthesisBriefing() {
             {CADENCE_OPTIONS.map(opt => (
               <button
                 key={opt.value}
-                onClick={() => setCadence(opt.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}
+                onClick={() => selectCadence(opt.value)}
+                disabled={savingCadence}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50 ${cadence === opt.value ? 'bg-white text-black font-medium' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}
               >
                 {opt.label}
               </button>

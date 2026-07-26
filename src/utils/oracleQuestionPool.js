@@ -302,8 +302,10 @@ export async function markDailyPromptAnswered() {
 export function formatRelativeDate(eventOccurredAt, now = new Date()) {
   const date = toDate(eventOccurredAt);
   if (!date) return '';
-  const startOfDay = (d) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  const days = Math.floor((startOfDay(now) - startOfDay(date)) / MS_PER_DAY);
+  // Local-midnight boundaries, matching dateUtils.localDateKey day semantics.
+  // Rounded because DST makes some local days 23/25 hours long.
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / MS_PER_DAY);
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
   if (days < 14) return `${days} days ago`;

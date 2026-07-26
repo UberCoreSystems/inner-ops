@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   collection, 
   query, 
@@ -14,322 +14,6 @@ import logger from '../utils/logger';
 import { localDateKey } from '../utils/dateUtils';
 
 /**
- * Custom hook to retrieve kill targets for the current date
- * @param {Date} targetDate - Optional date to query (defaults to today)
- * @param {boolean} realtime - Whether to use real-time updates (default: false)
- * @returns {object} { targets, loading, error, refetch }
- */
-export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
-  const [targets, setTargets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Use provided date or default to today in YYYY-MM-DD format (local, to match
-  // how targetDate keys are written across the app)
-  const queryDateString = targetDate
-    ? localDateKey(targetDate)
-    : localDateKey();
-
-  // Finding 16 remediation: fetchTargets is wrapped in useCallback with an
-  // explicit dep (queryDateString). The fetch effect and the manual refetch
-  // path both now reference a stable, correctly-updating closure.
-  const fetchTargets = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const auth = await getAuth();
-      const db = await getDb();
-
-      if (!auth.currentUser) {
-        logger.warn("No authenticated user for kill targets query");
-        setTargets([]);
-        return;
-      }
-
-      // Simple query - just userId and targetDate (no orderBy to avoid composite index requirement)
-      const q = query(
-        collection(db, 'killTargets'),
-        where('userId', '==', auth.currentUser.uid),
-        where('targetDate', '==', queryDateString)
-      );
-
-      const querySnapshot = await getDocs(q);
-      const fetchedTargets = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          // Handle both Firebase Timestamp objects and regular dates
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
-          lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
-          completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null)
-        };
-      });
-
-      // Sort by priority and creation time
-      fetchedTargets.sort((a, b) => {
-        // First sort by priority
-        if (a.priority !== b.priority) {
-          const priorityOrder = { high: 3, medium: 2, low: 1 };
-          return (priorityOrder[b.priority] || 1) - (priorityOrder[a.priority] || 1);
-        }
-        // Then by creation time (newest first)
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      });
-
-      setTargets(fetchedTargets);
-      logger.log(`✅ Loaded ${fetchedTargets.length} kill targets for ${queryDateString}`);
-
-    } catch (err) {
-      logger.error("Error fetching kill targets:", err);
-      setError(err.message || 'Failed to fetch kill targets');
-      setTargets([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [queryDateString]);
-
-  // Setup real-time listener or one-time fetch
-  useEffect(() => {
-    let cleanup;
-    const setupListener = async () => {
-      const auth = await getAuth();
-      const db = await getDb();
-      const userId = auth.currentUser?.uid;
-      
-      if (!userId) {
-        setLoading(false);
-        setTargets([]);
-        return;
-      }
-
-      if (realtime) {
-        // Real-time listener with simple query (no orderBy to avoid composite index requirement)
-        const q = query(
-          collection(db, 'killTargets'),
-          where('userId', '==', userId),
-          where('targetDate', '==', queryDateString)
-        );
-
-        const unsubscribe = onSnapshot(
-          q,
-          (querySnapshot) => {
-            const fetchedTargets = querySnapshot.docs.map(doc => {
-              const data = doc.data();
-              return {
-                id: doc.id,
-                ...data,
-                // Handle both Firebase Timestamp objects and regular dates
-                createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
-                lastUpdated: data.lastUpdated?.toDate ? data.lastUpdated.toDate() : (data.lastUpdated || new Date()),
-                completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : (data.completedAt || null)
-              };
-            });
-
-            // Sort by priority and creation time
-            fetchedTargets.sort((a, b) => {
-              if (a.priority !== b.priority) {
-                const priorityOrder = { high: 3, medium: 2, low: 1 };
-                return (priorityOrder[b.priority] || 1) - (priorityOrder[a.priority] || 1);
-              }
-              return new Date(b.createdAt) - new Date(a.createdAt);
-            });
-
-            setTargets(fetchedTargets);
-            setLoading(false);
-            setError(null);
-            logger.log(`🔄 Real-time update: ${fetchedTargets.length} kill targets`);
-          },
-          (err) => {
-            logger.error("Real-time listener error:", err);
-            setError(err.message || 'Real-time update failed');
-            setLoading(false);
-          }
-        );
-
-        cleanup = () => unsubscribe();
-      } else {
-        // One-time fetch
-        await fetchTargets();
-      }
-    };
-
-    setupListener().catch(err => {
-      logger.error("Setup listener error:", err);
-      setLoading(false);
-    });
-
-    return () => cleanup?.();
-  }, [queryDateString, realtime, fetchTargets]);
-
-  // Manual refetch function
-  const refetch = () => {
-    if (!realtime) {
-      fetchTargets();
-    }
-  };
-
-  // Toggle target status between different states
-  const toggleTargetStatus = async (targetId, newStatus) => {
-    try {
-      const auth = await getAuth();
-      const db = await getDb();
-      
-      if (!auth.currentUser) {
-        throw new Error('No authenticated user');
-      }
-
-      const targetRef = doc(db, 'killTargets', targetId);
-      const updateData = {
-        status: newStatus,
-        lastUpdated: serverTimestamp()
-      };
-
-      // Add completion timestamp if status is 'killed'
-      if (newStatus === 'killed') {
-        updateData.completedAt = serverTimestamp();
-      } else {
-        // Remove completion timestamp for other statuses
-        updateData.completedAt = null;
-      }
-
-      await updateDoc(targetRef, updateData);
-      logger.log(`✅ Target status updated to: ${newStatus}`);
-
-      // If not using real-time updates, manually refetch
-      if (!realtime) {
-        refetch();
-      }
-
-      return true;
-    } catch (error) {
-      logger.error('Error updating target status:', error);
-      throw error;
-    }
-  };
-
-  // Quick toggle between killed/escaped/active
-  const quickToggleStatus = async (targetId, currentStatus) => {
-    const statusCycle = {
-      'active': 'killed',
-      'killed': 'escaped', 
-      'escaped': 'active'
-    };
-    
-    const newStatus = statusCycle[currentStatus] || 'active';
-    return await toggleTargetStatus(targetId, newStatus);
-  };
-
-  // Set target as killed
-  const markAsKilled = async (targetId) => {
-    return await toggleTargetStatus(targetId, 'killed');
-  };
-
-  // Set target as escaped
-  const markAsEscaped = async (targetId) => {
-    return await toggleTargetStatus(targetId, 'escaped');
-  };
-
-  // Set target as active
-  const markAsActive = async (targetId) => {
-    return await toggleTargetStatus(targetId, 'active');
-  };
-
-  // Update reflection notes for a target
-  const updateReflectionNote = async (targetId, reflectionNote) => {
-    try {
-      const auth = await getAuth();
-      const db = await getDb();
-      
-      if (!auth.currentUser) {
-        throw new Error('No authenticated user');
-      }
-
-      const targetRef = doc(db, 'killTargets', targetId);
-      const updateData = {
-        reflectionNotes: reflectionNote.trim(),
-        lastUpdated: serverTimestamp()
-      };
-
-      await updateDoc(targetRef, updateData);
-      logger.log(`✅ Reflection note updated for target: ${targetId}`);
-
-      // If not using real-time updates, manually refetch
-      if (!realtime) {
-        refetch();
-      }
-
-      return true;
-    } catch (error) {
-      logger.error('Error updating reflection note:', error);
-      throw error;
-    }
-  };
-
-  // Clear reflection notes for a target
-  const clearReflectionNote = async (targetId) => {
-    try {
-      const auth = await getAuth();
-      const db = await getDb();
-      
-      if (!auth.currentUser) {
-        throw new Error('No authenticated user');
-      }
-
-      const targetRef = doc(db, 'killTargets', targetId);
-      const updateData = {
-        reflectionNotes: '',
-        lastUpdated: serverTimestamp()
-      };
-
-      await updateDoc(targetRef, updateData);
-      logger.log(`✅ Reflection note cleared for target: ${targetId}`);
-
-      // If not using real-time updates, manually refetch
-      if (!realtime) {
-        refetch();
-      }
-
-      return true;
-    } catch (error) {
-      logger.error('Error clearing reflection note:', error);
-      throw error;
-    }
-  };
-
-  // Computed statistics
-  const stats = {
-    total: targets.length,
-    killed: targets.filter(t => t.status === 'killed').length,
-    escaped: targets.filter(t => t.status === 'escaped').length,
-    active: targets.filter(t => t.status === 'active').length,
-    pending: targets.filter(t => !t.status || t.status === 'pending').length,
-    highPriority: targets.filter(t => t.priority === 'high').length,
-    mediumPriority: targets.filter(t => t.priority === 'medium').length,
-    lowPriority: targets.filter(t => t.priority === 'low').length,
-    completionRate: targets.length > 0 ? (targets.filter(t => t.status === 'killed').length / targets.length) * 100 : 0
-  };
-
-  return {
-    targets,
-    loading,
-    error,
-    refetch,
-    stats,
-    // Status toggle functions
-    toggleTargetStatus,
-    quickToggleStatus,
-    markAsKilled,
-    markAsEscaped,
-    markAsActive,
-    // Reflection note functions
-    updateReflectionNote,
-    clearReflectionNote
-  };
-};
-
-/**
  * Hook for ALL kill targets regardless of creation date.
  * Returns all targets for stats, but `activeTargets` filtered to active only.
  * Used by the Dashboard "Active Contracts" widget.
@@ -337,20 +21,31 @@ export const useKillTargetsForDate = (targetDate = null, realtime = false) => {
 export const useActiveKillTargets = (realtime = true) => {
   const [allTargets, setAllTargets] = useState([]);
   const [targets, setTargets] = useState([]);
+  const [confirmedKills, setConfirmedKills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
 
+  // `mounted` guards every step after an await — unmount before the awaits
+  // resolve must not leak the snapshot listeners or set state on a dead hook.
   useEffect(() => {
     let cleanup;
+    let mounted = true;
     const setup = async () => {
       const auth = await getAuth();
       const db = await getDb();
+      if (!mounted) return;
       const userId = auth.currentUser?.uid;
       if (!userId) { setLoading(false); setTargets([]); return; }
 
       const q = query(
         collection(db, 'killTargets'),
+        where('userId', '==', userId)
+      );
+      // Kills are MOVED to confirmedKills, never left in killTargets with
+      // status:'killed' — the killed/completion stats must read both.
+      const killsQ = query(
+        collection(db, 'confirmedKills'),
         where('userId', '==', userId)
       );
 
@@ -372,23 +67,45 @@ export const useActiveKillTargets = (realtime = true) => {
         setTargets(active);
       };
 
+      const parseKills = (snap) => {
+        setConfirmedKills(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      };
+
       if (realtime) {
         const unsub = onSnapshot(q, (snap) => {
+          if (!mounted) return;
           parseTargets(snap);
           setLoading(false);
           setError(null);
-        }, (err) => { setError(err.message); setLoading(false); });
-        cleanup = () => unsub();
+        }, (err) => {
+          if (!mounted) return;
+          setError(err.message);
+          setLoading(false);
+        });
+        const unsubKills = onSnapshot(killsQ, (snap) => {
+          if (!mounted) return;
+          parseKills(snap);
+        }, (err) => {
+          logger.error('Confirmed kills listener error:', err);
+        });
+        cleanup = () => { unsub(); unsubKills(); };
       } else {
         try {
-          const snap = await getDocs(q);
+          const [snap, killsSnap] = await Promise.all([getDocs(q), getDocs(killsQ)]);
+          if (!mounted) return;
           parseTargets(snap);
-        } catch (err) { setError(err.message); }
-        setLoading(false);
+          parseKills(killsSnap);
+        } catch (err) {
+          if (mounted) setError(err.message);
+        }
+        if (mounted) setLoading(false);
       }
     };
     setup();
-    return () => cleanup?.();
+    return () => {
+      mounted = false;
+      cleanup?.();
+    };
   }, [realtime, retryKey]);
 
   const refetch = () => {
@@ -431,15 +148,28 @@ export const useActiveKillTargets = (realtime = true) => {
     }
     return toggleTargetStatus(targetId, 'killed');
   };
+  // Escape parity with the Ledger autopsy writer (KillList.jsx submitAutopsy):
+  // append an escapeData entry in the same field shape and reset the streak,
+  // so dashboard escapes are visible to autopsy/drift/synthesis readers.
   const markAsEscaped = (targetId, closure = null) => {
+    const target = allTargets.find(t => t.id === targetId);
     if (closure && closure.note) {
+      const escapeEntry = {
+        date: localDateKey(),
+        context: closure.note,
+        rationalization: '',
+        prevention: null,
+        streakAtEscape: target?.streak || 0,
+      };
       return toggleTargetStatus(targetId, 'escaped', {
         escapeClosureNote: closure.note,
         escapeClosureTags: Array.isArray(closure.tags) ? closure.tags : [],
         escapedAt: serverTimestamp(),
+        escapeData: [...(target?.escapeData || []), escapeEntry],
+        streak: 0,
       });
     }
-    return toggleTargetStatus(targetId, 'escaped');
+    return toggleTargetStatus(targetId, 'escaped', { streak: 0 });
   };
   const markAsActive = (targetId) => toggleTargetStatus(targetId, 'active');
 
@@ -471,19 +201,23 @@ export const useActiveKillTargets = (realtime = true) => {
     }
   };
 
+  // Killed = archived confirmedKills + any legacy killTargets doc that still
+  // carries status:'killed' from before the move-to-archive model.
+  const legacyKilled = allTargets.filter(t => t.status === 'killed').length;
+  const killed = confirmedKills.length + legacyKilled;
+  const total = allTargets.length + confirmedKills.length;
   const stats = {
-    total: allTargets.length,
-    killed: allTargets.filter(t => t.status === 'killed').length,
+    total,
+    killed,
     escaped: allTargets.filter(t => t.status === 'escaped').length,
     active: targets.length,
-    completionRate: allTargets.length > 0
-      ? (allTargets.filter(t => t.status === 'killed').length / allTargets.length) * 100
-      : 0,
+    completionRate: total > 0 ? (killed / total) * 100 : 0,
   };
 
   return {
     targets,       // active only — displayed in the widget
     allTargets,    // all statuses — for stats and patterns
+    confirmedKills, // archived kills — killed/completion stats source
     loading,
     error,
     stats,

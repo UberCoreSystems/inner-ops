@@ -41,6 +41,7 @@ function leadWindowMs(correlation, windowDays) {
 /**
  * @param {Object} input
  * @param {Array}  input.killTargets
+ * @param {Array}  input.confirmedKills  archived kills (moved out of killTargets)
  * @param {Array}  input.relapseEntries
  * @param {Array}  input.hardLessons
  * @param {Array}  input.journalEntries
@@ -51,6 +52,7 @@ function leadWindowMs(correlation, windowDays) {
  */
 export function computeRelapseForecast({
   killTargets = [],
+  confirmedKills = [],
   relapseEntries = [],
   hardLessons = [],
   journalEntries = [],
@@ -58,10 +60,20 @@ export function computeRelapseForecast({
   signalDelta = null,
   windowDays = DEFAULT_WINDOW_DAYS,
 } = {}) {
-  const entryCount =
-    killTargets.length + relapseEntries.length + hardLessons.length + journalEntries.length;
+  // Kills live in confirmedKills, not killTargets. Docs archived before the
+  // status stamp still carry status:'active' — normalize to 'killed' so the
+  // event extractor sees them as kills regardless of doc age.
+  const killRecords = [
+    ...killTargets,
+    ...confirmedKills.map((k) =>
+      k?.status === 'killed' ? k : { ...k, status: 'killed' }
+    ),
+  ];
 
-  const events = extractEvents({ killTargets, relapseEntries, hardLessons, journalEntries });
+  const entryCount =
+    killRecords.length + relapseEntries.length + hardLessons.length + journalEntries.length;
+
+  const events = extractEvents({ killTargets: killRecords, relapseEntries, hardLessons, journalEntries });
   const { correlations, status } = computeCorrelations(events, { entryCount, windowDays });
 
   if (status !== 'ok') {

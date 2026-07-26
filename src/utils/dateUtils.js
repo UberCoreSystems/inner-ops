@@ -59,3 +59,30 @@ export const localDateKey = (value = new Date()) => {
   return `${y}-${m}-${day}`;
 };
 
+/**
+ * YYYY-MM-DDTHH:mm from LOCAL components — the value/max format for
+ * `<input type="datetime-local">`. A UTC `toISOString().slice(0, 16)` shifts
+ * the seeded time (and caps "now" in the past/future) for any user off UTC.
+ */
+export const toDatetimeLocalString = (date = new Date()) => {
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${localDateKey(date)}T${h}:${min}`;
+};
+
+/**
+ * Parse a date-ONLY `YYYY-MM-DD` string anchored at LOCAL noon. Bare
+ * `new Date('YYYY-MM-DD')` parses as UTC midnight, which renders a day early
+ * west of UTC; noon keeps the Date inside the intended local day everywhere.
+ * Returns null for anything that is not a valid date-only string — callers
+ * with mixed-shape fields should fall back to `parseDate`.
+ */
+export const parseDateOnlyLocal = (str) => {
+  if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return null;
+  const d = new Date(`${str}T12:00:00`);
+  if (isNaN(d.getTime())) return null;
+  // Engines disagree on out-of-range dates ("2026-02-30" rolls over in Node,
+  // is Invalid Date in some browsers). Reject via round-trip so both agree.
+  return localDateKey(d) === str ? d : null;
+};
+

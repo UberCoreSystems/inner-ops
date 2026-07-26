@@ -1,179 +1,11 @@
-import React, { useEffect, useState } from 'react';
-
-/**
- * Oura-style Circular Progress Ring Component
- * Creates the signature stacked ring visualization
- */
-// Detect reduced motion preference once at module load — does not change mid-session
-const prefersReducedMotion =
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-export const CircularProgressRing = React.memo(function CircularProgressRing({
-  progress = 0,
-  size = 120,
-  strokeWidth = 8,
-  color = '#00d4aa',
-  trackColor = '#1a1a1a',
-  showGlow = true,
-  animateOnMount = true,
-  label,
-  children
-}) {
-  const [animatedProgress, setAnimatedProgress] = useState(
-    animateOnMount && !prefersReducedMotion ? 0 : progress
-  );
-
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (animatedProgress / 100) * circumference;
-  const ariaLabel = label ?? `${Math.round(progress)}% progress`;
-  const transition = prefersReducedMotion ? 'none' : 'stroke-dashoffset 1s ease-out';
-
-  useEffect(() => {
-    if (animateOnMount && !prefersReducedMotion) {
-      const timer = setTimeout(() => {
-        setAnimatedProgress(progress);
-      }, 100);
-      return () => clearTimeout(timer);
-    } else {
-      setAnimatedProgress(progress);
-    }
-  }, [progress, animateOnMount]);
-
-  return (
-    <div className="oura-ring" style={{ width: size, height: size }}>
-      <svg
-        width={size}
-        height={size}
-        role="img"
-        aria-label={ariaLabel}
-      >
-        {/* Glow effect layer */}
-        {showGlow && (
-          <circle
-            className="oura-ring-glow"
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={color}
-            strokeWidth={strokeWidth + 4}
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            fill="none"
-            style={{
-              filter: 'blur(8px)',
-              opacity: 0.4,
-              transition,
-            }}
-          />
-        )}
-
-        {/* Track */}
-        <circle
-          className="oura-ring-track"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={strokeWidth}
-          stroke={trackColor}
-        />
-
-        {/* Progress */}
-        <circle
-          className="oura-ring-progress"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={strokeWidth}
-          stroke={color}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          style={{ transition }}
-        />
-      </svg>
-
-      {/* Center content */}
-      {children && (
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ width: size, height: size }}
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  );
-});
-
-/**
- * Stacked Triple Ring - Like Oura's main readiness display
- */
-export const TripleRing = React.memo(function TripleRing({
-  rings = [
-    { progress: 75, color: '#00d4aa', label: 'Clarity' },
-    { progress: 60, color: '#4da6ff', label: 'Activity' },
-    { progress: 85, color: '#a855f7', label: 'Focus' }
-  ],
-  size = 200,
-  centerContent,
-  ariaLabel,
-}) {
-  const baseStrokeWidth = 10;
-  const gap = 14;
-  const compositeLabel = ariaLabel ??
-    rings.map((r) => `${r.label}: ${Math.round(r.progress)}%`).join(', ');
-
-  return (
-    <div
-      className="relative"
-      style={{ width: size, height: size, maxWidth: '100%' }}
-      role="img"
-      aria-label={compositeLabel}
-    >
-      {rings.map((ring, index) => {
-        const ringSize = size - (index * gap * 2);
-        const offset = index * gap;
-
-        return (
-          <div
-            key={index}
-            className="absolute"
-            style={{
-              top: offset,
-              left: offset,
-              width: ringSize,
-              height: ringSize
-            }}
-          >
-            <CircularProgressRing
-              progress={ring.progress}
-              size={ringSize}
-              strokeWidth={baseStrokeWidth}
-              color={ring.color}
-              showGlow={true}
-              label={`${ring.label}: ${Math.round(ring.progress)}%`}
-            />
-          </div>
-        );
-      })}
-
-      {/* Center content */}
-      {centerContent && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          {centerContent}
-        </div>
-      )}
-    </div>
-  );
-});
+import React from 'react';
 
 /**
  * Score Card - Oura-style metric display
  */
-export const ScoreCard = React.memo(function ScoreCard({ 
-  score, 
-  label, 
+export const ScoreCard = React.memo(function ScoreCard({
+  score,
+  label,
   sublabel,
   color = '#00d4aa',
   icon,
@@ -212,9 +44,9 @@ export const ScoreCard = React.memo(function ScoreCard({
           </span>
         )}
       </div>
-      
+
       <div className="flex items-end gap-2">
-        <span 
+        <span
           className={`oura-score ${scoreSizes[size]} font-bold`}
           style={{ color }}
         >
@@ -226,53 +58,10 @@ export const ScoreCard = React.memo(function ScoreCard({
           </span>
         )}
       </div>
-      
+
       {sublabel && (
         <p className="text-[#858585] text-sm mt-2">{sublabel}</p>
       )}
-    </div>
-  );
-});
-
-/**
- * Insight Card - For AI insights and recommendations
- */
-export const InsightCard = React.memo(function InsightCard({ 
-  title, 
-  description, 
-  icon = '💡',
-  accentColor = '#00d4aa',
-  action
-}) {
-  return (
-    <div 
-      className="oura-card p-5 group hover:border-[#2a2a2a] transition-all duration-300"
-      style={{ 
-        borderLeft: `3px solid ${accentColor}`,
-        background: `linear-gradient(90deg, ${accentColor}08 0%, transparent 30%)`
-      }}
-    >
-      <div className="flex gap-4">
-        <div 
-          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: `${accentColor}20` }}
-        >
-          <span className="text-lg">{icon}</span>
-        </div>
-        <div className="flex-1">
-          <h4 className="text-white font-medium mb-1">{title}</h4>
-          <p className="text-[#ababab] text-sm leading-relaxed">{description}</p>
-          {action && (
-            <button 
-              className="mt-3 text-sm font-medium transition-colors"
-              style={{ color: accentColor }}
-              onClick={action.onClick}
-            >
-              {action.label} →
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 });
@@ -323,5 +112,3 @@ export const ActivityItem = React.memo(function ActivityItem({
     </button>
   );
 });
-
-export default CircularProgressRing;

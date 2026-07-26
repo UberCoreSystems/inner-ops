@@ -73,13 +73,13 @@ export default defineConfig({
           if (id.includes('node_modules/firebase/auth')) return 'firebase-auth';
           if (id.includes('node_modules/firebase/firestore')) return 'firebase-firestore';
           
+          // UI libraries. Tested before the generic `node_modules/react`
+          // matcher below, which would otherwise swallow react-hot-toast
+          // (prefix match) and make this rule unreachable.
+          if (id.includes('node_modules/react-hot-toast')) return 'ui-toast';
+
           // React ecosystem
           if (id.includes('node_modules/react')) return 'vendor-react';
-          if (id.includes('node_modules/react-router')) return 'vendor-react';
-          if (id.includes('node_modules/react-dom')) return 'vendor-react';
-          
-          // UI libraries
-          if (id.includes('node_modules/react-hot-toast')) return 'ui-toast';
         }
       }
     },

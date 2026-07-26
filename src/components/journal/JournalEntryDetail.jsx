@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { moodOptions, intensityLevels } from '../../constants/moods';
 import { parseDate } from '../../utils/dateUtils';
+import { ORACLE_FIELDS } from '../../utils/schema';
+import { PROVENANCE } from '../../utils/aiFeedback';
 import { MoodIcons } from './MoodIcons';
 import OracleReactionChip from './OracleReactionChip';
 
@@ -69,6 +71,14 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
   const oracleText = typeof entry.oracleJudgment === 'string'
     ? entry.oracleJudgment
     : entry.oracleJudgment ? JSON.stringify(entry.oracleJudgment) : '';
+  // Prose composed locally after a failed Oracle call reads identically to
+  // model output, so it is labeled here too — not just in the modal it was
+  // first shown in. A missing field is a pre-provenance document: no claim is
+  // made either way, so it renders exactly as before.
+  const isLocalReading = entry[ORACLE_FIELDS.PROVENANCE] === PROVENANCE.LOCAL;
+  const fallbackReason = entry[ORACLE_FIELDS.FALLBACK_REASON];
+  const wasRateLimited = fallbackReason === 'resource-exhausted'
+    || fallbackReason === 'functions/resource-exhausted';
 
   return (
     // z-[60] clears the mobile bottom nav (`fixed bottom-0 z-50`), which would
@@ -139,11 +149,22 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
           </p>
 
           {oracleText && (
-            <div className="p-4 bg-black border border-[#1a1a1a] border-l-2 border-l-[#a855f7] rounded-2xl">
+            <div className={`p-4 bg-black border border-[#1a1a1a] border-l-2 rounded-2xl ${isLocalReading ? 'border-l-[#5a5a5a]' : 'border-l-[#a855f7]'}`}>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[#888] font-medium text-xs uppercase tracking-widest">Oracle</h4>
+                <h4 className="text-[#888] font-medium text-xs uppercase tracking-widest">
+                  {isLocalReading ? 'Oracle · Local' : 'Oracle'}
+                </h4>
                 <OracleReactionChip reaction={entry.oracleReaction} />
               </div>
+              {isLocalReading && (
+                <div className="border-l-2 border-[#5a5a5a] pl-3 mb-3">
+                  <p className="text-[#858585] text-xs leading-relaxed">
+                    {wasRateLimited
+                      ? 'The daily Oracle limit was reached when this entry was saved. This reading was assembled locally.'
+                      : 'The Oracle did not respond when this entry was saved. This reading was assembled locally from this entry alone. It does not use your record.'}
+                  </p>
+                </div>
+              )}
               <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
                 {oracleText}
               </div>

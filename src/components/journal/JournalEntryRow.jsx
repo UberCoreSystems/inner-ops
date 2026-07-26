@@ -1,5 +1,7 @@
 import { getMoodStripColor } from '../../constants/moods';
 import { parseDate } from '../../utils/dateUtils';
+import { ORACLE_FIELDS } from '../../utils/schema';
+import { PROVENANCE } from '../../utils/aiFeedback';
 import OracleReactionChip from './OracleReactionChip';
 
 // Collapse an entry to one scannable line. Multi-line entries would blow the
@@ -22,6 +24,10 @@ export default function JournalEntryRow({ entry, onOpen }) {
     : '—';
   const color = getMoodStripColor(entry.mood);
   const opacity = 0.25 + ((entry.intensity || 3) / 5) * 0.75;
+  // A locally-composed reading gets a muted dot and says so, rather than
+  // signalling an Oracle reading the entry never received. Missing field =
+  // pre-provenance document; left as-is.
+  const isLocalReading = entry[ORACLE_FIELDS.PROVENANCE] === PROVENANCE.LOCAL;
 
   return (
     <button
@@ -44,7 +50,10 @@ export default function JournalEntryRow({ entry, onOpen }) {
       <span className="flex items-center gap-2 shrink-0">
         <OracleReactionChip reaction={entry.oracleReaction} />
         {entry.oracleJudgment && (
-          <span className="w-1.5 h-1.5 rounded-full bg-[#a855f7]" title="Oracle reading recorded" />
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${isLocalReading ? 'bg-[#5a5a5a]' : 'bg-[#a855f7]'}`}
+            title={isLocalReading ? 'Reading assembled locally — the Oracle did not respond' : 'Oracle reading recorded'}
+          />
         )}
       </span>
     </button>

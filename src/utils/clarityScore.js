@@ -34,7 +34,8 @@
  */
 
 import logger from './logger.js';
-import { MS_PER_DAY, toMs } from './dateUtils.js';
+import { MS_PER_DAY, toMs, parseDateOnlyLocal } from './dateUtils.js';
+import { KILL_TARGET_FIELDS } from './schema.js';
 
 // Firestore/detector imports are resolved lazily so tests that inject a fake
 // `readUserData`/`detectDriftSignals` never pull the Firebase SDK (or any
@@ -53,8 +54,19 @@ const loadDefaults = async () => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Kill-target escapes carry a date-ONLY `date` field. `toMs` routes that
+// through `new Date('YYYY-MM-DD')`, i.e. UTC midnight — west of UTC that lands
+// in the previous local day, so an escape logged near a day boundary buckets
+// into the wrong window. This is score-input math, so a mis-bucketed escape is
+// a gameable discrepancy, not a cosmetic one. Anchor date-only values at local
+// noon, matching detectDriftSignals; every other shape is unchanged.
+const eventMs = (value) => {
+  const localDay = parseDateOnlyLocal(value);
+  return localDay ? localDay.getTime() : toMs(value);
+};
+
 const withinWindow = (value, windowDays) => {
-  const ms = toMs(value);
+  const ms = eventMs(value);
   if (!ms) return false;
   return Date.now() - ms <= windowDays * MS_PER_DAY;
 };
@@ -63,7 +75,7 @@ const withinWindow = (value, windowDays) => {
 // offsetDays = 0 → same as withinWindow. offsetDays = windowDays → the window
 // immediately preceding the current one.
 const withinOffsetWindow = (value, windowDays, offsetDays) => {
-  const ms = toMs(value);
+  const ms = eventMs(value);
   if (!ms) return false;
   const now = Date.now();
   const start = now - (offsetDays + windowDays) * MS_PER_DAY;
@@ -212,13 +224,15 @@ export async function getActiveDriftSignals(userId, deps = {}) {
     });
     const priorKillTargets = killArr
       .map(target => {
-        const escapes = Array.isArray(target.escapes) ? target.escapes : [];
+        const escapes = Array.isArray(target[KILL_TARGET_FIELDS.ESCAPES])
+          ? target[KILL_TARGET_FIELDS.ESCAPES]
+          : [];
         const priorEscapes = escapes.filter(esc =>
           esc?.date && withinOffsetWindow(esc.date, windowDays, windowDays)
         );
-        return { ...target, escapes: priorEscapes };
+        return { ...target, [KILL_TARGET_FIELDS.ESCAPES]: priorEscapes };
       })
-      .filter(target => (target.escapes || []).length > 0);
+      .filter(target => target[KILL_TARGET_FIELDS.ESCAPES].length > 0);
 
     const priorResult = detectDriftSignals(priorRelapse, priorKillTargets);
     const priorSignalCount = (priorResult?.signals || []).length;

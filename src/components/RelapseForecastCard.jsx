@@ -55,6 +55,7 @@ function buildForecastEntryText(activeAntecedents, convergencePoint, countdownTe
 export default function RelapseForecastCard({ relapseEntries = [], killTargets = [] }) {
   const [hardLessons, setHardLessons] = useState([]);
   const [journalEntries, setJournalEntries] = useState([]);
+  const [confirmedKills, setConfirmedKills] = useState([]);
   const [synthesis, setSynthesis] = useState(null);
   const [confrontations, setConfrontations] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -66,15 +67,17 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
     let cancelled = false;
     (async () => {
       try {
-        const [lessons, journals, syntheses, confs] = await Promise.all([
+        const [lessons, journals, syntheses, confs, kills] = await Promise.all([
           readUserData(COLLECTIONS.HARD_LESSONS).catch(() => []),
           readUserData(COLLECTIONS.JOURNAL_ENTRIES).catch(() => []),
           readUserData(COLLECTIONS.SYNTHESES).catch(() => []),
           readUserData(COLLECTIONS.CONFRONTATIONS).catch(() => []),
+          readUserData(COLLECTIONS.CONFIRMED_KILLS).catch(() => []),
         ]);
         if (cancelled) return;
         setHardLessons(Array.isArray(lessons) ? lessons : []);
         setJournalEntries(Array.isArray(journals) ? journals : []);
+        setConfirmedKills(Array.isArray(kills) ? kills : []);
         // Reuse the most recent synthesis briefing's signalDelta / convergencePoint
         // rather than re-deriving them here.
         const latest = (Array.isArray(syntheses) ? syntheses : [])
@@ -95,13 +98,14 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
     () =>
       computeRelapseForecast({
         killTargets,
+        confirmedKills,
         relapseEntries,
         hardLessons,
         journalEntries,
         now: Date.now(),
         signalDelta: synthesis?.signalDelta ?? null,
       }),
-    [killTargets, relapseEntries, hardLessons, journalEntries, synthesis]
+    [killTargets, confirmedKills, relapseEntries, hardLessons, journalEntries, synthesis]
   );
 
   const alreadyConfronted =
@@ -218,6 +222,23 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
       });
     } catch (err) {
       logger.warn('RelapseForecastCard: reaction write failed', err?.message);
+      throw err;
+    }
+  };
+
+  // A regenerated confrontation replaces the one on record — otherwise the
+  // stored doc keeps the reading the user discarded.
+  const handleFeedbackReplaced = async (newFeedback) => {
+    if (!activeDocId || !newFeedback) return;
+    try {
+      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, {
+        [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback,
+      });
+      setConfrontations((prev) => prev.map((c) =>
+        c.id === activeDocId ? { ...c, [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback } : c
+      ));
+    } catch (err) {
+      logger.warn('RelapseForecastCard: replaced-response write failed', err?.message);
     }
   };
 
@@ -268,6 +289,7 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
         entryModuleName="oracle"
         entryCount={modalState.entryCount}
         onReaction={handleReaction}
+        onFeedbackReplaced={handleFeedbackReplaced}
       />
     </>
   );

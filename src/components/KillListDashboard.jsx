@@ -110,14 +110,22 @@ const KillListDashboard = React.memo(function KillListDashboard() {
           closureTags: Array.isArray(tags) ? tags : [],
           killedAt,
           activeDuration,
+          // Archived kill must self-identify — correlation/forecast readers
+          // match on status, not on which collection the doc sits in.
+          status: 'killed',
         });
         confirmedKillId = confirmedKillDoc.id;
       } else {
         await markAsEscaped(target.id, { note, tags });
       }
 
-      // 2. Transition to Oracle loading. User can dismiss from here.
-      setClosureModal(prev => ({ ...prev, oraclePhase: 'loading' }));
+      // 2. Transition to Oracle loading. User can dismiss from here. Every
+      // async modal update is guarded by target id — the user can dismiss and
+      // open a different target's closure while the Oracle call is in flight,
+      // and the response must never land on the wrong target's modal.
+      setClosureModal(prev => (
+        prev.target?.id === target.id ? { ...prev, oraclePhase: 'loading' } : prev
+      ));
 
       // 3. Oracle one-line response — runs regardless of whether modal
       //    stays open. If dismissed mid-call, we surface via toast instead.
@@ -142,11 +150,11 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       if (closureDismissedRef.current) {
         ouraToast.info(`Oracle: ${oracleResponse}`);
       } else {
-        setClosureModal(prev => ({
-          ...prev,
-          oraclePhase: 'done',
-          oracleResponse,
-        }));
+        setClosureModal(prev => (
+          prev.target?.id === target.id
+            ? { ...prev, oraclePhase: 'done', oracleResponse }
+            : prev
+        ));
       }
 
       ouraToast.success(
@@ -220,6 +228,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
       await updateDoc(targetRef, { oracleReaction: reactionId });
     } catch (error) {
       logger.error('Error saving Oracle reaction:', error);
+      throw error;
     }
   };
 

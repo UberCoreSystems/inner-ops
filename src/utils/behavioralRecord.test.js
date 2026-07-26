@@ -41,6 +41,43 @@ test('kills fall back to completed threshold when streak is missing (legacy)', (
   assert.equal(r.execution.kills60, 2);
 });
 
+test('quick-kill with streak 0 minutes after creation does NOT count as held ≥ threshold', () => {
+  // Gameability guard: creating a contract and killing it immediately leaves
+  // streak 0 and near-zero calendar age — the threshold fallback must not
+  // promote it into the ≥21 census.
+  const createdAt = new Date(NOW - 30 * 60000).toISOString(); // 30 minutes old
+  const confirmedKills = [
+    { streak: 0, createdAt, killedAt: new Date(NOW).toISOString(), consecutiveDaysRequired: 21 },
+    { createdAt, killedAt: new Date(NOW).toISOString(), consecutiveDaysRequired: 60 }, // streak absent
+  ];
+  const r = computeBehavioralRecord({ confirmedKills }, NOW);
+  assert.equal(r.execution.kills21, 0);
+  assert.equal(r.execution.kills60, 0);
+});
+
+test('legitimate old kill with no streak but age ≥ threshold still counts', () => {
+  const confirmedKills = [
+    // killedAt present, 90-day age supports the 60-day threshold
+    { createdAt: daysAgo(92), killedAt: daysAgo(2), consecutiveDaysRequired: 60 },
+    // killedAt missing — archivedAt is the kill moment
+    { createdAt: daysAgo(40), archivedAt: daysAgo(1), consecutiveDaysRequired: 21 },
+    // killedAt/archivedAt missing — timestamp is the kill moment
+    { createdAt: daysAgo(40), timestamp: daysAgo(1), consecutiveDaysRequired: 21 },
+  ];
+  const r = computeBehavioralRecord({ confirmedKills }, NOW);
+  assert.equal(r.execution.kills21, 3);
+  assert.equal(r.execution.kills60, 1);
+});
+
+test('streakless kill younger than its threshold counts only its capped age', () => {
+  // 10 days old, 21-day threshold, no streak → held 10, below the ≥21 tier.
+  const confirmedKills = [
+    { createdAt: daysAgo(10), killedAt: daysAgo(0), consecutiveDaysRequired: 21 },
+  ];
+  const r = computeBehavioralRecord({ confirmedKills }, NOW);
+  assert.equal(r.execution.kills21, 0);
+});
+
 test('activeDuration (calendar age) is NEVER used for held tiers', () => {
   // A kill that existed 200 calendar days but was only held 25 consecutive
   // days is a ≥21 kill, NOT a ≥60 kill. Using activeDuration would wrongly

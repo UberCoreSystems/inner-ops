@@ -52,6 +52,22 @@ const listActiveMarkers = (markers) => Object.keys(EVASION_MARKER_LABELS)
   .filter((key) => markers[key])
   .map((key) => EVASION_MARKER_LABELS[key]);
 
+// The marker KEYS that fired, for the Oracle payload. Keys only — the prose
+// labels above are for local composition and logging; the Cloud Function owns
+// the wording it puts in the system prompt and re-derives it from these keys.
+export const listActiveMarkerKeys = (markers) => Object.keys(EVASION_MARKER_LABELS)
+  .filter((key) => markers?.[key]);
+
+/**
+ * Structured evasion signal sent to the Oracle Cloud Function. `null` for the
+ * low band — there is nothing to calibrate, and an empty payload keeps the
+ * dynamic prompt suffix (and the cache boundary) untouched.
+ */
+export const buildEvasionPayload = (markers, band) => {
+  if (band !== 'moderate' && band !== 'high') return null;
+  return { band, markers: listActiveMarkerKeys(markers) };
+};
+
 export const classifyEvasion = (markers) => {
   if (!markers || typeof markers.count !== 'number') return 'low';
   if (markers.count >= EVASION_THRESHOLD_HIGH) return 'high';
@@ -382,6 +398,7 @@ export const buildPrompt = ({
   priorFeedbackSummary = '',
   userGoals = [],
   behavioralContext = null,
+  evasion = null,
 }) => {
   const userPrompt = {
     moduleName,
@@ -389,6 +406,7 @@ export const buildPrompt = ({
     extractedThemes: themes,
     selectedLenses: lenses,
     behavioralContext: behavioralContext || undefined,
+    evasion: evasion || undefined,
     antiRepetition: {
       noveltyMode: antiRepetitionData.noveltyMode,
       similarity: antiRepetitionData.similarity,
@@ -597,6 +615,10 @@ export const callLLM = async (promptBundle, generationContext) => {
       userContext,
       tone,
       ...(userPrompt.behavioralContext ? { behavioralContext: userPrompt.behavioralContext } : {}),
+      // UXR-002 Spec 5: evasion band + marker keys. The Cloud Function owns the
+      // calibration wording and validates both fields against its own enums;
+      // this only reports what the detector found.
+      ...(userPrompt.evasion ? { evasion: userPrompt.evasion } : {}),
       // BER-167: pass behavioral record density for Oracle trust calibration
       entryCount: typeof userPrompt.behavioralContext?.totalEntryCount === 'number'
         ? userPrompt.behavioralContext.totalEntryCount
@@ -863,6 +885,10 @@ export const generateFeedback = async ({
     priorFeedbackSummary,
     userGoals,
     behavioralContext,
+    // Spec 5 previously only reached the local fallback composer via the frame
+    // override above; the band never left the client, so live Oracle output was
+    // uncalibrated. The band + marker keys now ride to the Cloud Function.
+    evasion: buildEvasionPayload(evasionMarkers, evasionBand),
   });
 
   try {

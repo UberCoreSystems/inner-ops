@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MS_PER_DAY, toMs, getEntryTimestamp, parseDate, localDateKey } from './dateUtils.js';
+import { MS_PER_DAY, toMs, getEntryTimestamp, parseDate, localDateKey, toDatetimeLocalString, parseDateOnlyLocal } from './dateUtils.js';
 
 describe('dateUtils.MS_PER_DAY', () => {
   it('equals 86_400_000', () => {
@@ -119,5 +119,53 @@ describe('dateUtils.localDateKey', () => {
     const today = localDateKey(new Date());
     assert.equal(localDateKey('garbage'), today);
     assert.equal(localDateKey(null), today);
+  });
+});
+
+describe('dateUtils.toDatetimeLocalString', () => {
+  it('formats LOCAL components as YYYY-MM-DDTHH:mm with zero-padding', () => {
+    const d = new Date(2026, 0, 5, 9, 7, 59); // Jan 5 2026 09:07:59 local
+    assert.equal(toDatetimeLocalString(d), '2026-01-05T09:07');
+  });
+
+  it('uses local (not UTC) fields — matches getHours/getMinutes for a late-evening instant', () => {
+    const d = new Date(2026, 6, 24, 23, 45, 0); // rolls to next UTC day west of UTC
+    const expected = `${localDateKey(d)}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    assert.equal(toDatetimeLocalString(d), expected);
+  });
+
+  it('defaults to now', () => {
+    const before = new Date();
+    const result = toDatetimeLocalString();
+    const after = new Date();
+    assert.ok(result >= toDatetimeLocalString(before) && result <= toDatetimeLocalString(after));
+  });
+});
+
+describe('dateUtils.parseDateOnlyLocal', () => {
+  it('anchors a YYYY-MM-DD string at local noon of that day', () => {
+    const d = parseDateOnlyLocal('2026-07-24');
+    assert.ok(d instanceof Date);
+    assert.equal(d.getFullYear(), 2026);
+    assert.equal(d.getMonth(), 6);
+    assert.equal(d.getDate(), 24);
+    assert.equal(d.getHours(), 12);
+  });
+
+  it('round-trips through localDateKey (never a day early)', () => {
+    assert.equal(localDateKey(parseDateOnlyLocal('2026-01-01')), '2026-01-01');
+    assert.equal(localDateKey(parseDateOnlyLocal('2026-12-31')), '2026-12-31');
+  });
+
+  it('returns null for non-date-only shapes (full ISO stays with parseDate)', () => {
+    assert.equal(parseDateOnlyLocal('2026-07-24T08:30:00.000Z'), null);
+    assert.equal(parseDateOnlyLocal('garbage'), null);
+    assert.equal(parseDateOnlyLocal(''), null);
+    assert.equal(parseDateOnlyLocal(null), null);
+    assert.equal(parseDateOnlyLocal(1700000000000), null);
+  });
+
+  it('returns null for an impossible calendar date', () => {
+    assert.equal(parseDateOnlyLocal('2026-02-30'), null);
   });
 });

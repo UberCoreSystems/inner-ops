@@ -5,6 +5,7 @@ import { getUserProfile } from '../../utils/userProfile';
 import { evaluateAllTriggers, layoutBanners } from '../../utils/engagementTriggers';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '../../utils/schema';
 import { isExemptPath } from '../../utils/routeGating';
+import ouraToast from '../../utils/toast';
 import logger from '../../utils/logger';
 
 /**
@@ -13,8 +14,10 @@ import logger from '../../utils/logger';
  * "+N more" deferred to v1.1).
  *
  * Data sourcing:
- *   journalEntries — realtime subscription. New entries dismiss the banner
- *     automatically without requiring a navigation.
+ *   journalEntries — realtime subscription bounded to the newest entry. The
+ *     only consumer (journalStaleness) reads the most recent timestamp, so an
+ *     app-wide listener over the user's entire highest-volume collection buys
+ *     nothing. New entries still dismiss the banner without a navigation.
  *   userSettings   — realtime subscription. Toggling a notification off in
  *     /settings hides the banner immediately.
  *   userProfile    — one-shot read on mount/auth change. Personal context
@@ -43,6 +46,16 @@ export default function BannerStack({ user }) {
   const killTargetsUnsubRef = useRef(null);
   const synthesesUnsubRef = useRef(null);
   const settingsUnsubRef = useRef(null);
+  // One notice per mount — four listeners dying together (network drop) must
+  // not stack four toasts.
+  const listenerDeathNotifiedRef = useRef(false);
+
+  const notifyListenerDeath = useCallback((collectionName, error) => {
+    logger.error(`BannerStack ${collectionName} listener stopped:`, error?.code || error?.message);
+    if (listenerDeathNotifiedRef.current) return;
+    listenerDeathNotifiedRef.current = true;
+    ouraToast.error('Live updates stopped. Refresh to reconnect.');
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -57,6 +70,7 @@ export default function BannerStack({ user }) {
     }
 
     let active = true;
+    listenerDeathNotifiedRef.current = false;
 
     // One-shot profile read — rarely changes mid-session.
     (async () => {
@@ -71,10 +85,17 @@ export default function BannerStack({ user }) {
     })();
 
     // Realtime journal entries — new entries silence the staleness banner
-    // without a route change.
+    // without a route change. Bounded to the newest doc; the (userId ASC,
+    // timestamp DESC) composite index in firestore.indexes.json covers it,
+    // and firebaseUtils degrades to an unbounded listener if it is missing.
     subscribeToUserData('journalEntries', (data) => {
       if (!active) return;
       setJournalEntries(data || []);
+    }, {
+      orderByField: 'timestamp',
+      orderDirection: 'desc',
+      limit: 1,
+      onError: (err) => { if (active) notifyListenerDeath('journalEntries', err); },
     }).then((unsub) => {
       if (!active) { unsub(); return; }
       journalUnsubRef.current = unsub;
@@ -87,6 +108,8 @@ export default function BannerStack({ user }) {
     subscribeToUserData('killTargets', (data) => {
       if (!active) return;
       setKillTargets(data || []);
+    }, {
+      onError: (err) => { if (active) notifyListenerDeath('killTargets', err); },
     }).then((unsub) => {
       if (!active) { unsub(); return; }
       killTargetsUnsubRef.current = unsub;
@@ -99,6 +122,8 @@ export default function BannerStack({ user }) {
     subscribeToUserData('syntheses', (data) => {
       if (!active) return;
       setSyntheses(data || []);
+    }, {
+      onError: (err) => { if (active) notifyListenerDeath('syntheses', err); },
     }).then((unsub) => {
       if (!active) { unsub(); return; }
       synthesesUnsubRef.current = unsub;
@@ -122,6 +147,8 @@ export default function BannerStack({ user }) {
         setBannerDismissals(settings.bannerDismissals || {});
       }
       setLoaded(true);
+    }, {
+      onError: (err) => { if (active) notifyListenerDeath('userSettings', err); },
     }).then((unsub) => {
       if (!active) { unsub(); return; }
       settingsUnsubRef.current = unsub;

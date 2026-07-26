@@ -7,6 +7,8 @@ import {
   composeSignalReport,
   clarityScoreUtils,
 } from './clarityScore.js';
+import { MS_PER_DAY, localDateKey, parseDateOnlyLocal } from './dateUtils.js';
+import { KILL_TARGET_FIELDS } from './schema.js';
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
 
@@ -128,6 +130,55 @@ test('getActiveDriftSignals passes relapse and kill-target data to detector', as
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].relapse, [{ id: 'r1' }]);
   assert.deepEqual(calls[0].kills, [{ id: 'k1' }]);
+});
+
+test('getActiveDriftSignals buckets a date-only escape by its LOCAL day, not UTC midnight', async () => {
+  // Kill-target escapes store a date-only `date`. Reading it as UTC midnight
+  // shifts it by up to 14 hours, which can move a boundary escape into the
+  // wrong comparison window — a discrepancy inside the anti-gaming score path.
+  //
+  // The window edge is placed exactly between the two readings, so the correct
+  // (local-noon) reading and the buggy (UTC-midnight) reading always disagree.
+  const escapeDate = localDateKey(new Date(Date.now() - 20 * MS_PER_DAY));
+  const localNoonMs = parseDateOnlyLocal(escapeDate).getTime();
+  const utcMidnightMs = new Date(escapeDate).getTime();
+
+  const boundaryMs = (localNoonMs + utcMidnightMs) / 2;
+  const windowDays = (Date.now() - boundaryMs) / MS_PER_DAY;
+  // Prior window is (now - 2*windowDays, now - windowDays] = (…, boundaryMs].
+  const expectedInPriorWindow = localNoonMs <= boundaryMs;
+
+  const collections = emptyCollections();
+  collections.killTargets = [{
+    id: 'k1',
+    [KILL_TARGET_FIELDS.ESCAPES]: [{ date: escapeDate }],
+  }];
+
+  const priorCalls = [];
+  await getActiveDriftSignals('u1', {
+    readUserData: makeReader(collections),
+    detectDriftSignals: (_relapse, kills) => {
+      priorCalls.push(kills);
+      return { signals: [], skippedCount: 0 };
+    },
+    compareToPrior: true,
+    windowDays,
+  });
+
+  // Two detector runs: [0] current window (raw data), [1] prior window (filtered).
+  assert.equal(priorCalls.length, 2);
+  const priorTargets = priorCalls[1];
+  assert.equal(
+    priorTargets.length,
+    expectedInPriorWindow ? 1 : 0,
+    'a date-only escape must bucket by its local day'
+  );
+
+  if (localNoonMs !== utcMidnightMs) {
+    // Guard that the fixture actually discriminates: the UTC reading would
+    // have produced the opposite bucketing.
+    assert.notEqual(utcMidnightMs <= boundaryMs, expectedInPriorWindow);
+  }
 });
 
 // ─── getRuleIntegrityStatus ───────────────────────────────────────────────────

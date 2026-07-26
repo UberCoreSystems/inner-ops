@@ -7,7 +7,7 @@ Clarity score is not a wellness metric. It is a measure of behavioral self-comma
 The scoring system is designed to reflect product philosophy:
 - **Kill List execution outweighs passive habits.** Naming and killing a behavioral pattern is harder and more valuable than journaling streaks.
 - **Action beats documentation.** Completing a target earns more than logging one.
-- **Honesty over gaming.** Relapse entries require reflection. Black Mirror entries require commitment. No empty logging.
+- **Honesty over gaming.** Relapse entries require reflection. No empty logging.
 
 ---
 
@@ -53,15 +53,6 @@ The scoring system is designed to reflect product philosophy:
 - 31–90 days: 0.6×
 - 91–180 days: 0.3×
 - >180 days: 0.1×
-
-### Black Mirror
-
-| Event | Points |
-|---|---|
-| Weekly check completed | 8 pts |
-| Low index bonus (index < 10) | +5 pts |
-
-One bonus awarded per week per user. Week boundaries are calculated in UTC to prevent timezone misbucketing.
 
 ### Relapse Radar
 
