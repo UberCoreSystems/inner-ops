@@ -1112,29 +1112,6 @@ export default function Journal() {
 
         <ModuleIntro moduleId="journal" />
 
-        {/* 30-Day Mood — strip + derived takeaway */}
-        {entries.length > 0 && (
-          <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-            <div className="oura-card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[#858585] text-xs uppercase tracking-widest">30-Day Mood</h3>
-                <div className="w-2 h-2 rounded-sm ring-1 ring-white/40" title="Today" />
-              </div>
-              <MoodStrip entries={entries} />
-              {journalSignal.takeaway && (
-                <p className="text-[#ababab] text-sm leading-relaxed mt-4">
-                  {journalSignal.takeaway}
-                </p>
-              )}
-              {journalSignal.cluster && (
-                <p className="text-[#858585] text-xs leading-relaxed mt-2">
-                  {journalSignal.cluster}
-                </p>
-              )}
-            </div>
-          </section>
-        )}
-
         {/* Entry Form */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <div className={`oura-card p-6 mb-8 ${editingEntryId ? 'border border-[#a855f7]/40' : ''}`}>
@@ -1360,7 +1337,7 @@ export default function Journal() {
                   </div>
                 </div>
 
-                <div className="relative">
+                <div className="relative journal-surface rounded-2xl">
                   <textarea
                     id="journal-entry-input"
                     ref={entryTextareaRef}
@@ -1370,7 +1347,11 @@ export default function Journal() {
                     onBlur={() => setIsTextareaFocused(false)}
                     rows={6}
                     style={{ minHeight: '11rem' }}
-                    className="w-full p-4 pr-14 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none resize-none transition-colors overflow-hidden"
+                    className={`w-full p-4 pr-14 bg-[#121216] text-white rounded-2xl border focus:border-[#a855f7] focus:outline-none resize-none transition-colors overflow-hidden ${
+                      !entry.trim() && !isTextareaFocused
+                        ? 'animate-border-breathe-journal'
+                        : 'border-[#2a2a2a]'
+                    }`}
                     placeholder="Write about your day, thoughts, feelings, challenges, or victories..."
                     required
                     maxLength={20000}
@@ -1420,6 +1401,29 @@ export default function Journal() {
             </form>
           </div>
         </section>
+
+        {/* 30-Day Mood — strip + derived takeaway */}
+        {entries.length > 0 && (
+          <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+            <div className="oura-card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#858585] text-xs uppercase tracking-widest">30-Day Mood</h3>
+                <div className="w-2 h-2 rounded-sm ring-1 ring-white/40" title="Today" />
+              </div>
+              <MoodStrip entries={entries} />
+              {journalSignal.takeaway && (
+                <p className="text-[#ababab] text-sm leading-relaxed mt-4">
+                  {journalSignal.takeaway}
+                </p>
+              )}
+              {journalSignal.cluster && (
+                <p className="text-[#858585] text-xs leading-relaxed mt-2">
+                  {journalSignal.cluster}
+                </p>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Classifier status row — visible while the Oracle classifier is in
             flight, when it completed without a signal, or when it failed. The

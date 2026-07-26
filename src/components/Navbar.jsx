@@ -65,16 +65,16 @@ const Icons = {
 };
 
 // Finding 20 remediation: nav config hoisted to module scope.
-// Synthesis sits last — the daily-use modules lead, and the cross-module
-// readout closes the row after The Signal.
+// The Signal precedes Hard Lessons — a signal fires before the lesson is
+// extracted. Synthesis sits last: the cross-module readout closes the row.
 // `descriptor` is a plain-language hint (title tooltip) for first-time
 // legibility; the established module names are unchanged.
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', mobileLabel: 'Home', icon: Icons.dashboard, descriptor: 'Your record at a glance' },
   { path: '/journal', label: 'Journal', mobileLabel: 'Journal', icon: Icons.journal, descriptor: 'Daily reflection' },
   { path: '/ledger', label: 'General Ledger', mobileLabel: 'Ledger', icon: Icons.killList, descriptor: "Patterns you're killing" },
-  { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons, descriptor: 'Costs converted to rules' },
   { path: '/relapse', label: 'The Signal', mobileLabel: 'Signal', icon: Icons.relapse, descriptor: 'Relapse & drift radar' },
+  { path: '/hardlessons', label: 'Hard Lessons', mobileLabel: 'Lessons', icon: Icons.hardLessons, descriptor: 'Costs converted to rules' },
   { path: '/synthesis', label: 'Synthesis', mobileLabel: 'Synth', icon: Icons.synthesis, descriptor: 'One reading across every module' },
 ];
 

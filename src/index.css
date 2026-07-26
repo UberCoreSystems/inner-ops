@@ -289,9 +289,34 @@ html {
   animation: borderBreathe 8s ease-in-out infinite;
 }
 
+/* Journal writing surface — rests lit in purple so it reads as the focal
+   object even before focus; blooms on focus-within. */
+.journal-surface {
+  box-shadow: 0 0 24px color-mix(in srgb, #a855f7 8%, transparent);
+  transition: box-shadow 300ms ease, border-color 300ms ease;
+}
+
+.journal-surface:focus-within {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #a855f7 55%, transparent),
+    0 0 32px color-mix(in srgb, #a855f7 22%, transparent);
+}
+
+/* Empty-state cue for the journal surface — purple sibling of borderBreathe */
+@keyframes borderBreatheJournal {
+  0%, 100% { border-color: rgba(168, 85, 247, 0.15); }
+  50%      { border-color: rgba(168, 85, 247, 0.45); }
+}
+
+.animate-border-breathe-journal {
+  border-color: rgba(168, 85, 247, 0.3);
+  animation: borderBreatheJournal 6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skel-animate { animation: none; }
   .animate-border-breathe { animation: none; }
+  .animate-border-breathe-journal { animation: none; }
 }
 
 /* Fade helpers for skeleton/content cross-fade */
