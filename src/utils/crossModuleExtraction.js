@@ -75,7 +75,7 @@ export async function classifyAndExtract(entryText, { tone = 'stoic', forceRefre
   try {
     const { getFunctions, httpsCallable } = await import('firebase/functions');
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
 
     const { getAuth } = await import('firebase/auth');
     const uid = getAuth().currentUser?.uid;
@@ -213,7 +213,7 @@ export async function extractHardLessonDirect(text, { tone = 'stoic' } = {}) {
   try {
     const { getFunctions, httpsCallable } = await import('firebase/functions');
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
 
     const { getAuth } = await import('firebase/auth');
     const uid = getAuth().currentUser?.uid;
@@ -280,7 +280,7 @@ export async function suggestImplementationIntentions(targetTitle, categoryLabel
   try {
     const { getFunctions, httpsCallable } = await import('firebase/functions');
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
 
     const { getAuth } = await import('firebase/auth');
     const uid = getAuth().currentUser?.uid;
@@ -367,7 +367,7 @@ export async function critiqueTargetFraming(targetTitle, categoryLabel, context,
   try {
     const { getFunctions, httpsCallable } = await import('firebase/functions');
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
 
     const { getAuth } = await import('firebase/auth');
     const uid = getAuth().currentUser?.uid;

@@ -58,8 +58,7 @@ Synthesis and Oracle both read across all modules via `readUserData`. Key data f
 
 | Function | Purpose |
 |----------|---------|
-| `oracle` | Secure Claude API proxy. Auth-gated, rate-limited per user/UTC-day via `ORACLE_DAILY_LIMIT` (prod = 100, code default 50; shared pool with `oracleFollowUp`). One journal save costs ~5 Oracle calls (1 classifier + up to 3 extractors + feedback), so the effective budget is ~20 saves/day at 100. Module-aware system prompts with posture matching (challenge/build/ground/clarify/receive). Receives behavioral context (user-authored fields clamped + delimited server-side). |
-| `oracleFollowUp` | Second-layer conversational response. Reads user's reply to initial Oracle feedback and adapts posture. |
+| `oracle` | Secure Claude API proxy. Auth-gated, rate-limited per user/UTC-day via `ORACLE_DAILY_LIMIT` (prod = 100, code default 50). One journal save costs ~5 Oracle calls (1 classifier + up to 3 extractors + feedback), so the effective budget is ~20 saves/day at 100. Module-aware system prompts with posture matching (challenge/build/ground/clarify/receive). Receives behavioral context (user-authored fields clamped + delimited server-side). Follow-up ("challenge") responses route through this same function via the `oracle_challenge` prompt key. |
 
 ## Commands
 
@@ -91,7 +90,7 @@ UI · UX · AI quality · feature completeness — **equal weight.**
 ## Quality Rules
 
 - **AI feedback must be real.** Do not reintroduce template rotation in `src/utils/aiFeedback.js` — route through the Claude proxy.
-- **Clarity Score must not be gameable.** When touching `src/utils/clarityScore.js`, verify new inputs can't be farmed (fake relapses, dummy hard lessons, etc.).
+- **The Signal Report must not be gameable.** The numeric Clarity Score is removed and is not coming back. When touching `src/utils/clarityScore.js` (the Signal Report engine), verify new inputs can't be farmed (fake relapses, dummy hard lessons, etc.) and never reintroduce a numeric score, rank, or multiplier.
 - **Mobile nav must work.** `src/components/Navbar.jsx` historically used `hidden md:flex` with no mobile fallback — verify any nav change renders on mobile.
 - **Visualize what you track.** If a module stores data, it must be surfaced somewhere (trends, history, rates). Flag gaps when you see them.
 - **No speculative generality.** Don't add features, abstractions, or infrastructure beyond the task.
@@ -104,7 +103,7 @@ Shipped 2026-07-25 — all launch items confirmed:
 - [x] Verify `.env` / environment variables are set for production Firebase project
 - [x] Run `npm run build` and confirm clean production build
 - [x] Deploy Firestore rules (`firestore.rules`)
-- [x] Deploy Cloud Functions (oracle, oracleFollowUp)
+- [x] Deploy Cloud Functions (oracle)
 - [x] Set `ANTHROPIC_API_KEY` secret in Firebase Functions config
 - [x] Smoke test: auth flow, journal CRUD, Kill List operations, Hard Lessons extraction, Relapse Radar entry, Synthesis briefing generation
 

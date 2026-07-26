@@ -14,7 +14,9 @@ import { getDb } from '../firebase.js';
 import { MEMORY_DOC_IDS, isMemoryModule } from './memoryConstants.js';
 import logger from './logger.js';
 
-const callable = (name, opts = {}) => httpsCallable(getFunctions(), name, { timeout: 30000, ...opts });
+// Client timeout = server timeoutSeconds + 5s network buffer, so the client
+// never abandons a call the server can still complete.
+const callable = (name, opts = {}) => httpsCallable(getFunctions(), name, { timeout: 35000, ...opts });
 
 /**
  * Fire-and-forget memory update after a finalized entry. NEVER awaited by the
@@ -26,7 +28,8 @@ const callable = (name, opts = {}) => httpsCallable(getFunctions(), name, { time
  */
 export const updateMemory = (module, entryId) => {
   if (!isMemoryModule(module) || !entryId) return Promise.resolve();
-  return callable('updateMemory')({ module, entryId })
+  // Server runs the Haiku updater under timeoutSeconds: 60 — wait it out.
+  return callable('updateMemory', { timeout: 65000 })({ module, entryId })
     .catch((err) => { logger.warn('updateMemory failed (non-blocking)', { module, err: err?.message }); });
 };
 

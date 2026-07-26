@@ -6,9 +6,6 @@
  * three behavioral signals from Firestore and composes them into a prose-ready
  * structured report.
  *
- * Specification: see /SCORING.md at the repo root for the canonical signal
- * definitions, window sizes, and what is intentionally NOT measured.
- *
  * Readers:
  *   - getConfrontationRate      — did the user engage with Oracle feedback,
  *                                 or dismiss it, over the recent window?

@@ -282,7 +282,7 @@ async function generateConfrontationQuestion(data) {
 
   try {
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
     const result = await oracleFn({
       entryText: dataStr,
       moduleName: 'synthesis',
@@ -498,7 +498,7 @@ async function generateReckoningConfrontation(data) {
   const entryText = buildReckoningEntryText(data);
   try {
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
     const result = await oracleFn({
       entryText,
       moduleName: 'synthesis',

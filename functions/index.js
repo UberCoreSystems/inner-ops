@@ -10,7 +10,6 @@ const {
   TRUST_THRESHOLD,
   MAX_ENTRY_TEXT_CHARS,
   MAX_USER_RESPONSE_CHARS,
-  MAX_FEEDBACK_CHARS,
   MAX_REACTANCE_SUMMARY_CHARS,
   MAX_REACTANCE_QUESTION_CHARS,
 } = require("./config");
@@ -142,7 +141,7 @@ exports.oracle = onCall(
       );
     }
 
-    // Per-user daily Oracle cap (shared pool with oracleFollowUp). Increments
+    // Per-user daily Oracle cap. Increments
     // before payload validation so abusive clients can't farm slot-free
     // 400-class errors, and before the Anthropic call so failed calls still
     // consume a slot (counts attempts, not successes). Throws HttpsError
@@ -253,122 +252,6 @@ exports.oracle = onCall(
         latencyMs: Date.now() - startedAt,
       });
       throw new HttpsError("internal", "The Oracle is unavailable. Try again shortly.");
-    }
-  }
-);
-
-// Static follow-up system prompt — identical across every user and call, so it
-// is sent as a single cache_control prefix block (no per-user data here).
-const FOLLOWUP_SYSTEM_PROMPT = `You are the Oracle — a direct, grounded advisor continuing a conversation.
-
-The user responded to your initial feedback. Read their response carefully before choosing your posture.
-
-If they pushed back or deflected → go one level deeper. Name what they are still protecting.
-If they agreed and added insight → build on what they said. Extend their thinking. Show them the next step.
-If they shared something vulnerable or new → receive it. Do not challenge vulnerability with more pressure.
-If they asked a genuine question → answer it directly. No redirecting it back to them.
-
-Do NOT repeat what you already said. Do NOT offer generic encouragement.
-Be specific. Reference their exact words. Max 3 sentences.
-No emojis. No therapeutic language. Never name a philosopher or tradition.`;
-
-/**
- * OracleFollowUp — second-layer reflection response.
- *
- * Expects: { originalEntry, userResponse, initialFeedback }
- * Returns: { followUp }
- *
- * Shares the same per-day counter as `oracle` (one pool per user) and
- * rejects oversized payloads. Feedback-doc ownership validation via a
- * persisted feedbackId is tracked as a follow-up item — the current schema
- * does not persist initial Oracle feedback server-side.
- */
-exports.oracleFollowUp = onCall(
-  { secrets: [anthropicApiKey], region: "us-central1", timeoutSeconds: 30 },
-  async (request) => {
-    const startedAt = Date.now();
-
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "You must be signed in.");
-    }
-
-    const uid = request.auth.uid;
-
-    // Shares the same per-user daily cap as `oracle` — same counter doc.
-    await checkAndIncrementOracleLimit(uid);
-
-    const { originalEntry, userResponse, initialFeedback } = request.data;
-
-    if (!userResponse || typeof userResponse !== "string" || userResponse.trim().length < 5) {
-      throw new HttpsError("invalid-argument", "Your response must be at least 5 characters.");
-    }
-    if (userResponse.length > MAX_USER_RESPONSE_CHARS) {
-      throw new HttpsError("invalid-argument", "Your response exceeds maximum length.");
-    }
-    if (typeof originalEntry === "string" && originalEntry.length > MAX_ENTRY_TEXT_CHARS) {
-      throw new HttpsError("invalid-argument", "Original entry exceeds maximum length.");
-    }
-    if (typeof initialFeedback === "string" && initialFeedback.length > MAX_FEEDBACK_CHARS) {
-      throw new HttpsError("invalid-argument", "Initial feedback exceeds maximum length.");
-    }
-
-    const client = new Anthropic({ apiKey: anthropicApiKey.value() });
-
-    try {
-      // NO-TRAINING POSTURE: see the note at the oracle call site above —
-      // commercial API traffic is not used for model training by default;
-      // verify org-level data settings in the Anthropic Console.
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 400,
-        // Fully static across all users/calls → one cached prefix block. The
-        // per-user content (entry, feedback, response) rides in `messages`,
-        // uncached. (Below Sonnet's 1024-token minimum cacheable prefix today,
-        // so this no-ops until the prompt grows; harmless and future-proof.)
-        system: [{ type: "text", text: FOLLOWUP_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-        messages: [
-          {
-            role: "user",
-            content: `Original entry: "${originalEntry}"
-
-Your initial feedback: "${initialFeedback}"
-
-Their response: "${userResponse}"
-
-Continue the conversation. Match your posture to what they actually said.`,
-          },
-        ],
-      });
-
-      logOracleCall({
-        fn: "oracleFollowUp",
-        uid,
-        inputTokens: message.usage?.input_tokens ?? null,
-        outputTokens: message.usage?.output_tokens ?? null,
-        latencyMs: Date.now() - startedAt,
-      });
-
-      // Fire-and-forget cost telemetry — adds no latency, fails silently.
-      usage.logUsage({
-        uid,
-        model: "claude-sonnet-4-6",
-        callType: "followup",
-        usage: message.usage,
-      });
-
-      return { followUp: message.content[0]?.text || "" };
-    } catch (error) {
-      if (error instanceof HttpsError) throw error;
-      // Never log raw error.message — see oracle catch above.
-      console.error("Claude follow-up error:", { name: error.name, status: error.status });
-      logOracleCall({
-        fn: "oracleFollowUp",
-        uid,
-        error: error.name,
-        errorStatus: error.status ?? null,
-        latencyMs: Date.now() - startedAt,
-      });
-      throw new HttpsError("internal", "Follow-up unavailable.");
     }
   }
 );
@@ -1212,9 +1095,6 @@ exports.updateMemory = memory.updateMemory;
 exports.editMemory = memory.editMemory;
 exports.deleteMemoryReceipt = memory.deleteMemoryReceipt;
 exports.wipeMemory = memory.wipeMemory;
-// Read-only provenance for the Oracle modal: the validated receipts the Oracle
-// reasons from (Eng #3 — "what the Oracle has on record").
-exports.getOnRecord = memory.getOnRecord;
 
 // Pure prompt-assembly helpers exported for unit testing. Not registered as
 // Cloud Functions; safe to require() from a node:test harness.

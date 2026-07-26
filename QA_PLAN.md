@@ -79,7 +79,7 @@
 - [ ] Feedback feels written for the entry, not generic
 - [ ] **No wellness/motivational language** — challenge or grounding only (per CLAUDE.md)
 - [ ] User can react (emoji buttons), reaction persists
-- [ ] User can reply → oracleFollowUp generates second response that doesn't soften pushback
+- [ ] User can reply → follow-up (`oracle` with `oracle_challenge` key) generates second response that doesn't soften pushback
 - [ ] Entry written 12h+ after the event → Oracle tone shifts to "reconstructed memory" (proximity flag)
 
 ### 2.3 List / search / mood calendar
@@ -336,15 +336,14 @@ Run these from the app, then verify via `firebase functions:log`.
 - [ ] Client tries to inject `customSystemPrompt` → rejected
 - [ ] 30s timeout on slow Claude API → clean timeout error to client
 
-### 8.2 oracleFollowUp
-- [ ] User replies in OracleModal → followUp call generates confrontational second response
+### 8.2 Oracle follow-up (`oracle_challenge` prompt key)
+- [ ] User replies in OracleModal → follow-up call generates confrontational second response
 - [ ] Does not soften or affirm user pushback (per product language rules)
 
 ### 8.3 Rate limit ([functions/rateLimit.js](functions/rateLimit.js))
-- [ ] Counter increments on each oracle/oracleFollowUp call (verify in `users/{uid}/_rateLimits`)
+- [ ] Counter increments on each oracle call, including follow-ups (verify in `users/{uid}/_rateLimits`)
 - [ ] 21st call in a day → resource-exhausted error returned
 - [ ] Counter resets at day boundary (UTC or configured tz — verify which)
-- [ ] Counter shared across oracle + oracleFollowUp (not separate pools)
 
 ### 8.4 Log verification
 - [ ] `firebase functions:log --only oracle` shows successful 200s for each real call you made

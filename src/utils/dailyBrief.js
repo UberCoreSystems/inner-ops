@@ -25,7 +25,7 @@
  */
 
 import logger from './logger.js';
-import { MS_PER_DAY, toMs, localDateKey } from './dateUtils.js';
+import { MS_PER_DAY, toMs, localDateKey, parseDateOnlyLocal, parseDate } from './dateUtils.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -180,12 +180,15 @@ export async function buildSourceContext(userId, deps = {}) {
       .filter((t) => t.status === 'active')
       .map((t) => {
         const escapes = Array.isArray(t.escapeData) ? t.escapeData : [];
+        // escapeData[].date is a LOCAL 'YYYY-MM-DD' key — toMs would parse it
+        // as UTC midnight and shift the 7-day window edge off local time.
+        const escapeMs = (e) => (parseDateOnlyLocal(e?.date) || parseDate(e?.date))?.getTime() ?? 0;
         const recentEscapes = escapes.filter((e) => {
-          const ts = toMs(e?.date);
+          const ts = escapeMs(e);
           return ts && now - ts <= window7;
         });
         if (recentEscapes.length === 0) return null;
-        const lastEscapeMs = recentEscapes.reduce((m, e) => Math.max(m, toMs(e.date)), 0);
+        const lastEscapeMs = recentEscapes.reduce((m, e) => Math.max(m, escapeMs(e)), 0);
         return {
           title: t.title || '',
           escapeCountLast7d: recentEscapes.length,
@@ -424,7 +427,7 @@ export async function generateDailyBrief(userId, deps = {}) {
   if (!callOracleFn) {
     const loaded = await loadDefaults();
     const functions = loaded.functions.getFunctions();
-    callOracleFn = loaded.functions.httpsCallable(functions, 'oracle', { timeout: 30000 });
+    callOracleFn = loaded.functions.httpsCallable(functions, 'oracle', { timeout: 35000 });
   }
 
   const brief = await callOracleForBrief(serialized, callOracleFn);

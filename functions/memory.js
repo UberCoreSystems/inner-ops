@@ -789,65 +789,14 @@ function buildMemoryBlock(blocks) {
   return `\n\nMEMORY — your accumulated observations and the user's own past words, each tagged with when it was written (relative to now):\n${body}\n\nThese are receipts, not summaries. Use one when it exposes a contradiction with the current entry: quote the user's exact words and weave them into your response naturally, referring to the time the way a person would — "earlier today", "last week", "a few weeks back" — never a raw date and never the mechanical "on [date] you said". A receipt tagged "earlier today" is from TODAY; treat it as something just said, never as past history. If memory conflicts with what the user writes now, name the conflict; do not silently prefer either. Do not fabricate or alter a quote. If no receipt is relevant, ignore this section.`;
 }
 
-/**
- * Flatten injected memory blocks into a client-safe provenance list — the
- * user's own substring-VALIDATED words that the Oracle reasons from, shown at
- * the point of feedback ("what the Oracle has on record"). Strips internal
- * fields (sourceEntryId, raw contextSnapshot) so nothing but the validated
- * quote, its date, and the source-module label crosses the wire. Deduped by
- * quote, capped. This is the only honest per-call provenance: the live feedback
- * prose is prompt-guarded, but these receipts are validation-guarded at write
- * time (see reconcileReceipts), so they can be shown as "your words" safely.
- */
-function collectReceiptsForClient(blocks, cap = MEMORY_MAX_RECEIPTS) {
-  if (!Array.isArray(blocks)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const b of blocks) {
-    for (const r of Array.isArray(b?.receipts) ? b.receipts : []) {
-      const quote = typeof r?.quote === "string" ? r.quote.trim() : "";
-      if (!quote) continue;
-      const key = quote.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ quote, date: r.date || null, source: b.label || null });
-      if (out.length >= cap) return out;
-    }
-  }
-  return out;
-}
-
-// getOnRecord — read-only provenance for the Oracle modal. Returns the same
-// validated receipts the Oracle is injected with (global + the entry's module),
-// flattened + stripped for display. No LLM call, no rate-limit draw; a plain
-// owner-scoped read of the user's own memory. Degrades to [] on any failure so
-// the modal simply omits the panel — never blocks feedback.
-const getOnRecord = onCall(
-  { region: "us-central1", timeoutSeconds: 15 },
-  async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
-    const uid = request.auth.uid;
-    const moduleName = typeof request.data?.moduleName === "string" ? request.data.moduleName : "";
-    try {
-      const blocks = await fetchMemoryForInjection(uid, moduleName);
-      return { onRecord: collectReceiptsForClient(blocks) };
-    } catch (error) {
-      console.error("getOnRecord.error", { name: error.name });
-      return { onRecord: [] };
-    }
-  }
-);
-
 module.exports = {
   HAIKU_MODEL,
   updateMemory,
   editMemory,
   deleteMemoryReceipt,
   wipeMemory,
-  getOnRecord,
   fetchMemoryForInjection,
   buildMemoryBlock,
-  collectReceiptsForClient,
   // exported for unit tests
   reconcileReceipts,
   parseUpdaterJson,

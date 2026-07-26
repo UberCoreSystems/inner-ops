@@ -559,7 +559,7 @@ export const callLLM = async (promptBundle, generationContext) => {
   try {
     // Call real Claude API via secure Firebase Cloud Function proxy
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
 
     // Map the first selected lens to a tone string the Cloud Function understands
     const toneMap = {

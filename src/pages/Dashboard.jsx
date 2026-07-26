@@ -283,7 +283,7 @@ export default function Dashboard() {
 
       setRecentEntries(allEntries);
       
-      // Store raw data for deferred clarity score calculation
+      // Store raw data for the deferred Signal Report composition
       setRawUserData({ journalEntries, relapseEntries, killTargets, hardLessons, userSettings });
 
       logger.log("✅ Dashboard: Critical data loaded and UI updated", {
@@ -296,8 +296,8 @@ export default function Dashboard() {
         recentEntries: allEntries.length
       });
       
-      // Defer clarity score calculation to avoid blocking initial render
-      // This will be calculated in a separate effect after UI is shown
+      // Signal Report composition is deferred to a separate effect after the
+      // UI is shown, to avoid blocking initial render.
     } catch (error) {
       logger.error("❌ Dashboard: Error loading critical data:", error);
     } finally {

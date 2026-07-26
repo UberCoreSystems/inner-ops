@@ -28,7 +28,7 @@ const MAX_REGEN = 3;
 async function callOracleRaw(entryText, promptContext, entryModuleName, entryCount = null) {
   try {
     const functions = getFunctions();
-    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 30000 });
+    const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
     const result = await oracleFn({
       entryText,
       moduleName: entryModuleName === 'journal' ? 'journal' : 'oracle',

@@ -9,7 +9,7 @@
  * model recorded a break as a SEPARATE lesson doc tagged `isRuleViolation: true`
  * (optionally pointing at a rule via `violatedRuleId`). `getViolatedRules`
  * folds both in so every reader — Synthesis, Oracle behavioral context, the
- * Pattern Confrontation card, the clarity score — agrees on what counts as
+ * Pattern Confrontation card, the Signal Report — agrees on what counts as
  * violated. Two writers with disagreeing readers is exactly the split this
  * module exists to close.
  *
@@ -87,7 +87,7 @@ export function getHeldStreakDays(lesson, now = Date.now()) {
  * Whether the rule has a break on its OWN doc within `windowDays` — any
  * `violations[]` entry OR `lastViolatedAt`. A RESOLVED break still counts:
  * after-action clears the operational under-review state, never the historical
- * violation (anti-gaming). Used by the clarity score's rule-integrity counter.
+ * violation (anti-gaming). Used by the Signal Report's rule-integrity counter.
  */
 export function isViolatedInWindow(lesson, windowDays, now = Date.now()) {
   const violations = Array.isArray(lesson?.violations) ? lesson.violations : [];

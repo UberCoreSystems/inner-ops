@@ -16,6 +16,7 @@
 
 import { RELAPSE_FIELDS, RELAPSE_ENTRY_TYPES, KILL_TARGET_FIELDS } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
+import { parseDateOnlyLocal, parseDate } from './dateUtils.js';
 
 const DAY_MS = 86400000;
 const TITLE_MAX = 40;
@@ -60,7 +61,9 @@ export function composeMirrorReading(input = {}) {
   const weekAgoMs = now - 7 * DAY_MS;
   const isWithinWeek = (dateLike) => {
     if (!dateLike) return false;
-    const ts = dateLike?.toDate ? dateLike.toDate().getTime() : new Date(dateLike).getTime();
+    // checkIns/escapeData dates are LOCAL 'YYYY-MM-DD' keys — a bare
+    // new Date(str) parses them as UTC midnight and shifts the window edge.
+    const ts = (parseDateOnlyLocal(dateLike) || parseDate(dateLike))?.getTime() ?? NaN;
     return Number.isFinite(ts) && ts > weekAgoMs;
   };
 

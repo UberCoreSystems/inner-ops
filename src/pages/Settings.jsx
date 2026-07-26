@@ -7,6 +7,7 @@ import { readUserData, upsertUserSettings } from '../utils/firebaseUtils';
 import { getUserProfile, saveUserProfile } from '../utils/userProfile';
 import { readMemoryDocs } from '../utils/updateMemory';
 import { buildExportPayload } from '../utils/exportData';
+import { localDateKey } from '../utils/dateUtils';
 import { authService } from '../utils/authService';
 import {
   ENGAGEMENT_TRIGGERS,
@@ -258,7 +259,7 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `inner-ops-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `inner-ops-export-${localDateKey()}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -295,7 +296,9 @@ export default function Settings() {
       // Wipe all Firestore data via the Admin-SDK function. The Firebase Auth
       // user is deleted only after the user acknowledges the receipt below.
       const functions = getFunctions();
-      const res = await httpsCallable(functions, 'deleteUserData')();
+      // Server timeoutSeconds is 120; the SDK default (70s) gave up while the
+      // wipe was still running. Outlast the server deadline plus network.
+      const res = await httpsCallable(functions, 'deleteUserData', { timeout: 130000 })();
       setDeletePassword('');
       setDeletionReceipt(res?.data?.manifest || {});
     } catch (err) {

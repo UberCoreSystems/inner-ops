@@ -1,8 +1,7 @@
 /**
  * Oracle Cloud Function rate limiter.
  *
- * Shared by `oracle` and `oracleFollowUp` — one counter pool per user per
- * UTC day. Counter doc location:
+ * One counter pool per user per UTC day. Counter doc location:
  *
  *   users/{uid}/_rateLimits/oracle_{YYYY-MM-DD}
  *
