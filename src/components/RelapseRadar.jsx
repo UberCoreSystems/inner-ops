@@ -34,7 +34,18 @@ import {
   resolveSubstanceLabel,
   formatDriftSignalText,
 } from '../utils/relapseTaxonomy';
-import { RELAPSE_ENTRY_TYPES, ORACLE_FIELDS } from '../utils/schema';
+import {
+  RELAPSE_ENTRY_TYPES,
+  ORACLE_FIELDS,
+  SIGNAL_RESOLUTION_OUTCOMES,
+  SIGNAL_RESOLUTION_VIA,
+} from '../utils/schema';
+import SignalDebriefCard from './SignalDebriefCard';
+import {
+  SIGNAL_STATES,
+  getSignalState,
+  formatWindowRemaining,
+} from '../utils/signalDebrief';
 
 // UXR-002 Spec 4: archetype IDs, habit IDs, and substance options live in
 // src/utils/relapseTaxonomy.js. See that file for the rationale (self-
@@ -160,6 +171,16 @@ const RelapseRadar = () => {
   const [postSaveAction, setPostSaveAction] = useState(null);
   const [postSaveMantra, setPostSaveMantra] = useState('');
 
+  // Signal Debrief. landedOriginRef carries the origin signal's id through
+  // the "it landed" flow — currentEntryId is overwritten when the relapse
+  // entry saves, so it can't. Cleared by the Signal toggle and after every
+  // successful submit so an abandoned flow can never stamp a later,
+  // unrelated relapse.
+  const landedOriginRef = useRef(null); // { id, via } | null
+  const [checkpointHeld, setCheckpointHeld] = useState(false);
+  const [checkpointNote, setCheckpointNote] = useState('');
+  const [checkpointBusy, setCheckpointBusy] = useState(false);
+
   // BER-182: Oura Ring biometric precursor data
   const {
     connected: ouraConnected,
@@ -249,6 +270,28 @@ const RelapseRadar = () => {
       if (data.signalSummary) setPrecursorContext(data.signalSummary);
     } catch { /* ignore */ }
   }, []);
+
+  // Dashboard debrief "It landed" bridge. sessionStorage (not router state)
+  // because Relapse.jsx remounts this component via a key bump. Read-and-
+  // delete, same idiom as relapse_extraction_prefill above.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('signal_debrief_landed');
+      if (!raw) return;
+      sessionStorage.removeItem('signal_debrief_landed');
+      const { originSignalId } = JSON.parse(raw);
+      if (!originSignalId) return;
+      landedOriginRef.current = { id: originSignalId, via: SIGNAL_RESOLUTION_VIA.DEBRIEF };
+      setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE);
+      setStep(1);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Mirror a debrief/checkpoint resolution into local state — entries load
+  // via a one-shot read, so every write must be reflected here by hand.
+  const applyResolutionLocally = (entryId, resolution) => {
+    setRelapseEntries(prev => prev.map(e => (e.id === entryId ? { ...e, resolution } : e)));
+  };
 
   const loadRelapseEntries = async () => {
     if (mountedRef.current) setLoadError(false);
@@ -447,6 +490,26 @@ const RelapseRadar = () => {
     });
   }, [relapseEntries, searchQuery]);
 
+  // Signal lifecycle partition. States derive against the FULL entry list —
+  // never the search-filtered one — so filtering can't un-land a signal
+  // whose landing relapse is filtered out.
+  const entryStates = useMemo(() => {
+    const map = new Map();
+    for (const entry of filteredRelapseEntries) {
+      map.set(entry.id, getSignalState(entry, relapseEntries));
+    }
+    return map;
+  }, [filteredRelapseEntries, relapseEntries]);
+
+  const openEntries = useMemo(
+    () => filteredRelapseEntries.filter(e => entryStates.get(e.id)?.status !== SIGNAL_STATES.CLOSED),
+    [filteredRelapseEntries, entryStates]
+  );
+  const closedSignals = useMemo(
+    () => filteredRelapseEntries.filter(e => entryStates.get(e.id)?.status === SIGNAL_STATES.CLOSED),
+    [filteredRelapseEntries, entryStates]
+  );
+
   const handlePrecursorToggle = (condition) => {
     setSelectedPrecursors(prev =>
       prev.includes(condition)
@@ -606,6 +669,24 @@ const RelapseRadar = () => {
       const isRelapseEvent = entryType === RELAPSE_ENTRY_TYPES.RELAPSE;
       ouraToast.success(isRelapseEvent ? 'Relapse logged' : 'Signal logged');
 
+      // "It landed" flows (post-save slip, debrief card, Dashboard bridge):
+      // stamp the origin signal landed, linked to this relapse entry.
+      // Fire-and-forget — the auto-landed derivation in signalDebrief.js is
+      // the backstop for a failed stamp, so it never blocks the save.
+      const landedOrigin = landedOriginRef.current;
+      landedOriginRef.current = null;
+      if (isRelapseEvent && landedOrigin?.id) {
+        const resolution = {
+          outcome: SIGNAL_RESOLUTION_OUTCOMES.LANDED,
+          resolvedAt: new Date().toISOString(),
+          via: landedOrigin.via,
+          relapseEntryId: savedEntry.id,
+        };
+        updateData('relapseEntries', landedOrigin.id, { resolution })
+          .then(() => applyResolutionLocally(landedOrigin.id, resolution))
+          .catch(err => logger.error('Signal landed-stamp failed:', err));
+      }
+
       // Bridge to Hard Lessons when this was an actual relapse event so the
       // assumption / cost / rule capture happens in the right module. Stash
       // a prefill payload in sessionStorage under the same key the cross-
@@ -676,17 +757,78 @@ const RelapseRadar = () => {
     }
   };
 
-  // Post-Signal checkpoint: user confirms the precursor passed.
-  const handleConditionsResolved = () => {
+  // Post-Signal checkpoint: user confirms the precursor passed. Write first —
+  // the held close never depends on the optional note. On failure the panel
+  // stays up with its buttons intact; the tap must not silently vanish.
+  const handleConditionsResolved = async () => {
+    if (!currentEntryId || checkpointBusy) return;
+    setCheckpointBusy(true);
+    const resolution = {
+      outcome: SIGNAL_RESOLUTION_OUTCOMES.HELD,
+      resolvedAt: new Date().toISOString(),
+      via: SIGNAL_RESOLUTION_VIA.CHECKPOINT,
+    };
+    try {
+      await updateData('relapseEntries', currentEntryId, { resolution });
+      applyResolutionLocally(currentEntryId, resolution);
+      setCheckpointNote('');
+      setCheckpointHeld(true);
+    } catch (error) {
+      logger.error('Checkpoint held write failed:', error);
+      if (redirectIfAuthLost(error)) return;
+      ouraToast.error('Save failed — signal not closed.');
+    } finally {
+      setCheckpointBusy(false);
+    }
+  };
+
+  const exitCheckpoint = () => {
+    setCheckpointHeld(false);
+    setCheckpointNote('');
     setPostSaveAction(null);
     setStep(1);
-    ouraToast.success('Conditions resolved. Logged.');
+    ouraToast.success('Signal closed — held.');
+  };
+
+  // Optional "what held?" one-liner, merged into the already-written held
+  // resolution. A failed note write never un-holds the signal.
+  const handleCheckpointNoteSave = async () => {
+    const trimmed = checkpointNote.trim();
+    if (!trimmed) { exitCheckpoint(); return; }
+    setCheckpointBusy(true);
+    const existing = relapseEntries.find(e => e.id === currentEntryId)?.resolution;
+    const resolution = { ...existing, note: trimmed };
+    try {
+      await updateData('relapseEntries', currentEntryId, { resolution });
+      applyResolutionLocally(currentEntryId, resolution);
+    } catch (error) {
+      logger.error('Checkpoint note write failed:', error);
+      ouraToast.error('Note not saved.');
+    } finally {
+      setCheckpointBusy(false);
+      exitCheckpoint();
+    }
   };
 
   // Post-Signal checkpoint: user is reporting a slip. Flip the entry type to
   // RELAPSE and reset the form. The user re-describes the slip fresh; the
-  // already-saved Signal entry stays as-is in history (a real precursor record).
+  // already-saved Signal entry stays as-is in history and is stamped landed
+  // once the relapse entry saves.
   const handleSlipped = () => {
+    landedOriginRef.current = { id: currentEntryId, via: SIGNAL_RESOLUTION_VIA.CHECKPOINT };
+    setPostSaveAction(null);
+    setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE);
+    setStep(1);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Debrief card "It landed": same target state as handleSlipped, with the
+  // origin signal carried by ref until the relapse saves. Abandoning the
+  // flow leaves the signal pending — the debrief card returns.
+  const handleDebriefLanded = (entry) => {
+    landedOriginRef.current = { id: entry.id, via: SIGNAL_RESOLUTION_VIA.DEBRIEF };
     setPostSaveAction(null);
     setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE);
     setStep(1);
@@ -716,7 +858,139 @@ const RelapseRadar = () => {
     }
   };
 
+  // Full entry card, shared by the open list and the expanded closed rows.
+  // Closed cards get a closure strip on top and a Collapse control.
+  const renderEntryCard = (entry, state) => {
+    const isLive = state?.status === SIGNAL_STATES.LIVE;
+    const isPending = state?.status === SIGNAL_STATES.PENDING;
+    const isClosed = state?.status === SIGNAL_STATES.CLOSED;
+    const held = state?.outcome === SIGNAL_RESOLUTION_OUTCOMES.HELD;
+    const outcomeColor = held ? '#00d4aa' : '#b45309';
+    const resolvedDate = state?.resolvedAt
+      ? new Date(state.resolvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : null;
+    const provenanceLine = state?.via === SIGNAL_RESOLUTION_VIA.AUTO
+      ? 'A relapse was logged inside this window'
+      : state?.via === SIGNAL_RESOLUTION_VIA.DEBRIEF
+        ? 'Closed in debrief'
+        : 'Closed at the checkpoint';
+
+    return (
+      <div
+        key={entry.id}
+        id={`relapse-entry-${entry.id}`}
+        style={{ '--lit-accent': isPending ? '#b45309' : '#00d4aa' }}
+        className={`oura-card p-5 hover:shadow-oura-glow-cyan transition-shadow duration-300${isPending ? ' border-l-2 border-[#b45309]' : ''}${highlightId === entry.id ? ' entry-focus' : ''}`}
+      >
+        {isClosed && (
+          <div className="mb-4 p-3 rounded-xl bg-oura-darker border-l-4" style={{ borderLeftColor: outcomeColor }}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-sm font-medium" style={{ color: outcomeColor }}>{held ? 'Held' : 'Landed'}</span>
+                <p className="text-[#858585] text-xs mt-0.5">
+                  {provenanceLine}{resolvedDate ? ` · ${resolvedDate}` : ''}
+                </p>
+                {state?.note && <p className="text-gray-400 text-xs italic mt-1">“{state.note}”</p>}
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleExpand(`${entry.id}_closedOpen`)}
+                className="text-[#858585] hover:text-[#ababab] text-xs shrink-0 transition-colors"
+              >
+                Collapse
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-oura-cyan font-light text-lg">{resolveArchetypeLabel(entry.selectedSelf)}</div>
+              {isLive && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#00d4aa]/40 bg-[#00d4aa]/10 text-[#00d4aa] uppercase tracking-wider">
+                  Window open · {formatWindowRemaining(state.windowEndsAtMs - Date.now())}
+                </span>
+              )}
+              {isPending && (
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('signal-debrief-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                  className="text-[10px] px-2 py-0.5 rounded-full border border-[#b45309]/40 bg-[#b45309]/10 text-[#b45309] uppercase tracking-wider hover:bg-[#b45309]/20 transition-colors"
+                >
+                  Debrief waiting
+                </button>
+              )}
+            </div>
+            <div className="text-gray-400 text-sm mt-2">
+              {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
+          </div>
+          <button
+            onClick={() => archiveRelapseEntry(entry)}
+            aria-label="Archive entry"
+            title="Archive"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-oura-darker transition-colors shrink-0"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="4" rx="1" />
+              <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+              <line x1="10" y1="12" x2="14" y2="12" />
+            </svg>
+          </button>
+        </div>
+        {entry.reflection && (
+          <div className="mt-3">
+            <p className={`text-gray-400 text-sm leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_reflection`] ? '' : 'line-clamp-3'}`}>
+              {entry.reflection}
+            </p>
+            {entry.reflection.length > 220 && (
+              <button
+                type="button"
+                onClick={() => toggleExpand(`${entry.id}_reflection`)}
+                className="text-gray-400 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+              >
+                {expandedSections[`${entry.id}_reflection`] ? '▲ Show less' : '▼ Show more'}
+              </button>
+            )}
+          </div>
+        )}
+        {entry.precursorConditions?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {entry.precursorConditions.map(c => (
+              <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-oura-darker text-gray-400 border border-oura-border">{c}</span>
+            ))}
+          </div>
+        )}
+        {entry.oracleFeedback && (
+          <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
+            <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
+            <p className={`text-gray-300 text-xs leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_oracle`] ? '' : 'line-clamp-3'}`}>
+              {entry.oracleFeedback}
+            </p>
+            {entry.oracleFeedback.length > 220 && (
+              <button
+                type="button"
+                onClick={() => toggleExpand(`${entry.id}_oracle`)}
+                className="text-gray-400 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+              >
+                {expandedSections[`${entry.id}_oracle`] ? '▲ Show less' : '▼ Show more'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
+    <>
+      {entriesLoaded && !loadError && (
+        <SignalDebriefCard
+          entries={relapseEntries}
+          onResolved={applyResolutionLocally}
+          onLanded={handleDebriefLanded}
+        />
+      )}
     <div className="oura-card p-6">
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
@@ -837,7 +1111,12 @@ const RelapseRadar = () => {
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setEntryType(RELAPSE_ENTRY_TYPES.SIGNAL)}
+              onClick={() => {
+                // Backing out of an "it landed" flow: the origin signal must
+                // stay pending, never stamp a later unrelated relapse.
+                landedOriginRef.current = null;
+                setEntryType(RELAPSE_ENTRY_TYPES.SIGNAL);
+              }}
               className={`p-3 rounded-xl text-left transition-all duration-200 border ${
                 entryType === RELAPSE_ENTRY_TYPES.SIGNAL
                   ? 'bg-oura-cyan/15 border-oura-cyan text-white'
@@ -1110,22 +1389,59 @@ const RelapseRadar = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <button
-              type="button"
-              onClick={handleConditionsResolved}
-              className="px-5 py-3 rounded-2xl bg-oura-card border border-oura-cyan/40 text-oura-cyan hover:bg-oura-cyan/10 transition-colors font-medium"
-            >
-              Conditions resolved
-            </button>
-            <button
-              type="button"
-              onClick={handleSlipped}
-              className="px-5 py-3 rounded-2xl bg-oura-card border border-[#b45309]/40 text-[#b45309] hover:bg-[#b45309]/10 transition-colors font-medium"
-            >
-              I slipped
-            </button>
-          </div>
+          {checkpointHeld ? (
+            <div className="pt-1 space-y-3 animate-fade-in">
+              <div>
+                <p className="text-white text-sm">Held. What held?</p>
+                <p className="text-[#858585] text-xs mt-0.5">One line. Optional.</p>
+              </div>
+              <input
+                type="text"
+                value={checkpointNote}
+                onChange={(e) => setCheckpointNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCheckpointNoteSave(); }}
+                maxLength={200}
+                className="w-full px-4 py-3 rounded-xl bg-oura-darker border border-oura-border text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-oura-cyan/40"
+              />
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleCheckpointNoteSave}
+                  disabled={checkpointBusy}
+                  className="px-5 py-2.5 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] disabled:opacity-50 transition-all"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={exitCheckpoint}
+                  disabled={checkpointBusy}
+                  className="text-[#858585] hover:text-[#ababab] text-xs transition-colors"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleConditionsResolved}
+                disabled={checkpointBusy}
+                className="px-5 py-3 rounded-2xl bg-oura-card border border-oura-cyan/40 text-oura-cyan hover:bg-oura-cyan/10 disabled:opacity-50 transition-colors font-medium"
+              >
+                Conditions resolved
+              </button>
+              <button
+                type="button"
+                onClick={handleSlipped}
+                disabled={checkpointBusy}
+                className="px-5 py-3 rounded-2xl bg-oura-card border border-[#b45309]/40 text-[#b45309] hover:bg-[#b45309]/10 disabled:opacity-50 transition-colors font-medium"
+              >
+                I slipped
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1306,70 +1622,54 @@ const RelapseRadar = () => {
 
           {view === 'active' && (filteredRelapseEntries.length > 0 ? (
             <div className="space-y-3">
-              {filteredRelapseEntries.slice(0, 3).map((entry) => (
-                <div key={entry.id} id={`relapse-entry-${entry.id}`} style={{ '--lit-accent': '#00d4aa' }} className={`oura-card p-5 hover:shadow-oura-glow-cyan transition-shadow duration-300${highlightId === entry.id ? ' entry-focus' : ''}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-oura-cyan font-light text-lg">{resolveArchetypeLabel(entry.selectedSelf)}</div>
-                      <div className="text-gray-400 text-sm mt-2">
-                        {entry.createdAt?.toDate?.()?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => archiveRelapseEntry(entry)}
-                      aria-label="Archive entry"
-                      title="Archive"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-oura-darker transition-colors shrink-0"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="4" rx="1" />
-                        <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
-                        <line x1="10" y1="12" x2="14" y2="12" />
-                      </svg>
-                    </button>
+              {openEntries.slice(0, 3).map((entry) => renderEntryCard(entry, entryStates.get(entry.id)))}
+              {closedSignals.length > 0 && (
+                <div className="pt-2">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">
+                    Closed Signals ({closedSignals.length})
                   </div>
-                  {entry.reflection && (
-                    <div className="mt-3">
-                      <p className={`text-gray-400 text-sm leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_reflection`] ? '' : 'line-clamp-3'}`}>
-                        {entry.reflection}
-                      </p>
-                      {entry.reflection.length > 220 && (
+                  <div className="space-y-2">
+                    {(expandedSections['closed_stack'] ? closedSignals : closedSignals.slice(0, 5)).map((entry) => {
+                      const state = entryStates.get(entry.id);
+                      if (expandedSections[`${entry.id}_closedOpen`]) {
+                        return renderEntryCard(entry, state);
+                      }
+                      const held = state?.outcome === SIGNAL_RESOLUTION_OUTCOMES.HELD;
+                      const dotColor = held ? '#00d4aa' : '#b45309';
+                      const rowDate = state?.anchorMs
+                        ? new Date(state.anchorMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : '—';
+                      return (
                         <button
+                          key={entry.id}
                           type="button"
-                          onClick={() => toggleExpand(`${entry.id}_reflection`)}
-                          className="text-gray-400 hover:text-gray-300 text-xs mt-1.5 transition-colors"
+                          onClick={() => toggleExpand(`${entry.id}_closedOpen`)}
+                          className="w-full flex items-center gap-3 p-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl hover:bg-[#111111] transition-colors text-left animate-fade-in"
                         >
-                          {expandedSections[`${entry.id}_reflection`] ? '▲ Show less' : '▼ Show more'}
+                          <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ backgroundColor: dotColor }} aria-hidden="true" />
+                          <span className="text-[11px] tabular-nums w-12 shrink-0 text-[#858585]">{rowDate}</span>
+                          <span className="flex-1 min-w-0 truncate text-[#d1d1d1] text-sm">
+                            {resolveArchetypeLabel(entry.selectedSelf)}
+                            {entry.reflection ? ` — ${entry.reflection}` : ''}
+                          </span>
+                          <span className="text-[10px] uppercase tracking-wider shrink-0" style={{ color: dotColor }}>
+                            {held ? 'Held' : 'Landed'}
+                          </span>
                         </button>
-                      )}
-                    </div>
-                  )}
-                  {entry.precursorConditions?.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {entry.precursorConditions.map(c => (
-                        <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-oura-darker text-gray-400 border border-oura-border">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                  {entry.oracleFeedback && (
-                    <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
-                      <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
-                      <p className={`text-gray-300 text-xs leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_oracle`] ? '' : 'line-clamp-3'}`}>
-                        {entry.oracleFeedback}
-                      </p>
-                      {entry.oracleFeedback.length > 220 && (
-                        <button
-                          type="button"
-                          onClick={() => toggleExpand(`${entry.id}_oracle`)}
-                          className="text-gray-400 hover:text-gray-300 text-xs mt-1.5 transition-colors"
-                        >
-                          {expandedSections[`${entry.id}_oracle`] ? '▲ Show less' : '▼ Show more'}
-                        </button>
-                      )}
-                    </div>
-                  )}
+                      );
+                    })}
+                    {closedSignals.length > 5 && !expandedSections['closed_stack'] && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand('closed_stack')}
+                        className="text-gray-400 hover:text-gray-300 text-xs transition-colors"
+                      >
+                        Show all {closedSignals.length}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           ) : (
             <div className="oura-card p-6 text-center">
@@ -1440,6 +1740,7 @@ const RelapseRadar = () => {
         fallbackReason={oracleModal.fallbackReason}
       />
     </div>
+    </>
   );
 };
 

@@ -24,6 +24,7 @@ import DailyPrompt from '../components/DailyPrompt';
 import MirrorStack from '../components/MirrorStack';
 import WeeklyRuleReview from '../components/WeeklyRuleReview';
 import PatternConfrontationCard from '../components/PatternConfrontationCard';
+import SignalDebriefCard from '../components/SignalDebriefCard';
 import { ScoreCard, ActivityItem } from '../components/OuraRing';
 import { AppIcon } from '../components/AppIcons';
 import { SkeletonDashboard } from '../components/SkeletonLoader';
@@ -543,6 +544,31 @@ export default function Dashboard() {
               </button>
             </div>
           </section>
+        )}
+
+        {/* Signal Debrief — signals whose 48h window passed unresolved.
+            Prop-driven off rawUserData so an answer patches dashboard state in
+            place; "It landed" bridges into the relapse flow via sessionStorage
+            (Relapse.jsx remounts RelapseRadar, so router state won't survive). */}
+        {rawUserData && (
+          <SignalDebriefCard
+            entries={rawUserData.relapseEntries || []}
+            animationDelay="0.03s"
+            onResolved={(entryId, resolution) => {
+              setRawUserData(prev => prev ? {
+                ...prev,
+                relapseEntries: (prev.relapseEntries || []).map(e =>
+                  e.id === entryId ? { ...e, resolution } : e
+                ),
+              } : prev);
+            }}
+            onLanded={(entry) => {
+              try {
+                sessionStorage.setItem('signal_debrief_landed', JSON.stringify({ originSignalId: entry.id }));
+              } catch { /* ignore storage errors */ }
+              navigate('/relapse');
+            }}
+          />
         )}
 
         {/* Unified reading — one card, two peer sections. Oracle is the layered

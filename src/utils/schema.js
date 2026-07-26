@@ -36,6 +36,10 @@ export const RELAPSE_FIELDS = Object.freeze({
   CONTEXT_SHIFT: 'precursorContext',    // non-empty string indicates routine disruption
   REFLECTION: 'reflection',             // free-form user text
   ENTRY_TYPE: 'entryType',              // 'signal' (precursor) | 'relapse' (actual relapse event)
+  // Signal Debrief resolution, present only on signal entries the user closed:
+  //   { outcome: 'held'|'landed', resolvedAt: ISO, via: 'checkpoint'|'debrief',
+  //     note?, relapseEntryId? }
+  RESOLUTION: 'resolution',
 });
 
 // Allowed values for RELAPSE_FIELDS.ENTRY_TYPE. Entries written before this
@@ -43,6 +47,23 @@ export const RELAPSE_FIELDS = Object.freeze({
 export const RELAPSE_ENTRY_TYPES = Object.freeze({
   SIGNAL: 'signal',
   RELAPSE: 'relapse',
+});
+
+// Signal Debrief outcomes and provenance. Only user actions are persisted:
+// 'checkpoint' = the post-save "Conditions resolved" / "I slipped" buttons,
+// 'debrief' = the Signal Debrief card. AUTO is derived, never written — a
+// relapse entry whose event time falls inside a signal's 48h window closes
+// that signal as landed at read time (src/utils/signalDebrief.js is the
+// single reader for signal state). Distinct from CONFRONTATION_FIELDS —
+// drift-signal confrontations are a separate mechanic on another collection.
+export const SIGNAL_RESOLUTION_OUTCOMES = Object.freeze({
+  HELD: 'held',
+  LANDED: 'landed',
+});
+export const SIGNAL_RESOLUTION_VIA = Object.freeze({
+  CHECKPOINT: 'checkpoint',
+  DEBRIEF: 'debrief',
+  AUTO: 'auto',
 });
 
 // Kill-target fields consumed cross-module.
