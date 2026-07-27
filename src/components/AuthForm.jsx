@@ -7,11 +7,11 @@ import logger from '../utils/logger';
 const AnimatedRings = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none">
     {/* Large outer ring */}
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full border border-[#00d4aa]/10 animate-pulse" style={{ animationDuration: '4s' }} />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full border border-[#4da6ff]/10 animate-pulse" style={{ animationDuration: '4s' }} />
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-[#4da6ff]/10 animate-pulse" style={{ animationDuration: '3s', animationDelay: '0.5s' }} />
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full border border-[#a855f7]/10 animate-pulse" style={{ animationDuration: '3.5s', animationDelay: '1s' }} />
     {/* Glow effect */}
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] rounded-full bg-gradient-radial from-[#00d4aa]/5 to-transparent" />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] rounded-full bg-gradient-radial from-[#4da6ff]/5 to-transparent" />
   </div>
 );
 
@@ -21,12 +21,12 @@ const Logo = () => (
     <div className="relative">
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="animate-pulse" style={{ animationDuration: '3s' }}>
         <circle cx="24" cy="24" r="22" stroke="url(#logoGradient)" strokeWidth="2" fill="none" />
-        <circle cx="24" cy="24" r="16" stroke="#00d4aa" strokeWidth="1.5" fill="none" opacity="0.6" />
-        <circle cx="24" cy="24" r="10" stroke="#00d4aa" strokeWidth="1" fill="none" opacity="0.3" />
-        <circle cx="24" cy="24" r="4" fill="#00d4aa" />
+        <circle cx="24" cy="24" r="16" stroke="#4da6ff" strokeWidth="1.5" fill="none" opacity="0.6" />
+        <circle cx="24" cy="24" r="10" stroke="#4da6ff" strokeWidth="1" fill="none" opacity="0.3" />
+        <circle cx="24" cy="24" r="4" fill="#4da6ff" />
         <defs>
           <linearGradient id="logoGradient" x1="0" y1="0" x2="48" y2="48">
-            <stop offset="0%" stopColor="#00d4aa" />
+            <stop offset="0%" stopColor="#4da6ff" />
             <stop offset="50%" stopColor="#4da6ff" />
             <stop offset="100%" stopColor="#a855f7" />
           </linearGradient>
@@ -135,7 +135,7 @@ export default function AuthForm({ onAuthSuccess }) {
               }}
               className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${
                 isSignIn 
-                  ? 'bg-[#00d4aa] text-black' 
+                  ? 'bg-[#4da6ff] text-black' 
                   : 'text-[#858585] hover:text-white'
               }`}
             >
@@ -150,7 +150,7 @@ export default function AuthForm({ onAuthSuccess }) {
               }}
               className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${
                 !isSignIn 
-                  ? 'bg-[#00d4aa] text-black' 
+                  ? 'bg-[#4da6ff] text-black' 
                   : 'text-[#858585] hover:text-white'
               }`}
             >
@@ -187,11 +187,11 @@ export default function AuthForm({ onAuthSuccess }) {
                   onChange={handleInputChange}
                   onFocus={() => setFocusedField('email')}
                   onBlur={() => setFocusedField(null)}
-                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#4da6ff] focus:outline-none focus:ring-1 focus:ring-[#4da6ff]/30 transition-all duration-300"
                   placeholder="you@example.com"
                 />
                 {focusedField === 'email' && (
-                  <div className="absolute inset-0 rounded-xl bg-[#00d4aa]/5 pointer-events-none" />
+                  <div className="absolute inset-0 rounded-xl bg-[#4da6ff]/5 pointer-events-none" />
                 )}
               </div>
             </div>
@@ -211,11 +211,11 @@ export default function AuthForm({ onAuthSuccess }) {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedField('displayName')}
                     onBlur={() => setFocusedField(null)}
-                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#4da6ff] focus:outline-none focus:ring-1 focus:ring-[#4da6ff]/30 transition-all duration-300"
                     placeholder="What name does the Oracle use?"
                   />
                   {focusedField === 'displayName' && (
-                    <div className="absolute inset-0 rounded-xl bg-[#00d4aa]/5 pointer-events-none" />
+                    <div className="absolute inset-0 rounded-xl bg-[#4da6ff]/5 pointer-events-none" />
                   )}
                 </div>
               </div>
@@ -232,7 +232,7 @@ export default function AuthForm({ onAuthSuccess }) {
                     type="button"
                     onClick={handleForgotPassword}
                     disabled={resetting}
-                    className="text-xs text-[#858585] hover:text-[#00d4aa] focus:outline-none focus:text-[#00d4aa] transition-colors disabled:opacity-50"
+                    className="text-xs text-[#858585] hover:text-[#4da6ff] focus:outline-none focus:text-[#4da6ff] transition-colors disabled:opacity-50"
                   >
                     {resetting ? 'Sending…' : 'Forgot password?'}
                   </button>
@@ -248,11 +248,11 @@ export default function AuthForm({ onAuthSuccess }) {
                   onChange={handleInputChange}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField(null)}
-                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                  className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#4da6ff] focus:outline-none focus:ring-1 focus:ring-[#4da6ff]/30 transition-all duration-300"
                   placeholder="••••••••"
                 />
                 {focusedField === 'password' && (
-                  <div className="absolute inset-0 rounded-xl bg-[#00d4aa]/5 pointer-events-none" />
+                  <div className="absolute inset-0 rounded-xl bg-[#4da6ff]/5 pointer-events-none" />
                 )}
               </div>
             </div>
@@ -273,11 +273,11 @@ export default function AuthForm({ onAuthSuccess }) {
                     onChange={handleInputChange}
                     onFocus={() => setFocusedField('confirmPassword')}
                     onBlur={() => setFocusedField(null)}
-                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#00d4aa] focus:outline-none focus:ring-1 focus:ring-[#00d4aa]/30 transition-all duration-300"
+                    className="w-full px-4 py-3.5 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl text-white placeholder-[#828282] focus:border-[#4da6ff] focus:outline-none focus:ring-1 focus:ring-[#4da6ff]/30 transition-all duration-300"
                     placeholder="••••••••"
                   />
                   {focusedField === 'confirmPassword' && (
-                    <div className="absolute inset-0 rounded-xl bg-[#00d4aa]/5 pointer-events-none" />
+                    <div className="absolute inset-0 rounded-xl bg-[#4da6ff]/5 pointer-events-none" />
                   )}
                 </div>
                 {/* Pass 2 Finding 17 remediation: live password-match indicator
@@ -287,7 +287,7 @@ export default function AuthForm({ onAuthSuccess }) {
                   <div
                     className={`text-xs ${
                       formData.password === formData.confirmPassword
-                        ? 'text-[#00d4aa]'
+                        ? 'text-[#4da6ff]'
                         : 'text-[#ef4444]'
                     }`}
                     aria-live="polite"
@@ -314,7 +314,7 @@ export default function AuthForm({ onAuthSuccess }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 bg-[#00d4aa] text-black rounded-xl font-medium text-sm uppercase tracking-wider hover:bg-[#00e6b8] focus:outline-none focus:ring-2 focus:ring-[#00d4aa]/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.01] active:scale-[0.99]"
+              className="w-full py-4 bg-[#4da6ff] text-black rounded-xl font-medium text-sm uppercase tracking-wider hover:bg-[#3d8fd9] focus:outline-none focus:ring-2 focus:ring-[#4da6ff]/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.01] active:scale-[0.99]"
             >
               {loading ? (
                 <div className="flex items-center justify-center gap-2">
