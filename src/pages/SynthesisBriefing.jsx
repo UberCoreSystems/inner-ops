@@ -37,6 +37,7 @@ export default function SynthesisBriefing() {
   const [briefings, setBriefings] = useState([]);
   const [reckonings, setReckonings] = useState([]);
   const [runningReckoning, setRunningReckoning] = useState(false);
+  const [openReckoningId, setOpenReckoningId] = useState(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   // Mirrors userSettings.synthesisCadence — the field useSynthesisAutoGenerate
@@ -207,8 +208,10 @@ export default function SynthesisBriefing() {
       if (result?.status === 'ok') {
         await loadBriefings();
         ouraToast.info(result.reused ? 'Latest reckoning is under an hour old — showing it.' : 'The Reckoning is ready.');
+      } else if (result?.status === 'clean-period') {
+        ouraToast.info(`Clean period — no logged event contradicts a stated commitment in the last ${result.periodDays || 28} days.`);
       } else if (result?.status === 'insufficient-data') {
-        ouraToast.info('No contradictions to reckon with this period.');
+        ouraToast.info('Add a Kill Contract, Hard Lesson, or Relapse entry first.');
       }
     } catch (err) {
       logger.error('Reckoning generation failed:', err);
@@ -262,6 +265,37 @@ export default function SynthesisBriefing() {
   const latestBriefing = briefings[0] || null;
   const archiveBriefings = briefings.slice(1);
   const displayBriefing = selectedArchive || latestBriefing;
+
+  // A reckoning is open only while its own period is still running; once
+  // generatedAt + period.days has passed (or a newer reckoning supersedes it)
+  // it closes to a dated row. Mirrors the Signal Debrief closure grammar.
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const reckoningClosesMs = (r) => new Date(r.generatedAt).getTime() + (r.period?.days || 28) * DAY_MS;
+  const latestReckoning = reckonings[0] || null;
+  const latestReckoningLive = latestReckoning ? Date.now() < reckoningClosesMs(latestReckoning) : false;
+  const closedReckonings = latestReckoningLive ? reckonings.slice(1) : reckonings;
+
+  const renderReckoningBody = (r, { live = false } = {}) => (
+    <>
+      <p className="text-white text-sm leading-relaxed whitespace-pre-line mb-4 max-w-[68ch]">
+        {r.reckoningConfrontation}
+      </p>
+      <ul className="space-y-2">
+        {(r.contradictions || []).map((c, i) => (
+          <li key={i} className="text-xs">
+            <span className="text-[#ababab]">{c.commitment?.text}</span>
+            <span className="text-[#858585]">
+              {' '}— contradicted by {c.evidence?.length} logged event(s): {(c.evidence || []).map((e) => (e.date || '').slice(0, 10)).join(', ')}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[#5a5a5a] text-[10px] mt-3">
+        Generated {new Date(r.generatedAt).toLocaleDateString()} · {r.meta?.evidenceCount} events traced
+        {live ? ` · closes ${new Date(reckoningClosesMs(r)).toLocaleDateString()}` : ''}
+      </p>
+    </>
+  );
 
   // "Sparse" briefing: no cross-module signal — every section will be generic.
   // Detect from meta so we can explain WHY the content reads as boilerplate.
@@ -359,24 +393,57 @@ export default function SynthesisBriefing() {
             </button>
           </div>
 
-          {reckonings[0] && (
+          {latestReckoningLive && (
             <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-              <p className="text-white text-sm leading-relaxed whitespace-pre-line mb-4 max-w-[68ch]">
-                {reckonings[0].reckoningConfrontation}
-              </p>
-              <ul className="space-y-2">
-                {(reckonings[0].contradictions || []).map((c, i) => (
-                  <li key={i} className="text-xs">
-                    <span className="text-[#ababab]">{c.commitment?.text}</span>
-                    <span className="text-[#858585]">
-                      {' '}— contradicted by {c.evidence?.length} logged event(s): {(c.evidence || []).map((e) => (e.date || '').slice(0, 10)).join(', ')}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[#5a5a5a] text-[10px] mt-3">
-                Generated {new Date(reckonings[0].generatedAt).toLocaleDateString()} · {reckonings[0].meta?.evidenceCount} events traced
-              </p>
+              {renderReckoningBody(latestReckoning, { live: true })}
+            </div>
+          )}
+
+          {closedReckonings.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+              <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">
+                Closed Reckonings ({closedReckonings.length})
+              </div>
+              <div className="space-y-2">
+                {closedReckonings.map((r) => {
+                  const rid = r.id || r.generatedAt;
+                  const rowDate = new Date(r.generatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  const nContradictions = r.meta?.contradictionCount ?? (r.contradictions || []).length;
+                  const nEvents = r.meta?.evidenceCount ?? 0;
+                  if (openReckoningId === rid) {
+                    return (
+                      <div key={rid} className="p-4 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl animate-fade-in">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <span className="text-[#858585] text-xs">{rowDate} · period closed</span>
+                          <button
+                            type="button"
+                            onClick={() => setOpenReckoningId(null)}
+                            className="text-[#858585] hover:text-[#ababab] text-xs shrink-0 transition-colors"
+                          >
+                            Collapse
+                          </button>
+                        </div>
+                        {renderReckoningBody(r)}
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={rid}
+                      type="button"
+                      onClick={() => setOpenReckoningId(rid)}
+                      className="w-full flex items-center gap-3 p-3 bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl hover:bg-[#111111] transition-colors text-left animate-fade-in"
+                    >
+                      <span className="w-[7px] h-[7px] rounded-full shrink-0 bg-[#b45309]" aria-hidden="true" />
+                      <span className="text-[11px] tabular-nums w-12 shrink-0 text-[#858585]">{rowDate}</span>
+                      <span className="flex-1 min-w-0 truncate text-[#d1d1d1] text-sm">
+                        {nContradictions} contradiction{nContradictions === 1 ? '' : 's'} · {nEvents} event{nEvents === 1 ? '' : 's'} traced
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider shrink-0 text-[#b45309]">Closed</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

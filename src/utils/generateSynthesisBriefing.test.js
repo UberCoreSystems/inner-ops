@@ -285,7 +285,7 @@ describe('generateSynthesisBriefing — reckoning mode', () => {
     assert.equal(written.meta.contradictionCount, written.contradictions.length);
   });
 
-  it('returns insufficient-data when nothing contradicts the commitments', async () => {
+  it('returns clean-period when commitments exist but nothing contradicts them', async () => {
     let writes = 0;
     const writeSpy = async () => { writes += 1; return { id: 'x' }; };
     const data = {
@@ -295,8 +295,16 @@ describe('generateSynthesisBriefing — reckoning mode', () => {
     const result = await generateSynthesisBriefing('u1', 'weekly', {
       readUserData: makeReader(data), writeData: writeSpy, mode: 'reckoning', bypassCadence: true,
     });
-    assert.equal(result.status, 'insufficient-data');
+    assert.equal(result.status, 'clean-period');
+    assert.equal(result.periodDays, 28);
     assert.equal(writes, 0, 'no document written and no billed call');
+  });
+
+  it('reckoning with no data at all still returns insufficient-data (cold-start gate)', async () => {
+    const result = await generateSynthesisBriefing('u1', 'weekly', {
+      readUserData: makeReader({}), writeData: async () => ({ id: 'x' }), mode: 'reckoning', bypassCadence: true,
+    });
+    assert.equal(result.status, 'insufficient-data');
   });
 
   it('type-scoped cooldown: a recent synthesis does not block a reckoning', async () => {

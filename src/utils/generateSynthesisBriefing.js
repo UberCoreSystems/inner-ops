@@ -525,7 +525,9 @@ async function generateReckoning({
   });
 
   // Nothing contradicts the stated commitments → no reckoning, no billed call.
-  if (contradictions.length === 0) return { status: 'insufficient-data' };
+  // Distinct from the cold-start 'insufficient-data' gate: the user has
+  // commitments on record and a clean period against them.
+  if (contradictions.length === 0) return { status: 'clean-period', periodDays: RECKONING_PERIOD_DAYS };
 
   const reckoningConfrontation = await generateReckoningConfrontation({
     contradictions, languageDrift, identityDirection,
