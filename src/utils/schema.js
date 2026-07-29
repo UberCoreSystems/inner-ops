@@ -160,6 +160,11 @@ export const USER_SETTINGS_FIELDS = Object.freeze({
   // `version` is the reset lever: bump ONBOARDING_HELP_VERSION and every user
   // sees the refreshed help once, with no data migration.
   ONBOARDING_HELP: 'onboardingHelp',
+  // User-defined precursor conditions added via the Relapse Radar "Other"
+  // affordance. Plain strings saved verbatim into entries' precursorConditions
+  // so drift detection streaks over them identically to built-ins. Capped at
+  // CUSTOM_PRECURSOR_LIMITS.MAX_COUNT (see customPrecursors.js).
+  CUSTOM_PRECURSOR_CONDITIONS: 'customPrecursorConditions',
 });
 
 // Bump to re-show all first-run help after a substantive copy or layout pass.

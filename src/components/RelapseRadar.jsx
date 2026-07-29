@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getAuth } from '../firebase';
-import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
+import { writeData, readUserData, updateData, upsertUserSettings } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
 import { generateAIFeedback } from '../utils/aiFeedback';
@@ -39,7 +39,14 @@ import {
   ORACLE_FIELDS,
   SIGNAL_RESOLUTION_OUTCOMES,
   SIGNAL_RESOLUTION_VIA,
+  USER_SETTINGS_FIELDS,
 } from '../utils/schema';
+import {
+  CUSTOM_PRECURSOR_LIMITS,
+  addCustomPrecursor,
+  removeCustomPrecursor,
+  sanitizeCustomList,
+} from '../utils/customPrecursors';
 import SignalDebriefCard from './SignalDebriefCard';
 import {
   SIGNAL_STATES,
@@ -66,6 +73,11 @@ const PRECURSOR_CONDITIONS = [
   'Emotionally numb',
   'None of the above',
 ];
+
+// Custom conditions render between these built-ins and 'None of the above',
+// which stays last in the grid.
+const NONE_OF_THE_ABOVE = 'None of the above';
+const BUILTIN_PRECURSORS = PRECURSOR_CONDITIONS.filter(c => c !== NONE_OF_THE_ABOVE);
 
 // Post-Signal grounding tools. Same content as EmergencyButton's panel so the
 // two surfaces stay coherent — keeping a local copy here avoids importing a
@@ -149,6 +161,12 @@ const RelapseRadar = () => {
   const [driftThreshold] = useState(3);
   const [killTargets, setKillTargets] = useState([]);
 
+  // User-defined precursor conditions ("Other"). Persisted on userSettings;
+  // selected values save into precursorConditions like any built-in string.
+  const [customPrecursors, setCustomPrecursors] = useState([]);
+  const [showOtherInput, setShowOtherInput] = useState(false);
+  const [otherValue, setOtherValue] = useState('');
+
   // BER-133: archetype-to-kill-list match prompt shown after submission
   const [archetypeMatchPrompt, setArchetypeMatchPrompt] = useState(null); // { targetName, targetId, archetype }
 
@@ -207,9 +225,18 @@ const RelapseRadar = () => {
           readUserData('killTargets').then(targets => {
             if (mountedRef.current) setKillTargets(targets || []);
           }).catch(() => {});
+          readUserData('userSettings').then(docs => {
+            if (mountedRef.current) {
+              setCustomPrecursors(sanitizeCustomList(
+                docs?.[0]?.[USER_SETTINGS_FIELDS.CUSTOM_PRECURSOR_CONDITIONS],
+                PRECURSOR_CONDITIONS
+              ));
+            }
+          }).catch(() => {});
         } else {
           setRelapseEntries([]);
           setKillTargets([]);
+          setCustomPrecursors([]);
           setEntriesLoaded(true);
         }
       });
@@ -516,6 +543,36 @@ const RelapseRadar = () => {
         ? prev.filter(p => p !== condition)
         : [...prev, condition]
     );
+  };
+
+  const handleAddCustomPrecursor = () => {
+    const result = addCustomPrecursor(customPrecursors, otherValue, PRECURSOR_CONDITIONS);
+    if (!result.ok) {
+      const message = {
+        empty: 'Name the condition first.',
+        duplicate: 'Already listed.',
+        too_long: `${CUSTOM_PRECURSOR_LIMITS.MAX_LENGTH} characters max.`,
+        limit: `Limit reached (${CUSTOM_PRECURSOR_LIMITS.MAX_COUNT}). Remove one to add another.`,
+      }[result.reason];
+      ouraToast.warning(message);
+      return;
+    }
+    setCustomPrecursors(result.list);
+    setSelectedPrecursors(prev => prev.includes(result.value) ? prev : [...prev, result.value]);
+    setOtherValue('');
+    setShowOtherInput(false);
+    upsertUserSettings({ [USER_SETTINGS_FIELDS.CUSTOM_PRECURSOR_CONDITIONS]: result.list })
+      .catch(err => logger.warn('Failed to persist custom precursor:', err));
+  };
+
+  // Removes the chip going forward only — historical entries keep the string,
+  // so drift detection over past data is untouched.
+  const handleRemoveCustomPrecursor = (value) => {
+    const list = removeCustomPrecursor(customPrecursors, value);
+    setCustomPrecursors(list);
+    setSelectedPrecursors(prev => prev.filter(p => p !== value));
+    upsertUserSettings({ [USER_SETTINGS_FIELDS.CUSTOM_PRECURSOR_CONDITIONS]: list })
+      .catch(err => logger.warn('Failed to persist custom precursor removal:', err));
   };
 
   const handleHabitToggle = (habit) => {
@@ -1154,7 +1211,7 @@ const RelapseRadar = () => {
           <h3 className="text-xl font-light text-white tracking-tight">What conditions were present in the 24–48 hours before this?</h3>
           <p className="text-gray-400 text-sm">Select all that apply. Select at least one before proceeding.</p>
           <div role="group" aria-label="Precursor conditions" className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {PRECURSOR_CONDITIONS.map((condition) => (
+            {BUILTIN_PRECURSORS.map((condition) => (
               <button
                 key={condition}
                 aria-pressed={selectedPrecursors.includes(condition)}
@@ -1168,6 +1225,91 @@ const RelapseRadar = () => {
                 {condition}
               </button>
             ))}
+            {customPrecursors.map((condition) => (
+              <div key={condition} className="relative">
+                <button
+                  aria-pressed={selectedPrecursors.includes(condition)}
+                  onClick={() => handlePrecursorToggle(condition)}
+                  className={`w-full p-4 pr-10 rounded-2xl text-left transition-all duration-200 ${
+                    selectedPrecursors.includes(condition)
+                      ? 'bg-oura-cyan text-black font-medium shadow-oura-glow-cyan'
+                      : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
+                  }`}
+                >
+                  {condition}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${condition}`}
+                  onClick={() => handleRemoveCustomPrecursor(condition)}
+                  className={`absolute top-2 right-2 w-6 h-6 rounded-full text-xs leading-none transition-colors ${
+                    selectedPrecursors.includes(condition)
+                      ? 'text-black/60 hover:text-black hover:bg-black/10'
+                      : 'text-gray-500 hover:text-gray-200 hover:bg-oura-darker'
+                  }`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {showOtherInput ? (
+              <div className="p-2 rounded-2xl bg-oura-card border border-oura-cyan flex items-center gap-2">
+                <input
+                  autoFocus
+                  type="text"
+                  value={otherValue}
+                  maxLength={CUSTOM_PRECURSOR_LIMITS.MAX_LENGTH}
+                  placeholder="Name the condition"
+                  onChange={(e) => setOtherValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); handleAddCustomPrecursor(); }
+                    if (e.key === 'Escape') { setOtherValue(''); setShowOtherInput(false); }
+                  }}
+                  className="flex-1 min-w-0 p-2 bg-transparent text-white text-sm focus:outline-none placeholder-gray-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomPrecursor}
+                  className="px-3 py-2 rounded-xl bg-oura-cyan text-black text-sm font-medium"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  aria-label="Cancel"
+                  onClick={() => { setOtherValue(''); setShowOtherInput(false); }}
+                  className="px-2 py-2 rounded-xl text-gray-400 hover:text-gray-200 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={customPrecursors.length >= CUSTOM_PRECURSOR_LIMITS.MAX_COUNT}
+                onClick={() => setShowOtherInput(true)}
+                className={`p-4 rounded-2xl text-left transition-all duration-200 border border-dashed border-oura-border text-gray-400 ${
+                  customPrecursors.length >= CUSTOM_PRECURSOR_LIMITS.MAX_COUNT
+                    ? 'opacity-30 cursor-not-allowed'
+                    : 'bg-oura-card hover:bg-oura-darker hover:text-gray-200'
+                }`}
+              >
+                {customPrecursors.length >= CUSTOM_PRECURSOR_LIMITS.MAX_COUNT
+                  ? `Limit reached (${CUSTOM_PRECURSOR_LIMITS.MAX_COUNT}). Remove one to add another.`
+                  : 'Other +'}
+              </button>
+            )}
+            <button
+              aria-pressed={selectedPrecursors.includes(NONE_OF_THE_ABOVE)}
+              onClick={() => handlePrecursorToggle(NONE_OF_THE_ABOVE)}
+              className={`p-4 rounded-2xl text-left transition-all duration-200 ${
+                selectedPrecursors.includes(NONE_OF_THE_ABOVE)
+                  ? 'bg-oura-cyan text-black font-medium shadow-oura-glow-cyan'
+                  : 'bg-oura-card text-gray-300 hover:bg-oura-darker border border-oura-border'
+              }`}
+            >
+              {NONE_OF_THE_ABOVE}
+            </button>
           </div>
           {/* BER-182: Physiological precursor — Oura Ring */}
           {OURA_ENABLED && ouraConnected && ouraBiometrics && !ouraLoading && (
