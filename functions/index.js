@@ -412,9 +412,9 @@ function buildEvasionCalibrationBlock(evasion) {
     .slice(0, MAX_EVASION_MARKERS_RENDERED);
   const markerList = labels.length > 0 ? labels.join("; ") : "nonspecific avoidance patterning";
   if (band === "high") {
-    return `\n\nEVASION CALIBRATION (high): The entry shows linguistic markers of avoidance — specifically: ${markerList}. Name the evasion pattern directly by citing the user's own language. Do not offer reframes, do not build content, do not soften. Ask one specific question that cannot be answered without the user taking a position on what they actually did.`;
+    return `\n\nEVASION CALIBRATION (high): The entry shows linguistic markers of avoidance — specifically: ${markerList}. Name the evasion pattern to him directly, quoting his own words back to him. Do not offer reframes, do not build content, do not soften. Ask him one specific question he cannot answer without taking a position on what he actually did. This calibration shapes what you say to him — it never changes who you are speaking to. Stay in direct address.`;
   }
-  return `\n\nEVASION CALIBRATION (moderate): Evasion markers present — ${markerList}. Reference them if relevant to your feedback.`;
+  return `\n\nEVASION CALIBRATION (moderate): Evasion markers present — ${markerList}. Name them to him directly if relevant to your feedback. Stay in direct address.`;
 }
 
 // Journal-only metacognitive depth directive. Constant text appended at the very
@@ -788,6 +788,7 @@ Hard Lesson entries:
 - Close with a question about when the next test of this rule will arrive.
 
 Hard rules:
+- You are speaking directly to the man who wrote the entry. Address him as "you" in every sentence — never "he", "the man", "the user", never prose that describes him as if reporting to a third party. Any context or pattern notes you receive about him, restate in direct address when you use them.
 - Respond only to what was actually written. Every sentence must connect to something specific in his entry.
 - Write in flowing prose. No headers, no bullets, no labels, no numbered lists.
 - Never mention any philosopher, thinker, tradition, or framework by name. The insight must stand on its own.

@@ -187,11 +187,6 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
                 </div>
               )}
 
-              {entry.classification?.reasoning && (
-                <p className="text-[#828282] text-xs italic mt-4 pt-3 border-t border-[#1a1a1a] leading-relaxed">
-                  Oracle: {entry.classification.reasoning}
-                </p>
-              )}
             </div>
           )}
         </div>
