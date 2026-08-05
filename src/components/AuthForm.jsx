@@ -61,7 +61,7 @@ export default function AuthForm({ onAuthSuccess }) {
     setResetting(true);
     try {
       await authService.resetPassword(email);
-      ouraToast.success('Reset email sent — check your inbox.');
+      ouraToast.success('Reset email sent — check your inbox (and spam).');
     } catch (err) {
       logger.error('Password reset error:', err);
       const msg = err?.message || 'Could not send reset email';
@@ -94,7 +94,7 @@ export default function AuthForm({ onAuthSuccess }) {
         : await authService.register(formData.email, formData.password, formData.displayName);
 
       logger.log("✅ Authentication successful:", result);
-      ouraToast.success(isSignIn ? 'Welcome back!' : 'Account created successfully!');
+      ouraToast.success(isSignIn ? 'Welcome back!' : 'Account created. Verification email sent — check your inbox (and spam).');
       
       if (onAuthSuccess) {
         onAuthSuccess(result);

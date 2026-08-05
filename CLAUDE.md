@@ -2,7 +2,7 @@
 
 ## Project State
 
-- **Status:** Live — deployed 2026-07-25 (closed beta). Production Firestore holds real user data: schema changes need migration thinking, and rules/functions changes must be deployed and verified via logs, not just merged.
+- **Status:** Live — deployed 2026-07-25 (closed beta), on custom domain **https://innerops.io** since 2026-08-04 (Namecheap DNS → Firebase Hosting; www redirects to apex; old .web.app URL still serves). `VITE_FIREBASE_AUTH_DOMAIN=innerops.io`. Production Firestore holds real user data: schema changes need migration thinking, and rules/functions changes must be deployed and verified via logs, not just merged.
 - **Build:** Clean. BER-1 through BER-13 closed. QA and CI agents operational.
 - **v1 Scope (locked):** Journaling + Kill List + Hard Lessons + Relapse Radar + Synthesis
 - **Open items (post-launch):** Oracle UI redesign, engagement notifications, AI interaction layer (Command Brief — extends Synthesis cross-module reading to session-level prompts), MCP/skills integration
@@ -109,7 +109,7 @@ Shipped 2026-07-25 — all launch items confirmed:
 
 ### Outstanding before public launch
 
-- [ ] Email deliverability: default `noreply@inner-ops-8ce36.firebaseapp.com` sender lands in Gmail spam for new projects (confirmed 2026-05-25 — verification + reset emails were in spam, not missing). Real fix (custom domain + Resend/SendGrid with SPF/DKIM) deferred to expanded beta. Closed beta on default sender is acceptable but warn testers to check spam.
+- [ ] Email deliverability — fix in flight (2026-08-05): custom email domain `innerops.io` configured in Firebase Auth Templates; SPF TXT + both DKIM CNAMEs live at Namecheap and publicly resolving; awaiting Firebase verification (≤48h), after which sender becomes `noreply@innerops.io`. Remaining: end-to-end inbox test (Gmail throwaway — SPF/DKIM PASS, lands in inbox, links on innerops.io; repeat for password reset and a non-Gmail inbox). Auth toasts mention checking spam — drop that copy once deliverability is confirmed. If Gmail still spam-folders after DNS settles: testers hit "Not spam," re-test after a week, then escalate to Resend (separate plan). Original issue (2026-05-25): default `noreply@inner-ops-8ce36.firebaseapp.com` sender landed in Gmail spam.
 
 ## How Bo Works
 

@@ -220,7 +220,7 @@ export default function Dashboard() {
       logger.log("📡 Dashboard: Loading data for user:", currentUser.uid);
       
       // Load ALL data at once - await everything before setting state.
-      const [journalEntries, relapseEntries, killTargets, hardLessons, userSettings] = await Promise.all([
+      const [journalEntries, relapseEntries, killTargets, hardLessons, userSettings, confirmedKills] = await Promise.all([
         readUserData('journalEntries').then(data => {
           logger.log("📔 Dashboard: Journal entries loaded:", data?.length || 0);
           return data || [];
@@ -238,6 +238,10 @@ export default function Dashboard() {
           return data || [];
         }),
         readUserData('userSettings').then(data => data || []).catch(() => []),
+        readUserData('confirmedKills').then(data => {
+          logger.log("💀 Dashboard: Confirmed kills loaded:", data?.length || 0);
+          return data || [];
+        }),
       ]);
 
       logger.log("📊 Dashboard: All data loaded:", {
@@ -262,6 +266,13 @@ export default function Dashboard() {
         streakDays = Math.max(0, Math.floor((today - lastRelapse) / (1000 * 60 * 60 * 24)));
       }
 
+      // Kills are MOVED to confirmedKills on close (KillList archive model),
+      // so the live killTargets collection never counts them. All-time killed
+      // = archived kills + any legacy doc still carrying status:'killed'.
+      const legacyKilled = killTargets.filter(t => t.status === 'killed').length;
+      const contractsKilled = confirmedKills.length + legacyKilled;
+      const contractsTotal = killTargets.length + confirmedKills.length;
+
       // Set stats to show ALL-TIME counts (not just recent activity)
       // This gives a complete picture of user progress
       setStats({
@@ -269,8 +280,8 @@ export default function Dashboard() {
         journalEntriesTotal: journalEntries.length,
         relapseEntries: relapseEntries.length,
         streakDays,
-        killTargets: killTargets.length,  // All-time total
-        killTargetsTotal: killTargets.length,
+        killTargets: contractsKilled,  // All-time killed contracts
+        killTargetsTotal: contractsTotal,
         hardLessons: hardLessons.length,  // All-time total
         hardLessonsTotal: hardLessons.length
       });
@@ -892,7 +903,10 @@ export default function Dashboard() {
 
         {/* Recent Activity + All-Time Stats — paired in one row to keep the
             page compact. Stats sit as a 2×2 square in the right column. */}
-        <div className="grid lg:grid-cols-2 gap-6 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
+        {/* grid-cols-1 is load-bearing on mobile: a bare `grid` leaves the
+            implicit column auto-sized, so the nowrap activity titles inflate
+            the track past the viewport and drag the stats grid with it. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
 
           {/* Recent Activity */}
           <section>
@@ -948,7 +962,7 @@ export default function Dashboard() {
           <section data-tour="stats" className="flex flex-col">
             <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Your Stats (All-Time)</h3>
             <div className="grid grid-cols-2 auto-rows-fr gap-4 flex-1">
-              <ScoreCard score={stats.killTargets} label="Targets" sublabel={`of ${stats.killTargetsTotal || 0} total`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" glow />
+              <ScoreCard score={stats.killTargets} label="Kills" sublabel={`of ${stats.killTargetsTotal || 0} contracts`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" glow />
               <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" glow />
               <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" glow />
               <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" glow />
