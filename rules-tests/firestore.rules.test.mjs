@@ -47,11 +47,14 @@ const RULES = readFileSync(join(__dirname, '..', 'firestore.rules'), 'utf8');
 
 const OWNER = 'alice';
 const OTHER = 'mallory';
+const UNVERIFIED = 'trent'; // signed in, email_verified=false — must get nothing
 
 let testEnv;
-let ownerDb; // authenticated as OWNER
-let otherDb; // authenticated as OTHER
+let ownerDb; // authenticated as OWNER, email verified
+let otherDb; // authenticated as OTHER, email verified
 let anonDb; // unauthenticated
+let unverifiedDb; // authenticated as UNVERIFIED, email NOT verified
+let noClaimDb; // authenticated as UNVERIFIED with no email claims at all
 
 before(async () => {
   testEnv = await initializeTestEnvironment({
@@ -62,9 +65,22 @@ before(async () => {
       port: 8080,
     },
   });
-  ownerDb = testEnv.authenticatedContext(OWNER).firestore();
-  otherDb = testEnv.authenticatedContext(OTHER).firestore();
+  // The email-verification boundary means "authenticated" alone is no longer
+  // enough — the main matrix runs under verified tokens, mirroring a real
+  // password session whose address is confirmed.
+  ownerDb = testEnv
+    .authenticatedContext(OWNER, { email: 'alice@example.com', email_verified: true })
+    .firestore();
+  otherDb = testEnv
+    .authenticatedContext(OTHER, { email: 'mallory@example.com', email_verified: true })
+    .firestore();
   anonDb = testEnv.unauthenticatedContext().firestore();
+  unverifiedDb = testEnv
+    .authenticatedContext(UNVERIFIED, { email: 'trent@example.com', email_verified: false })
+    .firestore();
+  // Token shape of a legacy anonymous account: no email claims. Must fail
+  // closed the same way.
+  noClaimDb = testEnv.authenticatedContext(UNVERIFIED).firestore();
 });
 
 after(async () => {
@@ -416,6 +432,72 @@ describe('cross-uid read isolation (signed-in non-owner)', () => {
   it("non-owner cannot read another uid's memory doc", async () => {
     await seed('users', [OWNER, 'memory', 'global'], { content: 'secret', receipts: [] });
     await assertFails(getDoc(doc(otherDb, 'users', OWNER, 'memory', 'global')));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Email-verification boundary — a signed-in session with an unconfirmed
+// address must read/write NOTHING it owns, across every user-data layout.
+// Client-side gating (VerifyEmailGate) is bypassable; this is the proof that
+// the rules are the enforcement layer.
+// ─────────────────────────────────────────────────────────────────────────
+describe('email-verification boundary (signed-in, unverified owner)', () => {
+  before(clear);
+
+  for (const coll of USERID_COLLECTIONS) {
+    it(`unverified owner: create own ${coll} doc denied`, async () => {
+      await assertFails(setDoc(doc(unverifiedDb, coll, 'uv-create'), { userId: UNVERIFIED, body: 'x' }));
+    });
+
+    it(`unverified owner: get own ${coll} doc denied`, async () => {
+      await seed(coll, ['uv-owned'], { userId: UNVERIFIED, body: 'x' });
+      await assertFails(getDoc(doc(unverifiedDb, coll, 'uv-owned')));
+    });
+
+    it(`unverified owner: list own ${coll} denied`, async () => {
+      await seed(coll, ['uv-list'], { userId: UNVERIFIED, body: 'x' });
+      await assertFails(getDocs(query(collection(unverifiedDb, coll), where('userId', '==', UNVERIFIED))));
+    });
+
+    it(`unverified owner: update own ${coll} doc denied`, async () => {
+      await seed(coll, ['uv-update'], { userId: UNVERIFIED, body: 'x' });
+      await assertFails(updateDoc(doc(unverifiedDb, coll, 'uv-update'), { body: 'y' }));
+    });
+
+    it(`unverified owner: delete own ${coll} doc denied`, async () => {
+      await seed(coll, ['uv-delete'], { userId: UNVERIFIED, body: 'x' });
+      await assertFails(deleteDoc(doc(unverifiedDb, coll, 'uv-delete')));
+    });
+  }
+
+  for (const coll of DOCID_COLLECTIONS) {
+    it(`unverified owner: write own ${coll} doc denied`, async () => {
+      await assertFails(setDoc(doc(unverifiedDb, coll, UNVERIFIED), { displayName: 'Trent' }));
+    });
+
+    it(`unverified owner: read own ${coll} doc denied`, async () => {
+      await seed(coll, [UNVERIFIED], { displayName: 'Trent' });
+      await assertFails(getDoc(doc(unverifiedDb, coll, UNVERIFIED)));
+    });
+  }
+
+  it('unverified owner: read own memory doc denied', async () => {
+    await seed('users', [UNVERIFIED, 'memory', 'global'], { content: 'x', receipts: [] });
+    await assertFails(getDoc(doc(unverifiedDb, 'users', UNVERIFIED, 'memory', 'global')));
+  });
+
+  it('unverified owner: read own biometrics denied', async () => {
+    await seed('users', [UNVERIFIED, 'biometrics', 'k'], { hrv: 1 });
+    await assertFails(getDoc(doc(unverifiedDb, 'users', UNVERIFIED, 'biometrics', 'k')));
+  });
+
+  it('no-email-claim token (legacy anonymous shape): create denied', async () => {
+    await assertFails(setDoc(doc(noClaimDb, 'journalEntries', 'nc-create'), { userId: UNVERIFIED, body: 'x' }));
+  });
+
+  it('no-email-claim token (legacy anonymous shape): get denied', async () => {
+    await seed('journalEntries', ['nc-owned'], { userId: UNVERIFIED, body: 'x' });
+    await assertFails(getDoc(doc(noClaimDb, 'journalEntries', 'nc-owned')));
   });
 });
 

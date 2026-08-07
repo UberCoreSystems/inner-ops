@@ -1059,21 +1059,35 @@ async function eraseUserData(db, uid) {
   return summary;
 }
 
-// deleteUserData — permanently erase all of the caller's data. Auth-gated; a
-// user can only delete their own account (uid comes from the verified token,
-// never from the client payload). The client calls this, then deletes the
-// Firebase Auth user itself (which requires recent re-authentication).
-exports.deleteUserData = onCall({ timeoutSeconds: 120 }, async (request) => {
+// eraseUserAccount — full account erasure: Firestore wipe, then Auth-record
+// removal via the Admin SDK. Ordered so a failed wipe never destroys the
+// credential while data remains; the wipe is idempotent, so a retry after an
+// auth-deletion failure re-runs safely. Admin-side auth deletion has no
+// recent-login requirement, unlike client-side deleteUser — which previously
+// left an orphaned Auth record when the session went stale between the wipe
+// and the receipt acknowledgment.
+async function eraseUserAccount(db, auth, uid) {
+  const summary = await eraseUserData(db, uid);
+  await auth.deleteUser(uid);
+  return summary;
+}
+
+// deleteUserData — permanently erase the caller's account: all Firestore data
+// and the Firebase Auth record. Auth-gated; a user can only delete their own
+// account (uid comes from the verified token, never from the client payload).
+// After this resolves, nothing of the account survives server-side; the client
+// only signs out locally.
+exports.deleteUserData = onCall({ region: "us-central1", timeoutSeconds: 120 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "You must be signed in to delete your account.");
   }
   const uid = request.auth.uid;
   const { getFirestore } = require("firebase-admin/firestore");
-  const db = getFirestore();
+  const { getAuth } = require("firebase-admin/auth");
 
   let summary;
   try {
-    summary = await eraseUserData(db, uid);
+    summary = await eraseUserAccount(getFirestore(), getAuth(), uid);
   } catch (err) {
     // Never echo raw error detail to the client.
     console.error("deleteUserData failed", { uid, code: err?.code, message: err?.message });
@@ -1105,6 +1119,9 @@ exports.buildSystemPrompt = buildSystemPrompt;
 exports.buildSystemPromptBlocks = buildSystemPromptBlocks;
 // Erase logic exported for emulator-backed verification of the deletion receipt.
 exports.eraseUserData = eraseUserData;
+// Full-erasure orchestrator (Firestore wipe + Auth record) exported so the
+// wipe-before-credential ordering can be unit-tested.
+exports.eraseUserAccount = eraseUserAccount;
 // Canonical list of owner-scoped collections wiped on account deletion. Exported
 // so the deletion-receipt test can assert every tracked collection is reported.
 exports.USER_DATA_COLLECTIONS = USER_DATA_COLLECTIONS;

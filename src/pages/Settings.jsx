@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from '../firebase';
 import { readUserData, upsertUserSettings } from '../utils/firebaseUtils';
@@ -66,10 +66,10 @@ export default function Settings() {
   const [showDelete, setShowDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
-  // Deletion receipt: the manifest of what was erased, shown while the user is
-  // still authenticated. Finalizing (deleteUser) is deferred to acknowledgment,
-  // because deleteUser trips onAuthStateChanged → AuthGate and unmounts this
-  // page, which would otherwise hide the receipt before it could be read.
+  // Deletion receipt: the manifest of what was erased. The server has already
+  // removed the data and the Auth record; the local session survives until
+  // token refresh, so the receipt stays readable until the user acknowledges
+  // it and we sign out locally.
   const [deletionReceipt, setDeletionReceipt] = useState(null);
   const [finishing, setFinishing] = useState(false);
 
@@ -293,8 +293,9 @@ export default function Settings() {
       // Deletion is a sensitive operation — re-authenticate first.
       const cred = EmailAuthProvider.credential(user.email, deletePassword);
       await reauthenticateWithCredential(user, cred);
-      // Wipe all Firestore data via the Admin-SDK function. The Firebase Auth
-      // user is deleted only after the user acknowledges the receipt below.
+      // Server-side erasure: all Firestore data AND the Auth record. The local
+      // session stays live until acknowledgment (the SDK only learns the user
+      // is gone on token refresh), which keeps the receipt readable.
       const functions = getFunctions();
       // Server timeoutSeconds is 120; the SDK default (70s) gave up while the
       // wipe was still running. Outlast the server deadline plus network.
@@ -313,21 +314,14 @@ export default function Settings() {
     }
   };
 
-  // Final irreversible step: remove the auth user. Data is already erased; if
-  // this fails (e.g. stale re-auth after a long read of the receipt) we sign
-  // out anyway — the orphaned, data-empty auth record is harmless.
+  // The account no longer exists server-side (deleteUserData removed both the
+  // data and the Auth record). All that remains is clearing the local session.
   const finishDeletion = async () => {
     setFinishing(true);
     try {
-      const auth = await getAuth();
-      const user = auth.currentUser;
-      if (user) await deleteUser(user);
-    } catch (err) {
-      logger.error('Final account removal failed:', { code: err?.code });
-      try { await authService.signOut(); } catch { /* swap to auth surface regardless */ }
-    } finally {
-      navigate('/auth');
-    }
+      await authService.signOut();
+    } catch { /* local session only — swap to auth surface regardless */ }
+    navigate('/auth');
   };
 
   if (showBriefing) {
@@ -584,7 +578,7 @@ function DeletionReceipt({ manifest, finishing, onFinish }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-white text-sm">Your data has been erased.</p>
+        <p className="text-white text-sm">Your account and all data have been erased.</p>
         <p className="text-[#858585] text-xs mt-1">
           What was removed from the record:
         </p>

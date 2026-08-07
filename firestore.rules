@@ -29,18 +29,27 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Email-verification boundary (2026-08-06). A signed-in session whose
+    // address is unconfirmed gets NOTHING: client-side gating (VerifyEmailGate)
+    // is bypassable, this claim check is the enforcement layer. Every helper
+    // below requires it, and every user-data allow routes through a helper.
+    // Tokens without the claim (e.g. legacy anonymous accounts) fail closed.
+    function hasVerifiedEmail() {
+      return request.auth.token.email_verified == true;
+    }
+
     function isOwner(userId) {
-      return isSignedIn() && userId == request.auth.uid;
+      return isSignedIn() && hasVerifiedEmail() && userId == request.auth.uid;
     }
 
     function createsOwnDocument() {
-      return isSignedIn() &&
+      return isSignedIn() && hasVerifiedEmail() &&
         request.resource.data.userId is string &&
         request.resource.data.userId == request.auth.uid;
     }
 
     function updatesOwnDocument() {
-      return isSignedIn() &&
+      return isSignedIn() && hasVerifiedEmail() &&
         resource.data.userId is string &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.userId == resource.data.userId;
@@ -59,7 +68,7 @@ service cloud.firestore {
     // scoping mechanism; per-user collections on this app are bounded
     // by user behavior, not by a rule-level cap.
     function ownerListAllowed() {
-      return isSignedIn() &&
+      return isSignedIn() && hasVerifiedEmail() &&
         resource.data.userId == request.auth.uid;
     }
 

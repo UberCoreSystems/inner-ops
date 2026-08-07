@@ -28,9 +28,10 @@ export const authService = {
         logger.log(`✅ Display name set to: ${displayName}`);
       }
 
-      // Fire-and-forget verification email. We intentionally do NOT gate
-      // features on emailVerified for v1 — the email is informational only.
-      // A failure here must not block registration.
+      // Verification email is the entry gate: App renders VerifyEmailGate for
+      // any signed-in user with emailVerified=false, and firestore.rules deny
+      // user-data access without the email_verified claim. A send failure here
+      // must still not block registration — the gate screen offers a resend.
       try {
         await sendEmailVerification(user);
         logger.log("✉️  Verification email sent to:", user.email);
@@ -82,6 +83,23 @@ export const authService = {
       };
     } catch (error) {
       logger.error("❌ Sign in failed:", error);
+      throw this.handleAuthError(error);
+    }
+  },
+
+  // Re-send the verification email for the active session (VerifyEmailGate).
+  // The 60s resend cooldown lives in the UI; Firebase additionally rate-limits
+  // sends server-side (auth/too-many-requests).
+  async resendVerification() {
+    try {
+      const auth = getCachedAuth() || await getAuth();
+      const user = auth?.currentUser;
+      if (!user) throw new Error('No active session. Sign in again.');
+      await sendEmailVerification(user);
+      logger.log("✉️  Verification email re-sent to:", user.email);
+      return { sent: true };
+    } catch (error) {
+      logger.error("❌ Verification re-send failed:", error);
       throw this.handleAuthError(error);
     }
   },

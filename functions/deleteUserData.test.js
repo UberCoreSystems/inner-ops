@@ -18,7 +18,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
 
-const { eraseUserData, USER_DATA_COLLECTIONS } = require("./index");
+const { eraseUserData, eraseUserAccount, USER_DATA_COLLECTIONS } = require("./index");
 
 // Minimal fake Firestore covering exactly the surface eraseUserData/deleteOwnedDocs use:
 //   collection(name).where().limit().get()  → owner-scoped page (single page; size < 400)
@@ -101,6 +101,32 @@ test("the two root docs (userProfiles/{uid}, users/{uid}) are recursively delete
     db._calls.recursiveDeletes.includes("users/abc"),
     "users/{uid} (and its admin subcollections) must be recursively deleted"
   );
+});
+
+test("eraseUserAccount removes the Auth record only after the full wipe", async () => {
+  const db = makeFakeDb({ userProfileExists: true });
+  const authDeletions = [];
+  const fakeAuth = {
+    async deleteUser(uid) {
+      // Ordering invariant: the credential must not be destroyed while any
+      // user data could still exist — both root recursive deletes come first.
+      assert.ok(db._calls.recursiveDeletes.includes("userProfiles/user-123"));
+      assert.ok(db._calls.recursiveDeletes.includes("users/user-123"));
+      authDeletions.push(uid);
+    },
+  };
+  const manifest = await eraseUserAccount(db, fakeAuth, "user-123");
+  assert.deepStrictEqual(authDeletions, ["user-123"], "Auth record deleted exactly once, by uid");
+  assert.strictEqual(manifest.userProfile, 1, "receipt manifest passes through unchanged");
+});
+
+test("eraseUserAccount leaves the Auth record intact when the wipe fails", async () => {
+  const db = makeFakeDb();
+  db.recursiveDelete = async () => { throw new Error("wipe failed"); };
+  const authDeletions = [];
+  const fakeAuth = { async deleteUser(uid) { authDeletions.push(uid); } };
+  await assert.rejects(() => eraseUserAccount(db, fakeAuth, "u"), /wipe failed/);
+  assert.strictEqual(authDeletions.length, 0, "credential must survive a failed wipe so the user can retry");
 });
 
 test("empty account: every collection reports 0 and absent profile reports 0", async () => {

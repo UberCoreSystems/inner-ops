@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useReducer, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { authService } from './utils/authService';
@@ -16,6 +16,7 @@ import AuthGate from './components/AuthGate';
 import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
 import OnboardingGate from './components/OnboardingGate';
+import VerifyEmailGate from './components/VerifyEmailGate';
 import BannerStack from './components/banner/BannerStack';
 import ScrollToTop from './components/ScrollToTop';
 
@@ -66,8 +67,13 @@ const lazyInitializeFirebase = async () => {
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // reload() mutates the Firebase User in place, so a same-reference setUser
+  // bails out of re-rendering. VerifyEmailGate bumps this after a confirmed
+  // verification to force the gate condition to re-evaluate.
+  const [, bumpAuthVersion] = useReducer((n) => n + 1, 0);
 
-  useSynthesisAutoGenerate(user?.uid || null);
+  // Unverified sessions must not touch Firestore (rules deny the read anyway).
+  useSynthesisAutoGenerate(user && user.emailVerified ? user.uid : null);
 
   useEffect(() => {
     // Finding 9: boot-time env diagnostic removed. firebase.js fails fast on
@@ -84,8 +90,16 @@ function App() {
         
         // NOW set up the auth listener after Firebase is initialized
         // This will check if user is already logged in
-        const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
+        const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
           if (firebaseUser) {
+            // The cached token does not learn that the verification link was
+            // clicked in another tab — reload before reading emailVerified so
+            // a verified user is not re-gated on page load.
+            try {
+              await firebaseUser.reload();
+            } catch (reloadErr) {
+              logger.warn("User reload failed, using cached auth state:", reloadErr?.code || reloadErr?.message);
+            }
             logger.log("🔐 Existing user found:", firebaseUser.uid);
             // Do not send email to PostHog — uid is the only PII forwarded.
             identify(firebaseUser.uid, {});
@@ -144,6 +158,20 @@ function App() {
           <p className="mt-4 text-sm text-oura-textSecondary tracking-wide">Initializing Inner Ops</p>
         </div>
       </div>
+    );
+  }
+
+  // A signed-in-but-unverified user is unauthorized for every app route.
+  // Rendering the gate before the Router mounts means no protected surface —
+  // and no Firestore listener — exists until the address is confirmed.
+  // firestore.rules enforce the same boundary server-side (email_verified).
+  if (user && !user.emailVerified) {
+    return (
+      <VerifyEmailGate
+        user={user}
+        onVerified={bumpAuthVersion}
+        onSignOut={handleLogout}
+      />
     );
   }
 
