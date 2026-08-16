@@ -12,6 +12,7 @@ const {
   MAX_USER_RESPONSE_CHARS,
   MAX_REACTANCE_SUMMARY_CHARS,
   MAX_REACTANCE_QUESTION_CHARS,
+  RECENT_ENTRY_EXCERPT_MAX_CHARS,
 } = require("./config");
 
 const { checkAndIncrementOracleLimit } = require("./rateLimit");
@@ -169,6 +170,11 @@ exports.oracle = onCall(
       throw new HttpsError("invalid-argument", "Entry text exceeds maximum length.");
     }
 
+    // Dynamic response length: scaled feedback modules get a per-entry token
+    // budget and a matching LENGTH TARGET directive; everything else keeps 600.
+    const entryWords = countEntryWords(entryText);
+    const lengthTier = lengthTierFor(normalizedModuleForLimit, entryWords);
+
     const client = new Anthropic({ apiKey: anthropicApiKey.value() });
 
     // Long-term memory: fetched SERVER-SIDE by verified uid (admin SDK) so the
@@ -182,7 +188,7 @@ exports.oracle = onCall(
     }
 
     // Split into a STABLE cacheable prefix + DYNAMIC per-user/per-session suffix.
-    const blocks = buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion);
+    const blocks = buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion, entryWords);
     const promptContextFragment = resolvePromptContext(promptContextKey, promptContextParams);
     // The registry fragment is per-call-type (and may carry clamped user text),
     // so it joins the dynamic suffix — never the cached prefix.
@@ -208,7 +214,7 @@ exports.oracle = onCall(
       // data retention is a separate enterprise setting, not assumed here.)
       const message = await client.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 600,
+        max_tokens: lengthTier ? lengthTier.maxTokens : DEFAULT_MAX_TOKENS,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       });
@@ -226,6 +232,10 @@ exports.oracle = onCall(
         outputTokens: message.usage?.output_tokens ?? null,
         latencyMs: Date.now() - startedAt,
         posture: parsed.metacognitiveDepth || null,
+        // Dynamic-length observability: which band fired, and whether the
+        // response finished cleanly (a max_tokens stop means truncation).
+        lengthBand: lengthTier ? lengthTier.band : null,
+        stopReason: message.stop_reason ?? null,
       });
 
       // Fire-and-forget cost telemetry — adds no latency, fails silently.
@@ -266,8 +276,8 @@ exports.oracle = onCall(
 // inflate or hijack the system prompt with their own stored content.
 const MAX_CTX_FIELD_CHARS = 200;
 const MAX_CTX_ITEMS = 12;
-function ctxField(value) {
-  const s = String(value ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CTX_FIELD_CHARS);
+function ctxField(value, maxChars = MAX_CTX_FIELD_CHARS) {
+  const s = String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxChars);
   return `«${s}»`;
 }
 
@@ -431,7 +441,50 @@ DEPTH:Identity — the entry addresses structural self-understanding ("this is h
 Output only one of: DEPTH:Surface, DEPTH:Pattern, or DEPTH:Identity.
 Then a blank line. Then your prose response. Do not mention the depth in your prose.`;
 
-function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion) {
+// Dynamic response length: persona feedback scales with entry length instead of
+// the former fixed "150–220 words." Bands, not a formula — predictable and
+// testable, and the model handles a stated range better than an exact count.
+// max_tokens ≈ upper band × 1.4 tokens/word + ~25% headroom so every response
+// finishes with end_turn — a max_tokens stop would sever the closing tag.
+// Only the four feedback surfaces scale; classifier/extractors/morning brief/
+// emergency and the oracle/synthesis fall-throughs keep their fixed shapes.
+const LENGTH_SCALED_MODULES = new Set(["journal", "killlist", "relapse", "hardlessons"]);
+const LENGTH_TIERS = [
+  { band: "A", maxEntryWords: 99, targetWords: "130–200", maxTokens: 400 },
+  { band: "B", maxEntryWords: 179, targetWords: "170–270", maxTokens: 500 },
+  { band: "C", maxEntryWords: 299, targetWords: "230–400", maxTokens: 750 },
+  { band: "D", maxEntryWords: 449, targetWords: "330–550", maxTokens: 1000 },
+  { band: "E", maxEntryWords: Infinity, targetWords: "420–550", maxTokens: 1000 },
+];
+const DEFAULT_MAX_TOKENS = 600;
+
+function countEntryWords(text) {
+  return String(text || "").trim().split(/\s+/).filter(Boolean).length;
+}
+
+function lengthTierFor(normalizedModule, entryWords) {
+  if (!LENGTH_SCALED_MODULES.has(normalizedModule)) return null;
+  const words = Number.isFinite(entryWords) && entryWords > 0 ? entryWords : 0;
+  const tier = LENGTH_TIERS.find((t) => words <= t.maxEntryWords);
+  return { band: tier.band, targetWords: tier.targetWords, maxTokens: tier.maxTokens, entryWords: words };
+}
+
+// Per-entry, so this block always rides the UNCACHED dynamic suffix — see
+// buildSystemPromptBlocks. Putting it in the stable prefix would invalidate the
+// shared cache on every differently-sized entry.
+function buildLengthDirectiveBlock(normalizedModule, entryWords) {
+  const tier = lengthTierFor(normalizedModule, entryWords);
+  if (!tier) return "";
+  if (tier.band === "A") {
+    return `\n\nLENGTH TARGET: The entry is short. That does not make it small. Respond with ${tier.targetWords} words. Find the thing worth pressure and give it full treatment. Do not mirror his brevity by going thin, and do not pad — if you run past what the entry supports, you are inventing.`;
+  }
+  if (tier.band === "E") {
+    return `\n\nLENGTH TARGET: He wrote at length — roughly ${tier.entryWords} words. Respond with ${tier.targetWords} words. You will not match his length; match his seriousness. Choose the two or three load-bearing threads and go deep. If something significant goes unaddressed, name that you are leaving it — do not skim everything thinly.`;
+  }
+  return `\n\nLENGTH TARGET: He wrote roughly ${tier.entryWords} words. Respond with ${tier.targetWords} words — at least the weight he brought, at most half again as much. If you run out of substance before the floor, you missed something in the entry; read it again. Never stretch to fill the range.`;
+}
+
+function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion, entryWords) {
   // Normalize: 'killList', 'Kill List', 'Kill_List' → 'killlist'
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
 
@@ -460,7 +513,13 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memo
   const context = moduleContext[normalizedModule] || moduleContext.journal;
   const toneNote = toneColors[tone] ? `\nTone color: ${toneColors[tone]}` : "";
   const isEmergency = normalizedModule === "emergency";
-  const wordLimit = isEmergency ? "100–150 words." : "150–220 words.";
+  // Scaled modules defer length to the per-entry LENGTH TARGET in the dynamic
+  // tail; non-scaled persona fall-throughs (oracle/synthesis) keep the fixed
+  // range so the rule never dangles. Static per module → cache-safe.
+  const lengthRules = LENGTH_SCALED_MODULES.has(normalizedModule)
+    ? `- Length: obey the LENGTH TARGET appended at the end of this briefing. It scales with what he wrote.`
+    : `- 150–220 words.`;
+  const lengthBlock = buildLengthDirectiveBlock(normalizedModule, entryWords);
   // BER-167: trust calibration block — injected only when below threshold.
   // A non-number entryCount stays null so both gates below read "unknown" the
   // same way: high-data, no low-data caveat.
@@ -758,7 +817,8 @@ Journal entries:
 - Open by responding to the most alive thing in what he wrote — the thing that carries the most energy, whether that energy is positive, painful, or unresolved.
 - Engage with specifics from his entry. Quote or reference his exact language.
 - Offer one insight that extends or deepens what he wrote — something he can use, not just something that sounds wise.
-- Close with one question specific to his situation. If the entry is a win, the question should point forward ("what does this make possible now?"), not backward ("what are you still avoiding?").
+- When recent entries are provided and this entry continues one of them, name the through-line — he should feel that you remember. If there is no genuine continuity, do not fabricate one.
+- If the entry is a win and you close with a question, it should point forward ("what does this make possible now?"), not backward ("what are you still avoiding?").
 
 Kill List entries:
 - If he named a new target: engage with the specific pattern — what makes it survive, what makes it killable. Close with a question about his history with this target.
@@ -787,6 +847,14 @@ Hard Lesson entries:
 - Test the rule: name the most likely scenario where he will rationalize breaking it.
 - Close with a question about when the next test of this rule will arrive.
 
+CLOSING MOVE — the module notes above describe what a closing question should aim at when you use one. Whether you close with a question is governed by the posture you chose in Step 1, not by template:
+- CHALLENGE → close with one question he cannot answer without taking a position.
+- BUILD or RECEIVE → close with a forward-pointing question OR a single directive naming what to protect or repeat. A win does not always need to be interrogated.
+- GROUND → close with a statement that holds the weight. No question required. Do not manufacture inquiry into grief.
+- CLARIFY → the probing question may sit mid-response where it does the organizing work; close with the frame it produces.
+
+Vary the body with the entry: a synthesis across his recent record when continuity is present, a single-thread deep read when one thing dominates, a direct confrontation when he is dodging. Do not run the same open–insight–question shape every time.
+
 Hard rules:
 - You are speaking directly to the man who wrote the entry. Address him as "you" in every sentence — never "he", "the man", "the user", never prose that describes him as if reporting to a third party. Any context or pattern notes you receive about him, restate in direct address when you use them.
 - Respond only to what was actually written. Every sentence must connect to something specific in his entry.
@@ -795,8 +863,9 @@ Hard rules:
 - Never use: "you've got this", "healing journey", "be kind to yourself", "proud of you", "validate", "sit with", "amazing", "warrior."
 - No hedging. Cut "perhaps", "it seems", "you might want to consider."
 - Do not moralize. Do not lecture. Speak to him like an equal.
-- When you close with a question, wrap that single closing question inline in <closing_question>...</closing_question> tags. The tags must surround the question text exactly once. The question still reads as part of your prose; the tags are markers for downstream processing only.
-- ${wordLimit}${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${normalizedModule === 'journal' ? JOURNAL_DEPTH_DIRECTIVE : ''}${evasionBlock}`;
+- If — and only if — you close with a question, wrap that single closing question inline in <closing_question>...</closing_question> tags, exactly once. The question still reads as part of your prose; the tags are markers for downstream processing only. If you close with a statement or directive, use no tags anywhere. Never tag a mid-response question.
+${lengthRules}
+- Every sentence must earn its place. If a sentence restates his entry, restates you, or exists to reach a length, cut it and go deeper on what remains. Length comes from substance — another specific engaged, an implication drawn out, a pattern traced further — never from stretching a thought.${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${normalizedModule === 'journal' ? JOURNAL_DEPTH_DIRECTIVE : ''}${evasionBlock}${lengthBlock}`;
 }
 
 // Split the assembled system prompt into a STABLE cacheable prefix and a DYNAMIC
@@ -811,8 +880,8 @@ Hard rules:
 // `cacheable` is false for templates that interpolate per-user data MID-prompt
 // (the extraction prompts) — their prefix is not user-identical, so we never put
 // a cache breakpoint on it. Returns { stable, dynamic, cacheable }.
-function buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion) {
-  const full = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion);
+function buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion, entryWords) {
+  const full = buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memoryBlocks, evasion, entryWords);
   const normalizedModule = (moduleName || '').toLowerCase().replace(/[^a-z]/g, '');
   const count = typeof entryCount === "number" ? entryCount : null;
 
@@ -838,13 +907,14 @@ function buildSystemPromptBlocks(moduleName, tone, behavioralContext, entryCount
   const isEmergency = normalizedModule === "emergency";
   const memoryBlock = isEmergency ? "" : memory.buildMemoryBlock(memoryBlocks);
   const depthDirective = normalizedModule === "journal" ? JOURNAL_DEPTH_DIRECTIVE : "";
-  // Per-entry, so it belongs in the uncached suffix — putting it in the stable
-  // prefix would invalidate the shared cache on every differently-worded entry.
+  // Per-entry, so these belong in the uncached suffix — putting either in the
+  // stable prefix would invalidate the shared cache on every different entry.
   const evasionBlock = buildEvasionCalibrationBlock(evasion);
+  const lengthBlock = buildLengthDirectiveBlock(normalizedModule, entryWords);
 
   const dynamic = isEmergency
     ? `${behavioralContextBlock}${trustCalibrationBlock}${evasionBlock}`
-    : `${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${depthDirective}${evasionBlock}`;
+    : `${behavioralContextBlock}${trustCalibrationBlock}${memoryBlock}${depthDirective}${evasionBlock}${lengthBlock}`;
 
   if (dynamic && full.endsWith(dynamic)) {
     return { stable: full.slice(0, full.length - dynamic.length), dynamic, cacheable: true };
@@ -874,8 +944,11 @@ function buildUserPrompt(entryText, userContext) {
 
   const context = [];
 
+  // All free-text fields below are user-authored and client-supplied — same
+  // clamp + «» delimiter regime as the system-prompt side (ctxField), so they
+  // read as DATA, not instructions.
   if (userContext?.focusStatement) {
-    context.push(`What he's working on: ${userContext.focusStatement}`);
+    context.push(`What he's working on: ${ctxField(userContext.focusStatement)}`);
   }
   if (userContext?.primaryDriver && DRIVER_LABELS[userContext.primaryDriver]) {
     context.push(`His primary reason for being here: ${DRIVER_LABELS[userContext.primaryDriver]}`);
@@ -889,17 +962,21 @@ function buildUserPrompt(entryText, userContext) {
   // triggers — but only when the entry actually intersects with them.
   // Do not force-fit context that has nothing to do with what he wrote.
   if (Array.isArray(userContext?.activeSituations) && userContext.activeSituations.length) {
-    context.push(`What he's currently navigating: ${userContext.activeSituations.join('; ')}`);
+    const items = userContext.activeSituations.slice(0, MAX_CTX_ITEMS).map((s) => ctxField(s));
+    context.push(`What he's currently navigating: ${items.join('; ')}`);
   }
   if (Array.isArray(userContext?.knownTriggers) && userContext.knownTriggers.length) {
-    context.push(`Times/states where he historically fails: ${userContext.knownTriggers.join('; ')}`);
+    const items = userContext.knownTriggers.slice(0, MAX_CTX_ITEMS).map((s) => ctxField(s));
+    context.push(`Times/states where he historically fails: ${items.join('; ')}`);
   }
   if (typeof userContext?.operatingContext === 'string' && userContext.operatingContext.trim()) {
-    context.push(`Additional context he provided: ${userContext.operatingContext.trim()}`);
+    context.push(`Additional context he provided: ${ctxField(userContext.operatingContext, 500)}`);
   }
-  if (userContext?.recentEntries?.length) {
-    const summaries = userContext.recentEntries.slice(0, 2).join(' / ');
-    context.push(`Recent entry themes (context only — do not reference directly): ${summaries}`);
+  if (Array.isArray(userContext?.recentEntries) && userContext.recentEntries.length) {
+    const excerpts = userContext.recentEntries
+      .slice(0, 2)
+      .map((s) => ctxField(s, RECENT_ENTRY_EXCERPT_MAX_CHARS));
+    context.push(`His most recent entries, newest first (use for continuity — name the through-line when this entry extends one; never quote them back verbatim): ${excerpts.join(' / ')}`);
   }
 
   if (context.length > 0) {
@@ -1117,6 +1194,10 @@ exports.buildBehavioralContextBlock = buildBehavioralContextBlock;
 exports.buildEvasionCalibrationBlock = buildEvasionCalibrationBlock;
 exports.buildSystemPrompt = buildSystemPrompt;
 exports.buildSystemPromptBlocks = buildSystemPromptBlocks;
+// Dynamic response length + user-prompt assembly, exported for unit tests.
+exports.lengthTierFor = lengthTierFor;
+exports.buildLengthDirectiveBlock = buildLengthDirectiveBlock;
+exports.buildUserPrompt = buildUserPrompt;
 // Erase logic exported for emulator-backed verification of the deletion receipt.
 exports.eraseUserData = eraseUserData;
 // Full-erasure orchestrator (Firestore wipe + Auth record) exported so the

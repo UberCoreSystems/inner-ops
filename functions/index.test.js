@@ -19,6 +19,9 @@ const {
   buildSystemPromptBlocks,
   resolvePromptContext,
   parseOracleResponse,
+  lengthTierFor,
+  buildLengthDirectiveBlock,
+  buildUserPrompt,
 } = require("./index");
 
 test("buildBehavioralContextBlock renders the journal language pattern when set", () => {
@@ -417,4 +420,146 @@ test("reckoning_confrontation forbids fabrication and forbids a metrics report",
 test("reckoning_confrontation tolerates a missing count", () => {
   const t = resolvePromptContext("reckoning_confrontation", {});
   assert.match(t, /THE RECKONING/);
+});
+
+// ── Dynamic response length (length tiers) ─────────────────────────────────
+
+test("length tier band boundaries are exact", () => {
+  const band = (w) => lengthTierFor("journal", w).band;
+  assert.strictEqual(band(1), "A");
+  assert.strictEqual(band(99), "A");
+  assert.strictEqual(band(100), "B");
+  assert.strictEqual(band(179), "B");
+  assert.strictEqual(band(180), "C");
+  assert.strictEqual(band(299), "C");
+  assert.strictEqual(band(300), "D");
+  assert.strictEqual(band(449), "D");
+  assert.strictEqual(band(450), "E");
+  assert.strictEqual(band(3500), "E");
+});
+
+test("max_tokens scales with the band; invalid word counts degrade to the floor", () => {
+  assert.strictEqual(lengthTierFor("journal", 50).maxTokens, 400);
+  assert.strictEqual(lengthTierFor("journal", 150).maxTokens, 500);
+  assert.strictEqual(lengthTierFor("journal", 250).maxTokens, 750);
+  assert.strictEqual(lengthTierFor("journal", 400).maxTokens, 1000);
+  assert.strictEqual(lengthTierFor("journal", 2000).maxTokens, 1000);
+  assert.strictEqual(lengthTierFor("journal", undefined).band, "A");
+  assert.strictEqual(lengthTierFor("journal", NaN).band, "A");
+});
+
+test("only the four feedback surfaces scale — everything else keeps its shape", () => {
+  for (const mod of ["journal", "killlist", "relapse", "hardlessons"]) {
+    assert.ok(lengthTierFor(mod, 200), `${mod} must scale`);
+  }
+  for (const mod of ["emergency", "oracle", "synthesis", "entryclassification", "morningbrief", "killlistextraction", ""]) {
+    assert.strictEqual(lengthTierFor(mod, 200), null, `${mod} must not scale`);
+  }
+});
+
+test("length directive wording per band: floor, scaled, ceiling", () => {
+  const a = buildLengthDirectiveBlock("journal", 40);
+  assert.match(a, /LENGTH TARGET: The entry is short/);
+  assert.match(a, /130–200 words/);
+  const c = buildLengthDirectiveBlock("journal", 250);
+  assert.match(c, /roughly 250 words/);
+  assert.match(c, /230–400 words/);
+  assert.match(c, /Never stretch to fill the range/);
+  const e = buildLengthDirectiveBlock("journal", 1500);
+  assert.match(e, /roughly 1500 words/);
+  assert.match(e, /420–550 words/);
+  assert.match(e, /match his seriousness/);
+  assert.strictEqual(buildLengthDirectiveBlock("oracle", 250), "", "non-scaled modules get no directive");
+});
+
+test("scaled persona prompt defers to the LENGTH TARGET; fall-throughs keep the fixed range", () => {
+  const journal = buildSystemPrompt("journal", "stoic", null, 50, [], undefined, 250);
+  assert.match(journal, /obey the LENGTH TARGET appended/);
+  assert.match(journal, /\n\nLENGTH TARGET: He wrote roughly 250 words/);
+  assert.ok(!journal.includes("- 150–220 words."), "static word limit gone from scaled modules");
+  assert.match(journal, /Length comes from substance/);
+
+  const oracle = buildSystemPrompt("oracle", "stoic", null, 50, [], undefined, 250);
+  assert.ok(oracle.includes("- 150–220 words."), "oracle fall-through keeps the fixed range");
+  assert.ok(!oracle.includes("\n\nLENGTH TARGET:"), "no dangling directive for fall-throughs");
+
+  const emergency = buildSystemPrompt("emergency", null, null, 50, [], undefined, 250);
+  assert.match(emergency, /- 100–150 words\./);
+  assert.ok(!emergency.includes("LENGTH TARGET"), "emergency is untouched");
+});
+
+test("LENGTH TARGET rides the dynamic suffix; the cached prefix is entry-size-invariant", () => {
+  for (const mod of ["journal", "killlist", "relapse", "hardlessons"]) {
+    const small = buildSystemPromptBlocks(mod, "stoic", bcRich, 50, memRich, undefined, 42);
+    const large = buildSystemPromptBlocks(mod, "stoic", bcRich, 50, memRich, undefined, 1200);
+    assert.strictEqual(small.stable, large.stable, `${mod}: cached prefix must not vary with entry size`);
+    assert.notStrictEqual(small.dynamic, large.dynamic, `${mod}: suffix must carry the per-entry directive`);
+    assert.ok(small.dynamic.includes("\n\nLENGTH TARGET:"), `${mod}: directive in the dynamic tail`);
+    assert.ok(!small.stable.includes("\n\nLENGTH TARGET:"), `${mod}: directive must not invalidate the cached prefix`);
+    assert.strictEqual(small.cacheable, true);
+  }
+});
+
+test("segments recombine byte-for-byte with an entry word count present", () => {
+  const evasion = { band: "high", markers: ["hedging"] };
+  for (const mod of ["journal", "killlist", "relapse", "hardlessons", "emergency", "oracle"]) {
+    const full = buildSystemPrompt(mod, "stoic", bcRich, 50, memRich, evasion, 250);
+    const { stable, dynamic } = buildSystemPromptBlocks(mod, "stoic", bcRich, 50, memRich, evasion, 250);
+    assert.strictEqual(stable + dynamic, full, `${mod}: stable+dynamic must equal buildSystemPrompt`);
+  }
+});
+
+// ── CLOSING MOVE variance ──────────────────────────────────────────────────
+
+test("closing move varies by posture and the tag contract is conditional", () => {
+  const prompt = buildSystemPrompt("journal", "stoic", null, 50, [], undefined, 100);
+  assert.match(prompt, /CLOSING MOVE/);
+  assert.match(prompt, /GROUND → close with a statement that holds the weight/);
+  assert.match(prompt, /If — and only if — you close with a question/);
+  assert.match(prompt, /If you close with a statement or directive, use no tags anywhere/);
+  assert.ok(prompt.includes("Do not run the same open–insight–question shape every time."));
+});
+
+test("a statement-close response parses cleanly with no closing question", () => {
+  const parsed = parseOracleResponse(
+    "DEPTH:Pattern\n\nYou already know the cost of the late-night loop. You named it yourself. Hold the line tonight."
+  );
+  assert.strictEqual(parsed.metacognitiveDepth, "Pattern");
+  assert.strictEqual(parsed.closingQuestion, null, "no question anywhere → null, never fabricated");
+  assert.match(parsed.feedback, /Hold the line tonight\./);
+});
+
+// ── buildUserPrompt clamping (user-authored fields as data, not instructions) ──
+
+test("recent entries are capped at two, excerpted, and delimited", () => {
+  const prompt = buildUserPrompt("entry body here", {
+    recentEntries: ["b".repeat(500), "second entry text", "third must be dropped"],
+  });
+  assert.ok(prompt.includes(`«${"b".repeat(300)}»`), "first excerpt clamped to 300 chars inside guillemets");
+  assert.ok(!prompt.includes("b".repeat(301)), "nothing beyond the clamp survives");
+  assert.ok(prompt.includes("«second entry text»"));
+  assert.ok(!prompt.includes("third must be dropped"));
+  assert.match(prompt, /use for continuity/);
+});
+
+test("free-text profile fields are clamped, delimited, and newline-collapsed", () => {
+  const prompt = buildUserPrompt("entry body here", {
+    focusStatement: "F".repeat(300),
+    activeSituations: ["divorce\nproceedings"],
+    knownTriggers: ["late\nnights"],
+    operatingContext: "O".repeat(1000),
+  });
+  assert.ok(prompt.includes(`«${"F".repeat(200)}»`), "focusStatement clamped to 200");
+  assert.ok(!prompt.includes("F".repeat(201)));
+  assert.ok(prompt.includes("«divorce proceedings»"), "newlines collapse to spaces");
+  assert.ok(prompt.includes("«late nights»"));
+  assert.ok(prompt.includes(`«${"O".repeat(500)}»`), "operatingContext clamped to 500");
+  assert.ok(!prompt.includes("O".repeat(501)));
+});
+
+test("situation and trigger lists are capped at 12 items", () => {
+  const situations = Array.from({ length: 14 }, (_, i) => `situation-${i}`);
+  const prompt = buildUserPrompt("entry body here", { activeSituations: situations });
+  assert.ok(prompt.includes("«situation-11»"), "12th item renders");
+  assert.ok(!prompt.includes("situation-12"), "13th item is dropped");
 });

@@ -1019,6 +1019,18 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
           .join(' | ')
       : '';
 
+    // Continuity: the two most recent entry bodies (newest first) ride the wire
+    // as userContext.recentEntries so Oracle feedback can name the through-line
+    // across sessions. The Cloud Function clamps + delimits these server-side
+    // (300 chars); this excerpt cap only bounds the request payload.
+    const recentEntries = Array.isArray(resolvedPast)
+      ? resolvedPast
+          .slice(0, 2)
+          .map((entry) => normalizeEntryText(entry))
+          .filter(Boolean)
+          .map((text) => text.slice(0, 280))
+      : [];
+
     // Auto-fetch behavioral context when not explicitly provided by caller.
     let uid = null;
     try {
@@ -1044,6 +1056,7 @@ export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntrie
       moduleName,
       entryText,
       priorFeedbackSummary,
+      ...(recentEntries.length ? { userContext: { recentEntries } } : {}),
       behavioralContext: resolvedContext,
       triggeredCriterion,
       promptContextKey: resolvedPromptContextKey,

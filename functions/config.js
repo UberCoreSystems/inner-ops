@@ -25,6 +25,9 @@ exports.MAX_USER_RESPONSE_CHARS = intFromEnv("ORACLE_MAX_USER_RESPONSE_CHARS", 8
 exports.MAX_FEEDBACK_CHARS = intFromEnv("ORACLE_MAX_FEEDBACK_CHARS", 8000);
 exports.MAX_REACTANCE_SUMMARY_CHARS = intFromEnv("ORACLE_MAX_REACTANCE_SUMMARY_CHARS", 500);
 exports.MAX_REACTANCE_QUESTION_CHARS = intFromEnv("ORACLE_MAX_REACTANCE_QUESTION_CHARS", 300);
+// Per-excerpt cap on the recent-entry continuity excerpts forwarded by the
+// client (clamped + «»-delimited server-side in buildUserPrompt).
+exports.RECENT_ENTRY_EXCERPT_MAX_CHARS = intFromEnv("ORACLE_RECENT_ENTRY_EXCERPT_MAX_CHARS", 300);
 
 // ─── Long-term AI memory ────────────────────────────────────────────────
 // Separate daily cap for memory-updater Haiku calls — kept OFF the Oracle
