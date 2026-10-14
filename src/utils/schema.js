@@ -116,6 +116,10 @@ export const CONFRONTATION_FIELDS = Object.freeze({
   ORACLE_RESPONSE: 'oracleResponse', // Oracle's response prose
   REACTION: 'reaction',              // null | 'landed' | 'disagree' | 'sit_with' | 'missed'
   FOLLOW_UP_RESPONSE: 'followUpResponse', // optional Oracle follow-up text from "Go deeper"
+  // The commitment the follow-up closed on ({ text, pattern, trigger, action,
+  // check }). The server lifts the line out of the follow-up prose, so it is
+  // stored beside it or the record loses it. null when the turn had none.
+  COMMITMENT: 'commitment',
   ORACLE_ENGAGED: 'oracleEngaged',   // always true on these docs; explicit for the engagement reader
 });
 
@@ -232,4 +236,9 @@ export const ORACLE_FIELDS = Object.freeze({
   // and render without a provenance claim rather than guessing.
   PROVENANCE: 'oracleProvenance',
   FALLBACK_REASON: 'oracleFallbackReason',
+  // The commitment an Oracle follow-up closed on, persisted on the journal
+  // entry beside oracleFollowUp: { text, pattern, trigger, action, check,
+  // createdAt, contractId?, contractedAt? }. null when the follow-up had none;
+  // contractId is stamped by the Ledger once a Kill Contract is signed from it.
+  COMMITMENT: 'oracleCommitment',
 });

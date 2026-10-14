@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeIntentionSuggestions, normalizeRedirectCritique } from './crossModuleExtraction.js';
+import { normalizeIntentionSuggestions, normalizeRedirectCritique, buildCommitmentPrefill } from './crossModuleExtraction.js';
 
 describe('normalizeIntentionSuggestions', () => {
   it('returns [] for malformed / empty input', () => {
@@ -129,5 +129,44 @@ describe('normalizeRedirectCritique', () => {
       suggestions: [{ title: '', why: '' }],
     });
     assert.deepEqual(out, { verdict: 'sound', critique: '', suggestions: [] });
+  });
+});
+
+describe('buildCommitmentPrefill', () => {
+  const commitment = {
+    text: 'When a meeting runs past 6pm, I will train at 7am next day. Checked by the Ledger check-in.',
+    pattern: 'Gym skipped for work',
+    trigger: 'a meeting runs past 6pm',
+    action: 'train at 7am next day',
+    check: 'the Ledger check-in',
+  };
+
+  it('maps the commitment onto the Ledger prefill shape', () => {
+    assert.deepEqual(buildCommitmentPrefill(commitment, 'entry-1'), {
+      targetTitle: 'Gym skipped for work',
+      intention: { when: 'a meeting runs past 6pm', iWill: 'train at 7am next day' },
+      targetDescription: commitment.text,
+      fromJournalEntryId: 'entry-1',
+    });
+  });
+
+  it('respects the form caps: title 100, each clause 50', () => {
+    const out = buildCommitmentPrefill({
+      ...commitment,
+      pattern: 'P'.repeat(140),
+      trigger: 'T'.repeat(80),
+      action: 'A'.repeat(80),
+    }, 'entry-2');
+    assert.equal(out.targetTitle.length, 100);
+    assert.equal(out.intention.when.length, 50);
+    assert.equal(out.intention.iWill.length, 50);
+  });
+
+  it('omits what is missing so the form falls back to its own defaults', () => {
+    const noParts = buildCommitmentPrefill({ text: 'Train tomorrow at seven.', pattern: null, trigger: null, action: null, check: null }, 'entry-3');
+    assert.deepEqual(noParts, { targetDescription: 'Train tomorrow at seven.', fromJournalEntryId: 'entry-3' });
+    assert.deepEqual(buildCommitmentPrefill({ ...commitment, trigger: 'only one half', action: '' }, null).intention, undefined);
+    assert.ok(!('fromJournalEntryId' in buildCommitmentPrefill(commitment, null)));
+    assert.deepEqual(buildCommitmentPrefill(null, null), {});
   });
 });

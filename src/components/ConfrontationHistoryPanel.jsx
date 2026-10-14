@@ -244,6 +244,7 @@ export default function ConfrontationHistoryPanel({ confrontations = [] }) {
                     {g.entries.map((c) => {
                       const reaction = c?.[CONFRONTATION_FIELDS.REACTION];
                       const followUp = c?.[CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE];
+                      const commitmentText = c?.[CONFRONTATION_FIELDS.COMMITMENT]?.text;
                       return (
                         <div key={c.id} className="p-4">
                           <p className="text-[#858585] text-[10px] mb-2">
@@ -270,6 +271,12 @@ export default function ConfrontationHistoryPanel({ confrontations = [] }) {
                             <div className="mt-2 pt-2 border-t border-[#1a1a1a]">
                               <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">Follow-up</p>
                               <p className="text-[#ababab] text-xs leading-relaxed whitespace-pre-line">{followUp}</p>
+                              {typeof commitmentText === 'string' && commitmentText && (
+                                <p className="mt-2 text-[#d1d1d1] text-xs leading-relaxed">
+                                  <span className="text-[#858585] uppercase tracking-widest mr-2">Commitment</span>
+                                  {commitmentText}
+                                </p>
+                              )}
                             </div>
                           )}
 

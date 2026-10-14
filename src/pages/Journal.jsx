@@ -33,6 +33,7 @@ import {
   stashKillListExtraction,
   stashRelapseExtraction,
   stashHardLessonExtraction,
+  buildCommitmentPrefill,
 } from '../utils/crossModuleExtraction';
 
 // Reflective prompts surfaced one at a time. The Gibbs-cycle "action plan"
@@ -909,24 +910,35 @@ export default function Journal() {
   // survives a reload. The response is generated in OracleModal via the Claude
   // proxy (callOracleRaw) — no local templates. Field names match the entry
   // render slots so past entries show the exchange with no extra render code.
-  const persistFollowUp = async ({ followUpText, followUpResponse }) => {
+  // The commitment the reply closed on is stored beside it; an explicit null
+  // clears a stale one when a regenerated exchange ends without a tag.
+  const persistFollowUp = async ({ followUpText, followUpResponse, commitment = null }) => {
     if (!currentEntryId) return;
+    const patch = {
+      userResponse: followUpText,
+      oracleFollowUp: followUpResponse,
+      [ORACLE_FIELDS.COMMITMENT]: commitment
+        ? { ...commitment, createdAt: new Date().toISOString() }
+        : null,
+    };
     try {
-      await updateData('journalEntries', currentEntryId, {
-        userResponse: followUpText,
-        oracleFollowUp: followUpResponse,
-      });
+      await updateData('journalEntries', currentEntryId, patch);
       setEntries(prev =>
-        prev.map(e =>
-          e.id === currentEntryId
-            ? { ...e, userResponse: followUpText, oracleFollowUp: followUpResponse }
-            : e
-        )
+        prev.map(e => (e.id === currentEntryId ? { ...e, ...patch } : e))
       );
     } catch (error) {
       logger.error('Error saving oracle follow-up:', error);
       ouraToast.error('Exchange shown but not saved to the entry.');
     }
+  };
+
+  // "Make it a Kill Contract": hand the commitment to the Ledger's Add
+  // Contract form, prefilled. Same stash + navigate handoff as the cross-
+  // module extraction cards; nothing is written until he signs the form.
+  const handleMakeContract = (commitment, entryId) => {
+    if (!commitment) return;
+    stashKillListExtraction(buildCommitmentPrefill(commitment, entryId));
+    navigate('/ledger');
   };
 
   // Persist a reading that replaced the one shown when the modal opened —
@@ -1719,6 +1731,7 @@ export default function Journal() {
         onClose={() => setDetailEntryId(null)}
         onEdit={handleDetailEdit}
         onArchive={handleDetailArchive}
+        onMakeContract={(entry) => handleMakeContract(entry[ORACLE_FIELDS.COMMITMENT], entry.id)}
       />
 
       {/* Oracle Modal */}
@@ -1732,6 +1745,7 @@ export default function Journal() {
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
         onFollowUpStored={persistFollowUp}
+        onMakeContract={(commitment) => handleMakeContract(commitment, currentEntryId)}
         onFeedbackReplaced={persistReplacedFeedback}
         entryCount={oracleModal.entryCount}
         metacognitiveDepth={oracleModal.metacognitiveDepth}

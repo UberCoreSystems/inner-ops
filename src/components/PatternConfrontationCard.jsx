@@ -205,14 +205,18 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
     }
   };
 
-  const handleFollowUpStored = async ({ followUpResponse } = {}) => {
+  const handleFollowUpStored = async ({ followUpResponse, commitment = null } = {}) => {
     if (!activeDocId || !followUpResponse) return;
+    // The commitment is lifted out of the prose server-side, so it is stored
+    // beside the follow-up or the record loses the line the turn closed on.
+    const patch = {
+      [CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE]: followUpResponse,
+      [CONFRONTATION_FIELDS.COMMITMENT]: commitment,
+    };
     try {
-      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, {
-        [CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE]: followUpResponse,
-      });
+      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, patch);
       setConfrontations((prev) => prev.map((c) =>
-        c.id === activeDocId ? { ...c, [CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE]: followUpResponse } : c
+        c.id === activeDocId ? { ...c, ...patch } : c
       ));
     } catch (err) {
       logger.warn('PatternConfrontationCard: follow-up write failed', err?.message);

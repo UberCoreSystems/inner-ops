@@ -563,3 +563,99 @@ test("situation and trigger lists are capped at 12 items", () => {
   assert.ok(prompt.includes("«situation-11»"), "12th item renders");
   assert.ok(!prompt.includes("situation-12"), "13th item is dropped");
 });
+
+// ── promptContextKey registry: oracle_challenge (follow-up commitment) ──────
+
+test("oracle_challenge closes on a commitment, allows concession, and drops the no-back-down absolute", () => {
+  const t = resolvePromptContext("oracle_challenge", { pushback: "That skip was a scheduling clash, not avoidance." });
+  assert.match(t, /His pushback, verbatim: "That skip was a scheduling clash, not avoidance\."/);
+  assert.match(t, /concede plainly/);
+  assert.match(t, /Concede only to the record/);
+  assert.match(t, /Never invent a pattern, event, date, or quote/);
+  assert.match(t, /CLOSE WITH ONE COMMITMENT, NOT A QUESTION/);
+  assert.match(t, /<commitment pattern="/);
+  assert.match(t, /Commitment: When \[specific trigger or time\], I will \[specific observable action\]\. Checked by \[how the record will show it\]\./);
+  assert.match(t, /never use <closing_question> tags/);
+  assert.match(t, /"use no tags" rule above does not apply/);
+  assert.match(t, /no motivational, wellness, or therapeutic language, no hedging/);
+  assert.ok(!/Do not back down/.test(t), "the no-concession absolute is gone");
+  assert.ok(!/Stay confrontational/.test(t));
+  assert.ok(!/you got this|keep going|stay strong/i.test(t), "no encouragement copy");
+});
+
+test("oracle_challenge clamps the pushback and yields nothing without one", () => {
+  const long = resolvePromptContext("oracle_challenge", { pushback: "p".repeat(8001) });
+  assert.ok(long.includes("p".repeat(8000)));
+  assert.ok(!long.includes("p".repeat(8001)));
+  assert.strictEqual(resolvePromptContext("oracle_challenge", {}), "");
+  assert.strictEqual(resolvePromptContext("oracle_challenge", { pushback: 42 }), "");
+});
+
+test("oracle_challenge rides the dynamic suffix; the cached first-reading prefix is untouched", () => {
+  const { stable, cacheable } = buildSystemPromptBlocks("oracle", "stoic", null, 50, [], undefined, 100);
+  assert.ok(cacheable);
+  assert.match(stable, /CLOSING MOVE/);
+  assert.match(stable, /If — and only if — you close with a question/);
+  assert.ok(!/SECOND TURN/.test(stable), "the follow-up override never enters the cached prefix");
+});
+
+// ── Follow-up commitment extraction ─────────────────────────────────────────
+
+const COMMITTED_REPLY =
+  'You skipped twice and called both scheduling. The record shows the gym lost to work both times. ' +
+  '<commitment pattern="Gym skipped for work">Commitment: When a meeting runs past 6pm, I will train at 7am next day. Checked by the Ledger check-in the next morning.</commitment>';
+
+test("parseOracleResponse lifts a tagged commitment out of the prose as a structured field", () => {
+  const parsed = parseOracleResponse(COMMITTED_REPLY);
+  assert.deepStrictEqual(parsed.commitment, {
+    text: "When a meeting runs past 6pm, I will train at 7am next day. Checked by the Ledger check-in the next morning.",
+    pattern: "Gym skipped for work",
+    trigger: "a meeting runs past 6pm",
+    action: "train at 7am next day",
+    check: "the Ledger check-in the next morning",
+  });
+  assert.ok(!/<commitment/i.test(parsed.feedback), "tags are gone from the prose");
+  assert.ok(!/Commitment:/.test(parsed.feedback), "the line is gone from the prose");
+  assert.strictEqual(parsed.feedback, "You skipped twice and called both scheduling. The record shows the gym lost to work both times.");
+  assert.strictEqual(parsed.closingQuestion, null);
+});
+
+test("the commitment attribute is optional and tolerates smart quotes", () => {
+  const bare = parseOracleResponse("Prose. <commitment>Commitment: When X, I will Y. Checked by Z.</commitment>");
+  assert.strictEqual(bare.commitment.pattern, null);
+  assert.strictEqual(bare.commitment.trigger, "X");
+  assert.strictEqual(bare.commitment.action, "Y");
+  assert.strictEqual(bare.commitment.check, "Z");
+  const smart = parseOracleResponse("Prose. <commitment pattern=“Late-night scrolling”>Commitment: When X, I will Y. Checked by Z.</commitment>");
+  assert.strictEqual(smart.commitment.pattern, "Late-night scrolling");
+  assert.strictEqual(smart.feedback, "Prose.");
+});
+
+test("a tagged line that breaks the shape keeps its text with null parts", () => {
+  const parsed = parseOracleResponse("Prose. <commitment>Train tomorrow at seven, no matter what.</commitment>");
+  assert.strictEqual(parsed.commitment.text, "Train tomorrow at seven, no matter what.");
+  assert.strictEqual(parsed.commitment.trigger, null);
+  assert.strictEqual(parsed.commitment.action, null);
+  assert.strictEqual(parsed.commitment.check, null);
+  assert.strictEqual(parsed.feedback, "Prose.");
+});
+
+test("no commitment tag → commitment is null and the prose is untouched", () => {
+  const raw = "You named it. Commitment: When the urge hits, I will leave the room. Checked by tomorrow's entry.";
+  const parsed = parseOracleResponse(raw);
+  assert.strictEqual(parsed.commitment, null, "no heuristic recovery — untagged lines stay prose");
+  assert.strictEqual(parsed.feedback, raw);
+  const first = parseOracleResponse("DEPTH:Surface\n\nA first reading. <closing_question>What did you skip?</closing_question>");
+  assert.strictEqual(first.commitment, null);
+  assert.strictEqual(first.closingQuestion, "What did you skip?");
+});
+
+test("banned tone is stripped inside the commitment and a DEPTH prefix still parses", () => {
+  const parsed = parseOracleResponse(
+    'DEPTH:Pattern\n\nThe loop is named. <commitment pattern="Skips">Commitment: When it is 9pm, I will close the laptop, you got this. Checked by the log.</commitment>'
+  );
+  assert.strictEqual(parsed.metacognitiveDepth, "Pattern");
+  assert.ok(!/you got this/i.test(parsed.commitment.text));
+  assert.strictEqual(parsed.commitment.pattern, "Skips");
+  assert.strictEqual(parsed.feedback, "The loop is named.");
+});

@@ -267,6 +267,30 @@ export function normalizeIntentionSuggestions(parsed, maxLen = 50, cap = 6) {
 }
 
 /**
+ * Ledger prefill for an Oracle follow-up commitment ("Make it a Kill
+ * Contract"). Reuses the killIntentionSuggest clause shape ({ when, iWill })
+ * and the same 50-char clamp the Add Contract form enforces; the title is
+ * clamped to the form's 100-char cap. The whole commitment line rides as the
+ * target description so the "Checked by" clause is kept on the contract.
+ * Pure — no doc is written; the user reviews and submits the form.
+ */
+export function buildCommitmentPrefill(commitment, entryId, { titleMax = 100, clauseMax = 50 } = {}) {
+  const title = String(commitment?.pattern ?? '').replace(/\s+/g, ' ').trim().slice(0, titleMax);
+  const [intention] = normalizeIntentionSuggestions(
+    { suggestions: [{ when: commitment?.trigger, iWill: commitment?.action }] },
+    clauseMax,
+    1
+  );
+  const description = String(commitment?.text ?? '').replace(/\s+/g, ' ').trim();
+  return {
+    ...(title ? { targetTitle: title } : {}),
+    ...(intention ? { intention } : {}),
+    ...(description ? { targetDescription: description } : {}),
+    ...(entryId ? { fromJournalEntryId: String(entryId) } : {}),
+  };
+}
+
+/**
  * Ask the Oracle for personalized implementation-intention drafts for a Kill
  * Contract. Mirrors extractHardLessonDirect: explicit user action, no session
  * dedupe, behavioralContext-grounded. Returns a normalized `{ when, iWill }[]`

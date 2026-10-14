@@ -23,7 +23,8 @@ import logger from '../utils/logger';
 import KillListBackfillCard from '../components/KillListBackfillCard';
 import { KillTargetSummary } from '../components/KillTargetCard';
 import { categories as CATEGORIES } from '../utils/killListCategories';
-import { suggestImplementationIntentions, critiqueTargetFraming } from '../utils/crossModuleExtraction';
+import { suggestImplementationIntentions, critiqueTargetFraming, normalizeIntentionSuggestions } from '../utils/crossModuleExtraction';
+import { ORACLE_FIELDS } from '../utils/schema';
 import { buildColdCaseEntryText, buildReengagePrefill, engagementLineageLabel } from '../utils/coldCase';
 import { getConsecutiveDaysRequired, MIN_DAYS_REQUIRED } from '../utils/killTargetThreshold';
 import { localDateKey, parseDateOnlyLocal, parseDate } from '../utils/dateUtils';
@@ -340,6 +341,11 @@ const KillList = () => {
   const [pendingReengage, setPendingReengage] = useState(null);
   const coldCaseDismissedRef = useRef(false);
 
+  // Journal entry whose Oracle follow-up commitment this contract is drafted
+  // from. Written on the target as lineage and stamped back on the entry once
+  // the contract is signed, so the entry stops offering the action.
+  const [pendingFromJournalEntryId, setPendingFromJournalEntryId] = useState(null);
+
   // Reflection notes state
   const [user, setUser] = useState(null);
 
@@ -522,6 +528,7 @@ const KillList = () => {
   // Cross-module prefill consumer. Sources:
   //   • Journal cross-module extraction → { targetTitle, suggestedCategory, targetDescription }
   //   • Hard Lessons bridge / lesson card → { targetTitle, consecutiveDaysRequired?, fromHardLessonId }
+  //   • Journal Oracle follow-up commitment → { targetTitle?, intention: { when, iWill }, targetDescription, fromJournalEntryId }
   // Per the cross-module rule, no doc has been written upstream — the user
   // reviews and submits this form to create the target.
   useEffect(() => {
@@ -530,7 +537,7 @@ const KillList = () => {
       if (!raw) return;
       sessionStorage.removeItem('kl_extraction_prefill');
       const data = JSON.parse(raw);
-      if (data.targetTitle) setNewTarget(data.targetTitle);
+      if (data.targetTitle) setNewTarget(String(data.targetTitle).slice(0, TITLE_MAX_LENGTH));
       if (data.suggestedCategory) {
         const EXTRACTION_CATEGORY_MAP = {
           addiction: 'addiction',
@@ -551,6 +558,17 @@ const KillList = () => {
       }
       if (data.fromHardLessonId) setPendingFromHardLessonId(data.fromHardLessonId);
       if (data.targetDescription) setPendingTargetDescription(data.targetDescription);
+      if (data.intention) {
+        // Same clause shape and clamp as the Oracle's own drafts. The clause is
+        // user-owned from the start: the commitment was made in the exchange,
+        // so the auto-draft must not overwrite it when the title lands.
+        const [intention] = normalizeIntentionSuggestions({ suggestions: [data.intention] }, INTENTION_MAX_LENGTH, 1);
+        if (intention) {
+          setNewIntention({ trigger: intention.when, response: intention.iWill });
+          intentionEditedRef.current = true;
+        }
+      }
+      if (data.fromJournalEntryId) setPendingFromJournalEntryId(String(data.fromJournalEntryId));
       setShowAddForm(true);
       setTimeout(() => newTargetInputRef.current?.focus(), 150);
     } catch (err) {
@@ -743,6 +761,7 @@ const KillList = () => {
         lastUpdated: new Date().toISOString(),
         reflectionNotes: '',
         ...(pendingFromHardLessonId ? { fromHardLessonId: pendingFromHardLessonId } : {}),
+        ...(pendingFromJournalEntryId ? { fromJournalEntryId: pendingFromJournalEntryId } : {}),
         // Re-engagement lineage. Prior-kill facts are denormalized so the
         // card renders without an archive lookup; engagementCount carries
         // into the next confirmedKills doc via archiveConfirmedKill's spread.
@@ -779,10 +798,26 @@ const KillList = () => {
         }
       }
 
+      // Stamp the journal entry whose commitment this contract came from, so
+      // its detail view shows the contract instead of offering it again.
+      // Non-fatal: the contract stands if the stamp fails. Dot-path keys so
+      // the stored commitment map is extended, not replaced.
+      if (pendingFromJournalEntryId) {
+        try {
+          await updateData('journalEntries', pendingFromJournalEntryId, {
+            [`${ORACLE_FIELDS.COMMITMENT}.contractId`]: savedTarget.id,
+            [`${ORACLE_FIELDS.COMMITMENT}.contractedAt`]: new Date().toISOString(),
+          });
+        } catch (err) {
+          logger.error('Commitment contract stamp failed:', err?.message);
+        }
+      }
+
       setNewTarget('');
       setNewTargetCategory('bad-habit');
       setNewTargetDays(30);
       setPendingFromHardLessonId(null);
+      setPendingFromJournalEntryId(null);
       setPendingTargetDescription(null);
       setPendingReengage(null);
       setNewIntention({ trigger: '', response: '' });

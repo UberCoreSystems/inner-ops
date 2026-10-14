@@ -58,7 +58,7 @@ Synthesis and Oracle both read across all modules via `readUserData`. Key data f
 
 | Function | Purpose |
 |----------|---------|
-| `oracle` | Secure Claude API proxy. Auth-gated, rate-limited per user/UTC-day via `ORACLE_DAILY_LIMIT` (prod = 100, code default 50). One journal save costs ~5 Oracle calls (1 classifier + up to 3 extractors + feedback), so the effective budget is ~20 saves/day at 100. Module-aware system prompts with posture matching (challenge/build/ground/clarify/receive). Receives behavioral context (user-authored fields clamped + delimited server-side). Follow-up ("challenge") responses route through this same function via the `oracle_challenge` prompt key. |
+| `oracle` | Secure Claude API proxy. Auth-gated, rate-limited per user/UTC-day via `ORACLE_DAILY_LIMIT` (prod = 100, code default 50). One journal save costs ~5 Oracle calls (1 classifier + up to 3 extractors + feedback), so the effective budget is ~20 saves/day at 100. Module-aware system prompts with posture matching (challenge/build/ground/clarify/receive). Receives behavioral context (user-authored fields clamped + delimited server-side). Follow-up ("challenge") responses route through this same function via the `oracle_challenge` prompt key: that turn receives the entry, the Oracle's prior reading and the pushback (`src/utils/buildFollowUpEntryText.js`), may concede on the record, and closes on one tagged `<commitment>` line returned as `data.commitment` (`{ text, pattern, trigger, action, check }`) and persisted on the journal entry as `oracleCommitment`. |
 
 ## Commands
 

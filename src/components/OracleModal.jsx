@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
 import { generateAIFeedback, PROVENANCE } from '../utils/aiFeedback';
+import { buildFollowUpEntryText } from '../utils/buildFollowUpEntryText';
 import { resolveTriggeredCriterion } from '../utils/confrontationCriteria';
 import logger from '../utils/logger';
 import { ouraToast } from '../utils/toast';
@@ -45,10 +46,13 @@ async function callOracleRaw(entryText, promptContext, entryModuleName, entryCou
     return {
       feedback: result.data?.feedback?.trim() || null,
       metacognitiveDepth: result.data?.metacognitiveDepth || null,
+      // Follow-up turns close on a structured commitment (oracle_challenge in
+      // functions/index.js); every other call returns null here.
+      commitment: result.data?.commitment ?? null,
     };
   } catch (err) {
     logger.warn('Oracle raw call failed:', err?.message);
-    return { feedback: null, metacognitiveDepth: null };
+    return { feedback: null, metacognitiveDepth: null, commitment: null };
   }
 }
 
@@ -67,6 +71,10 @@ const OracleModal = ({
   entryText = '',
   entryModuleName = '',
   onFollowUpStored = null,
+  // Receives the follow-up commitment when the user chooses to make it a Kill
+  // Contract. Supplied by pages that can open the Ledger prefilled (Journal);
+  // without it the commitment block renders with no action.
+  onMakeContract = null,
   // Called when a retry or regeneration replaces the displayed reading, so the
   // owning page can persist it. Follow-ups are already persisted; without this
   // a reload paired a stored follow-up with the judgment it replaced.
@@ -103,6 +111,8 @@ const OracleModal = ({
   const [followUpResponse, setFollowUpResponse] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpUsed, setFollowUpUsed] = useState(false);
+  // The commitment the follow-up closed on — lifted out of the prose server-side.
+  const [followUpCommitment, setFollowUpCommitment] = useState(null);
   // Local copy so a successful retry can clear the "Local" label without the
   // parent having to re-render with a new prop.
   const [displayProvenance, setDisplayProvenance] = useState(provenance);
@@ -122,6 +132,7 @@ const OracleModal = ({
       setShowFollowUp(false);
       setFollowUpResponse('');
       setFollowUpUsed(false);
+      setFollowUpCommitment(null);
       setDisplayFeedback('');
       // BER-229: reset depth to prop value on each open
       setDisplayDepth(metacognitiveDepth);
@@ -228,6 +239,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         setFollowUpResponse('');
         setShowFollowUp(false);
         setFollowUpUsed(false);
+        setFollowUpCommitment(null);
         onFeedbackReplaced?.(regenFeedback, PROVENANCE.ORACLE, { metacognitiveDepth: regenDepth });
       } else {
         ouraToast.error('Oracle unavailable. Try again.');
@@ -244,9 +256,16 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     try {
       // Finding 3: pushback text is now a parameter, not a system prompt.
       // Server-side template wraps it into the challenge instruction.
-      const { feedback: followUpFeedback } = await callOracleRaw(
-        `Original context: ${entryText}\n\nUser's challenge: ${followUpText.trim()}`,
-        { key: 'oracle_challenge', params: { pushback: followUpText.trim() } },
+      // The Oracle's own prior reading rides along so it can hold or concede
+      // on the record — but only when that reading is Oracle output. A locally
+      // composed fallback is not a position the Oracle took.
+      const pushback = followUpText.trim();
+      const priorReading = displayProvenance === PROVENANCE.ORACLE
+        ? (displayFeedback || feedback || content || oracleFeedback)
+        : null;
+      const { feedback: followUpFeedback, commitment } = await callOracleRaw(
+        buildFollowUpEntryText({ entryText, priorReading, pushback }),
+        { key: 'oracle_challenge', params: { pushback } },
         // Module deliberately left unset — a follow-up is not a journal entry
         // and must not pick up the DEPTH directive. entryCount still applies.
         undefined,
@@ -254,12 +273,13 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       );
       const response = followUpFeedback || 'Oracle unavailable. Challenge recorded.';
       setFollowUpResponse(response);
+      setFollowUpCommitment(followUpFeedback ? commitment : null);
       setFollowUpUsed(true);
       // Persist only a genuine Oracle reply. Persisting the unavailable-
       // fallback would write a non-response onto the entry that survives reload
       // and reads as the Oracle's considered answer.
       if (onFollowUpStored && followUpFeedback) {
-        onFollowUpStored({ followUpText: followUpText.trim(), followUpResponse: followUpFeedback });
+        onFollowUpStored({ followUpText: pushback, followUpResponse: followUpFeedback, commitment: commitment ?? null });
       }
     } finally {
       setFollowUpLoading(false);
@@ -421,9 +441,30 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
               {/* Follow-up response */}
               {followUpResponse && (
-                <div className="border-l-2 border-[#5a5a5a] pl-4">
-                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Your challenge addressed</div>
-                  <div className="text-[#c0c0c0] text-sm leading-relaxed font-light">{followUpResponse}</div>
+                <div className="border-l-2 border-[#5a5a5a] pl-4 space-y-4">
+                  <div>
+                    <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Your challenge addressed</div>
+                    <div className="text-[#c0c0c0] text-sm leading-relaxed font-light">{followUpResponse}</div>
+                  </div>
+                  {/* The commitment the follow-up closed on. Lifted out of the
+                      prose server-side and shown as its own block so it reads
+                      as a term, not a sentence. The action opens the Ledger
+                      prefilled — nothing is created until he signs it. */}
+                  {followUpCommitment?.text && (
+                    <div className="border border-[#2a2a2a] rounded-xl p-4 space-y-3">
+                      <div className="text-[#858585] text-xs uppercase tracking-widest">Commitment</div>
+                      <div className="text-[#e0e0e0] text-sm leading-relaxed">{followUpCommitment.text}</div>
+                      {onMakeContract && (
+                        <button
+                          type="button"
+                          onClick={() => onMakeContract(followUpCommitment)}
+                          className="w-full sm:w-auto px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#2a2a2a] text-[#ababab] hover:border-[#3a3a3a] hover:text-white transition-all"
+                        >
+                          Make it a Kill Contract
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

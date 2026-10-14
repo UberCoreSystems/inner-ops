@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { moodOptions, intensityLevels } from '../../constants/moods';
 import { parseDate } from '../../utils/dateUtils';
 import { ORACLE_FIELDS } from '../../utils/schema';
@@ -13,7 +14,7 @@ import OracleReactionChip from './OracleReactionChip';
  *
  * Overlay shell (Escape, Tab trap, focus restore) mirrors RedirectTargetModal.
  */
-export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }) {
+export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, onMakeContract }) {
   const dialogRef = useRef(null);
   const previousFocusRef = useRef(null);
 
@@ -76,6 +77,11 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
   // first shown in. A missing field is a pre-provenance document: no claim is
   // made either way, so it renders exactly as before.
   const isLocalReading = entry[ORACLE_FIELDS.PROVENANCE] === PROVENANCE.LOCAL;
+  // The commitment the follow-up closed on. Gated on the line itself, not the
+  // object: a Ledger stamp that lands after a failed follow-up write leaves a
+  // map with a contractId and no text.
+  const commitment = entry[ORACLE_FIELDS.COMMITMENT];
+  const commitmentText = typeof commitment?.text === 'string' ? commitment.text : '';
   const fallbackReason = entry[ORACLE_FIELDS.FALLBACK_REASON];
   const wasRateLimited = fallbackReason === 'resource-exhausted'
     || fallbackReason === 'functions/resource-exhausted';
@@ -184,6 +190,29 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive }
                   <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
                     {entry.oracleFollowUp}
                   </div>
+                </div>
+              )}
+
+              {commitmentText && (
+                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Commitment</h5>
+                  <div className="text-[#f5f5f5] text-sm leading-relaxed">{commitmentText}</div>
+                  {commitment.contractId ? (
+                    <div className="mt-3 flex items-center gap-3 text-xs">
+                      <span className="text-[#858585] uppercase tracking-widest">Kill Contract signed</span>
+                      <Link to="/ledger" className="text-[#ababab] hover:text-white underline underline-offset-2">
+                        Open the Ledger
+                      </Link>
+                    </div>
+                  ) : onMakeContract ? (
+                    <button
+                      type="button"
+                      onClick={() => onMakeContract(entry)}
+                      className="mt-3 w-full sm:w-auto px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#2a2a2a] text-[#ababab] hover:border-[#3a3a3a] hover:text-white transition-colors"
+                    >
+                      Make it a Kill Contract
+                    </button>
+                  ) : null}
                 </div>
               )}
 

@@ -85,13 +85,32 @@ const PROMPT_CONTEXT_REGISTRY = {
     return `FORWARD-LOOKING CONFRONTATION — this is a PRE-failure signal. No relapse has occurred yet.${note} The entry lists behavioral antecedents that have historically preceded his relapses and are active right now. Your job: name the convergence plainly and put the decision in front of him before it happens. Rules: (1) State the pattern as history, not destiny — "X has preceded your relapses; it is active now," never "you will relapse." (2) No alarmism, no catastrophizing, no urgency theater. (3) No encouragement, no reassurance, no affirmation. (4) Be precise about the named antecedent and its typical lead time as given; do not invent antecedents or numbers not in the entry. (5) One confrontation, not a list of tips. End with the single question he needs to sit with now.`;
   },
 
-  // BER-136 Oracle challenge — user's own pushback, clamped to length.
+  // Oracle follow-up — the second turn of an exchange. The user pushed back on
+  // the first reading; the entry text arrives in three labeled sections
+  // (ORIGINAL ENTRY / YOUR PRIOR READING / HIS PUSHBACK, assembled by
+  // src/utils/buildFollowUpEntryText.js). This fragment is the last block of
+  // the system prompt, so its overrides of the posture steps, CLOSING MOVE,
+  // tag rule and length rule bind for this turn only — the first reading never
+  // sees it. The turn ends on ONE tagged commitment, never a question, and may
+  // concede when the record supports the pushback. Pushback is clamped.
   oracle_challenge: (params) => {
     const pushback = typeof params?.pushback === "string"
       ? params.pushback.slice(0, MAX_USER_RESPONSE_CHARS)
       : "";
     if (!pushback) return "";
-    return `The user is challenging your assessment with the following pushback: "${pushback}". Do not back down from your position. Do not affirm their pushback. Do not reframe it encouragingly. Address their specific challenge directly and unflinchingly. Stay confrontational.`;
+    return `SECOND TURN — HIS PUSHBACK. The entry text has three labeled parts: ORIGINAL ENTRY, YOUR PRIOR READING, and HIS PUSHBACK. His pushback, verbatim: "${pushback}". This is not a new reading. Do not re-read the entry from scratch, do not restate your prior reading, and do not choose a new posture — the posture steps above do not apply to this turn. If YOUR PRIOR READING says "(none recorded)", answer his pushback against the entry alone and take no position you did not state.
+
+Engage his specific pushback first. Then decide on the record alone — the entry, your prior reading, and any receipts provided above:
+- If the record supports your position, hold it. Name the receipt it rests on: his own words, the logged fact.
+- If his pushback is correct and the record supports him, concede plainly: one sentence naming exactly what you got wrong, then continue from the corrected read. A concession is a correction, not an apology and not praise.
+- Rhetoric alone earns nothing. A reframe, a question turned back on you, or a philosophical move is not a receipt. Concede only to the record.
+Never affirm for its own sake. Never invent a pattern, event, date, or quote that is not in the text above.
+
+Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Make the core point once. Keep the prose to 80–140 words — noticeably shorter than your prior reading. This replaces the length rule above.
+
+CLOSE WITH ONE COMMITMENT, NOT A QUESTION. This replaces the CLOSING MOVE above for this turn. Do not end on a question, never use <closing_question> tags, and put no question mark in the final line. Your final line is one commitment derived from the pattern named in this exchange — or from the corrected read, if you conceded — in exactly this shape, wrapped in <commitment> tags (these tags are required here; they are the only tags in your reply, and the "use no tags" rule above does not apply to them):
+<commitment pattern="[the pattern, as a short Kill List target name, 60 characters or fewer]">Commitment: When [specific trigger or time], I will [specific observable action]. Checked by [how the record will show it].</commitment>
+One commitment only. Concrete, observable, short: the trigger clause and the action clause are each 50 characters or fewer. Nothing follows the closing tag.`;
   },
 };
 
@@ -119,7 +138,9 @@ function logOracleCall(fields) {
  * Called from the client via Firebase callable function.
  * Expects: { entryText, moduleName, userContext, tone, behavioralContext,
  *           entryCount, promptContextKey, promptContextParams, evasion }
- * Returns: { feedback, lensUsed, prescriptions }
+ * Returns: { feedback, metacognitiveDepth, closingQuestion, commitment }
+ *   commitment is non-null only on oracle_challenge follow-ups that closed on
+ *   a tagged commitment line: { text, pattern, trigger, action, check }.
  */
 exports.oracle = onCall(
   { secrets: [anthropicApiKey], region: "us-central1", timeoutSeconds: 30 },
@@ -1026,6 +1047,38 @@ function extractClosingQuestionFromProse(prose) {
   return null;
 }
 
+// Follow-up commitment tags. The oracle_challenge turn closes on one tagged
+// commitment line. Unlike the closing question, the line is removed from the
+// prose entirely and returned as a structured field: the client renders it as
+// its own block and prefills a Kill Contract from it. Attribute quoting is
+// lenient so a smart quote in the pattern name cannot sink the commitment.
+// The first tag is parsed; every tagged block is stripped from the prose. No
+// heuristic recovery: an untagged line stays prose and `commitment` is null.
+const COMMITMENT_TAG_REGEX = /<commitment\b([^>]*)>\s*([\s\S]*?)\s*<\/commitment>/i;
+const COMMITMENT_TAG_REGEX_ALL = /<commitment\b[^>]*>\s*[\s\S]*?\s*<\/commitment>/gi;
+const COMMITMENT_PATTERN_ATTR_REGEX = /pattern\s*=\s*["'“”‘’]([^"'“”‘’]*)/i;
+const COMMITMENT_SHAPE_REGEX = /^When\s+(.+?),\s*I\s+will\s+(.+?)\.\s*Checked\s+by\s+(.+?)\.?$/i;
+const MAX_COMMITMENT_PATTERN_CHARS = 100;
+
+function parseCommitment(attrs, inner) {
+  const line = String(inner || "").replace(/\s+/g, " ").trim();
+  if (!line) return null;
+  const text = stripBannedTone(line.replace(/^Commitment:\s*/i, ""));
+  if (!text) return null;
+  const attrMatch = String(attrs || "").match(COMMITMENT_PATTERN_ATTR_REGEX);
+  const pattern = attrMatch
+    ? stripBannedTone(attrMatch[1]).slice(0, MAX_COMMITMENT_PATTERN_CHARS)
+    : "";
+  const shape = text.match(COMMITMENT_SHAPE_REGEX);
+  return {
+    text,
+    pattern: pattern || null,
+    trigger: shape ? shape[1].trim() : null,
+    action: shape ? shape[2].trim() : null,
+    check: shape ? shape[3].trim() : null,
+  };
+}
+
 function parseOracleResponse(rawText) {
   let trimmed = rawText.trim();
   let metacognitiveDepth = null;
@@ -1036,6 +1089,14 @@ function parseOracleResponse(rawText) {
   if (depthMatch) {
     metacognitiveDepth = depthMatch[1];
     trimmed = trimmed.slice(depthMatch[0].length).trim();
+  }
+
+  // Lift the follow-up commitment out of the prose (oracle_challenge turns).
+  let commitment = null;
+  const commitmentMatch = trimmed.match(COMMITMENT_TAG_REGEX);
+  if (commitmentMatch) {
+    commitment = parseCommitment(commitmentMatch[1], commitmentMatch[2]);
+    trimmed = trimmed.replace(COMMITMENT_TAG_REGEX_ALL, "").trim();
   }
 
   // Extract structured closing question if Claude wrapped it in tags.
@@ -1059,6 +1120,7 @@ function parseOracleResponse(rawText) {
     feedback: stripBannedTone(trimmed),
     metacognitiveDepth,
     closingQuestion: closingQuestion ? stripBannedTone(closingQuestion) : closingQuestion,
+    commitment,
   };
 }
 
