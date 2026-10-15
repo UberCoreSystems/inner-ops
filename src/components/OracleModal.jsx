@@ -1,9 +1,14 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
-import { generateAIFeedback, PROVENANCE } from '../utils/aiFeedback';
-import { buildFollowUpEntryText } from '../utils/buildFollowUpEntryText';
+import { generateAIFeedback, PROVENANCE, isRateLimitCode } from '../utils/aiFeedback';
+import {
+  buildFollowUpEntryText,
+  FOLLOW_UP_ANSWER_MAX_CHARS,
+  FOLLOW_UP_PUSHBACK_MAX_CHARS,
+} from '../utils/buildFollowUpEntryText';
+import { ARC_COPY, ARC_OUTCOME, arcOutcomeBadge } from '../utils/followUpArc';
 import { resolveTriggeredCriterion } from '../utils/confrontationCriteria';
 import logger from '../utils/logger';
 import { ouraToast } from '../utils/toast';
@@ -18,6 +23,48 @@ const REACTIONS = [
 ];
 
 const MAX_REGEN = 3;
+// The counter resets at UTC midnight (functions/rateLimit.js keys the day in
+// UTC), which is not midnight for most users.
+const LIMIT_LINE = 'Daily Oracle limit reached. Resets at 00:00 UTC.';
+
+// The "Go deeper" arc — fixed at two turns. Stages:
+//   idle      no exchange; Retry / Regenerate / Go deeper available
+//   pushback  the challenge box is open (Cancel returns to idle)
+//   answer    the Oracle replied and asked its question; the answer box is open
+//   closed    the closing read landed, with its verdict and the commitment
+//   left      he left the question unanswered
+// `reading` is the judgment the arc answers, frozen at turn 1 so turn 2 is
+// built from the same text whatever the display shows by then.
+const IDLE_ARC = Object.freeze({
+  stage: 'idle',
+  reading: null,
+  pushback: null,
+  reply: null,
+  question: null,
+  answer: null,
+  close: null,
+  commitment: null,
+  outcome: null,
+});
+
+// The reply closes on its question. When the tagged question is the reply's
+// last sentence it is shown once — as the heading of the answer box — and the
+// body is the reply without it.
+function splitReply(reply, question) {
+  const body = String(reply || '').trimEnd();
+  const q = String(question || '').trim();
+  if (!body || !q || !body.endsWith(q)) return { body, heading: null };
+  return { body: body.slice(0, body.length - q.length).trimEnd(), heading: q };
+}
+
+function UserTurn({ label, text }) {
+  return (
+    <div>
+      <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">{label}</div>
+      <div className="text-[#9a9a9a] text-sm leading-relaxed whitespace-pre-line">{text}</div>
+    </div>
+  );
+}
 
 // BER-136: call oracle CF directly for regen/follow-up.
 // BER-229: accept entryModuleName so journal regen gets DEPTH instruction from CF.
@@ -46,13 +93,22 @@ async function callOracleRaw(entryText, promptContext, entryModuleName, entryCou
     return {
       feedback: result.data?.feedback?.trim() || null,
       metacognitiveDepth: result.data?.metacognitiveDepth || null,
-      // Follow-up turns close on a structured commitment (oracle_challenge in
-      // functions/index.js); every other call returns null here.
+      closingQuestion: result.data?.closingQuestion || null,
+      // Set only by the closing turn of a follow-up arc (oracle_close).
       commitment: result.data?.commitment ?? null,
+      verdict: result.data?.verdict || null,
+      errorCode: null,
     };
   } catch (err) {
     logger.warn('Oracle raw call failed:', err?.message);
-    return { feedback: null, metacognitiveDepth: null, commitment: null };
+    return {
+      feedback: null,
+      metacognitiveDepth: null,
+      closingQuestion: null,
+      commitment: null,
+      verdict: null,
+      errorCode: err?.code || 'unknown',
+    };
   }
 }
 
@@ -70,6 +126,7 @@ const OracleModal = ({
   // BER-136: entry context for regeneration and follow-up
   entryText = '',
   entryModuleName = '',
+  // Receives the whole arc so far after every turn that changes the record.
   onFollowUpStored = null,
   // Receives the follow-up commitment when the user chooses to make it a Kill
   // Contract. Supplied by pages that can open the Ledger prefilled (Journal);
@@ -79,6 +136,9 @@ const OracleModal = ({
   // owning page can persist it. Follow-ups are already persisted; without this
   // a reload paired a stored follow-up with the judgment it replaced.
   onFeedbackReplaced = null,
+  // A question he leaves unanswered returns as Today's Reflection — true only
+  // where the arc is persisted somewhere the dashboard reads (Journal).
+  returnsToDashboard = false,
   // BER-194: data-depth calibration — null = unknown (no constraint applied)
   entryCount = null,
   // BER-225: metacognitive depth classification (journal entries only)
@@ -100,23 +160,38 @@ const OracleModal = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedReaction, setSelectedReaction] = useState(null);
 
-  // BER-136: regeneration + follow-up state
+  // BER-136: regeneration state
   const [displayFeedback, setDisplayFeedback] = useState('');
   // BER-229: local depth state so regen can update it (prop only reflects initial load)
   const [displayDepth, setDisplayDepth] = useState(metacognitiveDepth);
   const [regenCount, setRegenCount] = useState(0);
   const [regenLoading, setRegenLoading] = useState(false);
-  const [followUpText, setFollowUpText] = useState('');
-  const [showFollowUp, setShowFollowUp] = useState(false);
-  const [followUpResponse, setFollowUpResponse] = useState('');
-  const [followUpLoading, setFollowUpLoading] = useState(false);
-  const [followUpUsed, setFollowUpUsed] = useState(false);
-  // The commitment the follow-up closed on — lifted out of the prose server-side.
-  const [followUpCommitment, setFollowUpCommitment] = useState(null);
   // Local copy so a successful retry can clear the "Local" label without the
   // parent having to re-render with a new prop.
   const [displayProvenance, setDisplayProvenance] = useState(provenance);
   const [retryLoading, setRetryLoading] = useState(false);
+
+  // The "Go deeper" arc (see IDLE_ARC).
+  const [arc, setArc] = useState(IDLE_ARC);
+  const [draft, setDraft] = useState('');
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  // Submit is withheld until the daily Oracle limit resets.
+  const [limitReached, setLimitReached] = useState(false);
+  // Bumped on every reset: a result that lands for an older arc is dropped.
+  const arcIdRef = useRef(0);
+  // Writes are chained so a slow turn-1 write can never land over turn 2.
+  const persistChainRef = useRef(Promise.resolve());
+  const latestTurnRef = useRef(null);
+
+  const currentFeedback = displayFeedback || feedback || content || oracleFeedback;
+
+  const resetArc = () => {
+    arcIdRef.current += 1;
+    setArc(IDLE_ARC);
+    setDraft('');
+    setFollowUpLoading(false);
+    setLimitReached(false);
+  };
 
   useEffect(() => {
     if (isOpen && target && moduleName && !feedback && !content) {
@@ -128,11 +203,7 @@ const OracleModal = ({
       setSelectedReaction(null);
       // Reset regen/follow-up on each new open
       setRegenCount(0);
-      setFollowUpText('');
-      setShowFollowUp(false);
-      setFollowUpResponse('');
-      setFollowUpUsed(false);
-      setFollowUpCommitment(null);
+      resetArc();
       setDisplayFeedback('');
       // BER-229: reset depth to prop value on each open
       setDisplayDepth(metacognitiveDepth);
@@ -148,9 +219,9 @@ const OracleModal = ({
         }
       } catch { /* no-op */ }
     }
-    // generateOracleFeedback is an unmemoized closure (new each render) — adding
-    // it would regenerate on every render. metacognitiveDepth is intentionally
-    // re-applied only on open, not on every prop change.
+    // generateOracleFeedback and resetArc are unmemoized closures (new each
+    // render) — adding them would regenerate on every render. metacognitiveDepth
+    // is intentionally re-applied only on open, not on every prop change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, target, moduleName, feedback, content]);
 
@@ -159,6 +230,14 @@ const OracleModal = ({
     const base = feedback || content || oracleFeedback;
     if (base) setDisplayFeedback(base);
   }, [feedback, content, oracleFeedback]);
+
+  // Each new turn scrolls into view. The answer box is never auto-focused, so
+  // the phone keyboard does not open while he is still reading.
+  useEffect(() => {
+    if (arc.stage === 'answer' || arc.stage === 'closed' || arc.stage === 'left') {
+      latestTurnRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+    }
+  }, [arc.stage]);
 
   const generateOracleFeedback = async () => {
     if (!target || !moduleName) return;
@@ -198,17 +277,20 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     if (retryLoading || !entryText) return;
     setRetryLoading(true);
     try {
-      const { feedback: retryFeedback, metacognitiveDepth: retryDepth } = await callOracleRaw(
-        entryText,
-        null,
-        entryModuleName,
-        entryCount
-      );
+      const {
+        feedback: retryFeedback,
+        metacognitiveDepth: retryDepth,
+        closingQuestion: retryQuestion,
+      } = await callOracleRaw(entryText, null, entryModuleName, entryCount);
       if (retryFeedback) {
         setDisplayFeedback(retryFeedback);
         setDisplayDepth(retryDepth);
         setDisplayProvenance(PROVENANCE.ORACLE);
-        onFeedbackReplaced?.(retryFeedback, PROVENANCE.ORACLE, { metacognitiveDepth: retryDepth });
+        resetArc();
+        onFeedbackReplaced?.(retryFeedback, PROVENANCE.ORACLE, {
+          metacognitiveDepth: retryDepth,
+          closingQuestion: retryQuestion,
+        });
       } else {
         ouraToast.error('Oracle still unreachable.');
       }
@@ -219,13 +301,17 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
   // BER-136: regenerate from a different confrontational angle
   const handleRegenerate = async () => {
-    if (regenCount >= MAX_REGEN || regenLoading || !entryText) return;
+    if (regenCount >= MAX_REGEN || regenLoading || !entryText || arc.stage !== 'idle') return;
     setRegenLoading(true);
     try {
       // Finding 3: template lives server-side. The server interprets
       // entryCount (a number) to include or omit the data-depth caveat.
       // BER-229: pass entryModuleName so journal regen gets DEPTH from CF
-      const { feedback: regenFeedback, metacognitiveDepth: regenDepth } = await callOracleRaw(
+      const {
+        feedback: regenFeedback,
+        metacognitiveDepth: regenDepth,
+        closingQuestion: regenQuestion,
+      } = await callOracleRaw(
         entryText,
         { key: 'oracle_regen', params: { entryCount } },
         entryModuleName,
@@ -236,11 +322,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         setDisplayDepth(regenDepth);
         setDisplayProvenance(PROVENANCE.ORACLE);
         setRegenCount(prev => prev + 1);
-        setFollowUpResponse('');
-        setShowFollowUp(false);
-        setFollowUpUsed(false);
-        setFollowUpCommitment(null);
-        onFeedbackReplaced?.(regenFeedback, PROVENANCE.ORACLE, { metacognitiveDepth: regenDepth });
+        resetArc();
+        onFeedbackReplaced?.(regenFeedback, PROVENANCE.ORACLE, {
+          metacognitiveDepth: regenDepth,
+          closingQuestion: regenQuestion,
+        });
       } else {
         ouraToast.error('Oracle unavailable. Try again.');
       }
@@ -249,42 +335,112 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     }
   };
 
-  // BER-136: follow-up interrogation
-  const handleFollowUp = async () => {
-    if (!followUpText.trim() || followUpUsed || followUpLoading || !entryText) return;
+  const persistArc = (next) => {
+    if (!onFollowUpStored) return;
+    persistChainRef.current = persistChainRef.current
+      .then(() => onFollowUpStored(next))
+      .catch((err) => logger.warn('Follow-up persist failed:', err?.message));
+  };
+
+  // One Oracle call per turn. Returns the parsed result, or null after a
+  // failure — the draft stays and nothing is used up. Module deliberately left
+  // unset: a follow-up is not a journal entry and must not pick up the DEPTH
+  // directive. entryCount still applies.
+  const runTurn = async (key, turnEntryText) => {
+    const arcId = arcIdRef.current;
     setFollowUpLoading(true);
+    setLimitReached(false);
     try {
-      // Finding 3: pushback text is now a parameter, not a system prompt.
-      // Server-side template wraps it into the challenge instruction.
-      // The Oracle's own prior reading rides along so it can hold or concede
-      // on the record — but only when that reading is Oracle output. A locally
-      // composed fallback is not a position the Oracle took.
-      const pushback = followUpText.trim();
-      const priorReading = displayProvenance === PROVENANCE.ORACLE
-        ? (displayFeedback || feedback || content || oracleFeedback)
-        : null;
-      const { feedback: followUpFeedback, commitment } = await callOracleRaw(
-        buildFollowUpEntryText({ entryText, priorReading, pushback }),
-        { key: 'oracle_challenge', params: { pushback } },
-        // Module deliberately left unset — a follow-up is not a journal entry
-        // and must not pick up the DEPTH directive. entryCount still applies.
-        undefined,
-        entryCount
-      );
-      const response = followUpFeedback || 'Oracle unavailable. Challenge recorded.';
-      setFollowUpResponse(response);
-      setFollowUpCommitment(followUpFeedback ? commitment : null);
-      setFollowUpUsed(true);
-      // Persist only a genuine Oracle reply. Persisting the unavailable-
-      // fallback would write a non-response onto the entry that survives reload
-      // and reads as the Oracle's considered answer.
-      if (onFollowUpStored && followUpFeedback) {
-        onFollowUpStored({ followUpText: pushback, followUpResponse: followUpFeedback, commitment: commitment ?? null });
-      }
+      const result = await callOracleRaw(turnEntryText, { key }, undefined, entryCount);
+      if (arcIdRef.current !== arcId) return null;
+      if (result.feedback) return result;
+      if (isRateLimitCode(result.errorCode)) setLimitReached(true);
+      else ouraToast.error('Oracle unavailable. Try again.');
+      return null;
     } finally {
-      setFollowUpLoading(false);
+      if (arcIdRef.current === arcId) setFollowUpLoading(false);
     }
   };
+
+  // Turn 1: his challenge. The Oracle holds or concedes on the record and
+  // closes on the question he answers next.
+  const handlePushbackSubmit = async () => {
+    const pushback = draft.trim();
+    if (!pushback || arc.stage !== 'pushback' || followUpLoading || !entryText) return;
+    // The Oracle's own prior reading rides along so it can hold or concede on
+    // the record — but only when that reading is Oracle output. A locally
+    // composed fallback is not a position the Oracle took.
+    const reading = displayProvenance === PROVENANCE.ORACLE ? currentFeedback : null;
+    const result = await runTurn(
+      'oracle_pushback',
+      buildFollowUpEntryText({ entryText, priorReading: reading, pushback })
+    );
+    if (!result) return;
+    const next = {
+      ...IDLE_ARC,
+      stage: 'answer',
+      reading,
+      pushback,
+      reply: result.feedback,
+      question: result.closingQuestion,
+    };
+    setArc(next);
+    setDraft('');
+    persistArc(next);
+  };
+
+  // Turn 2: his answer. The Oracle judges it, closes on the commitment, and
+  // the exchange ends.
+  const handleAnswerSubmit = async () => {
+    const answer = draft.trim();
+    if (!answer || arc.stage !== 'answer' || followUpLoading || !entryText) return;
+    const result = await runTurn(
+      'oracle_close',
+      buildFollowUpEntryText({
+        entryText,
+        priorReading: arc.reading,
+        pushback: arc.pushback,
+        reply: arc.reply,
+        answer,
+      })
+    );
+    if (!result) return;
+    const next = {
+      ...arc,
+      stage: 'closed',
+      answer,
+      close: result.feedback,
+      commitment: result.commitment,
+      outcome: result.verdict,
+    };
+    setArc(next);
+    setDraft('');
+    persistArc(next);
+  };
+
+  // Leaving the question is a choice on the record: no call, outcome
+  // 'unanswered'. Reached from the button (the line below shows) and from
+  // closing the modal with the question open (it does not).
+  const leaveUnanswered = () => {
+    if (arc.stage !== 'answer' || followUpLoading) return;
+    const next = { ...arc, stage: 'left', outcome: ARC_OUTCOME.UNANSWERED };
+    setArc(next);
+    setDraft('');
+    persistArc(next);
+  };
+
+  // Every way out passes here. Unsent text asks first; an open question is
+  // left unanswered on the record. A turn still in flight is left to land —
+  // its result persists even after the modal has closed.
+  const requestClose = () => {
+    const boxOpen = arc.stage === 'pushback' || arc.stage === 'answer';
+    if (boxOpen && draft.trim() && !followUpLoading
+      && !window.confirm('Close without sending? What you wrote will be lost.')) return;
+    leaveUnanswered();
+    onClose?.();
+  };
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
 
   const handleReaction = async (reactionId) => {
     const previousReaction = selectedReaction;
@@ -301,34 +457,71 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     }
   };
 
-  const currentFeedback = displayFeedback || feedback || content || oracleFeedback;
   const isCurrentlyLoading = isLoading || isGenerating;
   // While the entry has no reading at all there is nothing to regenerate from
   // and nothing to push back on — only the retry below applies. A successful
   // retry clears the flag by setting real prose + Oracle provenance.
   const isUnanswered = oracleUnavailable && !isCurrentlyLoading && displayProvenance !== PROVENANCE.ORACLE;
-  const canRegen = !isUnanswered && !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
-  const canFollowUp = !isUnanswered && !!entryText && !followUpUsed && !followUpLoading && !isCurrentlyLoading && !!currentFeedback;
+  // Once the exchange starts, the reading it answers stays put: Retry,
+  // Regenerate and Go deeper leave while a box is open and for good once the
+  // Oracle has answered the challenge.
+  const arcStarted = arc.stage !== 'idle';
+  const canRegen = !arcStarted && !isUnanswered && !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
+  const canFollowUp = !arcStarted && !isUnanswered && !!entryText && !regenLoading && !retryLoading && !isCurrentlyLoading && !!currentFeedback;
 
   const isLocal = displayProvenance === PROVENANCE.LOCAL && !!currentFeedback && !isCurrentlyLoading;
-  // The two shapes the rate-limit code arrives in, depending on whether the
-  // error came from the callable wrapper or the raw functions client.
-  const isRateLimited = fallbackReason === 'resource-exhausted'
-    || fallbackReason === 'functions/resource-exhausted';
+  const isRateLimited = isRateLimitCode(fallbackReason);
   // Retrying a rate-limited call cannot succeed until the counter resets, so
   // the affordance is withheld rather than offered and failed.
-  const canRetry = (isLocal || isUnanswered) && !!entryText && !isRateLimited && !retryLoading;
+  const showRetry = !arcStarted && (isLocal || isUnanswered);
+  const canRetry = showRetry && !!entryText && !isRateLimited && !retryLoading;
+
+  const { body: replyBody, heading: questionHeading } = splitReply(arc.reply, arc.question);
+  const outcomeBadge = arcOutcomeBadge(arc.outcome);
+  // Pages that pass no onFollowUpStored discard the exchange on close, so
+  // they must not claim it stays on the record.
+  const leftLine = onFollowUpStored
+    ? `${ARC_COPY.leftUnanswered} It stays on the record${returnsToDashboard ? ' and comes back on the dashboard' : ''}.`
+    : ARC_COPY.leftUnanswered;
+  // The arc's one input box, by stage. The answer box is headed by the
+  // question itself when the reply ended on it.
+  const box = arc.stage === 'pushback'
+    ? {
+        label: "Challenge the Oracle's assessment",
+        question: null,
+        rows: 2,
+        maxLength: FOLLOW_UP_PUSHBACK_MAX_CHARS,
+        placeholder: 'State your specific pushback...',
+        onSubmit: handlePushbackSubmit,
+        secondaryLabel: 'Cancel',
+        onSecondary: resetArc,
+        secondaryDisabled: false,
+      }
+    : arc.stage === 'answer'
+      ? {
+          label: ARC_COPY.answer,
+          question: questionHeading,
+          rows: 3,
+          maxLength: FOLLOW_UP_ANSWER_MAX_CHARS,
+          placeholder: 'Answer it...',
+          onSubmit: handleAnswerSubmit,
+          secondaryLabel: 'Leave it unanswered',
+          onSecondary: leaveUnanswered,
+          secondaryDisabled: followUpLoading,
+        }
+      : null;
+  const canSubmit = !!draft.trim() && !followUpLoading && !limitReached;
 
   // a11y: trap keyboard focus inside the modal while open and restore focus on close.
   const trapRef = useFocusTrap(isOpen);
 
-  // a11y: Esc closes the modal.
+  // a11y: Esc closes the modal — through the same guard as the buttons.
   useEffect(() => {
     if (!isOpen) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    const onKey = (e) => { if (e.key === 'Escape') requestCloseRef.current(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -340,7 +533,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       aria-label="Oracle feedback"
       className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4"
     >
-      <div ref={trapRef} className="bg-black rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-2xl flex flex-col border border-[#1a1a1a]">
+      <div ref={trapRef} className="bg-black rounded-2xl max-w-2xl w-full max-h-[calc(100dvh-2rem)] overflow-hidden shadow-2xl flex flex-col border border-[#1a1a1a]">
 
         {/* Content */}
         <div className="p-6 flex-1 overflow-y-auto">
@@ -349,7 +542,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
             <div className="flex flex-col items-center justify-center py-16 relative">
               {/* Dismiss button — always visible so user is never trapped on Oracle failure */}
               <button
-                onClick={onClose}
+                onClick={requestClose}
                 aria-label="Close Oracle"
                 className="absolute top-0 right-0 text-[#858585] hover:text-[#ababab] transition-colors"
               >
@@ -405,10 +598,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   </span>
                 </div>
                 <button
-                  onClick={onClose}
+                  onClick={requestClose}
+                  aria-label="Close Oracle"
                   className="text-[#858585] hover:text-[#ababab] transition-colors"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                     <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
@@ -428,7 +622,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 <div className="border-l-2 border-[#5a5a5a] pl-3">
                   <p className="text-[#858585] text-xs leading-relaxed">
                     {isRateLimited
-                      ? 'Daily Oracle limit reached. Resets at midnight. This reading was assembled locally.'
+                      ? `${LIMIT_LINE} This reading was assembled locally.`
                       : 'The Oracle did not respond. This reading was assembled locally from this entry alone. It does not use your record.'}
                   </p>
                 </div>
@@ -439,25 +633,47 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 {currentFeedback || 'The Oracle awaits your query...'}
               </div>
 
-              {/* Follow-up response */}
-              {followUpResponse && (
-                <div className="border-l-2 border-[#5a5a5a] pl-4 space-y-4">
-                  <div>
-                    <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">Your challenge addressed</div>
-                    <div className="text-[#c0c0c0] text-sm leading-relaxed font-light">{followUpResponse}</div>
+              {/* The exchange. Each block names who is speaking; the newest
+                  turn scrolls into view. The question is shown once: as the
+                  heading of the answer box while it is open, at the end of the
+                  reply once the exchange has ended. */}
+              {arc.pushback && (
+                <div className="border-l-2 border-[#5a5a5a] pl-4 space-y-5" aria-live="polite">
+                  <UserTurn label={ARC_COPY.challenge} text={arc.pushback} />
+                  <div ref={arc.stage === 'answer' ? latestTurnRef : null}>
+                    <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">{ARC_COPY.reflection}</div>
+                    {replyBody && (
+                      <div className="text-[#c0c0c0] text-sm leading-relaxed font-light whitespace-pre-line">{replyBody}</div>
+                    )}
+                    {questionHeading && arc.stage !== 'answer' && (
+                      <div className="text-[#d1d1d1] text-sm leading-relaxed mt-2">{questionHeading}</div>
+                    )}
                   </div>
-                  {/* The commitment the follow-up closed on. Lifted out of the
-                      prose server-side and shown as its own block so it reads
-                      as a term, not a sentence. The action opens the Ledger
-                      prefilled — nothing is created until he signs it. */}
-                  {followUpCommitment?.text && (
+                  {arc.answer && <UserTurn label={ARC_COPY.answer} text={arc.answer} />}
+                  {arc.close && (
+                    <div ref={arc.stage === 'closed' ? latestTurnRef : null}>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-[#858585] text-xs uppercase tracking-widest">{ARC_COPY.closingRead}</span>
+                        {outcomeBadge && (
+                          <span className="text-[10px] uppercase tracking-widest" style={{ color: outcomeBadge.color }}>
+                            {outcomeBadge.label}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[#c0c0c0] text-sm leading-relaxed font-light whitespace-pre-line">{arc.close}</div>
+                    </div>
+                  )}
+                  {/* The commitment the exchange closed on, lifted out of the
+                      prose server-side. The action opens the Ledger prefilled —
+                      nothing is created until he signs it. */}
+                  {arc.commitment?.text && (
                     <div className="border border-[#2a2a2a] rounded-xl p-4 space-y-3">
-                      <div className="text-[#858585] text-xs uppercase tracking-widest">Commitment</div>
-                      <div className="text-[#e0e0e0] text-sm leading-relaxed">{followUpCommitment.text}</div>
+                      <div className="text-[#858585] text-xs uppercase tracking-widest">{ARC_COPY.commitment}</div>
+                      <div className="text-[#e0e0e0] text-sm leading-relaxed">{arc.commitment.text}</div>
                       {onMakeContract && (
                         <button
                           type="button"
-                          onClick={() => onMakeContract(followUpCommitment)}
+                          onClick={() => onMakeContract(arc.commitment)}
                           className="w-full sm:w-auto px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#2a2a2a] text-[#ababab] hover:border-[#3a3a3a] hover:text-white transition-all"
                         >
                           Make it a Kill Contract
@@ -465,50 +681,58 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                       )}
                     </div>
                   )}
+                  {arc.stage === 'left' && (
+                    <p ref={latestTurnRef} className="text-[#858585] text-xs leading-relaxed">{leftLine}</p>
+                  )}
                 </div>
               )}
 
-              {/* Follow-up input */}
-              {showFollowUp && !followUpUsed && (
+              {/* The arc's input box: the challenge (turn 1) or the answer (turn 2) */}
+              {box && (
                 <div className="space-y-3">
-                  <div className="text-[#858585] text-xs uppercase tracking-widest">Challenge the Oracle's assessment</div>
-                  {/* Pass 2 Finding 14 remediation: maxLength + visible
-                      counter so the user sees the cap before the server
-                      truncates. Matches MAX_USER_RESPONSE_CHARS in
-                      functions/index.js. */}
+                  {box.question ? (
+                    <div className="text-[#e0e0e0] text-[15px] leading-[1.75] font-light">{box.question}</div>
+                  ) : (
+                    <div className="text-[#858585] text-xs uppercase tracking-widest">{box.label}</div>
+                  )}
+                  {/* Pass 2 Finding 14 remediation: maxLength + visible counter
+                      so the user sees the cap before the server truncates. */}
                   <textarea
-                    value={followUpText}
-                    onChange={e => setFollowUpText(e.target.value)}
-                    rows={2}
-                    maxLength={8000}
-                    className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#828282]"
-                    placeholder="State your specific pushback..."
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    rows={box.rows}
+                    maxLength={box.maxLength}
+                    disabled={followUpLoading}
+                    className="w-full p-3 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#5a5a5a] focus:outline-none resize-none text-sm placeholder-[#828282] disabled:opacity-60"
+                    placeholder={box.placeholder}
                   />
                   <div className="text-[#858585] text-xs text-right" aria-live="polite">
-                    {followUpText.length} / 8000
+                    {draft.length} / {box.maxLength}
                   </div>
+                  {limitReached && <p className="text-[#858585] text-xs leading-relaxed">{LIMIT_LINE}</p>}
                   <div className="flex gap-2">
                     <button
-                      onClick={handleFollowUp}
-                      disabled={!followUpText.trim() || followUpLoading}
+                      onClick={box.onSubmit}
+                      disabled={!canSubmit}
                       className="flex-1 py-2.5 text-sm font-medium rounded-xl transition-all bg-[#1a1a1a] border border-[#2a2a2a] text-[#ababab] hover:text-white disabled:opacity-40"
                     >
                       {followUpLoading ? 'Processing...' : 'Submit'}
                     </button>
                     <button
-                      onClick={() => { setShowFollowUp(false); setFollowUpText(''); }}
-                      className="px-4 py-2.5 text-sm rounded-xl bg-transparent text-[#858585] hover:text-[#858585] transition-colors"
+                      onClick={box.onSecondary}
+                      disabled={box.secondaryDisabled}
+                      className="px-4 py-2.5 text-sm rounded-xl bg-transparent text-[#858585] hover:text-[#ababab] transition-colors disabled:opacity-40"
                     >
-                      Cancel
+                      {box.secondaryLabel}
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* BER-136: Regenerate + Go Deeper buttons */}
-              {currentFeedback && (canRegen || canFollowUp || isLocal || isUnanswered) && (
+              {/* BER-136: Retry + Regenerate + Go deeper — only before an exchange starts */}
+              {currentFeedback && !arcStarted && (canRegen || canFollowUp || showRetry) && (
                 <div className="flex gap-2 flex-wrap">
-                  {(isLocal || isUnanswered) && (
+                  {showRetry && (
                     <button
                       onClick={handleRetry}
                       disabled={!canRetry}
@@ -526,9 +750,9 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                       {regenLoading ? 'Regenerating...' : `Regenerate · ${MAX_REGEN - regenCount} of ${MAX_REGEN} remaining`}
                     </button>
                   )}
-                  {canFollowUp && !showFollowUp && (
+                  {canFollowUp && (
                     <button
-                      onClick={() => setShowFollowUp(true)}
+                      onClick={() => setArc({ ...IDLE_ARC, stage: 'pushback' })}
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#858585] hover:border-[#2a2a2a] hover:text-[#ababab] transition-all"
                     >
                       Go deeper
@@ -540,10 +764,10 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
               {/* Divider */}
               <div className="border-t border-[#1a1a1a]" />
 
-              {/* Reactions */}
+              {/* Reactions — about the reading, not the last turn */}
               {currentFeedback && (
                 <div>
-                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">How did this land?</div>
+                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">How did the reading land?</div>
                   <div className="flex flex-wrap gap-2">
                     {REACTIONS.map((r) => {
                       const isSelected = selectedReaction === r.id;
@@ -575,7 +799,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
               {/* Close */}
               <button
-                onClick={onClose}
+                onClick={requestClose}
                 className="w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 bg-[#111] border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a]"
               >
                 {selectedReaction ? 'Done' : 'Close'}

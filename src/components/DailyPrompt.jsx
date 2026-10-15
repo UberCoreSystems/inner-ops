@@ -8,6 +8,7 @@ import {
   assignDailyPrompt,
   formatRelativeDate,
   todayLocalDateString,
+  markOpenQuestionSurfaced,
 } from '../utils/oracleQuestionPool.js';
 import { USER_SETTINGS_FIELDS } from '../utils/schema.js';
 import {
@@ -88,15 +89,7 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
           if (cancelled) return;
           const found = pool.find((p) => p.id === storedId);
           if (found) {
-            setPrompt({
-              kind: 'oracle',
-              text: found.question,
-              sourceModule: found.sourceModule,
-              sourceDocId: found.sourceDocId,
-              eventOccurredAt: found.eventOccurredAt,
-              displayLabel: found.displayLabel,
-              id: found.id,
-            });
+            setPrompt({ kind: 'oracle', ...found, text: found.question });
             return;
           }
         } catch { /* fall through to fresh pick */ }
@@ -111,16 +104,9 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
         const recent = settings?.[USER_SETTINGS_FIELDS.RECENTLY_SHOWN_DAILY_PROMPT_IDS] || [];
         const pick = pickTodaysOracleQuestion(result.pool, recent, today);
         if (pick) {
-          setPrompt({
-            kind: 'oracle',
-            text: pick.question,
-            sourceModule: pick.sourceModule,
-            sourceDocId: pick.sourceDocId,
-            eventOccurredAt: pick.eventOccurredAt,
-            displayLabel: pick.displayLabel,
-            id: pick.id,
-          });
+          setPrompt({ kind: 'oracle', ...pick, text: pick.question });
           assignDailyPrompt({ promptId: pick.id, today, settings });
+          markOpenQuestionSurfaced(pick);
           return;
         }
       } catch { /* pool unavailable — fall through to static */ }
@@ -144,9 +130,12 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
     ? (ORACLE_SOURCE_META[prompt.sourceModule] || ORACLE_SOURCE_META.journalEntries)
     : (STATIC_CATEGORY_META[prompt.category] || STATIC_CATEGORY_META.selfAwareness);
 
-  const provenance = prompt.kind === 'oracle'
-    ? `Oracle asked you ${formatRelativeDate(prompt.eventOccurredAt) || 'recently'} after ${prompt.displayLabel}.`
-    : null;
+  const when = formatRelativeDate(prompt.eventOccurredAt) || 'recently';
+  const provenance = prompt.kind !== 'oracle'
+    ? null
+    : prompt.unanswered
+      ? `You left this unanswered after ${prompt.displayLabel} ${when}.`
+      : `Oracle asked you ${when} after ${prompt.displayLabel}.`;
 
   return (
     <div

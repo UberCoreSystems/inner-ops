@@ -5,6 +5,9 @@
  * Pool sources (every collection that already persists Oracle prose or a
  * structured question):
  *   - journalEntries.oracleClosingQuestion (or heuristic over oracleJudgment)
+ *   - journalEntries.oracleFollowUpQuestion when he left it unanswered in a
+ *     "Go deeper" exchange — comes back first until the dashboard has shown
+ *     it once (oracleFollowUpSurfacedAt), then takes its turn like the rest
  *   - hardLessons.oracleClosingQuestion (or heuristic over oracleWisdom)
  *   - relapseEntries.oracleClosingQuestion (or heuristic over oracleFeedback)
  *   - confirmedKills.oracleClosingQuestion (or heuristic over closure/oracleStatement)
@@ -19,10 +22,11 @@
  * the rotation rather than living forever.
  */
 
-import { readUserData, upsertUserSettings } from './firebaseUtils.js';
+import { readUserData, updateData, upsertUserSettings } from './firebaseUtils.js';
 import { COLLECTIONS, ORACLE_FIELDS, USER_SETTINGS_FIELDS } from './schema.js';
 import { extractClosingQuestion } from './oracleQuestionExtractor.js';
-import { localDateKey } from './dateUtils.js';
+import { isQuestionUnanswered } from './followUpArc.js';
+import { localDateKey, toMs } from './dateUtils.js';
 
 const LOOKBACK_DAYS = 60;
 const RECENT_SHOWN_CAP = 14;
@@ -71,10 +75,12 @@ function pickEventDate(doc) {
   );
 }
 
-function buildPoolEntry(collectionName, doc, question, eventDate) {
-  if (!question || typeof question !== 'string') return null;
+// The pool admits only a question that reads as one.
+const isPoolQuestion = (question) => typeof question === 'string' && question.trim().endsWith('?');
+
+function buildPoolEntry(collectionName, doc, question, eventDate, flags = {}) {
+  if (!isPoolQuestion(question)) return null;
   const trimmed = question.trim();
-  if (!trimmed || !trimmed.endsWith('?')) return null;
   return {
     id: `${collectionName}/${doc.id}`,
     question: trimmed,
@@ -82,10 +88,20 @@ function buildPoolEntry(collectionName, doc, question, eventDate) {
     sourceDocId: doc.id,
     eventOccurredAt: eventDate ? eventDate.toISOString() : null,
     displayLabel: MODULE_LABELS[collectionName] || 'an entry',
+    ...flags,
   };
 }
 
-function questionFromJournal(doc) {
+// A dialogue question he left open outranks the reading's closing question —
+// it is the one he walked away from. Returned with flags for the picker; once
+// the dashboard has shown it (surfacedAt) it competes like any other.
+export function questionFromJournal(doc) {
+  const open = doc[ORACLE_FIELDS.FOLLOW_UP_QUESTION];
+  // An open question the pool would not admit must not cost the entry its
+  // reading's question as well.
+  if (isQuestionUnanswered(doc) && isPoolQuestion(open)) {
+    return { question: open.trim(), unanswered: true, surfacedAt: doc[ORACLE_FIELDS.FOLLOW_UP_SURFACED_AT] || null };
+  }
   return doc[ORACLE_FIELDS.CLOSING_QUESTION] || extractClosingQuestion(doc[ORACLE_FIELDS.JOURNAL_PROSE]);
 }
 
@@ -157,8 +173,9 @@ export async function buildOracleQuestionPool({ now = new Date() } = {}) {
       if (!doc || !doc.id) continue;
       const eventDate = pickEventDate(doc);
       if (!withinLookback(eventDate, now)) continue;
-      const question = handler.getQuestion(doc);
-      const entry = buildPoolEntry(handler.collection, doc, question, eventDate);
+      const got = handler.getQuestion(doc);
+      const { question, ...flags } = typeof got === 'string' ? { question: got } : (got || {});
+      const entry = buildPoolEntry(handler.collection, doc, question, eventDate, flags);
       if (entry) pool.push(entry);
     }
   }
@@ -209,6 +226,14 @@ export function pickTodaysOracleQuestion(pool, recentlyShownIds, dateSeed, { now
   // If everything's been shown recently, allow the rolling window to recycle.
   const usable = candidates.length > 0 ? candidates : pool;
 
+  // A dialogue question he left open and has not yet been shown comes back
+  // first — the most recent one. Once surfaced it takes its turn in the
+  // weighted draw below.
+  const open = usable.filter((p) => p.unanswered && !p.surfacedAt);
+  if (open.length > 0) {
+    return open.reduce((latest, p) => (toMs(p.eventOccurredAt) > toMs(latest.eventOccurredAt) ? p : latest));
+  }
+
   const weights = usable.map((p) => recencyWeight(p.eventOccurredAt, now));
   const totalWeight = weights.reduce((sum, w) => sum + w, 0);
   if (totalWeight <= 0) return usable[0];
@@ -242,6 +267,22 @@ export async function readUserSettings() {
     return Array.isArray(docs) && docs.length > 0 ? docs[0] : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Stamp the entry behind an open dialogue question the first time the
+ * dashboard shows it; from then on it competes in the rotation like any other.
+ * Best-effort, like assignDailyPrompt.
+ */
+export async function markOpenQuestionSurfaced(pick) {
+  if (!pick?.unanswered || pick.surfacedAt || !pick.sourceDocId) return;
+  try {
+    await updateData(COLLECTIONS.JOURNAL_ENTRIES, pick.sourceDocId, {
+      [ORACLE_FIELDS.FOLLOW_UP_SURFACED_AT]: new Date().toISOString(),
+    });
+  } catch {
+    // intentional: never let this block the UI
   }
 }
 

@@ -5,6 +5,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { readUserData, writeData, updateData } from '../utils/firebaseUtils';
 import { COLLECTIONS, CONFRONTATION_FIELDS } from '../utils/schema';
+import { confrontationArcPatch, CONFRONTATION_ARC_CLEARED } from '../utils/followUpArc';
 import { getEntryTimestamp } from '../utils/dateUtils';
 import OracleModal from './OracleModal';
 import logger from '../utils/logger';
@@ -174,20 +175,33 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
     }
 
     let response = '';
+    // Forwarded so a follow-up can hold or concede on this reading, and so a
+    // rate-limited local reading is not offered a Retry that cannot work.
+    let provenance = null;
+    let fallbackReason = null;
     try {
-      const { text } = await generateAIFeedback({
+      const result = await generateAIFeedback({
         moduleName: 'relapse',
         content: entryText,
         promptContextKey: 'relapse_forecast',
         promptContextParams: { activeCount: forecast.activeAntecedents.length },
       });
-      response = text || 'Oracle unavailable. The signal is still yours to confront.';
+      response = result?.text || 'Oracle unavailable. The signal is still yours to confront.';
+      provenance = result?.provenance ?? null;
+      fallbackReason = result?.fallbackReason ?? null;
     } catch (error) {
       logger.error('Relapse forecast Oracle error:', error);
       response = 'Oracle unavailable. The signal is still yours to confront.';
     }
 
-    setModalState({ isOpen: true, content: response, isLoading: false, entryCount: getCachedTotalEntryCount() });
+    setModalState({
+      isOpen: true,
+      content: response,
+      isLoading: false,
+      entryCount: getCachedTotalEntryCount(),
+      provenance,
+      fallbackReason,
+    });
 
     // Persist the Oracle response onto the marker — or write a full doc if the
     // marker never landed (so a transient first-write failure still records it).
@@ -226,16 +240,34 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
     }
   };
 
-  // A regenerated confrontation replaces the one on record — otherwise the
-  // stored doc keeps the reading the user discarded.
+  // The whole arc so far lands on the confrontation doc after every turn —
+  // these docs sit in the same history panel as the pattern confrontations.
+  const handleFollowUpStored = async (snapshot) => {
+    if (!activeDocId) return;
+    const patch = confrontationArcPatch(snapshot);
+    try {
+      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, patch);
+      setConfrontations((prev) => prev.map((c) =>
+        c.id === activeDocId ? { ...c, ...patch } : c
+      ));
+    } catch (err) {
+      logger.warn('RelapseForecastCard: follow-up write failed', err?.message);
+    }
+  };
+
+  // A regenerated confrontation replaces the one on record, and clears any
+  // exchange that answered the discarded reading — otherwise the stored doc
+  // keeps the reading the user discarded.
   const handleFeedbackReplaced = async (newFeedback) => {
     if (!activeDocId || !newFeedback) return;
+    const patch = {
+      [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback,
+      ...CONFRONTATION_ARC_CLEARED,
+    };
     try {
-      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, {
-        [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback,
-      });
+      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, patch);
       setConfrontations((prev) => prev.map((c) =>
-        c.id === activeDocId ? { ...c, [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback } : c
+        c.id === activeDocId ? { ...c, ...patch } : c
       ));
     } catch (err) {
       logger.warn('RelapseForecastCard: replaced-response write failed', err?.message);
@@ -288,7 +320,10 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
         entryText={modalState.isOpen ? forecastEntryText : ''}
         entryModuleName="oracle"
         entryCount={modalState.entryCount}
+        provenance={modalState.provenance}
+        fallbackReason={modalState.fallbackReason}
         onReaction={handleReaction}
+        onFollowUpStored={handleFollowUpStored}
         onFeedbackReplaced={handleFeedbackReplaced}
       />
     </>

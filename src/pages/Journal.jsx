@@ -35,6 +35,7 @@ import {
   stashHardLessonExtraction,
   buildCommitmentPrefill,
 } from '../utils/crossModuleExtraction';
+import { journalArcPatch, JOURNAL_ARC_CLEARED } from '../utils/followUpArc';
 
 // Reflective prompts surfaced one at a time. The Gibbs-cycle "action plan"
 // stage was removed — action commitments live in the Kill List module, and
@@ -905,22 +906,11 @@ export default function Journal() {
     }
   };
 
-  // Persist a follow-up exchange (the user's challenge + the Oracle's reply)
-  // onto the journal entry, turning a one-shot reading into a conversation that
-  // survives a reload. The response is generated in OracleModal via the Claude
-  // proxy (callOracleRaw) — no local templates. Field names match the entry
-  // render slots so past entries show the exchange with no extra render code.
-  // The commitment the reply closed on is stored beside it; an explicit null
-  // clears a stale one when a regenerated exchange ends without a tag.
-  const persistFollowUp = async ({ followUpText, followUpResponse, commitment = null }) => {
+  // Persist the "Go deeper" arc onto the journal entry so the exchange survives
+  // a reload. Write strategy: src/utils/followUpArc.js.
+  const persistFollowUp = async (snapshot) => {
     if (!currentEntryId) return;
-    const patch = {
-      userResponse: followUpText,
-      oracleFollowUp: followUpResponse,
-      [ORACLE_FIELDS.COMMITMENT]: commitment
-        ? { ...commitment, createdAt: new Date().toISOString() }
-        : null,
-    };
+    const patch = journalArcPatch(snapshot, new Date().toISOString());
     try {
       await updateData('journalEntries', currentEntryId, patch);
       setEntries(prev =>
@@ -945,12 +935,21 @@ export default function Journal() {
   // a retry after a failed call, or a regeneration. Without this the modal
   // showed one judgment while the document kept another (or none), which a
   // stored follow-up would then answer out of context after a reload.
-  const persistReplacedFeedback = async (newFeedback, newProvenance, { metacognitiveDepth: newDepth } = {}) => {
+  const persistReplacedFeedback = async (
+    newFeedback,
+    newProvenance,
+    { metacognitiveDepth: newDepth, closingQuestion: newQuestion = null } = {}
+  ) => {
     if (!currentEntryId || !newFeedback) return;
     const patch = {
       oracleJudgment: newFeedback,
       ...(newProvenance ? { [ORACLE_FIELDS.PROVENANCE]: newProvenance } : {}),
       ...(newDepth ? { metacognitiveDepth: newDepth } : {}),
+      // Today's Reflection reads this field — the replaced reading's question
+      // must not keep circulating.
+      [ORACLE_FIELDS.CLOSING_QUESTION]: newQuestion || null,
+      // Any exchange on record answered the judgment that is gone.
+      ...JOURNAL_ARC_CLEARED,
     };
     try {
       await updateData('journalEntries', currentEntryId, patch);
@@ -1745,6 +1744,7 @@ export default function Journal() {
         isLoading={oracleModal.isLoading}
         onReaction={handleOracleReaction}
         onFollowUpStored={persistFollowUp}
+        returnsToDashboard
         onMakeContract={(commitment) => handleMakeContract(commitment, currentEntryId)}
         onFeedbackReplaced={persistReplacedFeedback}
         entryCount={oracleModal.entryCount}

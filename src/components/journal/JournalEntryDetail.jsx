@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { moodOptions, intensityLevels } from '../../constants/moods';
 import { parseDate } from '../../utils/dateUtils';
 import { ORACLE_FIELDS } from '../../utils/schema';
-import { PROVENANCE } from '../../utils/aiFeedback';
+import { PROVENANCE, isRateLimitCode } from '../../utils/aiFeedback';
+import { ARC_COPY, arcOutcomeBadge, arcText, isQuestionUnanswered } from '../../utils/followUpArc';
 import { MoodIcons } from './MoodIcons';
 import OracleReactionChip from './OracleReactionChip';
 
@@ -82,9 +83,15 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
   // map with a contractId and no text.
   const commitment = entry[ORACLE_FIELDS.COMMITMENT];
   const commitmentText = typeof commitment?.text === 'string' ? commitment.text : '';
-  const fallbackReason = entry[ORACLE_FIELDS.FALLBACK_REASON];
-  const wasRateLimited = fallbackReason === 'resource-exhausted'
-    || fallbackReason === 'functions/resource-exhausted';
+  // The "Go deeper" exchange, in the order it happened. Each block renders only
+  // when its field exists, so entries from before the arc read as before.
+  const pushback = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_PUSHBACK]);
+  const reply = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_REPLY]);
+  const answer = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_ANSWER]);
+  const closingRead = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_CLOSE]);
+  const outcomeBadge = arcOutcomeBadge(entry[ORACLE_FIELDS.FOLLOW_UP_OUTCOME]);
+  const leftUnanswered = isQuestionUnanswered(entry);
+  const wasRateLimited = isRateLimitCode(entry[ORACLE_FIELDS.FALLBACK_REASON]);
 
   return (
     // z-[60] clears the mobile bottom nav (`fixed bottom-0 z-50`), which would
@@ -175,27 +182,55 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
                 {oracleText}
               </div>
 
-              {entry.userResponse && typeof entry.userResponse === 'string' && (
+              {pushback && (
                 <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Your Response</h5>
+                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.challenge}</h5>
                   <div className="text-[#d1d1d1] text-sm leading-relaxed whitespace-pre-line">
-                    {entry.userResponse}
+                    {pushback}
                   </div>
                 </div>
               )}
 
-              {entry.oracleFollowUp && typeof entry.oracleFollowUp === 'string' && (
+              {reply && (
                 <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Oracle — Reflection</h5>
+                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.reflection}</h5>
                   <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
-                    {entry.oracleFollowUp}
+                    {reply}
+                  </div>
+                  {leftUnanswered && (
+                    <p className="mt-3 text-[#858585] text-xs leading-relaxed">{ARC_COPY.leftUnanswered}</p>
+                  )}
+                </div>
+              )}
+
+              {answer && (
+                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.answer}</h5>
+                  <div className="text-[#d1d1d1] text-sm leading-relaxed whitespace-pre-line">
+                    {answer}
+                  </div>
+                </div>
+              )}
+
+              {closingRead && (
+                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h5 className="text-[#888] font-medium text-xs uppercase tracking-widest">{ARC_COPY.closingRead}</h5>
+                    {outcomeBadge && (
+                      <span className="text-[10px] uppercase tracking-widest" style={{ color: outcomeBadge.color }}>
+                        {outcomeBadge.label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
+                    {closingRead}
                   </div>
                 </div>
               )}
 
               {commitmentText && (
                 <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">Commitment</h5>
+                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.commitment}</h5>
                   <div className="text-[#f5f5f5] text-sm leading-relaxed">{commitmentText}</div>
                   {commitment.contractId ? (
                     <div className="mt-3 flex items-center gap-3 text-xs">

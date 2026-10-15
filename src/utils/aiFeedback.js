@@ -553,6 +553,11 @@ const parseLLMJsonSafely = (value) => {
  */
 export const PROVENANCE = Object.freeze({ ORACLE: 'oracle', LOCAL: 'local' });
 
+// The two shapes the rate-limit code arrives in, depending on whether the
+// error came from the callable wrapper or the raw functions client. Stored
+// readings carry either, so readers use this too.
+export const isRateLimitCode = (code) => code === 'resource-exhausted' || code === 'functions/resource-exhausted';
+
 export const callLLM = async (promptBundle, generationContext) => {
   const { userPrompt } = promptBundle;
 
@@ -651,7 +656,7 @@ export const callLLM = async (promptBundle, generationContext) => {
     // to the templated response since a toast on every transient failure
     // would be noisy.
     const code = error?.code || '';
-    if (code === 'resource-exhausted' || code === 'functions/resource-exhausted') {
+    if (isRateLimitCode(code)) {
       try { ouraToast.warning('Oracle daily limit reached — using local response.'); } catch { /* ignore */ }
     } else if (code === 'deadline-exceeded' || code === 'functions/deadline-exceeded') {
       try { ouraToast.warning('Oracle is slow — using local response.'); } catch { /* ignore */ }

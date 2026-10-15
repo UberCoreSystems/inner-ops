@@ -4,6 +4,7 @@ import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { readUserData, writeData, updateData } from '../utils/firebaseUtils';
 import { COLLECTIONS, CONFRONTATION_FIELDS } from '../utils/schema';
+import { confrontationArcPatch, CONFRONTATION_ARC_CLEARED } from '../utils/followUpArc';
 import { getViolatedRules } from '../utils/ruleState';
 import OracleModal from './OracleModal';
 import ConfrontationHistoryPanel from './ConfrontationHistoryPanel';
@@ -52,7 +53,9 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
 
   const [confrontations, setConfrontations] = useState([]);
   const [confrontationsLoaded, setConfrontationsLoaded] = useState(false);
-  const [modalState, setModalState] = useState({ isOpen: false, content: '', isLoading: false, entryCount: null });
+  const [modalState, setModalState] = useState({
+    isOpen: false, content: '', isLoading: false, entryCount: null, provenance: null, fallbackReason: null,
+  });
   const [activeDocId, setActiveDocId] = useState(null);
   const [localDismissedKey, setLocalDismissedKey] = useState(null);
 
@@ -143,11 +146,17 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
       entryText = `${violatedInWindow} of my finalized rules have been violated in the last 30 days. What pattern am I most reluctant to name precisely?`;
     }
 
-    setModalState({ isOpen: true, content: '', isLoading: true, entryCount: null });
+    setModalState({ isOpen: true, content: '', isLoading: true, entryCount: null, provenance: null, fallbackReason: null });
     let response = '';
+    // Forwarded so a follow-up can hold or concede on this reading, and so a
+    // rate-limited local reading is not offered a Retry that cannot work.
+    let provenance = null;
+    let fallbackReason = null;
     try {
-      const { text } = await generateAIFeedback('oracle', entryText, []);
-      response = text || 'Oracle unavailable. The signal is still yours to confront.';
+      const result = await generateAIFeedback('oracle', entryText, []);
+      response = result?.text || 'Oracle unavailable. The signal is still yours to confront.';
+      provenance = result?.provenance ?? null;
+      fallbackReason = result?.fallbackReason ?? null;
     } catch (error) {
       logger.error('Pattern confrontation Oracle error:', error);
       response = 'Oracle unavailable. The signal is still yours to confront.';
@@ -158,6 +167,8 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
       content: response,
       isLoading: false,
       entryCount: getCachedTotalEntryCount(),
+      provenance,
+      fallbackReason,
     });
 
     // Persist the confrontation. The 24h dedupe + history panel + engagement
@@ -205,14 +216,11 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
     }
   };
 
-  const handleFollowUpStored = async ({ followUpResponse, commitment = null } = {}) => {
-    if (!activeDocId || !followUpResponse) return;
-    // The commitment is lifted out of the prose server-side, so it is stored
-    // beside the follow-up or the record loses the line the turn closed on.
-    const patch = {
-      [CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE]: followUpResponse,
-      [CONFRONTATION_FIELDS.COMMITMENT]: commitment,
-    };
+  // The whole arc so far lands on the confrontation doc after every turn —
+  // the history panel reads the exchange from it.
+  const handleFollowUpStored = async (snapshot) => {
+    if (!activeDocId) return;
+    const patch = confrontationArcPatch(snapshot);
     try {
       await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, patch);
       setConfrontations((prev) => prev.map((c) =>
@@ -223,16 +231,19 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
     }
   };
 
-  // A regenerated confrontation replaces the one on record. Without this the
-  // history panel and any stored follow-up keep quoting the discarded reading.
+  // A regenerated confrontation replaces the one on record, and clears any
+  // exchange that answered the discarded reading. Without this the history
+  // panel keeps quoting it.
   const handleFeedbackReplaced = async (newFeedback) => {
     if (!activeDocId || !newFeedback) return;
+    const patch = {
+      [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback,
+      ...CONFRONTATION_ARC_CLEARED,
+    };
     try {
-      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, {
-        [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback,
-      });
+      await updateData(COLLECTIONS.CONFRONTATIONS, activeDocId, patch);
       setConfrontations((prev) => prev.map((c) =>
-        c.id === activeDocId ? { ...c, [CONFRONTATION_FIELDS.ORACLE_RESPONSE]: newFeedback } : c
+        c.id === activeDocId ? { ...c, ...patch } : c
       ));
     } catch (err) {
       logger.warn('PatternConfrontationCard: replaced-response write failed', err?.message);
@@ -300,6 +311,8 @@ export default function PatternConfrontationCard({ signalReport, hardLessons = [
         entryText={modalState.isOpen ? headline : ''}
         entryModuleName="oracle"
         entryCount={modalState.entryCount}
+        provenance={modalState.provenance}
+        fallbackReason={modalState.fallbackReason}
         onReaction={handleReaction}
         onFollowUpStored={handleFollowUpStored}
         onFeedbackReplaced={handleFeedbackReplaced}

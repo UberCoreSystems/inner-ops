@@ -19,6 +19,7 @@ const {
   buildSystemPromptBlocks,
   resolvePromptContext,
   parseOracleResponse,
+  describeResponseShape,
   lengthTierFor,
   buildLengthDirectiveBlock,
   buildUserPrompt,
@@ -591,12 +592,13 @@ test("oracle_challenge clamps the pushback and yields nothing without one", () =
   assert.strictEqual(resolvePromptContext("oracle_challenge", { pushback: 42 }), "");
 });
 
-test("oracle_challenge rides the dynamic suffix; the cached first-reading prefix is untouched", () => {
+test("follow-up fragments ride the dynamic suffix; the cached first-reading prefix is untouched", () => {
   const { stable, cacheable } = buildSystemPromptBlocks("oracle", "stoic", null, 50, [], undefined, 100);
   assert.ok(cacheable);
   assert.match(stable, /CLOSING MOVE/);
   assert.match(stable, /If — and only if — you close with a question/);
   assert.ok(!/SECOND TURN/.test(stable), "the follow-up override never enters the cached prefix");
+  assert.ok(!/THIRD TURN/.test(stable));
 });
 
 // ── Follow-up commitment extraction ─────────────────────────────────────────
@@ -658,4 +660,110 @@ test("banned tone is stripped inside the commitment and a DEPTH prefix still par
   assert.ok(!/you got this/i.test(parsed.commitment.text));
   assert.strictEqual(parsed.commitment.pattern, "Skips");
   assert.strictEqual(parsed.feedback, "The loop is named.");
+});
+
+// ── promptContextKey registry: the fixed follow-up arc ──────────────────────
+
+test("oracle_pushback holds or concedes on the record and closes on one tagged question, never a commitment", () => {
+  const t = resolvePromptContext("oracle_pushback", {});
+  assert.match(t, /SECOND TURN — HIS PUSHBACK/);
+  assert.match(t, /concede plainly/);
+  assert.match(t, /Concede only to the record/);
+  assert.match(t, /Never invent a pattern, event, date, or quote/);
+  assert.match(t, /ONE insight/);
+  assert.match(t, /CLOSE WITH ONE QUESTION/);
+  assert.match(t, /only question mark in the reply/);
+  assert.match(t, /<closing_question> tags/);
+  assert.match(t, /80–140 words/);
+  assert.match(t, /no motivational, wellness, or therapeutic language, no hedging/);
+  assert.ok(!/<commitment/.test(t), "turn 1 never primes a commitment");
+  assert.ok(!/you got this|keep going|stay strong/i.test(t), "no encouragement copy");
+});
+
+test("oracle_close opens on a verdict, concedes at most once, and closes on the commitment shape", () => {
+  const t = resolvePromptContext("oracle_close", {});
+  assert.match(t, /THIRD TURN — HIS ANSWER/);
+  assert.match(t, /five labeled parts/);
+  assert.match(t, /VERDICT:answered or VERDICT:evaded/);
+  assert.match(t, /One concession per exchange/);
+  assert.match(t, /An explanation is not a contradiction/);
+  assert.match(t, /agreed without content/);
+  assert.match(t, /Do not thank him/);
+  assert.match(t, /60–110 words/);
+  assert.match(t, /no question mark anywhere/);
+  assert.match(t, /never use <closing_question> tags/);
+  assert.match(t, /"use no tags" rule above does not apply/);
+  assert.match(t, /\(none recorded\)/);
+  assert.match(t, /Commitment: When \[specific trigger or time\], I will \[specific observable action\]\. Checked by \[how the record will show it\]\./);
+});
+
+test("the arc keys take no parameters — the user's words never enter the system prompt", () => {
+  const pushback = resolvePromptContext("oracle_pushback", { pushback: "INJECT-ME" });
+  const close = resolvePromptContext("oracle_close", { answer: "INJECT-ME" });
+  assert.strictEqual(pushback, resolvePromptContext("oracle_pushback", {}));
+  assert.strictEqual(close, resolvePromptContext("oracle_close", {}));
+  assert.ok(!pushback.includes("INJECT-ME"));
+  assert.ok(!close.includes("INJECT-ME"));
+});
+
+// ── Parser: verdict line, multiple question tags, commitment-closed turns ────
+
+test("a VERDICT line is lifted into verdict and stripped from the prose", () => {
+  const parsed = parseOracleResponse(
+    "VERDICT:evaded\n\nYou answered a different question. <commitment>Commitment: When X, I will Y. Checked by Z.</commitment>"
+  );
+  assert.strictEqual(parsed.verdict, "evaded");
+  assert.strictEqual(parsed.feedback, "You answered a different question.");
+  assert.strictEqual(parsed.commitment.trigger, "X");
+  const plain = parseOracleResponse("VERDICT: Answered\nProse.");
+  assert.strictEqual(plain.verdict, "answered");
+  assert.strictEqual(plain.feedback, "Prose.");
+  const wrapped = parseOracleResponse("**VERDICT: evaded**\n\nProse.");
+  assert.strictEqual(wrapped.verdict, "evaded", "markdown around the line is swallowed with it");
+  assert.strictEqual(wrapped.feedback, "Prose.");
+  assert.strictEqual(parseOracleResponse("Prose with no verdict line.").verdict, null);
+  const depth = parseOracleResponse("**DEPTH:Pattern**\n\nA reading.");
+  assert.strictEqual(depth.verdict, null);
+  assert.strictEqual(depth.metacognitiveDepth, "Pattern", "the DEPTH line gets the same tolerance");
+  assert.strictEqual(depth.feedback, "A reading.");
+});
+
+test("every closing_question tag is unwrapped and the last one is the question", () => {
+  const parsed = parseOracleResponse(
+    "One. <closing_question>First?</closing_question> Two. <closing_question>Second?</closing_question>"
+  );
+  assert.strictEqual(parsed.closingQuestion, "Second?");
+  assert.ok(!/<\/?closing_question>/.test(parsed.feedback), "no markup reaches the UI");
+  assert.strictEqual(parsed.feedback, "One. First? Two. Second?");
+});
+
+test("the heuristic question still runs beside a commitment — turn 2 ignores it client-side, a mis-tagged turn 1 keeps its question", () => {
+  const parsed = parseOracleResponse(
+    'Which night did you choose the desk? <commitment pattern="Skips">Commitment: When X, I will Y. Checked by Z.</commitment>'
+  );
+  assert.strictEqual(parsed.closingQuestion, "Which night did you choose the desk?");
+  assert.strictEqual(parsed.commitment.pattern, "Skips");
+  const first = parseOracleResponse("A first reading with no tags. What did you skip?");
+  assert.strictEqual(first.closingQuestion, "What did you skip?", "first readings still recover the heuristic question");
+});
+
+test("describeResponseShape counts tags from the raw text and carries no text", () => {
+  const raw = "VERDICT:answered\n\nFour words of prose here. <commitment>Commitment: When X, I will Y. Checked by Z.</commitment>";
+  const shape = describeResponseShape(raw, parseOracleResponse(raw));
+  assert.deepStrictEqual(shape, {
+    closingQuestionTags: 0,
+    commitmentTags: 1,
+    commitmentShaped: true,
+    proseWords: 5,
+    verdict: "answered",
+  });
+  assert.ok(!JSON.stringify(shape).includes("Four words"), "no text in the shape");
+  const q = "<closing_question>Which night?</closing_question>";
+  assert.deepStrictEqual(describeResponseShape(q, parseOracleResponse(q)), {
+    closingQuestionTags: 1,
+    commitmentTags: 0,
+    commitmentShaped: false,
+    proseWords: 2,
+    verdict: null,
+  });
 });

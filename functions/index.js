@@ -85,14 +85,10 @@ const PROMPT_CONTEXT_REGISTRY = {
     return `FORWARD-LOOKING CONFRONTATION — this is a PRE-failure signal. No relapse has occurred yet.${note} The entry lists behavioral antecedents that have historically preceded his relapses and are active right now. Your job: name the convergence plainly and put the decision in front of him before it happens. Rules: (1) State the pattern as history, not destiny — "X has preceded your relapses; it is active now," never "you will relapse." (2) No alarmism, no catastrophizing, no urgency theater. (3) No encouragement, no reassurance, no affirmation. (4) Be precise about the named antecedent and its typical lead time as given; do not invent antecedents or numbers not in the entry. (5) One confrontation, not a list of tips. End with the single question he needs to sit with now.`;
   },
 
-  // Oracle follow-up — the second turn of an exchange. The user pushed back on
-  // the first reading; the entry text arrives in three labeled sections
-  // (ORIGINAL ENTRY / YOUR PRIOR READING / HIS PUSHBACK, assembled by
-  // src/utils/buildFollowUpEntryText.js). This fragment is the last block of
-  // the system prompt, so its overrides of the posture steps, CLOSING MOVE,
-  // tag rule and length rule bind for this turn only — the first reading never
-  // sees it. The turn ends on ONE tagged commitment, never a question, and may
-  // concede when the record supports the pushback. Pushback is clamped.
+  // LEGACY single-turn follow-up, superseded by the fixed arc below
+  // (oracle_pushback → oracle_close). Kept byte-identical because a tab still
+  // running the pre-arc bundle sends this key until it reloads. Delete once
+  // functions/scripts/readFollowUpArc.js shows no calls for 7 days.
   oracle_challenge: (params) => {
     const pushback = typeof params?.pushback === "string"
       ? params.pushback.slice(0, MAX_USER_RESPONSE_CHARS)
@@ -112,6 +108,46 @@ CLOSE WITH ONE COMMITMENT, NOT A QUESTION. This replaces the CLOSING MOVE above 
 <commitment pattern="[the pattern, as a short Kill List target name, 60 characters or fewer]">Commitment: When [specific trigger or time], I will [specific observable action]. Checked by [how the record will show it].</commitment>
 One commitment only. Concrete, observable, short: the trigger clause and the action clause are each 50 characters or fewer. Nothing follows the closing tag.`;
   },
+
+  // Follow-up arc, turn 1. The entry text carries the exchange as labeled
+  // sections (src/utils/buildFollowUpEntryText.js); this fragment, last in
+  // the system prompt, overrides posture, length and the closing move for the
+  // turn. Holds or concedes on the record, one insight, closes on ONE tagged
+  // question — never a commitment. No params: his words ride the user message.
+  oracle_pushback: () => `SECOND TURN — HIS PUSHBACK. The entry text has three labeled parts: ORIGINAL ENTRY, YOUR PRIOR READING, and HIS PUSHBACK. This is not a new reading. Do not re-read the entry from scratch, do not restate your prior reading, and do not choose a new posture — the posture steps and the variation rule above do not apply to this turn. If YOUR PRIOR READING says "(none recorded)", answer his pushback against the entry alone and take no position you did not state.
+
+Engage HIS PUSHBACK first. Then decide on the record alone — the entry, your prior reading, and any receipts provided above:
+- If the record supports your position, hold it. Name the receipt it rests on: his own words, the logged fact.
+- If his pushback is correct and the record supports him, concede plainly: one sentence naming exactly what you got wrong, then continue from the corrected read. A concession is a correction, not an apology and not praise.
+- Rhetoric alone earns nothing. A reframe, a question turned back on you, or a philosophical move is not a receipt. Concede only to the record.
+- If he does not dispute your reading — he answers the question it closed on, or adds facts — take it as his response: correct your read only where a fact he adds contradicts it, and continue.
+Never affirm for its own sake. Never invent a pattern, event, date, or quote that is not in the text above.
+
+Then give ONE insight this exchange has earned: something true about the pattern that neither your reading nor his pushback has said. Not a summary, not advice, not a plan.
+
+Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Make each point once. Keep the reply to 80–140 words, the question included — noticeably shorter than your prior reading. This replaces the length rule above.
+
+CLOSE WITH ONE QUESTION. This replaces the CLOSING MOVE above for this turn: whatever the posture, the reply ends on exactly one question, and it is the only question mark in the reply. He answers it next, and the exchange then closes on a commitment built from his answer — so ask for what that commitment needs and only he can supply: the specific moment, condition, or decision where this pattern runs. Not yes-or-no, not leading, not abstract; answerable in a few sentences, and not answerable without taking a position on what he actually does. Wrap it in <closing_question> tags, as the tag rule above requires. Do not propose a commitment, a plan, or a next step in this turn. Nothing follows the closing tag.`,
+
+  // Follow-up arc, turn 2 — the last. Opens on a VERDICT line (parsed like
+  // DEPTH), judges answered vs evaded, one concession per exchange, closes on
+  // ONE tagged commitment and asks nothing. No params.
+  oracle_close: () => `THIRD TURN — HIS ANSWER. The entry text has five labeled parts: ORIGINAL ENTRY, YOUR PRIOR READING, HIS PUSHBACK, YOUR REPLY, and HIS ANSWER. YOUR REPLY closed on a question; HIS ANSWER is what he wrote back. This is the last turn of the exchange. Do not re-read the entry, do not restate your reading or your reply, and do not choose a new posture — the posture steps and the variation rule above do not apply. If YOUR PRIOR READING says "(none recorded)", your position is only what YOUR REPLY stated.
+
+Judge the answer first, against the question it was given:
+- He answered if he named something specific: a moment, a condition, a decision, a cost. Say what his answer shows that the record did not, and build on it.
+- He evaded if he answered a different question, generalized, moved to philosophy, turned a question back on you, agreed without content ("you're right", "I know", "I'll do better"), or said he does not know. Name the evasion in one sentence, quoting his words, and state what a real answer would have had to contain. Do not ask again.
+Answering is not progress. Do not thank him, praise the answer, or call it honest, brave, or a breakthrough.
+
+Begin your reply with exactly one line stating that judgment — VERDICT:answered or VERDICT:evaded — then a blank line, then the prose. That line is read by the system and never shown to him.
+
+Your position stays on the record. His agreement is not evidence and neither is his insistence. One concession per exchange: if YOUR REPLY conceded a point, concede nothing further. If it held, correct your read only when his answer shows that YOUR REPLY misstated a fact — a fact in the entry, or a concrete event he now states that directly contradicts a claim you made. An explanation is not a contradiction. Name any correction in one sentence and continue from it. Never invent a pattern, event, date, or quote that is not in the text above.
+
+Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Keep the prose to 60–110 words, not counting the verdict line or the commitment line. This replaces the length rule above.
+
+CLOSE WITH ONE COMMITMENT. This replaces the CLOSING MOVE above for this turn. Ask nothing: no question mark anywhere in this reply — if you quote him, quote statements, not questions — and never use <closing_question> tags. Your final line is one commitment — built from his answer if he answered; if he evaded, built from the record and aimed at the moment he would not name — in exactly this shape, wrapped in <commitment> tags (these tags are required here; they are the only tags in your reply, and the "use no tags" rule above does not apply to them):
+<commitment pattern="[the pattern, as a short Kill List target name, 60 characters or fewer]">Commitment: When [specific trigger or time], I will [specific observable action]. Checked by [how the record will show it].</commitment>
+One commitment only. Concrete, observable, short: the trigger clause and the action clause are each 50 characters or fewer. Where his answer named the trigger, use his words. Nothing follows the closing tag.`,
 };
 
 function resolvePromptContext(key, params) {
@@ -138,9 +174,11 @@ function logOracleCall(fields) {
  * Called from the client via Firebase callable function.
  * Expects: { entryText, moduleName, userContext, tone, behavioralContext,
  *           entryCount, promptContextKey, promptContextParams, evasion }
- * Returns: { feedback, metacognitiveDepth, closingQuestion, commitment }
- *   commitment is non-null only on oracle_challenge follow-ups that closed on
- *   a tagged commitment line: { text, pattern, trigger, action, check }.
+ * Returns: { feedback, metacognitiveDepth, closingQuestion, commitment, verdict }
+ *   commitment is non-null only on follow-up turns that closed on a tagged
+ *   commitment line (oracle_close; legacy oracle_challenge): { text, pattern,
+ *   trigger, action, check }. verdict ('answered' | 'evaded') is set only on
+ *   oracle_close turns, from the VERDICT line the model opens with.
  */
 exports.oracle = onCall(
   { secrets: [anthropicApiKey], region: "us-central1", timeoutSeconds: 30 },
@@ -257,6 +295,8 @@ exports.oracle = onCall(
         // response finished cleanly (a max_tokens stop means truncation).
         lengthBand: lengthTier ? lengthTier.band : null,
         stopReason: message.stop_reason ?? null,
+        // Follow-up arc format checks — tag counts and the verdict, never text.
+        ...describeResponseShape(rawText, parsed),
       });
 
       // Fire-and-forget cost telemetry — adds no latency, fails silently.
@@ -1025,7 +1065,7 @@ function stripBannedTone(text) {
     .trim();
 }
 
-const CLOSING_QUESTION_TAG_REGEX = /<closing_question>\s*([\s\S]*?)\s*<\/closing_question>/i;
+const CLOSING_QUESTION_TAG_REGEX_ALL = /<closing_question>\s*([\s\S]*?)\s*<\/closing_question>/gi;
 
 function extractClosingQuestionFromProse(prose) {
   if (typeof prose !== "string" || !prose.trim()) return null;
@@ -1079,19 +1119,29 @@ function parseCommitment(attrs, inner) {
   };
 }
 
+// System-only first lines, "LABEL:value" — the DEPTH classification on journal
+// readings and the VERDICT on a follow-up's closing turn. Read by the system,
+// never shown to him, so the markdown the model sometimes wraps them in is
+// swallowed with them.
+function prefixLine(label, values) {
+  return new RegExp(`^[\\s*#_>—-]*${label}:\\s*(${values.join("|")})\\b[*_.:]*\\s*`, "i");
+}
+const DEPTH_LINE = prefixLine("DEPTH", ["Surface", "Pattern", "Identity"]);
+const VERDICT_LINE = prefixLine("VERDICT", ["answered", "evaded"]);
+
+function liftPrefixLine(text, regex) {
+  const match = text.match(regex);
+  return match ? { value: match[1], rest: text.slice(match[0].length).trim() } : { value: null, rest: text };
+}
+
 function parseOracleResponse(rawText) {
-  let trimmed = rawText.trim();
-  let metacognitiveDepth = null;
+  const depth = liftPrefixLine(rawText.trim(), DEPTH_LINE);
+  const metacognitiveDepth = depth.value;
+  const verdictLine = liftPrefixLine(depth.rest, VERDICT_LINE);
+  const verdict = verdictLine.value ? verdictLine.value.toLowerCase() : null;
+  let trimmed = verdictLine.rest;
 
-  // Extract DEPTH classification prefix injected for journal entries.
-  // Format: "DEPTH:Surface\n\n<prose>" or "DEPTH:Pattern\n<prose>" etc.
-  const depthMatch = trimmed.match(/^DEPTH:(Surface|Pattern|Identity)\n\n?/i);
-  if (depthMatch) {
-    metacognitiveDepth = depthMatch[1];
-    trimmed = trimmed.slice(depthMatch[0].length).trim();
-  }
-
-  // Lift the follow-up commitment out of the prose (oracle_challenge turns).
+  // Lift the follow-up commitment out of the prose (oracle_close turns).
   let commitment = null;
   const commitmentMatch = trimmed.match(COMMITMENT_TAG_REGEX);
   if (commitmentMatch) {
@@ -1099,17 +1149,19 @@ function parseOracleResponse(rawText) {
     trimmed = trimmed.replace(COMMITMENT_TAG_REGEX_ALL, "").trim();
   }
 
-  // Extract structured closing question if Claude wrapped it in tags.
+  // Unwrap every closing_question tag — a second one would otherwise reach
+  // the UI as raw markup — keeping the last as the closing question. The
+  // question text stays in the prose so the modal renders the full response.
   let closingQuestion = null;
-  const tagMatch = trimmed.match(CLOSING_QUESTION_TAG_REGEX);
-  if (tagMatch) {
-    closingQuestion = (tagMatch[1] || "").trim() || null;
-    // Strip the tags but preserve the inner question text in the prose so
-    // the modal continues to render the full Oracle response unchanged.
-    trimmed = trimmed.replace(CLOSING_QUESTION_TAG_REGEX, (_full, inner) => (inner || "").trim()).trim();
-  }
+  trimmed = trimmed.replace(CLOSING_QUESTION_TAG_REGEX_ALL, (_full, inner) => {
+    const question = (inner || "").trim();
+    closingQuestion = question || null;
+    return question;
+  }).trim();
 
-  // Fall back to heuristic extraction when the model omitted the tags.
+  // Fall back to heuristic extraction when the model omitted the tags. It runs
+  // beside a commitment too: the closing turn's client ignores the question,
+  // and a first turn that mis-tagged a commitment still gets its question back.
   if (!closingQuestion) {
     closingQuestion = extractClosingQuestionFromProse(trimmed);
   }
@@ -1121,6 +1173,23 @@ function parseOracleResponse(rawText) {
     metacognitiveDepth,
     closingQuestion: closingQuestion ? stripBannedTone(closingQuestion) : closingQuestion,
     commitment,
+    verdict,
+  };
+}
+
+// Format telemetry for the follow-up arc, logged beside every call: tag counts
+// from the raw text (the parsed fields include heuristic recovery), whether the
+// commitment parsed into its three clauses, the prose length, and the verdict.
+// Counts and a one-word enum only — never the text.
+function describeResponseShape(rawText, parsed) {
+  const raw = typeof rawText === "string" ? rawText : "";
+  const c = parsed?.commitment;
+  return {
+    closingQuestionTags: (raw.match(/<closing_question>/gi) || []).length,
+    commitmentTags: (raw.match(/<commitment\b/gi) || []).length,
+    commitmentShaped: !!(c && c.trigger && c.action && c.check),
+    proseWords: countEntryWords(parsed?.feedback),
+    verdict: parsed?.verdict || null,
   };
 }
 
@@ -1272,3 +1341,7 @@ exports.USER_DATA_COLLECTIONS = USER_DATA_COLLECTIONS;
 exports.resolvePromptContext = resolvePromptContext;
 // Response parser exported so the banned-tone output filter can be unit-tested.
 exports.parseOracleResponse = parseOracleResponse;
+// Follow-up arc format telemetry and its word counter, exported for unit tests
+// and the fixture runner.
+exports.describeResponseShape = describeResponseShape;
+exports.countEntryWords = countEntryWords;

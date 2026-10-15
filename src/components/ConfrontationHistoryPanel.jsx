@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { CONFRONTATION_FIELDS } from '../utils/schema';
+import { ARC_COPY, arcOutcomeBadge, arcText, isQuestionUnanswered } from '../utils/followUpArc';
 import { resolveArchetypeLabel } from '../utils/relapseTaxonomy';
 import { AppIcon } from './AppIcons';
 
@@ -243,7 +244,12 @@ export default function ConfrontationHistoryPanel({ confrontations = [] }) {
                   <div className="border-t border-[#1a1a1a] divide-y divide-[#1a1a1a]">
                     {g.entries.map((c) => {
                       const reaction = c?.[CONFRONTATION_FIELDS.REACTION];
-                      const followUp = c?.[CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE];
+                      const pushback = arcText(c?.[CONFRONTATION_FIELDS.FOLLOW_UP_PUSHBACK]);
+                      const followUp = arcText(c?.[CONFRONTATION_FIELDS.FOLLOW_UP_RESPONSE]);
+                      const answer = arcText(c?.[CONFRONTATION_FIELDS.FOLLOW_UP_ANSWER]);
+                      const closingRead = arcText(c?.[CONFRONTATION_FIELDS.FOLLOW_UP_CLOSE]);
+                      const outcomeBadge = arcOutcomeBadge(c?.[CONFRONTATION_FIELDS.FOLLOW_UP_OUTCOME]);
+                      const leftOpen = isQuestionUnanswered(c, CONFRONTATION_FIELDS);
                       const commitmentText = c?.[CONFRONTATION_FIELDS.COMMITMENT]?.text;
                       return (
                         <div key={c.id} className="p-4">
@@ -268,12 +274,40 @@ export default function ConfrontationHistoryPanel({ confrontations = [] }) {
                           )}
 
                           {followUp && (
-                            <div className="mt-2 pt-2 border-t border-[#1a1a1a]">
-                              <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">Follow-up</p>
-                              <p className="text-[#ababab] text-xs leading-relaxed whitespace-pre-line">{followUp}</p>
+                            <div className="mt-2 pt-2 border-t border-[#1a1a1a] space-y-2">
+                              {pushback && (
+                                <div>
+                                  <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">{ARC_COPY.challenge}</p>
+                                  <p className="text-[#8a8a8a] text-xs leading-relaxed whitespace-pre-line">{pushback}</p>
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">{ARC_COPY.reflection}</p>
+                                <p className="text-[#ababab] text-xs leading-relaxed whitespace-pre-line">{followUp}</p>
+                                {leftOpen && (
+                                  <p className="mt-1 text-[#7a7a7a] text-xs italic">{ARC_COPY.leftUnanswered}</p>
+                                )}
+                              </div>
+                              {answer && (
+                                <div>
+                                  <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">{ARC_COPY.answer}</p>
+                                  <p className="text-[#8a8a8a] text-xs leading-relaxed whitespace-pre-line">{answer}</p>
+                                </div>
+                              )}
+                              {closingRead && (
+                                <div>
+                                  <p className="text-[#858585] text-[10px] uppercase tracking-widest mb-1">
+                                    {ARC_COPY.closingRead}
+                                    {outcomeBadge && (
+                                      <span className="ml-2" style={{ color: outcomeBadge.color }}>{outcomeBadge.label}</span>
+                                    )}
+                                  </p>
+                                  <p className="text-[#ababab] text-xs leading-relaxed whitespace-pre-line">{closingRead}</p>
+                                </div>
+                              )}
                               {typeof commitmentText === 'string' && commitmentText && (
-                                <p className="mt-2 text-[#d1d1d1] text-xs leading-relaxed">
-                                  <span className="text-[#858585] uppercase tracking-widest mr-2">Commitment</span>
+                                <p className="text-[#d1d1d1] text-xs leading-relaxed">
+                                  <span className="text-[#858585] uppercase tracking-widest mr-2">{ARC_COPY.commitment}</span>
                                   {commitmentText}
                                 </p>
                               )}

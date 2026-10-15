@@ -115,11 +115,18 @@ export const CONFRONTATION_FIELDS = Object.freeze({
   PROMPT: 'prompt',                  // entry text sent to the Oracle
   ORACLE_RESPONSE: 'oracleResponse', // Oracle's response prose
   REACTION: 'reaction',              // null | 'landed' | 'disagree' | 'sit_with' | 'missed'
-  FOLLOW_UP_RESPONSE: 'followUpResponse', // optional Oracle follow-up text from "Go deeper"
-  // The commitment the follow-up closed on ({ text, pattern, trigger, action,
-  // check }). The server lifts the line out of the follow-up prose, so it is
-  // stored beside it or the record loses it. null when the turn had none.
+  FOLLOW_UP_RESPONSE: 'followUpResponse', // the Oracle's turn-1 reply in a "Go deeper" exchange
+  // The commitment the exchange closed on ({ text, pattern, trigger, action,
+  // check, createdAt }); null when the turn had none.
   COMMITMENT: 'commitment',
+  // The rest of the arc, as in ORACLE_FIELDS; src/utils/followUpArc.js owns
+  // the mapping. FOLLOW_UP_REPLY is FOLLOW_UP_RESPONSE under the arc's name.
+  FOLLOW_UP_REPLY: 'followUpResponse',
+  FOLLOW_UP_PUSHBACK: 'followUpPushback',
+  FOLLOW_UP_QUESTION: 'followUpQuestion',
+  FOLLOW_UP_ANSWER: 'followUpAnswer',
+  FOLLOW_UP_CLOSE: 'followUpClose',
+  FOLLOW_UP_OUTCOME: 'followUpOutcome',
   ORACLE_ENGAGED: 'oracleEngaged',   // always true on these docs; explicit for the engagement reader
 });
 
@@ -237,8 +244,21 @@ export const ORACLE_FIELDS = Object.freeze({
   PROVENANCE: 'oracleProvenance',
   FALLBACK_REASON: 'oracleFallbackReason',
   // The commitment an Oracle follow-up closed on, persisted on the journal
-  // entry beside oracleFollowUp: { text, pattern, trigger, action, check,
-  // createdAt, contractId?, contractedAt? }. null when the follow-up had none;
+  // entry beside oracleFollowUpClose: { text, pattern, trigger, action, check,
+  // createdAt, contractId?, contractedAt? }. null when the exchange had none;
   // contractId is stamped by the Ledger once a Kill Contract is signed from it.
   COMMITMENT: 'oracleCommitment',
+  // The "Go deeper" arc. userResponse and oracleFollowUp keep their legacy
+  // names. Outcome: 'answered' | 'evaded' (the Oracle's verdict) |
+  // 'unanswered' (he left the question) | null (open, or no arc).
+  // src/utils/followUpArc.js owns the mapping and the "left open" read.
+  FOLLOW_UP_PUSHBACK: 'userResponse',
+  FOLLOW_UP_REPLY: 'oracleFollowUp',
+  FOLLOW_UP_QUESTION: 'oracleFollowUpQuestion',
+  FOLLOW_UP_ANSWER: 'userFollowUpAnswer',
+  FOLLOW_UP_CLOSE: 'oracleFollowUpClose',
+  FOLLOW_UP_OUTCOME: 'oracleFollowUpOutcome',
+  // ISO stamp set the first time Today's Reflection shows the unanswered
+  // question; from then on the entry competes in the rotation like any other.
+  FOLLOW_UP_SURFACED_AT: 'oracleFollowUpSurfacedAt',
 });
