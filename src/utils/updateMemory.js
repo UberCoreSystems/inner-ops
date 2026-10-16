@@ -33,6 +33,20 @@ export const updateMemory = (module, entryId) => {
     .catch((err) => { logger.warn('updateMemory failed (non-blocking)', { module, err: err?.message }); });
 };
 
+/**
+ * Fire-and-forget after a PERMANENT delete: strips the receipts that quote the
+ * deleted entry from its module memory and global. Never throws.
+ *
+ * @param {'journal'|'killList'|'hardLessons'|'relapse'} module
+ * @param {string} entryId  id of the deleted source entry
+ */
+export const forgetEntryInMemory = (module, entryId) => {
+  if (!isMemoryModule(module) || !entryId) return Promise.resolve();
+  return callable('forgetEntryInMemory')({ module, entryId })
+    .then(() => clearMemoryCache())
+    .catch((err) => { logger.warn('forgetEntryInMemory failed (non-blocking)', { module, err: err?.message }); });
+};
+
 // ── UI-facing callables ──────────────────────────────────────────────────────
 export const editMemoryContent = (module, content) =>
   callable('editMemory')({ module, content }).then((r) => { clearMemoryCache(); return r.data; });

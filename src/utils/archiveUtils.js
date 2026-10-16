@@ -1,6 +1,8 @@
 import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { getAuth, getDb } from '../firebase.js';
 import logger from './logger.js';
+import { forgetEntryInMemory } from './updateMemory.js';
+import { memoryModuleForCollection } from './memoryConstants.js';
 
 // Parallel-collection archive pattern. Each active collection has a sibling
 // `{name}Archive` that stores documents user-initiated-archive moves here.
@@ -117,6 +119,8 @@ export const deleteArchivedEntry = async (collectionName, archivedEntry) => {
   const db = await getDb();
   await deleteDoc(doc(db, archiveNameFor(collectionName), archivedEntry.id));
   logger.log(`🗑️  Permanently deleted ${archiveNameFor(collectionName)}/${archivedEntry.id}`);
+  // The Oracle stops quoting what he removed. Not awaited; never blocks the delete.
+  forgetEntryInMemory(memoryModuleForCollection(collectionName), archivedEntry.id);
   return { id: archivedEntry.id, deleted: true };
 };
 

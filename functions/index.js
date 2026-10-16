@@ -241,7 +241,10 @@ exports.oracle = onCall(
     // Failure degrades to no-memory (identical to today); it never blocks feedback.
     let memoryBlocks = [];
     try {
-      memoryBlocks = await memory.fetchMemoryForInjection(uid, moduleName);
+      memoryBlocks = await memory.fetchMemoryForInjection(
+        uid,
+        memory.resolveMemoryScope(moduleName, request.data?.memoryModule)
+      );
     } catch (error) {
       console.error("oracle.memory.fetch.error", { name: error.name });
     }
@@ -1310,13 +1313,15 @@ exports.deleteUserData = onCall({ region: "us-central1", timeoutSeconds: 120 }, 
 
 // ─── Long-term AI memory callables ──────────────────────────────────────────
 // Server-only writers for users/{uid}/memory/*. Generation (updateMemory),
-// theme edit (editMemory), receipt removal (deleteMemoryReceipt), and wipe
+// theme edit (editMemory), receipt removal (deleteMemoryReceipt), receipts of a
+// permanently deleted entry (forgetEntryInMemory), and wipe
 // (wipeMemory) all run under the verified caller's uid via the Admin SDK.
 // (Memory docs are also cleared automatically by deleteUserData's recursive
 // delete of users/{uid}.)
 exports.updateMemory = memory.updateMemory;
 exports.editMemory = memory.editMemory;
 exports.deleteMemoryReceipt = memory.deleteMemoryReceipt;
+exports.forgetEntryInMemory = memory.forgetEntryInMemory;
 exports.wipeMemory = memory.wipeMemory;
 
 // Pure prompt-assembly helpers exported for unit testing. Not registered as

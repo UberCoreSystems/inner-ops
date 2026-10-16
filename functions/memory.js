@@ -694,6 +694,50 @@ const deleteMemoryReceipt = onCall(
   }
 );
 
+// ── Callable: forgetEntryInMemory ────────────────────────────────────────────
+// Called after an entry is permanently deleted. Removes the receipts that quote
+// it from that module's memory and from global (which copies module receipts
+// with their metadata). Themes are left alone, and so is userEdited — removing
+// a receipt is always allowed. No model call.
+function dropReceiptsForEntry(receipts, module, entryId) {
+  const list = Array.isArray(receipts) ? receipts : [];
+  const kept = list.filter((r) => !(r?.sourceEntryId === entryId && r?.sourceModule === module));
+  return { kept, removed: list.length - kept.length };
+}
+
+const forgetEntryInMemory = onCall(
+  { region: "us-central1", timeoutSeconds: 30 },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+    const uid = request.auth.uid;
+    const module = request.data?.module;
+    const entryId = request.data?.entryId;
+    if (!MODULE_IDS.includes(module)) {
+      throw new HttpsError("invalid-argument", "Unknown memory module.");
+    }
+    if (typeof entryId !== "string" || !entryId || entryId.length > 200) {
+      throw new HttpsError("invalid-argument", "entryId required.");
+    }
+
+    const db = getFirestore();
+    let removed = 0;
+    for (const docId of [module, GLOBAL_ID]) {
+      const ref = db.doc(`users/${uid}/memory/${docId}`);
+      removed += await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return 0;
+        const result = dropReceiptsForEntry(snap.data().receipts, module, entryId);
+        if (result.removed === 0) return 0;
+        tx.update(ref, { receipts: result.kept, updatedAt: FieldValue.serverTimestamp() });
+        return result.removed;
+      });
+    }
+
+    structuredLog({ fn: "forgetEntryInMemory", uid, module, stage: "forget", removed });
+    return { ok: true, removed };
+  }
+);
+
 // ── Callable: wipeMemory ─────────────────────────────────────────────────────
 // Deletes the doc(s). Rebuilds organically from future entries only.
 const wipeMemory = onCall(
@@ -720,6 +764,13 @@ const wipeMemory = onCall(
  * that module. For synthesis: global + all four module memories.
  * Returns an array of { label, content, receipts } (already truncated).
  */
+// Which memory an Oracle call reads. A follow-up turn sends moduleName "oracle"
+// (so it skips the journal DEPTH directive) plus memoryModule naming the
+// module the entry came from; memoryModule wins when it is a real module id.
+function resolveMemoryScope(moduleName, memoryModule) {
+  return MODULE_IDS.includes(memoryModule) ? memoryModule : moduleName;
+}
+
 async function fetchMemoryForInjection(uid, moduleName) {
   const db = getFirestore();
   const normalized = (moduleName || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -794,10 +845,13 @@ module.exports = {
   updateMemory,
   editMemory,
   deleteMemoryReceipt,
+  forgetEntryInMemory,
   wipeMemory,
   fetchMemoryForInjection,
+  resolveMemoryScope,
   buildMemoryBlock,
   // exported for unit tests
+  dropReceiptsForEntry,
   reconcileReceipts,
   parseUpdaterJson,
   resolveUpdaterContent,

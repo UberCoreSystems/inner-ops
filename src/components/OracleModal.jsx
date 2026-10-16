@@ -11,6 +11,7 @@ import {
 import { ARC_COPY, ARC_OUTCOME, arcOutcomeBadge } from '../utils/followUpArc';
 import { resolveTriggeredCriterion } from '../utils/confrontationCriteria';
 import logger from '../utils/logger';
+import { memoryModuleForName } from '../utils/memoryConstants';
 import { ouraToast } from '../utils/toast';
 import { InlineErrorBoundary } from './ErrorBoundary';
 import { useFocusTrap } from '../hooks/useFocusTrap';
@@ -73,7 +74,7 @@ function UserTurn({ label, text }) {
 // BER-194 follow-up: entryCount is forwarded so the server's trust-calibration
 // gate reads the same record density the modal was opened with. Omitting it
 // made every regen/retry run as if the user had zero entries logged.
-async function callOracleRaw(entryText, promptContext, entryModuleName, entryCount = null) {
+async function callOracleRaw(entryText, promptContext, entryModuleName, entryCount = null, memoryModule = null) {
   try {
     const functions = getFunctions();
     const oracleFn = httpsCallable(functions, 'oracle', { timeout: 35000 });
@@ -83,6 +84,7 @@ async function callOracleRaw(entryText, promptContext, entryModuleName, entryCou
       userContext: {},
       tone: 'stoic',
       ...(typeof entryCount === 'number' ? { entryCount } : {}),
+      ...(memoryModule ? { memoryModule } : {}),
       ...(promptContext?.key
         ? {
             promptContextKey: promptContext.key,
@@ -345,13 +347,16 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   // One Oracle call per turn. Returns the parsed result, or null after a
   // failure — the draft stays and nothing is used up. Module deliberately left
   // unset: a follow-up is not a journal entry and must not pick up the DEPTH
-  // directive. entryCount still applies.
+  // directive. entryCount still applies, and memory is scoped to the entry's
+  // own module so its receipts ride along.
   const runTurn = async (key, turnEntryText) => {
     const arcId = arcIdRef.current;
     setFollowUpLoading(true);
     setLimitReached(false);
     try {
-      const result = await callOracleRaw(turnEntryText, { key }, undefined, entryCount);
+      const result = await callOracleRaw(
+        turnEntryText, { key }, undefined, entryCount, memoryModuleForName(entryModuleName)
+      );
       if (arcIdRef.current !== arcId) return null;
       if (result.feedback) return result;
       if (isRateLimitCode(result.errorCode)) setLimitReached(true);

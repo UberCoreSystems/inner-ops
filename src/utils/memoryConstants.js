@@ -36,3 +36,19 @@ export const MEMORY_MAX_RECEIPTS_PER_MODULE = 5;
 export const MEMORY_RECEIPT_MAX_WORDS = 25;
 
 export const isMemoryModule = (m) => MEMORY_MODULES.includes(m);
+
+// Memory module for a source collection — permanent deletes name the collection.
+export const memoryModuleForCollection = (collectionName) =>
+  Object.keys(MEMORY_SOURCE_COLLECTIONS).find((m) => MEMORY_SOURCE_COLLECTIONS[m] === collectionName) || null;
+
+// Memory module for the display/entry module names OracleModal receives
+// ('journal', 'Kill List', 'hard_lessons', 'Relapse Radar', 'oracle', …).
+const MODULE_NAME_TO_MEMORY = {
+  journal: 'journal',
+  killlist: 'killList',
+  hardlessons: 'hardLessons',
+  relapse: 'relapse',
+  relapseradar: 'relapse',
+};
+export const memoryModuleForName = (name) =>
+  MODULE_NAME_TO_MEMORY[(name || '').toLowerCase().replace(/[^a-z]/g, '')] || null;

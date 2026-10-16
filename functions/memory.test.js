@@ -19,6 +19,8 @@ const {
   buildMemoryBlock,
   buildContextSnapshot,
   relativeDateLabel,
+  dropReceiptsForEntry,
+  resolveMemoryScope,
 } = require("./memory");
 
 // A UTC YYYY-MM-DD string N days before today — lets buildMemoryBlock tests
@@ -271,3 +273,30 @@ test("buildContextSnapshot returns null when there is nothing to capture", async
   assert.equal(s, null);
 });
 
+
+test("dropReceiptsForEntry removes only receipts from that entry in that module", () => {
+  const receipts = [
+    { quote: "a", sourceModule: "journal", sourceEntryId: "e1" },
+    { quote: "b", sourceModule: "journal", sourceEntryId: "e2" },
+    { quote: "c", sourceModule: "killList", sourceEntryId: "e1" },
+    { quote: "d", sourceModule: "journal", sourceEntryId: "e1" },
+  ];
+  const { kept, removed } = dropReceiptsForEntry(receipts, "journal", "e1");
+  assert.equal(removed, 2);
+  assert.deepEqual(kept.map((r) => r.quote), ["b", "c"]);
+});
+
+test("dropReceiptsForEntry leaves legacy receipts without ids and tolerates missing lists", () => {
+  const { kept, removed } = dropReceiptsForEntry([{ quote: "old", sourceModule: "journal" }], "journal", "e1");
+  assert.equal(removed, 0);
+  assert.equal(kept.length, 1);
+  assert.deepEqual(dropReceiptsForEntry(undefined, "journal", "e1"), { kept: [], removed: 0 });
+});
+
+test("resolveMemoryScope prefers a valid memoryModule over moduleName", () => {
+  assert.equal(resolveMemoryScope("oracle", "journal"), "journal");
+  assert.equal(resolveMemoryScope("oracle", "killList"), "killList");
+  assert.equal(resolveMemoryScope("journal", undefined), "journal");
+  assert.equal(resolveMemoryScope("synthesis", "global"), "synthesis");
+  assert.equal(resolveMemoryScope("oracle", "../other"), "oracle");
+});
