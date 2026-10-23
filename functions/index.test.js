@@ -674,7 +674,9 @@ test("oracle_pushback holds or concedes on the record and closes on one tagged q
   assert.match(t, /CLOSE WITH ONE QUESTION/);
   assert.match(t, /only question mark in the reply/);
   assert.match(t, /<closing_question> tags/);
-  assert.match(t, /80–140 words/);
+  assert.match(t, /80–140 words, the question included: at most two short paragraphs and six sentences/);
+  assert.match(t, /the shorter limit governs/);
+  assert.match(t, /no rhetorical questions in the body/);
   assert.match(t, /no motivational, wellness, or therapeutic language, no hedging/);
   assert.ok(!/<commitment/.test(t), "turn 1 never primes a commitment");
   assert.ok(!/you got this|keep going|stay strong/i.test(t), "no encouragement copy");
@@ -690,6 +692,8 @@ test("oracle_close opens on a verdict, concedes at most once, and closes on the 
   assert.match(t, /agreed without content/);
   assert.match(t, /Do not thank him/);
   assert.match(t, /60–110 words/);
+  assert.match(t, /one paragraph, at most five sentences/);
+  assert.match(t, /the trigger at most eight words, the action at most seven words/);
   assert.match(t, /no question mark anywhere/);
   assert.match(t, /never use <closing_question> tags/);
   assert.match(t, /"use no tags" rule above does not apply/);
@@ -766,4 +770,165 @@ test("describeResponseShape counts tags from the raw text and carries no text", 
     proseWords: 2,
     verdict: null,
   });
+});
+
+// ── promptContextKey registry: the four responses to a reading ───────────────
+
+test("oracle_further deepens from where his words point — no hold, no concede — and closes on one tagged question", () => {
+  const t = resolvePromptContext("oracle_further", {});
+  assert.match(t, /HE ASKS YOU TO GO FURTHER/);
+  assert.match(t, /HIS DIRECTION/);
+  assert.match(t, /not to dispute it/);
+  assert.match(t, /You are not defending a position\. Do not hold, do not concede/);
+  assert.match(t, /go one level under it/);
+  assert.match(t, /Never invent a pattern, event, date, or quote/);
+  assert.match(t, /ONE insight/);
+  assert.match(t, /CLOSE WITH ONE QUESTION/);
+  assert.match(t, /only question mark in the reply — no rhetorical questions in the body/);
+  assert.match(t, /<closing_question> tags/);
+  assert.match(t, /80–140 words, the question included: at most two short paragraphs and six sentences/);
+  assert.match(t, /no motivational, wellness, or therapeutic language, no hedging/);
+  assert.match(t, /\(none recorded\)/);
+  assert.ok(!/HIS PUSHBACK/.test(t), "his words are a direction, never a pushback");
+  assert.ok(!/<commitment/.test(t), "turn 1 never primes a commitment");
+  assert.ok(!/you got this|keep going|stay strong/i.test(t), "no encouragement copy");
+});
+
+test("oracle_landed is a receipt in his own words that closes on the commitment shape — no verdict, no question, no praise", () => {
+  const t = resolvePromptContext("oracle_landed", {});
+  assert.match(t, /IT LANDED/);
+  assert.match(t, /two labeled parts: ORIGINAL ENTRY and YOUR PRIOR READING/);
+  assert.match(t, /He wrote nothing back/);
+  assert.match(t, /not praise/);
+  assert.match(t, /Write the receipt/);
+  assert.match(t, /quote, verbatim and in quotation marks, the words in ORIGINAL ENTRY/);
+  assert.match(t, /Quote his entry, never YOUR PRIOR READING/);
+  assert.match(t, /Accepting a reading is not progress and earns nothing/);
+  assert.match(t, /do not thank him/);
+  assert.match(t, /honest, brave, mature, a step, or a breakthrough/);
+  assert.match(t, /Never invent a pattern, event, date, or quote/);
+  assert.match(t, /40–80 words/);
+  assert.match(t, /no motivational, wellness, or therapeutic language, no hedging/);
+  assert.match(t, /CLOSE WITH ONE COMMITMENT/);
+  assert.match(t, /no question mark anywhere/);
+  assert.match(t, /never use <closing_question> tags/);
+  assert.match(t, /Do not begin with a VERDICT line/);
+  assert.match(t, /"use no tags" rule above does not apply/);
+  assert.match(t, /Commitment: When \[specific trigger or time\], I will \[specific observable action\]\. Checked by \[how the record will show it\]\./);
+  assert.match(t, /\(none recorded\)/);
+  assert.ok(!/VERDICT:answered/.test(t), "no verdict line is primed");
+  assert.ok(!/HIS PUSHBACK|HIS DIRECTION|HIS ANSWER/.test(t), "nothing of his is expected in the entry text");
+  assert.ok(!/you got this|keep going|stay strong|proud of you|well done/i.test(t), "no encouragement copy");
+});
+
+test("oracle_close reads his turn under either label and drops the held-only framing", () => {
+  const t = resolvePromptContext("oracle_close", {});
+  assert.match(t, /HIS PUSHBACK or HIS DIRECTION/);
+  assert.match(t, /a challenge to your reading, or a request to go further/);
+  assert.match(t, /Otherwise, correct your read only when/);
+  assert.ok(!/If it held,/.test(t));
+  assert.match(t, /One concession per exchange/);
+});
+
+test("the new keys take no parameters either, and never enter the cached prefix", () => {
+  for (const key of ["oracle_further", "oracle_landed"]) {
+    const injected = resolvePromptContext(key, { pushback: "INJECT-ME", direction: "INJECT-ME", entry: "INJECT-ME" });
+    assert.strictEqual(injected, resolvePromptContext(key, {}));
+    assert.ok(!injected.includes("INJECT-ME"));
+  }
+  const { stable, cacheable } = buildSystemPromptBlocks("oracle", "stoic", null, 50, [], undefined, 100);
+  assert.ok(cacheable);
+  assert.ok(!/HE ASKS YOU TO GO FURTHER/.test(stable));
+  assert.ok(!/IT LANDED/.test(stable));
+});
+
+test("a landed reply parses to a commitment with no verdict and no question — the parser needs no new branch", () => {
+  const parsed = parseOracleResponse(
+    'You wrote "skipped it again Thursday" and called the push-ups a session. Accepting the reading puts on the record that the build decides when you train. ' +
+    '<commitment pattern="Build decides the gym">Commitment: When the client call runs past 6, I will leave at 6. Checked by the Ledger check-in.</commitment>'
+  );
+  assert.strictEqual(parsed.verdict, null);
+  assert.strictEqual(parsed.closingQuestion, null);
+  assert.strictEqual(parsed.commitment.pattern, "Build decides the gym");
+  assert.strictEqual(parsed.commitment.trigger, "the client call runs past 6");
+  assert.strictEqual(parsed.commitment.action, "leave at 6");
+  assert.strictEqual(parsed.commitment.check, "the Ledger check-in");
+  assert.ok(!/<commitment/.test(parsed.feedback));
+  assert.match(parsed.feedback, /skipped it again Thursday/);
+  const shape = describeResponseShape("Prose. <commitment>Commitment: When X, I will Y. Checked by Z.</commitment>", parsed);
+  assert.strictEqual(shape.commitmentTags, 1);
+  assert.strictEqual(shape.closingQuestionTags, 0);
+});
+
+// ── Behavioral context: reading responses ────────────────────────────────────
+
+const RESPONSES = {
+  windowDays: 30,
+  pushBack: 3,
+  goFurther: 1,
+  landed: 2,
+  sit: 2,
+  landedContracted: 1,
+  sitsReturnedResolved: 1,
+  sitsDeferredAgain: 1,
+  total: 8,
+};
+
+test("renders the reading-response line from counts, with the contract, the repeat and the resolved sit", () => {
+  const block = buildBehavioralContextBlock({ readingResponses: RESPONSES }, 50);
+  assert.match(
+    block,
+    /Reading responses \(last 30d\): pushed back 3, went further 1, accepted 2 \(1 became a Kill Contract\), sitting with 2 \(1 set aside more than once\), 1 set-aside reading came back and he responded\./
+  );
+  assert.match(block, /An accepted reading that did not become a contract is a gap between word and act/);
+  assert.match(block, /A reading set aside is a deferral on the record, not an evasion — do not treat it as one\./);
+});
+
+test("zero intents render nothing; omitted sub-counts drop their clauses; junk is coerced and capped", () => {
+  assert.strictEqual(buildBehavioralContextBlock({ readingResponses: { pushBack: 0, goFurther: 0, landed: 0, sit: 0 } }, 50), "");
+  assert.strictEqual(buildBehavioralContextBlock({ readingResponses: null }, 50), "");
+  assert.strictEqual(buildBehavioralContextBlock({ readingResponses: [] }, 50), "");
+  const lean = buildBehavioralContextBlock({ readingResponses: { landed: 2, sit: 1 } }, 50);
+  assert.match(lean, /Reading responses \(last 30d\): accepted 2, sitting with 1\./);
+  assert.ok(!/became a Kill Contract|set aside more than once|came back/.test(lean));
+  const junk = buildBehavioralContextBlock(
+    { readingResponses: { windowDays: "junk", pushBack: "3 pushbacks", goFurther: -4, landed: 1e9, landedContracted: 5000, sit: 1.9, sitsDeferredAgain: 7 } },
+    50
+  );
+  assert.match(junk, /Reading responses \(last 30d\): accepted 999 \(999 became a Kill Contract\), sitting with 1 \(1 set aside more than once\)\./);
+  assert.ok(!/pushbacks|went further|-4/.test(junk));
+});
+
+test("the reading-response line reaches the live prompt through the dynamic suffix, never the cached prefix", () => {
+  const prompt = buildSystemPrompt("journal", "stoic", { readingResponses: RESPONSES }, 50, [], undefined, 100);
+  assert.match(prompt, /Reading responses \(last 30d\): pushed back 3/);
+  const { stable, dynamic } = buildSystemPromptBlocks("journal", "stoic", { readingResponses: RESPONSES }, 50, [], undefined, 100);
+  assert.ok(!/Reading responses/.test(stable), "per-user counts never enter the cached prefix");
+  assert.match(dynamic, /Reading responses \(last 30d\)/);
+  assert.strictEqual(stable + dynamic, prompt);
+});
+
+// ── The follow-up shape line on the user message ─────────────────────────────
+
+test("follow-up turns end the user message with their shape; first readings and other keys do not", () => {
+  const base = buildUserPrompt("Entry text here.", {});
+  assert.ok(base.endsWith("Be specific to this entry."));
+  assert.strictEqual(buildUserPrompt("Entry text here.", {}, null), base);
+  assert.strictEqual(buildUserPrompt("Entry text here.", {}, "oracle_regen"), base, "only the follow-up keys get a shape line");
+  const turnOne = buildUserPrompt("Entry text here.", {}, "oracle_pushback");
+  assert.ok(turnOne.startsWith(base));
+  assert.match(turnOne, /Shape of this reply: two paragraphs of two or three sentences each, 80–140 words in all/);
+  assert.match(turnOne, /the tagged question is the only question mark in the reply\.$/);
+  assert.strictEqual(buildUserPrompt("Entry text here.", {}, "oracle_further").slice(base.length), turnOne.slice(base.length));
+  const close = buildUserPrompt("Entry text here.", {}, "oracle_close");
+  assert.match(close, /the VERDICT line, a blank line, one paragraph of three to five sentences \(60–110 words\)/);
+  assert.match(close, /No question mark anywhere/);
+  assert.match(close, /the trigger is at most eight words and the action at most seven words\.$/);
+  const landed = buildUserPrompt("Entry text here.", {}, "oracle_landed");
+  assert.match(landed, /one paragraph of two to four sentences \(40–80 words\) that quotes, in quotation marks, a phrase taken word for word from the ORIGINAL ENTRY section/);
+  assert.match(landed, /never a line from YOUR PRIOR READING/);
+  assert.match(landed, /No advice, no second paragraph, no question mark/);
+  for (const key of ["oracle_pushback", "oracle_further", "oracle_close", "oracle_landed"]) {
+    assert.ok(!/you got this|keep going|stay strong/i.test(buildUserPrompt("Entry.", {}, key)), "no encouragement copy");
+  }
 });

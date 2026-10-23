@@ -567,6 +567,9 @@ export default function SynthesisBriefing() {
               {displayBriefing.signalDeltaNote && (
                 <p className="text-[#ababab] text-sm mt-3 leading-relaxed max-w-[68ch]">{displayBriefing.signalDeltaNote}</p>
               )}
+              {displayBriefing.readingResponseNote && (
+                <p className="text-[#ababab] text-sm mt-3 leading-relaxed max-w-[68ch]">{displayBriefing.readingResponseNote}</p>
+              )}
             </div>
 
             {/* Section 4: Confrontation Question */}

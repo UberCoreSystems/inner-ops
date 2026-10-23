@@ -23,11 +23,15 @@ const { pathToFileURL } = require("url");
 const { initializeApp, applicationDefault, getApps } = require("firebase-admin/app");
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 
-const ARC_CALL_TYPES = ["oracle_pushback", "oracle_close", "oracle_challenge"];
+const ARC_CALL_TYPES = ["oracle_pushback", "oracle_further", "oracle_close", "oracle_landed", "oracle_challenge"];
 
 const STEPS = {
   all: "docs in range",
   reading: "with a reading",
+  pushBack: "response: pushed back",
+  goFurther: "response: went further",
+  landed: "response: it landed",
+  sit: "response: sitting with it",
   legacy: "legacy single-turn follow-up",
   started: "arc started (challenge sent)",
   question: "question delivered",
@@ -40,7 +44,9 @@ const STEPS = {
   surfaced: "came back on the dashboard",
 };
 const JOURNAL_STEPS = Object.keys(STEPS);
-const CONFRONTATION_STEPS = JOURNAL_STEPS.filter((s) => s !== "contract" && s !== "surfaced");
+const RESPONSE_STEPS = { push_back: "pushBack", go_further: "goFurther", landed: "landed", sit: "sit" };
+const JOURNAL_ONLY = new Set(["contract", "surfaced", ...Object.values(RESPONSE_STEPS)]);
+const CONFRONTATION_STEPS = JOURNAL_STEPS.filter((s) => !JOURNAL_ONLY.has(s));
 
 // Logical names → stored field names, from the schema the app writes with.
 function fieldMaps({ ORACLE_FIELDS, CONFRONTATION_FIELDS }) {
@@ -57,6 +63,7 @@ function fieldMaps({ ORACLE_FIELDS, CONFRONTATION_FIELDS }) {
       reading: ORACLE_FIELDS.JOURNAL_PROSE,
       ...arc(ORACLE_FIELDS),
       surfacedAt: ORACLE_FIELDS.FOLLOW_UP_SURFACED_AT,
+      intent: ORACLE_FIELDS.FOLLOW_UP_INTENT,
     },
     confrontation: {
       userId: "userId",
@@ -90,6 +97,10 @@ const fmtUSD = (n) => `$${(Number(n) || 0).toFixed(4)}`;
 function arcSteps(data, F) {
   const steps = ["all"];
   if (isText(data[F.reading])) steps.push("reading");
+  // Which of the four responses he chose (journal docs only). A sit has no
+  // reply, so it is counted here and nowhere below.
+  const responseStep = F.intent ? RESPONSE_STEPS[data[F.intent]] : null;
+  if (responseStep) steps.push(responseStep);
   const hasReply = isText(data[F.reply]);
   if (hasReply && !has(data, F.question)) steps.push("legacy");
   if (!hasReply || !has(data, F.question)) return steps;

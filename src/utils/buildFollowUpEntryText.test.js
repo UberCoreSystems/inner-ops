@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildFollowUpEntryText,
+  buildLandedEntryText,
   FOLLOW_UP_MAX_CHARS,
   FOLLOW_UP_READING_MAX_CHARS,
   FOLLOW_UP_PUSHBACK_MAX_CHARS,
@@ -115,5 +116,49 @@ describe('buildFollowUpEntryText', () => {
   it('writes "(none recorded)" in the five-section layout too', () => {
     const out = buildFollowUpEntryText({ entryText: 'E.', priorReading: '', pushback: 'P.', reply: 'Which?', answer: 'A.' });
     assert.ok(out.includes(`YOUR PRIOR READING:\n${NO_READING_RECORDED}\n\nHIS PUSHBACK:`));
+  });
+});
+
+describe('buildFollowUpEntryText — intents', () => {
+  it('labels his words HIS DIRECTION for go_further and HIS PUSHBACK otherwise, in both layouts', () => {
+    const base = { entryText: 'E.', priorReading: 'R.', pushback: 'Take the proof line further.' };
+    assert.equal(
+      buildFollowUpEntryText({ ...base, intent: 'go_further' }),
+      'ORIGINAL ENTRY:\nE.\n\nYOUR PRIOR READING:\nR.\n\nHIS DIRECTION:\nTake the proof line further.'
+    );
+    assert.equal(
+      buildFollowUpEntryText({ ...base, intent: 'go_further', reply: 'Which night?', answer: 'Tuesday.' }),
+      'ORIGINAL ENTRY:\nE.\n\nYOUR PRIOR READING:\nR.\n\nHIS DIRECTION:\nTake the proof line further.\n\nYOUR REPLY:\nWhich night?\n\nHIS ANSWER:\nTuesday.'
+    );
+    assert.equal(buildFollowUpEntryText({ ...base, intent: 'push_back' }), buildFollowUpEntryText(base));
+    assert.equal(buildFollowUpEntryText({ ...base, intent: 'landed' }), buildFollowUpEntryText(base), 'only go_further changes the label');
+  });
+
+  it('the direction layout keeps the budget with its own label', () => {
+    const out = buildFollowUpEntryText({ entryText: 'e'.repeat(30000), priorReading: 'r'.repeat(30000), pushback: 'p'.repeat(8000), intent: 'go_further' });
+    assert.ok(out.length <= FOLLOW_UP_MAX_CHARS);
+    assert.ok(out.endsWith(`HIS DIRECTION:\n${'p'.repeat(8000)}`));
+  });
+});
+
+describe('buildLandedEntryText', () => {
+  it('lays out the entry and the reading only', () => {
+    assert.equal(
+      buildLandedEntryText({ entryText: 'Skipped the gym twice.', priorReading: 'You called both skips scheduling.' }),
+      'ORIGINAL ENTRY:\nSkipped the gym twice.\n\nYOUR PRIOR READING:\nYou called both skips scheduling.'
+    );
+    assert.ok(!buildLandedEntryText({ entryText: 'E.', priorReading: 'R.' }).includes('HIS '), 'nothing of his rides along');
+  });
+
+  it('writes "(none recorded)" without a reading, caps the reading, and gives the entry the remainder', () => {
+    assert.ok(buildLandedEntryText({ entryText: 'E.', priorReading: '' }).endsWith(`YOUR PRIOR READING:\n${NO_READING_RECORDED}`));
+    const out = buildLandedEntryText({ entryText: 'e'.repeat(30000), priorReading: 'r'.repeat(30000) });
+    assert.ok(out.length <= FOLLOW_UP_MAX_CHARS);
+    const reading = out.split('YOUR PRIOR READING:\n')[1];
+    assert.equal(reading.length, FOLLOW_UP_READING_MAX_CHARS);
+    const entry = out.split('ORIGINAL ENTRY:\n')[1].split('\n\nYOUR PRIOR READING:')[0];
+    assert.ok(entry.length > 15000, 'entry takes the remaining budget');
+    assert.ok(buildLandedEntryText({ entryText: 'e'.repeat(500), priorReading: 'r' }, 120).length <= 120);
+    assert.doesNotThrow(() => buildLandedEntryText());
   });
 });

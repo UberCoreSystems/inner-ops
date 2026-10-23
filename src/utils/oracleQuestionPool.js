@@ -6,8 +6,11 @@
  * structured question):
  *   - journalEntries.oracleClosingQuestion (or heuristic over oracleJudgment)
  *   - journalEntries.oracleFollowUpQuestion when he left it unanswered in a
- *     "Go deeper" exchange — comes back first until the dashboard has shown
+ *     follow-up exchange — comes back first until the dashboard has shown
  *     it once (oracleFollowUpSurfacedAt), then takes its turn like the rest
+ *   - a journal reading he chose to sit with, once its date arrives
+ *     (oracleSitUntil): the same return path, sending him back to the
+ *     reading. While the date is ahead the entry is out of the pool entirely.
  *   - hardLessons.oracleClosingQuestion (or heuristic over oracleWisdom)
  *   - relapseEntries.oracleClosingQuestion (or heuristic over oracleFeedback)
  *   - confirmedKills.oracleClosingQuestion (or heuristic over closure/oracleStatement)
@@ -25,7 +28,7 @@
 import { readUserData, updateData, upsertUserSettings } from './firebaseUtils.js';
 import { COLLECTIONS, ORACLE_FIELDS, USER_SETTINGS_FIELDS } from './schema.js';
 import { extractClosingQuestion } from './oracleQuestionExtractor.js';
-import { isQuestionUnanswered } from './followUpArc.js';
+import { isQuestionUnanswered, sitStateOf } from './followUpArc.js';
 import { localDateKey, toMs } from './dateUtils.js';
 
 const LOOKBACK_DAYS = 60;
@@ -75,11 +78,26 @@ function pickEventDate(doc) {
   );
 }
 
-// The pool admits only a question that reads as one.
+// The pool admits only a question that reads as one — except a reading he
+// sat with, which returns as itself: the card quotes it and sends him back.
 const isPoolQuestion = (question) => typeof question === 'string' && question.trim().endsWith('?');
 
+// A reading that closed on a statement is quoted by its opening sentence.
+const EXCERPT_MAX_CHARS = 200;
+export function readingExcerpt(prose) {
+  if (typeof prose !== 'string') return null;
+  const cleaned = prose.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  const first = cleaned.split(/(?<=[.!?])\s+(?=[A-Z"'‘“(])/)[0].trim();
+  return first.length > EXCERPT_MAX_CHARS ? `${first.slice(0, EXCERPT_MAX_CHARS - 1).trimEnd()}…` : first;
+}
+
+// A pick that comes back first: an open dialogue question, or a reading he
+// sat with whose date has arrived — until the dashboard has shown it once.
+export const isReturningPick = (pick) => !!(pick?.unanswered || pick?.sitDue) && !pick.surfacedAt;
+
 function buildPoolEntry(collectionName, doc, question, eventDate, flags = {}) {
-  if (!isPoolQuestion(question)) return null;
+  if (!isPoolQuestion(question) && !flags.sitDue) return null;
   const trimmed = question.trim();
   return {
     id: `${collectionName}/${doc.id}`,
@@ -92,10 +110,19 @@ function buildPoolEntry(collectionName, doc, question, eventDate, flags = {}) {
   };
 }
 
-// A dialogue question he left open outranks the reading's closing question —
-// it is the one he walked away from. Returned with flags for the picker; once
-// the dashboard has shown it (surfacedAt) it competes like any other.
-export function questionFromJournal(doc) {
+// A reading he sat with stays out of the pool until its date, then returns as
+// itself. A dialogue question he left open outranks the reading's closing
+// question — it is the one he walked away from. Both come back with flags for
+// the picker; once the dashboard has shown one (surfacedAt) it competes like
+// any other.
+export function questionFromJournal(doc, now = new Date()) {
+  const sit = sitStateOf(doc, now);
+  if (sit === 'pending') return null;
+  if (sit === 'due') {
+    const closing = doc[ORACLE_FIELDS.CLOSING_QUESTION];
+    const text = isPoolQuestion(closing) ? closing.trim() : readingExcerpt(doc[ORACLE_FIELDS.JOURNAL_PROSE]);
+    return text ? { question: text, sitDue: true, surfacedAt: doc[ORACLE_FIELDS.FOLLOW_UP_SURFACED_AT] || null } : null;
+  }
   const open = doc[ORACLE_FIELDS.FOLLOW_UP_QUESTION];
   // An open question the pool would not admit must not cost the entry its
   // reading's question as well.
@@ -173,7 +200,7 @@ export async function buildOracleQuestionPool({ now = new Date() } = {}) {
       if (!doc || !doc.id) continue;
       const eventDate = pickEventDate(doc);
       if (!withinLookback(eventDate, now)) continue;
-      const got = handler.getQuestion(doc);
+      const got = handler.getQuestion(doc, now);
       const { question, ...flags } = typeof got === 'string' ? { question: got } : (got || {});
       const entry = buildPoolEntry(handler.collection, doc, question, eventDate, flags);
       if (entry) pool.push(entry);
@@ -226,10 +253,10 @@ export function pickTodaysOracleQuestion(pool, recentlyShownIds, dateSeed, { now
   // If everything's been shown recently, allow the rolling window to recycle.
   const usable = candidates.length > 0 ? candidates : pool;
 
-  // A dialogue question he left open and has not yet been shown comes back
-  // first — the most recent one. Once surfaced it takes its turn in the
-  // weighted draw below.
-  const open = usable.filter((p) => p.unanswered && !p.surfacedAt);
+  // A dialogue question he left open, or a reading he sat with that is due,
+  // comes back first when it has not yet been shown — the most recent one.
+  // Once surfaced it takes its turn in the weighted draw below.
+  const open = usable.filter(isReturningPick);
   if (open.length > 0) {
     return open.reduce((latest, p) => (toMs(p.eventOccurredAt) > toMs(latest.eventOccurredAt) ? p : latest));
   }
@@ -271,12 +298,13 @@ export async function readUserSettings() {
 }
 
 /**
- * Stamp the entry behind an open dialogue question the first time the
- * dashboard shows it; from then on it competes in the rotation like any other.
- * Best-effort, like assignDailyPrompt.
+ * Stamp the entry behind a returning pick — an open dialogue question, or a
+ * reading he sat with — the first time the dashboard shows it; from then on
+ * it competes in the rotation like any other. Best-effort, like
+ * assignDailyPrompt.
  */
 export async function markOpenQuestionSurfaced(pick) {
-  if (!pick?.unanswered || pick.surfacedAt || !pick.sourceDocId) return;
+  if (!isReturningPick(pick) || !pick.sourceDocId) return;
   try {
     await updateData(COLLECTIONS.JOURNAL_ENTRIES, pick.sourceDocId, {
       [ORACLE_FIELDS.FOLLOW_UP_SURFACED_AT]: new Date().toISOString(),

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { writeData, readUserDataPage, updateData } from '../utils/firebaseUtils';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
-import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
+import { getCachedTotalEntryCount, warmBehavioralContext } from '../utils/getBehavioralContext';
 import { updateMemory } from '../utils/updateMemory';
 import VoiceInputButton from '../components/VoiceInputButton';
 import OracleModal from '../components/OracleModal';
@@ -35,7 +35,7 @@ import {
   stashHardLessonExtraction,
   buildCommitmentPrefill,
 } from '../utils/crossModuleExtraction';
-import { journalArcPatch, JOURNAL_ARC_CLEARED } from '../utils/followUpArc';
+import { journalArcPatch, journalSitPatch, sitRecordOf, JOURNAL_ARC_CLEARED } from '../utils/followUpArc';
 
 // Reflective prompts surfaced one at a time. The Gibbs-cycle "action plan"
 // stage was removed — action commitments live in the Kill List module, and
@@ -166,6 +166,21 @@ const MoodStrip = ({ entries }) => {
   );
 };
 
+// The text the Oracle reads for a journal entry: the mood line, the entry,
+// and the proximity note when it was written long after the event. Shared by
+// the save flow and the path that reopens a stored reading, so a follow-up
+// turn is built from the same text the first reading answered.
+const RETROSPECTIVE_NOTE = '\n[ENTRY CONTEXT: This entry was written significantly after the event. The user\'s recollection may be reconstructed rather than accurate. Weight behavioral specifics cautiously and probe for what details may have been edited by hindsight.]';
+function composeOracleInput({ content, mood, intensity, entryProximityFlag }) {
+  const moodLabel = moodOptions.find(m => m.value === mood)?.label || mood;
+  const proximityNote = entryProximityFlag === 'retrospective' ? RETROSPECTIVE_NOTE : '';
+  return `Mood: ${moodLabel} (${intensity}/5)\n${content}${proximityNote}`;
+}
+
+// How many further pages the sit-return path will load looking for its entry
+// before giving up — a reading he sat with is a week or more old.
+const RESUME_MAX_EXTRA_PAGES = 10;
+
 export default function Journal() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -268,6 +283,42 @@ export default function Journal() {
     navigate(location.pathname, { replace: true, state: {} });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A reading he set aside comes back through Today's Reflection; its card
+  // sends him here with the entry id. The modal reopens on the stored reading
+  // with the four responses once the entry has loaded, paging further if it
+  // is older than the first page. State is cleared so a refresh does not
+  // reopen it.
+  const resumeOracleEntryIdRef = useRef(null);
+  const resumePagesLoadedRef = useRef(0);
+  useEffect(() => {
+    const id = location.state?.resumeOracleEntryId;
+    if (!id) return;
+    resumeOracleEntryIdRef.current = id;
+    resumePagesLoadedRef.current = 0;
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const id = resumeOracleEntryIdRef.current;
+    if (!id || loading || loadingMore) return;
+    const entry = entries.find(e => e.id === id);
+    if (entry) {
+      resumeOracleEntryIdRef.current = null;
+      reopenOracleForEntry(entry);
+      return;
+    }
+    if (hasMoreEntries && resumePagesLoadedRef.current < RESUME_MAX_EXTRA_PAGES) {
+      resumePagesLoadedRef.current += 1;
+      loadMoreEntries();
+      return;
+    }
+    resumeOracleEntryIdRef.current = null;
+    ouraToast.error('That entry could not be found.');
+    // reopenOracleForEntry and loadMoreEntries are unmemoized closures; the
+    // entries arriving is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, loading, loadingMore, hasMoreEntries]);
 
   // Entry editing state
   const [editingEntryId, setEditingEntryId] = useState(null);
@@ -706,18 +757,13 @@ export default function Journal() {
       }
 
       // New entry — generate Oracle feedback
-      const moodLabel = moodOptions.find(m => m.value === mood)?.label || mood;
-
       // BER-139: proximity flag
       const occurredAt = new Date(eventOccurredAt);
       const nowMs = Date.now();
       const gapHours = (nowMs - occurredAt.getTime()) / 3_600_000;
       const entryProximityFlag = gapHours > 12 ? 'retrospective' : 'contemporaneous';
-      const proximityNote = entryProximityFlag === 'retrospective'
-        ? '\n[ENTRY CONTEXT: This entry was written significantly after the event. The user\'s recollection may be reconstructed rather than accurate. Weight behavioral specifics cautiously and probe for what details may have been edited by hindsight.]'
-        : '';
 
-      const inputText = `Mood: ${moodLabel} (${intensity}/5)\n${entry}${proximityNote}`;
+      const inputText = composeOracleInput({ content: entry, mood, intensity, entryProximityFlag });
       // `entries` is newest-first, so the Oracle's "recent entries" context is
       // the HEAD of the list. slice(-3) took the tail — the three oldest loaded
       // entries, up to a page back.
@@ -920,6 +966,43 @@ export default function Journal() {
       logger.error('Error saving oracle follow-up:', error);
       ouraToast.error('Exchange shown but not saved to the entry.');
     }
+  };
+
+  // "Sit with this": no call. Writes the deferral and resolves to the sit on
+  // record so the modal can say when the reading comes back. Throws on a
+  // failed write so the modal does not claim a return date it has not got.
+  const persistSit = async () => {
+    if (!currentEntryId) throw new Error('No entry to sit with');
+    const entry = entries.find(e => e.id === currentEntryId) || {};
+    const patch = journalSitPatch(entry);
+    try {
+      await updateData('journalEntries', currentEntryId, patch);
+    } catch (error) {
+      logger.error('Error saving oracle sit:', error);
+      throw error;
+    }
+    setEntries(prev => prev.map(e => (e.id === currentEntryId ? { ...e, ...patch } : e)));
+    return sitRecordOf({ ...entry, ...patch });
+  };
+
+  // Reopen the modal on an entry's stored reading — the sit return. The save
+  // flow warms the behavioral-context cache through the first reading; here
+  // nothing runs ahead of the modal, so the count is fetched first.
+  const reopenOracleForEntry = async (entry) => {
+    setCurrentEntryId(entry.id);
+    openOracleLoading();
+    await warmBehavioralContext();
+    const reading = typeof entry.oracleJudgment === 'string' ? entry.oracleJudgment : '';
+    openOracleWithContent({
+      content: reading || 'This entry has no reading.',
+      entryCount: getCachedTotalEntryCount(),
+      metacognitiveDepth: entry.metacognitiveDepth || null,
+      entryText: composeOracleInput(entry),
+      entryModuleName: 'journal',
+      provenance: reading ? entry[ORACLE_FIELDS.PROVENANCE] || null : null,
+      fallbackReason: entry[ORACLE_FIELDS.FALLBACK_REASON] || null,
+      oracleUnavailable: !reading,
+    });
   };
 
   // "Make it a Kill Contract": hand the commitment to the Ledger's Add
@@ -1745,6 +1828,9 @@ export default function Journal() {
         onReaction={handleOracleReaction}
         onFollowUpStored={persistFollowUp}
         returnsToDashboard
+        intentChoices
+        onSit={persistSit}
+        sitRecord={sitRecordOf(entries.find(e => e.id === currentEntryId))}
         onMakeContract={(commitment) => handleMakeContract(commitment, currentEntryId)}
         onFeedbackReplaced={persistReplacedFeedback}
         entryCount={oracleModal.entryCount}

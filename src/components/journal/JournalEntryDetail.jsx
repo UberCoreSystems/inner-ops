@@ -4,7 +4,16 @@ import { moodOptions, intensityLevels } from '../../constants/moods';
 import { parseDate } from '../../utils/dateUtils';
 import { ORACLE_FIELDS } from '../../utils/schema';
 import { PROVENANCE, isRateLimitCode } from '../../utils/aiFeedback';
-import { ARC_COPY, arcOutcomeBadge, arcText, isQuestionUnanswered } from '../../utils/followUpArc';
+import {
+  ARC_COPY,
+  ARC_INTENT,
+  arcOutcomeBadge,
+  arcText,
+  isQuestionUnanswered,
+  sitRecordOf,
+  sitLine,
+  sitBeforeLine,
+} from '../../utils/followUpArc';
 import { MoodIcons } from './MoodIcons';
 import OracleReactionChip from './OracleReactionChip';
 
@@ -83,14 +92,21 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
   // map with a contractId and no text.
   const commitment = entry[ORACLE_FIELDS.COMMITMENT];
   const commitmentText = typeof commitment?.text === 'string' ? commitment.text : '';
-  // The "Go deeper" exchange, in the order it happened. Each block renders only
-  // when its field exists, so entries from before the arc read as before.
+  // The exchange, in the order it happened. Each block renders only when its
+  // field exists, so entries from before the arc read as before. A landed
+  // reading has the receipt as its reply and no question.
   const pushback = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_PUSHBACK]);
   const reply = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_REPLY]);
   const answer = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_ANSWER]);
   const closingRead = arcText(entry[ORACLE_FIELDS.FOLLOW_UP_CLOSE]);
   const outcomeBadge = arcOutcomeBadge(entry[ORACLE_FIELDS.FOLLOW_UP_OUTCOME]);
   const leftUnanswered = isQuestionUnanswered(entry);
+  // Sitting with it: the pending sit says when it comes back. A sit he later
+  // responded to is said once, above his words.
+  const sit = sitRecordOf(entry);
+  const sitCount = Math.max(0, Math.floor(Number(entry[ORACLE_FIELDS.SIT_COUNT]) || 0));
+  const responded = [ARC_INTENT.PUSH_BACK, ARC_INTENT.GO_FURTHER, ARC_INTENT.LANDED].includes(entry[ORACLE_FIELDS.FOLLOW_UP_INTENT]);
+  const sitBefore = !sit && sitCount > 0 && responded ? sitBeforeLine(sitCount) : null;
   const wasRateLimited = isRateLimitCode(entry[ORACLE_FIELDS.FALLBACK_REASON]);
 
   return (
@@ -167,7 +183,7 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
                 <h4 className="text-[#888] font-medium text-xs uppercase tracking-widest">
                   {isLocalReading ? 'Oracle · Local' : 'Oracle'}
                 </h4>
-                <OracleReactionChip reaction={entry.oracleReaction} />
+                <OracleReactionChip entry={entry} />
               </div>
               {isLocalReading && (
                 <div className="border-l-2 border-[#5a5a5a] pl-3 mb-3">
@@ -182,18 +198,20 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
                 {oracleText}
               </div>
 
+              {/* The exchange, one column: his turns as indented quotes, the
+                  Oracle's replies in the reading's voice. */}
+              {sitBefore && (
+                <p className="mt-4 text-[#858585] text-xs leading-relaxed">{sitBefore}</p>
+              )}
+
               {pushback && (
-                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.challenge}</h5>
-                  <div className="text-[#d1d1d1] text-sm leading-relaxed whitespace-pre-line">
-                    {pushback}
-                  </div>
-                </div>
+                <blockquote className="mt-4 border-l-2 border-[#2a2a2a] pl-3 text-[#9a9a9a] text-sm leading-relaxed whitespace-pre-line">
+                  {pushback}
+                </blockquote>
               )}
 
               {reply && (
-                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.reflection}</h5>
+                <div className="mt-4">
                   <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
                     {reply}
                   </div>
@@ -204,32 +222,26 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
               )}
 
               {answer && (
-                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                  <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.answer}</h5>
-                  <div className="text-[#d1d1d1] text-sm leading-relaxed whitespace-pre-line">
-                    {answer}
-                  </div>
-                </div>
+                <blockquote className="mt-4 border-l-2 border-[#2a2a2a] pl-3 text-[#9a9a9a] text-sm leading-relaxed whitespace-pre-line">
+                  {answer}
+                </blockquote>
               )}
 
               {closingRead && (
-                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h5 className="text-[#888] font-medium text-xs uppercase tracking-widest">{ARC_COPY.closingRead}</h5>
-                    {outcomeBadge && (
-                      <span className="text-[10px] uppercase tracking-widest" style={{ color: outcomeBadge.color }}>
-                        {outcomeBadge.label}
-                      </span>
-                    )}
-                  </div>
+                <div className="mt-4">
                   <div className="text-[#f5f5f5] text-sm leading-relaxed whitespace-pre-line">
                     {closingRead}
                   </div>
+                  {outcomeBadge && (
+                    <div className="mt-2 text-[10px] uppercase tracking-widest" style={{ color: outcomeBadge.color }}>
+                      {outcomeBadge.label}
+                    </div>
+                  )}
                 </div>
               )}
 
               {commitmentText && (
-                <div className="mt-4 pt-4 border-t border-[#1a1a1a]">
+                <div className="mt-4 border border-[#2a2a2a] rounded-xl p-4">
                   <h5 className="text-[#888] font-medium text-xs mb-2 uppercase tracking-widest">{ARC_COPY.commitment}</h5>
                   <div className="text-[#f5f5f5] text-sm leading-relaxed">{commitmentText}</div>
                   {commitment.contractId ? (
@@ -249,6 +261,10 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
                     </button>
                   ) : null}
                 </div>
+              )}
+
+              {sit && (
+                <p className="mt-4 text-[#858585] text-xs leading-relaxed">{sitLine(sit)}</p>
               )}
 
             </div>

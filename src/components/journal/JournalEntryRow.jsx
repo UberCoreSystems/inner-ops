@@ -48,7 +48,7 @@ export default function JournalEntryRow({ entry, onOpen }) {
         {snippetOf(entry.content)}
       </span>
       <span className="flex items-center gap-2 shrink-0">
-        <OracleReactionChip reaction={entry.oracleReaction} />
+        <OracleReactionChip entry={entry} />
         {entry.oracleJudgment && (
           <span
             className={`w-1.5 h-1.5 rounded-full ${isLocalReading ? 'bg-[#5a5a5a]' : 'bg-[#a855f7]'}`}

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { generateSynthesisBriefing, assembleReckoning } from './generateSynthesisBriefing.js';
+import { generateSynthesisBriefing, assembleReckoning, composeReadingResponseNote } from './generateSynthesisBriefing.js';
 import {
   COLLECTIONS,
   RELAPSE_FIELDS,
@@ -320,5 +320,45 @@ describe('generateSynthesisBriefing — reckoning mode', () => {
     });
     assert.equal(result.status, 'ok');
     assert.equal(written.type, 'reckoning');
+  });
+});
+
+describe('generateSynthesisBriefing — reading responses', () => {
+  it('composes one line from counts: what he resists, what he accepts, whether it became a commitment, what he set aside', () => {
+    assert.equal(
+      composeReadingResponseNote({ pushBack: 3, goFurther: 1, landed: 2, sit: 2, landedContracted: 1, sitsReturnedResolved: 1, sitsDeferredAgain: 1, total: 8 }),
+      'Oracle readings this period: pushed back on 3, went further on 1, accepted 2, sitting with 2. ' +
+        '1 accepted reading became a Kill Contract. 1 set-aside reading came back and he responded; 1 was set aside more than once.'
+    );
+    assert.equal(
+      composeReadingResponseNote({ landed: 2, total: 2 }),
+      'Oracle readings this period: accepted 2. No accepted reading became a Kill Contract.'
+    );
+    assert.equal(composeReadingResponseNote({ pushBack: 1, total: 1 }), 'Oracle readings this period: pushed back on 1.');
+    assert.equal(composeReadingResponseNote({ total: 0 }), null);
+    assert.equal(composeReadingResponseNote(null), null);
+  });
+
+  it('lands on the briefing over the 28-day window, with its counts in meta, and is null without responses', async () => {
+    const journal = [
+      { id: 'j1', timestamp: now - dayMs, content: 'x', oracleFollowUpIntent: 'push_back', oracleFollowUpOutcome: 'evaded' },
+      { id: 'j2', timestamp: now - 2 * dayMs, content: 'x', oracleFollowUpIntent: 'landed', oracleCommitment: { text: 'C', contractId: 'k9' } },
+      { id: 'j3', timestamp: now - 29 * dayMs, content: 'x', oracleFollowUpIntent: 'sit', oracleSitCount: 1 },
+    ];
+    let written = null;
+    const deps = makeDeps({ ...minCrossModuleData(), [COLLECTIONS.JOURNAL_ENTRIES]: journal }, async (_c, doc) => { written = doc; });
+    const result = await generateSynthesisBriefing('u1', 'weekly', deps);
+    assert.equal(result.status, 'ok');
+    assert.equal(
+      result.briefing.readingResponseNote,
+      'Oracle readings this period: pushed back on 1, accepted 1. 1 accepted reading became a Kill Contract.'
+    );
+    assert.equal(written.readingResponseNote, result.briefing.readingResponseNote);
+    assert.equal(result.briefing.meta.readingResponses.total, 2, 'the 29-day-old sit is outside the window');
+
+    const bare = await generateSynthesisBriefing('u1', 'weekly', makeDeps(minCrossModuleData()));
+    assert.equal(bare.status, 'ok');
+    assert.equal(bare.briefing.readingResponseNote, null);
+    assert.equal(bare.briefing.meta.readingResponses, null);
   });
 });

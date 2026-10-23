@@ -631,6 +631,9 @@ export default function Dashboard() {
             onJournalClick={(promptText) => {
               navigate('/journal', { state: { seedPrompt: promptText || '', fromDailyPrompt: true } });
             }}
+            onReturnToReading={(pick) => {
+              navigate('/journal', { state: { resumeOracleEntryId: pick.sourceDocId } });
+            }}
           />
         </section>
 

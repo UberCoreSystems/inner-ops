@@ -258,7 +258,18 @@ export const ORACLE_FIELDS = Object.freeze({
   FOLLOW_UP_ANSWER: 'userFollowUpAnswer',
   FOLLOW_UP_CLOSE: 'oracleFollowUpClose',
   FOLLOW_UP_OUTCOME: 'oracleFollowUpOutcome',
-  // ISO stamp set the first time Today's Reflection shows the unanswered
-  // question; from then on the entry competes in the rotation like any other.
+  // ISO stamp set the first time Today's Reflection brings the entry back —
+  // an unanswered question, or a reading he sat with once its date arrives.
+  // From then on the entry competes in the rotation like any other. Any arc
+  // or sit write resets it, so the next open state returns first again.
   FOLLOW_UP_SURFACED_AT: 'oracleFollowUpSurfacedAt',
+  // How he responded to the reading: 'push_back' | 'go_further' | 'landed' |
+  // 'sit' | null (no response, or a document from before the four choices).
+  // The legacy oracleReaction chip value is left untouched beside it.
+  FOLLOW_UP_INTENT: 'oracleFollowUpIntent',
+  // "Sit with this": the ISO date the reading comes back on the dashboard, and
+  // how many times he has sat with it. The count survives a resolved sit and a
+  // replaced reading — it is about him, not the reading.
+  SIT_UNTIL: 'oracleSitUntil',
+  SIT_COUNT: 'oracleSitCount',
 });

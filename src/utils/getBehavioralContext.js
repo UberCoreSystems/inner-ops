@@ -24,6 +24,7 @@ import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 import { getEntryTimestamp as getTimestamp } from './dateUtils.js';
 import { getViolatedRules } from './ruleState.js';
 import { extractEvents, computeCorrelations } from './crossModuleCorrelation.js';
+import { summarizeReadingResponses } from './followUpArc.js';
 
 const contextCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -154,6 +155,10 @@ export async function getBehavioralContext(userId, deps = {}) {
       computeCorrelations(events, { entryCount: totalEntryCount })
     );
 
+    // How he responds to readings, last 30 days — counts only, never his
+    // words. Null when nothing is in the window, so the server injects nothing.
+    const readingResponses = summarizeReadingResponses(journalEntries, { windowDays: 30, now: ts });
+
     const value = {
       activeKillTargets,
       dominantRelapseArchetype,
@@ -163,6 +168,7 @@ export async function getBehavioralContext(userId, deps = {}) {
       identityDirection, // BER-137
       totalEntryCount,   // BER-167
       temporalCorrelations,
+      readingResponses,
       missingCollections, // Finding 6: surface partial-load state to consumers
     };
 
@@ -184,6 +190,7 @@ function buildEmpty() {
     identityDirection: null,
     totalEntryCount: 0, // BER-167
     temporalCorrelations: { status: 'insufficient-signal', items: [] },
+    readingResponses: null,
     missingCollections: [], // Finding 6
   };
 }
@@ -238,6 +245,20 @@ export function deriveLanguagePattern(entries) {
     .filter(([, n]) => n >= 2) // require repetition across entries
     .map(([w]) => w);
   return top.length > 0 ? top.join(', ') : null;
+}
+
+/**
+ * Warm the cache for the signed-in user so getCachedTotalEntryCount is a hit.
+ * The save flow does this through the first reading; a reading reopened from
+ * the dashboard has no such call ahead of it. Never throws.
+ */
+export async function warmBehavioralContext() {
+  try {
+    const uid = getAuth().currentUser?.uid;
+    if (uid) await getBehavioralContext(uid);
+  } catch {
+    // the count stays unknown — the server treats it as high-data, as today
+  }
 }
 
 /** Invalidate cache for a user (call after data mutations if needed) */

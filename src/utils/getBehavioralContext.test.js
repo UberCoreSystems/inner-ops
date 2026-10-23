@@ -219,3 +219,42 @@ describe('clearBehavioralContextCache', () => {
     assert.doesNotThrow(() => clearBehavioralContextCache('nobody'));
   });
 });
+
+describe('getBehavioralContext — reading responses', () => {
+  it('summarizes how he responded to readings over the last 30 days, counts only', async () => {
+    const data = {
+      [COLLECTIONS.JOURNAL_ENTRIES]: [
+        { id: 'j1', timestamp: T0 - 1 * dayMs, content: 'x', oracleFollowUpIntent: 'push_back', oracleFollowUpOutcome: 'evaded' },
+        { id: 'j2', timestamp: T0 - 2 * dayMs, content: 'x', oracleFollowUpIntent: 'landed', oracleCommitment: { text: 'C', contractId: 'k1' } },
+        { id: 'j3', timestamp: T0 - 3 * dayMs, content: 'x', oracleFollowUpIntent: 'sit', oracleSitCount: 2 },
+        { id: 'j4', timestamp: T0 - 4 * dayMs, content: 'x', oracleFollowUpIntent: 'go_further', oracleSitCount: 1 },
+        { id: 'j5', timestamp: T0 - 40 * dayMs, content: 'x', oracleFollowUpIntent: 'landed' },
+        { id: 'j6', timestamp: T0 - 5 * dayMs, content: 'x', oracleReaction: 'landed' },
+      ],
+    };
+    const ctx = await getBehavioralContext('u1', noDeps(data));
+    assert.deepEqual(ctx.readingResponses, {
+      windowDays: 30,
+      pushBack: 1,
+      goFurther: 1,
+      landed: 1,
+      sit: 1,
+      landedContracted: 1,
+      sitsReturnedResolved: 1,
+      sitsDeferredAgain: 1,
+      total: 4,
+    });
+    assert.ok(!JSON.stringify(ctx.readingResponses).includes('x'), 'no entry text leaves the client');
+  });
+
+  it('is null with no responses in the window, and in the empty snapshot', async () => {
+    const data = {
+      [COLLECTIONS.JOURNAL_ENTRIES]: [
+        { id: 'j1', timestamp: T0 - 1 * dayMs, content: 'x', oracleReaction: 'landed' },
+        { id: 'j2', timestamp: T0 - 45 * dayMs, content: 'x', oracleFollowUpIntent: 'landed' },
+      ],
+    };
+    assert.equal((await getBehavioralContext('u1', noDeps(data))).readingResponses, null);
+    assert.equal((await getBehavioralContext(null)).readingResponses, null);
+  });
+});

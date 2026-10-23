@@ -42,7 +42,9 @@ const getTodaysStaticPrompt = () => {
 
 const isStaticPromptId = (id) => typeof id === 'string' && id.startsWith('static/');
 
-const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
+// onReturnToReading: a reading he sat with is back — the card sends him to
+// it (the pick carries sourceDocId) instead of seeding a new entry.
+const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick, onReturnToReading }) {
   const [prompt, setPrompt] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -133,9 +135,11 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
   const when = formatRelativeDate(prompt.eventOccurredAt) || 'recently';
   const provenance = prompt.kind !== 'oracle'
     ? null
-    : prompt.unanswered
-      ? `You left this unanswered after ${prompt.displayLabel} ${when}.`
-      : `Oracle asked you ${when} after ${prompt.displayLabel}.`;
+    : prompt.sitDue
+      ? `You set this aside after ${prompt.displayLabel} ${when}.`
+      : prompt.unanswered
+        ? `You left this unanswered after ${prompt.displayLabel} ${when}.`
+        : `Oracle asked you ${when} after ${prompt.displayLabel}.`;
 
   return (
     <div
@@ -189,18 +193,35 @@ const DailyPrompt = React.memo(function DailyPrompt({ onJournalClick }) {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3 relative z-10">
-        <button
-          onClick={() => onJournalClick?.(prompt.text)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105"
-          style={{
-            backgroundColor: `${meta.color}20`,
-            color: meta.color,
-            border: `1px solid ${meta.color}40`
-          }}
-        >
-          <AppIcon name="journal" size={16} color={meta.color} glow={true} glowIntensity={0.4} />
-          <span>Journal This</span>
-        </button>
+        {/* A reading he sat with returns as itself: the response happens at
+            the reading, not in a new entry. */}
+        {prompt.sitDue ? (
+          <button
+            onClick={() => onReturnToReading?.(prompt)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105"
+            style={{
+              backgroundColor: `${meta.color}20`,
+              color: meta.color,
+              border: `1px solid ${meta.color}40`
+            }}
+          >
+            <AppIcon name={meta.icon} size={16} color={meta.color} glow={true} glowIntensity={0.4} />
+            <span>Return to the reading</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => onJournalClick?.(prompt.text)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105"
+            style={{
+              backgroundColor: `${meta.color}20`,
+              color: meta.color,
+              border: `1px solid ${meta.color}40`
+            }}
+          >
+            <AppIcon name="journal" size={16} color={meta.color} glow={true} glowIntensity={0.4} />
+            <span>Journal This</span>
+          </button>
+        )}
 
         <Link
           to="/ledger"

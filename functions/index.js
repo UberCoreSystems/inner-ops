@@ -125,14 +125,14 @@ Never affirm for its own sake. Never invent a pattern, event, date, or quote tha
 
 Then give ONE insight this exchange has earned: something true about the pattern that neither your reading nor his pushback has said. Not a summary, not advice, not a plan.
 
-Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Make each point once. Keep the reply to 80–140 words, the question included — noticeably shorter than your prior reading. This replaces the length rule above.
+Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Make each point once. Keep the reply to 80–140 words, the question included: at most two short paragraphs and six sentences. This replaces the 150–220 word rule above — the shorter limit governs.
 
-CLOSE WITH ONE QUESTION. This replaces the CLOSING MOVE above for this turn: whatever the posture, the reply ends on exactly one question, and it is the only question mark in the reply. He answers it next, and the exchange then closes on a commitment built from his answer — so ask for what that commitment needs and only he can supply: the specific moment, condition, or decision where this pattern runs. Not yes-or-no, not leading, not abstract; answerable in a few sentences, and not answerable without taking a position on what he actually does. Wrap it in <closing_question> tags, as the tag rule above requires. Do not propose a commitment, a plan, or a next step in this turn. Nothing follows the closing tag.`,
+CLOSE WITH ONE QUESTION. This replaces the CLOSING MOVE above for this turn: whatever the posture, the reply ends on exactly one question, and it is the only question mark in the reply — no rhetorical questions in the body. He answers it next, and the exchange then closes on a commitment built from his answer — so ask for what that commitment needs and only he can supply: the specific moment, condition, or decision where this pattern runs. Not yes-or-no, not leading, not abstract; answerable in a few sentences, and not answerable without taking a position on what he actually does. Wrap it in <closing_question> tags, as the tag rule above requires. Do not propose a commitment, a plan, or a next step in this turn. Nothing follows the closing tag.`,
 
   // Follow-up arc, turn 2 — the last. Opens on a VERDICT line (parsed like
   // DEPTH), judges answered vs evaded, one concession per exchange, closes on
   // ONE tagged commitment and asks nothing. No params.
-  oracle_close: () => `THIRD TURN — HIS ANSWER. The entry text has five labeled parts: ORIGINAL ENTRY, YOUR PRIOR READING, HIS PUSHBACK, YOUR REPLY, and HIS ANSWER. YOUR REPLY closed on a question; HIS ANSWER is what he wrote back. This is the last turn of the exchange. Do not re-read the entry, do not restate your reading or your reply, and do not choose a new posture — the posture steps and the variation rule above do not apply. If YOUR PRIOR READING says "(none recorded)", your position is only what YOUR REPLY stated.
+  oracle_close: () => `THIRD TURN — HIS ANSWER. The entry text has five labeled parts: ORIGINAL ENTRY, YOUR PRIOR READING, HIS PUSHBACK or HIS DIRECTION (the label says which: a challenge to your reading, or a request to go further), YOUR REPLY, and HIS ANSWER. YOUR REPLY closed on a question; HIS ANSWER is what he wrote back. This is the last turn of the exchange. Do not re-read the entry, do not restate your reading or your reply, and do not choose a new posture — the posture steps and the variation rule above do not apply. If YOUR PRIOR READING says "(none recorded)", your position is only what YOUR REPLY stated.
 
 Judge the answer first, against the question it was given:
 - He answered if he named something specific: a moment, a condition, a decision, a cost. Say what his answer shows that the record did not, and build on it.
@@ -141,13 +141,43 @@ Answering is not progress. Do not thank him, praise the answer, or call it hones
 
 Begin your reply with exactly one line stating that judgment — VERDICT:answered or VERDICT:evaded — then a blank line, then the prose. That line is read by the system and never shown to him.
 
-Your position stays on the record. His agreement is not evidence and neither is his insistence. One concession per exchange: if YOUR REPLY conceded a point, concede nothing further. If it held, correct your read only when his answer shows that YOUR REPLY misstated a fact — a fact in the entry, or a concrete event he now states that directly contradicts a claim you made. An explanation is not a contradiction. Name any correction in one sentence and continue from it. Never invent a pattern, event, date, or quote that is not in the text above.
+Your position stays on the record. His agreement is not evidence and neither is his insistence. One concession per exchange: if YOUR REPLY conceded a point, concede nothing further. Otherwise, correct your read only when his answer shows that YOUR REPLY misstated a fact — a fact in the entry, or a concrete event he now states that directly contradicts a claim you made. An explanation is not a contradiction. Name any correction in one sentence and continue from it. Never invent a pattern, event, date, or quote that is not in the text above.
 
-Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Keep the prose to 60–110 words, not counting the verdict line or the commitment line. This replaces the length rule above.
+Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Keep the prose to 60–110 words, not counting the verdict line or the commitment line: one paragraph, at most five sentences. This replaces the 150–220 word rule above — the shorter limit governs.
 
 CLOSE WITH ONE COMMITMENT. This replaces the CLOSING MOVE above for this turn. Ask nothing: no question mark anywhere in this reply — if you quote him, quote statements, not questions — and never use <closing_question> tags. Your final line is one commitment — built from his answer if he answered; if he evaded, built from the record and aimed at the moment he would not name — in exactly this shape, wrapped in <commitment> tags (these tags are required here; they are the only tags in your reply, and the "use no tags" rule above does not apply to them):
 <commitment pattern="[the pattern, as a short Kill List target name, 60 characters or fewer]">Commitment: When [specific trigger or time], I will [specific observable action]. Checked by [how the record will show it].</commitment>
-One commitment only. Concrete, observable, short: the trigger clause and the action clause are each 50 characters or fewer. Where his answer named the trigger, use his words. Nothing follows the closing tag.`,
+One commitment only. Concrete, observable, short: the trigger clause and the action clause are each 50 characters or fewer — the trigger at most eight words, the action at most seven words, one verb and its object with nothing after it, no "and", no "then", no "before", no second step. Where his answer named the trigger, use his words. Nothing follows the closing tag.`,
+
+  // "Go further", turn 1. Same three-section entry text as oracle_pushback with
+  // his section labeled HIS DIRECTION: he is not disputing the reading, so
+  // there is nothing to hold or concede. Deepens the reading from where his
+  // words point and closes on ONE tagged question, so oracle_close runs the
+  // second turn unchanged. No params.
+  oracle_further: () => `SECOND TURN — HE ASKS YOU TO GO FURTHER. The entry text has three labeled parts: ORIGINAL ENTRY, YOUR PRIOR READING, and HIS DIRECTION. He read your reading and chose to go further, not to dispute it: HIS DIRECTION is where he points — the thread he wants taken deeper, a detail he adds, or a line of your reading he wants opened. This is not a new reading. Do not re-read the entry from scratch, do not restate your prior reading, and do not choose a new posture — the posture steps and the variation rule above do not apply to this turn. If YOUR PRIOR READING says "(none recorded)", read the entry from where his direction points and take no position you did not state.
+
+You are not defending a position. Do not hold, do not concede, do not weigh his words against your reading. Take the thread HIS DIRECTION names and go one level under it, on the record alone — the entry, your prior reading, and any receipts provided above: the mechanism that runs it, what it costs him, what it protects, or the older pattern it is one instance of. If he adds a fact, use it. If HIS DIRECTION points at nothing specific, take the one line of your reading his words come closest to and open that. Never invent a pattern, event, date, or quote that is not in the text above.
+
+Then give ONE insight this turn has earned: something true about the pattern that your reading did not say. Not a summary, not advice, not a plan, not reassurance.
+
+Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Make each point once. Keep the reply to 80–140 words, the question included: at most two short paragraphs and six sentences. This replaces the 150–220 word rule above — the shorter limit governs.
+
+CLOSE WITH ONE QUESTION. This replaces the CLOSING MOVE above for this turn: whatever the posture, the reply ends on exactly one question, and it is the only question mark in the reply — no rhetorical questions in the body. He answers it next, and the exchange then closes on a commitment built from his answer — so ask for what that commitment needs and only he can supply: the specific moment, condition, or decision where this pattern runs. Not yes-or-no, not leading, not abstract; answerable in a few sentences, and not answerable without taking a position on what he actually does. Wrap it in <closing_question> tags, as the tag rule above requires. Do not propose a commitment, a plan, or a next step in this turn. Nothing follows the closing tag.`,
+
+  // "It landed" — one turn, the last. Two-section entry text (ORIGINAL ENTRY,
+  // YOUR PRIOR READING; src/utils/buildFollowUpEntryText.js
+  // buildLandedEntryText). A receipt of what he accepted, in his own words,
+  // closing on ONE tagged commitment. No VERDICT line, no question. Not
+  // praise: accepting a reading earns nothing. No params.
+  oracle_landed: () => `SECOND TURN — IT LANDED. The entry text has two labeled parts: ORIGINAL ENTRY and YOUR PRIOR READING. He read your reading and chose "It landed": he accepts it. He wrote nothing back. This is the only turn and the last. It is not a new reading, not a verdict on him, and not praise. Do not re-read the entry from scratch, do not restate your prior reading, and do not choose a new posture — the posture steps and the variation rule above do not apply to this turn. If YOUR PRIOR READING says "(none recorded)", state what the entry itself puts on the record, and take no position you did not state.
+
+Write the receipt. Name precisely what he has accepted, in his own words: quote, verbatim and in quotation marks, the words in ORIGINAL ENTRY that your reading rested on — the moment, the choice, the line he wrote. Quote his entry, never YOUR PRIOR READING: the receipt is his words, not yours. Then state in one or two sentences what accepting them puts on the record about what he does. A receipt is a statement of fact, not an evaluation. Accepting a reading is not progress and earns nothing: do not thank him, do not call the acceptance honest, brave, mature, a step, or a breakthrough, and do not say it is good that it landed. Do not add a new observation, do not interpret further, do not advise. Never invent a pattern, event, date, or quote that is not in the text above.
+
+Voice rules above still hold: direct address, no motivational, wellness, or therapeutic language, no hedging. Keep the prose to 40–80 words, not counting the commitment line. This replaces the length rule above.
+
+CLOSE WITH ONE COMMITMENT. This replaces the CLOSING MOVE above for this turn. Ask nothing: no question mark anywhere in this reply — if you quote him, quote statements, not questions — and never use <closing_question> tags. Do not begin with a VERDICT line or any label; begin with the prose. Your final line is one commitment built from what he accepted, aimed at the moment in the entry where the pattern runs, in exactly this shape, wrapped in <commitment> tags (these tags are required here; they are the only tags in your reply, and the "use no tags" rule above does not apply to them):
+<commitment pattern="[the pattern, as a short Kill List target name, 60 characters or fewer]">Commitment: When [specific trigger or time], I will [specific observable action]. Checked by [how the record will show it].</commitment>
+One commitment only. Concrete, observable, short: the trigger clause and the action clause are each 50 characters or fewer — the trigger at most eight words, the action at most seven words, one verb and its object with nothing after it, no "and", no "then", no "before", no second step. Where the entry named the trigger, use his words. Nothing follows the closing tag.`,
 };
 
 function resolvePromptContext(key, params) {
@@ -176,9 +206,10 @@ function logOracleCall(fields) {
  *           entryCount, promptContextKey, promptContextParams, evasion }
  * Returns: { feedback, metacognitiveDepth, closingQuestion, commitment, verdict }
  *   commitment is non-null only on follow-up turns that closed on a tagged
- *   commitment line (oracle_close; legacy oracle_challenge): { text, pattern,
- *   trigger, action, check }. verdict ('answered' | 'evaded') is set only on
- *   oracle_close turns, from the VERDICT line the model opens with.
+ *   commitment line (oracle_close, oracle_landed; legacy oracle_challenge):
+ *   { text, pattern, trigger, action, check }. verdict ('answered' | 'evaded')
+ *   is set only on oracle_close turns, from the VERDICT line the model opens
+ *   with.
  */
 exports.oracle = onCall(
   { secrets: [anthropicApiKey], region: "us-central1", timeoutSeconds: 30 },
@@ -265,7 +296,7 @@ exports.oracle = onCall(
           ...(dynamicSuffix ? [{ type: "text", text: dynamicSuffix }] : []),
         ]
       : `${blocks.stable}${dynamicSuffix}`;
-    const userPrompt = buildUserPrompt(entryText, userContext);
+    const userPrompt = buildUserPrompt(entryText, userContext, promptContextKey);
 
     try {
       // NO-TRAINING POSTURE: Anthropic does not train its models on inputs or
@@ -395,6 +426,39 @@ function renderTemporalCorrelations(temporalCorrelations) {
   );
 }
 
+// How he responds to readings (src/utils/followUpArc.js
+// summarizeReadingResponses): counts only, coerced and capped, never text. A
+// COMPUTED field like the correlations, so no ctxField clamp applies. Renders
+// nothing when every intent count is zero.
+const MAX_RESPONSE_COUNT = 999;
+const responseCount = (v) => Math.min(MAX_RESPONSE_COUNT, Math.max(0, Math.floor(Number(v) || 0)));
+function renderReadingResponses(responses) {
+  if (!responses || typeof responses !== "object" || Array.isArray(responses)) return "";
+  const pushBack = responseCount(responses.pushBack);
+  const goFurther = responseCount(responses.goFurther);
+  const landed = responseCount(responses.landed);
+  const sit = responseCount(responses.sit);
+  if (pushBack + goFurther + landed + sit === 0) return "";
+  const parts = [];
+  if (pushBack) parts.push(`pushed back ${pushBack}`);
+  if (goFurther) parts.push(`went further ${goFurther}`);
+  if (landed) {
+    const contracted = Math.min(responseCount(responses.landedContracted), landed);
+    parts.push(`accepted ${landed}${contracted ? ` (${contracted} became a Kill Contract)` : ""}`);
+  }
+  if (sit) {
+    const again = Math.min(responseCount(responses.sitsDeferredAgain), sit);
+    parts.push(`sitting with ${sit}${again ? ` (${again} set aside more than once)` : ""}`);
+  }
+  const resolved = responseCount(responses.sitsReturnedResolved);
+  if (resolved) parts.push(`${resolved} set-aside reading${resolved === 1 ? "" : "s"} came back and he responded`);
+  return (
+    `Reading responses (last ${responseCount(responses.windowDays) || 30}d): ${parts.join(", ")}. ` +
+    `An accepted reading that did not become a contract is a gap between word and act; name it when the entry touches the same ground. ` +
+    `A reading set aside is a deferral on the record, not an evasion — do not treat it as one.`
+  );
+}
+
 function buildBehavioralContextBlock(behavioralContext, entryCount) {
   if (!behavioralContext || typeof behavioralContext !== "object") return "";
   // Below the trust threshold there is not enough record to assert a "dominant"
@@ -433,6 +497,10 @@ function buildBehavioralContextBlock(behavioralContext, entryCount) {
   const correlationBlock = renderTemporalCorrelations(behavioralContext.temporalCorrelations);
   if (correlationBlock) {
     parts.push(correlationBlock);
+  }
+  const responsesLine = renderReadingResponses(behavioralContext.readingResponses);
+  if (responsesLine) {
+    parts.push(responsesLine);
   }
   if (parts.length === 0) return "";
   return `\n\nCross-module behavioral context (use at least one data point when relevant; do not invent patterns not listed):\n${parts.join("\n")}\nDo not generate encouragement or affirmation. Maintain confrontational, not compassionate, tone.`;
@@ -1003,7 +1071,23 @@ const STYLE_INSTRUCTIONS = {
   balanced: "He chose balanced feedback — be direct and honest, but match the weight of your response to what the entry actually contains. Lighter entries get lighter responses.",
 };
 
-function buildUserPrompt(entryText, userContext) {
+// The follow-up turns override the persona's length and closing rules from
+// the tail of a long system prompt, which the model under-weights: live
+// fixtures ran 175–210 words against a 140-word rule. The shape of the reply
+// is therefore restated as the last line of the user message, where it is
+// read last. Keyed by promptContextKey; first readings get nothing.
+const FOLLOW_UP_SHAPE = {
+  oracle_pushback:
+    "Shape of this reply: two paragraphs of two or three sentences each, 80–140 words in all, then the one tagged question as the final line. No third paragraph. No rhetorical questions: the tagged question is the only question mark in the reply.",
+  oracle_further:
+    "Shape of this reply: two paragraphs of two or three sentences each, 80–140 words in all, then the one tagged question as the final line. No third paragraph. No rhetorical questions: the tagged question is the only question mark in the reply.",
+  oracle_close:
+    "Shape of this reply: the VERDICT line, a blank line, one paragraph of three to five sentences (60–110 words), then the tagged commitment as the final line. No question mark anywhere: if his words were a question, restate them as a statement. In the commitment, the trigger is at most eight words and the action at most seven words.",
+  oracle_landed:
+    "Shape of this reply: one paragraph of two to four sentences (40–80 words) that quotes, in quotation marks, a phrase taken word for word from the ORIGINAL ENTRY section — his words, never a line from YOUR PRIOR READING — then the tagged commitment as the final line. No advice, no second paragraph, no question mark. In the commitment, the trigger is at most eight words and the action at most seven words.",
+};
+
+function buildUserPrompt(entryText, userContext, promptContextKey = null) {
   let prompt = `Entry:\n${entryText}`;
 
   const context = [];
@@ -1048,6 +1132,8 @@ function buildUserPrompt(entryText, userContext) {
   }
 
   prompt += `\n\nRespond only to what he actually wrote. Be specific to this entry.`;
+  const shape = promptContextKey ? FOLLOW_UP_SHAPE[promptContextKey] : null;
+  if (shape) prompt += `\n\n${shape}`;
   return prompt;
 }
 

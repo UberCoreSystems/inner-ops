@@ -32,6 +32,7 @@ import {
 } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 import { deriveLanguagePattern } from './getBehavioralContext.js';
+import { summarizeReadingResponses } from './followUpArc.js';
 
 const CADENCE_DAYS = { weekly: 7, biweekly: 14 };
 
@@ -181,6 +182,12 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
   const recentJournals = (journalEntries || []).filter(e => now - getTimestamp(e) < windowMs28);
   const journalEntriesPerWeek = Number((recentJournals.length / 4).toFixed(1));
 
+  // --- Oracle readings: how he responded this period (28d) ---
+  // One line: what he resists, what he accepts, whether acceptance became a
+  // commitment, what he set aside. Counts only; null when there is nothing.
+  const readingResponses = summarizeReadingResponses(journalEntries, { windowDays: 28, now });
+  const readingResponseNote = composeReadingResponseNote(readingResponses);
+
   // --- Signal Delta: trend from relapse / escape / rule-violation data ---
   let signalDelta = 'stable';
   if (recentRelapseCount >= 3 || totalEscapes28d >= 5 || violatedRules.length >= 2) signalDelta = 'deteriorating';
@@ -202,7 +209,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
   const confrontationQuestion = await generateConfrontationQuestion({
     convergencePoint, violatedRules, finalizedRules, dominantArchetype, signalDelta,
     recentRelapseCount, activeTargetCount: activeTargets.length, highEscapeTargets,
-    identityDirection, journalEntriesPerWeek,
+    identityDirection, journalEntriesPerWeek, readingResponseNote,
   });
 
   // Manual on-demand generations do NOT set isNew. isNew drives the unread
@@ -221,6 +228,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
     violatedRules,
     signalDelta,
     signalDeltaNote,
+    readingResponseNote,
     confrontationQuestion,
     // Renamed from `_meta` to `meta` so the Vite terser `mangle.properties:
     // /^_/` config (vite.config.js) doesn't rewrite the key on the way into
@@ -234,6 +242,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
       highEscapeTargetCount: highEscapeTargets.length,
       finalizedRuleCount: finalizedRules.length,
       identityDirection,
+      readingResponses,
     },
   };
 
@@ -268,6 +277,34 @@ function deriveConvergencePoint({ dominantArchetype, highEscapeTargets, violated
   return signals.join('. ') + '.';
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * The briefing's one line on how he responds to readings. Built only from
+ * counts; null when there were no responses in the period.
+ */
+export function composeReadingResponseNote(responses) {
+  if (!responses || !(responses.total > 0)) return null;
+  const parts = [];
+  if (responses.pushBack) parts.push(`pushed back on ${responses.pushBack}`);
+  if (responses.goFurther) parts.push(`went further on ${responses.goFurther}`);
+  if (responses.landed) parts.push(`accepted ${responses.landed}`);
+  if (responses.sit) parts.push(`sitting with ${responses.sit}`);
+  const sentences = [`Oracle readings this period: ${parts.join(', ')}.`];
+  if (responses.landed) {
+    sentences.push(
+      responses.landedContracted
+        ? `${plural(responses.landedContracted, 'accepted reading')} became a Kill Contract.`
+        : 'No accepted reading became a Kill Contract.'
+    );
+  }
+  const sits = [];
+  if (responses.sitsReturnedResolved) sits.push(`${plural(responses.sitsReturnedResolved, 'set-aside reading')} came back and he responded`);
+  if (responses.sitsDeferredAgain) sits.push(`${responses.sitsDeferredAgain} ${responses.sitsDeferredAgain === 1 ? 'was' : 'were'} set aside more than once`);
+  if (sits.length > 0) sentences.push(`${sits.join('; ')}.`);
+  return sentences.join(' ');
+}
+
 async function generateConfrontationQuestion(data) {
   const dataStr = [
     data.convergencePoint && `Pattern: ${data.convergencePoint}`,
@@ -278,6 +315,7 @@ async function generateConfrontationQuestion(data) {
     typeof data.journalEntriesPerWeek === 'number' && `Journal cadence (28d avg): ${data.journalEntriesPerWeek} entries/week`,
     data.highEscapeTargets.length > 0 && `Ledger repeated failures: ${data.highEscapeTargets.map(t => t.title).join(', ')}`,
     data.identityDirection && `User's stated identity direction: "${data.identityDirection}"`,
+    data.readingResponseNote && `Reading responses: ${data.readingResponseNote}`,
   ].filter(Boolean).join('\n');
 
   try {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Manual fixture runner for the Oracle follow-up arc ("Go deeper").
+ * Manual fixture runner for the Oracle follow-up arc and the responses to a
+ * reading (Push back, Go further, It landed).
  *
  * Assembles the exact requests the deployed `oracle` function sends for each
  * turn — same system-prompt blocks, same registry fragment, same user prompt,
@@ -10,6 +11,7 @@
  *
  * Usage (repo root, functions deps installed):
  *   ANTHROPIC_API_KEY=... node functions/scripts/followUpFixture.js --fixture A
+ *   (A..G; F and G exercise oracle_further and oracle_landed)
  *
  * Turn 1 only (oracle_pushback):
  *   A (hold): the first reading is generated live, then challenged with
@@ -25,10 +27,19 @@
  *     named, one commitment, no question mark anywhere.
  *   E (second-concession probe): B, then more rhetoric. Expect no second
  *     concession, one commitment.
+ * Go further (oracle_further → oracle_close):
+ *   F: the first reading is generated live, then he points at a line of it.
+ *     Expect: no hold or concede language, one insight, one tagged question;
+ *     then VERDICT:answered and one commitment.
+ * It landed (oracle_landed, one turn):
+ *   G: the first reading is generated live, then he accepts it. Expect: a
+ *     span of the entry quoted, one commitment, no question mark, no VERDICT
+ *     line, no praise, ≤100 words of prose.
  *
  * The generated turn-1 question is printed so a person can judge whether the
  * scripted answer fits it. Bar to ship: every fixture passes 3 runs in a row.
  * The key comes from the environment only; Firebase secrets are never read.
+ * A key not scoped to a workspace also needs ANTHROPIC_WORKSPACE_ID.
  */
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -99,12 +110,40 @@ const FIXTURES = {
     answer: `You're wrong about the walk too. Skipping one walk isn't a pattern, it's a Tuesday.`,
     expectNoSecondConcession: true,
   },
+  // `pushback` carries his turn-1 words under either intent, as the arc
+  // snapshot does; for F they are a direction, not a challenge.
+  F: {
+    kind: "further",
+    label: "go further — he points at the proof-of-concept line; no hold, no concede, one question",
+    entry: GYM_ENTRY,
+    priorReading: null, // generated live
+    pushback: `Take the proof-of-concept line further. I keep calling the build the proof, and I want that opened: what the build is standing in for on the nights I skip.`,
+    expectNoHoldOrConcede: true,
+    answer: `The build never refuses me. Tuesday and Thursday I chose the thing that would not say no, and the gym would have.`,
+    expectVerdict: "answered",
+  },
+  G: {
+    kind: "landed",
+    label: "it landed — a receipt in his words, one commitment, no question, no praise",
+    entry: GYM_ENTRY,
+    priorReading: null, // generated live
+  },
 };
 
-const CONCESSION_RE = /\b(wrong|misread|mistaken|misstated|got that wrong|I said you skipped|stand corrected|you did (do|complete)|you completed|you logged|the record shows you)/i;
+const CONCESSION_RE = /\b(wrong|misread|mistaken|misstated|got that wrong|I said you skipped|stand corrected|you'?re right|you are right|inverted|a miss that was(n'?t| not) there|the (session|lift) happened|you did (do|complete)|you completed|you logged|the record shows you)/i;
 const SECOND_CONCESSION_RE = /\b(I was wrong|I misread|I misstated|stand corrected|you'?re right about the walk|you are right about the walk)\b/i;
 const PRAISE_RE = /\b(thank you|thanks|good answer|well done|brave|proud|breakthrough|honest answer)\b/i;
 const EVASION_RE = /\b(evad\w*|dodg\w*|not an answer|did(n't| not) answer|different question|sidestep\w*|deflect\w*|turned (it|the question|that) back)\b/i;
+// Go further is not a dispute: the reply must neither defend nor give ground.
+const HOLD_CONCEDE_RE = /\b(I concede|I was wrong|I misread|I misstated|stand corrected|you'?re (right|wrong)|you are (right|wrong)|I hold (my|the|to)|my reading stands|the reading stands|I maintain)\b/i;
+// It landed is a receipt, not an evaluation of his accepting it.
+const LANDED_PRAISE_RE = /\b(good that|glad|honest(y)?|brave|courage|step forward|progress|breakthrough|well done|thank you|thanks|proud)\b/i;
+
+// Question marks the Oracle asked, not ones inside his quoted words — the
+// closing turn is told to quote an evasion, and an evasion can be a question.
+function questionMarksAsked(raw) {
+  return (String(raw || "").replace(/"[^"\n]*"|“[^”\n]*”/g, "").match(/\?/g) || []).length;
+}
 
 // Whether the prose quotes any run of `span` consecutive words from the answer.
 function quotesSpanOf(answer, prose, span = 3) {
@@ -131,7 +170,7 @@ async function callOracle(client, { moduleName, entryText, promptContext }) {
     model: MODEL,
     max_tokens: tier ? tier.maxTokens : DEFAULT_MAX_TOKENS,
     system: buildSystem(moduleName, entryText, promptContext),
-    messages: [{ role: "user", content: buildUserPrompt(entryText, {}) }],
+    messages: [{ role: "user", content: buildUserPrompt(entryText, {}, promptContext?.key || null) }],
   });
   const raw = message.content[0]?.text || "";
   return { raw, parsed: parseOracleResponse(raw), stopReason: message.stop_reason, usage: message.usage };
@@ -153,23 +192,54 @@ function report(title, result) {
 
 // The tag counts, commitment shape and word count come from the same helper
 // the deployed function logs, so the gate certifies what the logs measure.
-function checkTurnOne(result, { expectConcession }) {
+function checkTurnOne(result, { expectConcession, expectNoHoldOrConcede }) {
   const raw = result.raw.trim();
   const shape = describeResponseShape(raw, result.parsed);
-  const questionMarks = (raw.match(/\?/g) || []).length;
+  const questionMarks = questionMarksAsked(raw);
   console.log("--- turn 1 checks ---");
   let ok = true;
   ok = check("finished with end_turn (not truncated)", result.stopReason === "end_turn", result.stopReason) && ok;
   ok = check("exactly one <closing_question> tag", shape.closingQuestionTags === 1, `found ${shape.closingQuestionTags}`) && ok;
   ok = check("the question is the last thing in the reply", /<\/closing_question>\s*$/i.test(raw)) && ok;
   ok = check("no <commitment> tag", shape.commitmentTags === 0, `found ${shape.commitmentTags}`) && ok;
-  ok = check("exactly one question mark", questionMarks === 1, `found ${questionMarks}`) && ok;
+  ok = check("exactly one question mark outside his quoted words", questionMarks === 1, `found ${questionMarks}`) && ok;
   ok = check("closing question parsed", !!result.parsed.closingQuestion) && ok;
   ok = check("reply ≤ 160 words", shape.proseWords <= 160, `${shape.proseWords} words`) && ok;
   if (expectConcession) {
     ok = check("concession language present (heuristic)", CONCESSION_RE.test(result.parsed.feedback)) && ok;
   }
+  if (expectNoHoldOrConcede) {
+    ok = check("no hold or concede language (heuristic)", !HOLD_CONCEDE_RE.test(result.parsed.feedback)) && ok;
+  }
   console.log(ok ? "TURN 1: ALL CHECKS PASSED" : "TURN 1: SOME CHECKS FAILED");
+  return ok;
+}
+
+// The landed turn: the deployed function logs the same shape fields.
+function checkLanded(result, fixture) {
+  const raw = result.raw.trim();
+  const shape = describeResponseShape(raw, result.parsed);
+  const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+  const finalLine = lines[lines.length - 1] || "";
+  const c = result.parsed.commitment;
+  const prose = result.parsed.feedback;
+  console.log("--- landed checks ---");
+  let ok = true;
+  ok = check("finished with end_turn (not truncated)", result.stopReason === "end_turn", result.stopReason) && ok;
+  ok = check("no VERDICT line", !/^[\s*#_>—-]*VERDICT:/i.test(raw) && result.parsed.verdict === null) && ok;
+  ok = check("exactly one <commitment> tag", shape.commitmentTags === 1, `found ${shape.commitmentTags}`) && ok;
+  ok = check("final line is the commitment", /<\/commitment>\s*$/i.test(raw), finalLine.slice(0, 80)) && ok;
+  ok = check("no <closing_question> tag", shape.closingQuestionTags === 0, `found ${shape.closingQuestionTags}`) && ok;
+  ok = check("no question mark outside his quoted words", questionMarksAsked(raw) === 0) && ok;
+  ok = check("commitment parsed into trigger/action/check", shape.commitmentShaped) && ok;
+  if (shape.commitmentShaped) {
+    ok = check("trigger ≤ 50 chars", c.trigger.length <= 50, `${c.trigger.length}`) && ok;
+    ok = check("action ≤ 50 chars", c.action.length <= 50, `${c.action.length}`) && ok;
+  }
+  ok = check("prose ≤ 100 words", shape.proseWords <= 100, `${shape.proseWords} words`) && ok;
+  ok = check("quotes a span of the entry (his own words)", quotesSpanOf(fixture.entry, prose)) && ok;
+  ok = check("no thanks or praise", !PRAISE_RE.test(prose) && !LANDED_PRAISE_RE.test(prose)) && ok;
+  console.log(ok ? "LANDED: ALL CHECKS PASSED" : "LANDED: SOME CHECKS FAILED");
   return ok;
 }
 
@@ -188,7 +258,7 @@ function checkTurnTwo(result, fixture) {
   ok = check("exactly one <commitment> tag", shape.commitmentTags === 1, `found ${shape.commitmentTags}`) && ok;
   ok = check("final line is the commitment", /<\/commitment>\s*$/i.test(raw), finalLine.slice(0, 80)) && ok;
   ok = check("no <closing_question> tag", shape.closingQuestionTags === 0, `found ${shape.closingQuestionTags}`) && ok;
-  ok = check("no question mark anywhere", !raw.includes("?")) && ok;
+  ok = check("no question mark outside his quoted words", questionMarksAsked(raw) === 0) && ok;
   ok = check("commitment parsed into trigger/action/check", shape.commitmentShaped) && ok;
   if (shape.commitmentShaped) {
     ok = check("trigger ≤ 50 chars", c.trigger.length <= 50, `${c.trigger.length}`) && ok;
@@ -213,17 +283,22 @@ async function main() {
   const which = (process.argv[process.argv.indexOf("--fixture") + 1] || "").toUpperCase();
   const fixture = FIXTURES[which];
   if (!fixture) {
-    console.error("Usage: node functions/scripts/followUpFixture.js --fixture A|B|C|D|E");
+    console.error("Usage: node functions/scripts/followUpFixture.js --fixture A|B|C|D|E|F|G");
     process.exit(2);
   }
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("ANTHROPIC_API_KEY is not set in the environment.");
     process.exit(2);
   }
-  const { buildFollowUpEntryText } = await import(
+  const { buildFollowUpEntryText, buildLandedEntryText } = await import(
     pathToFileURL(path.join(__dirname, "..", "..", "src", "utils", "buildFollowUpEntryText.js")).href
   );
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // A key created outside a workspace must name one on every request.
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    ...(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}),
+  });
 
   console.log(`FIXTURE ${which}: ${fixture.label}`);
   let priorReading = fixture.priorReading;
@@ -233,12 +308,26 @@ async function main() {
     priorReading = first.parsed.feedback;
   }
 
+  if (fixture.kind === "landed") {
+    const landed = await callOracle(client, {
+      moduleName: "oracle",
+      entryText: buildLandedEntryText({ entryText: fixture.entry, priorReading }),
+      promptContext: { key: "oracle_landed" },
+    });
+    report(`FIXTURE ${which} — it landed (oracle_landed)`, landed);
+    const landedOk = checkLanded(landed, fixture);
+    console.log(landedOk ? "\nFIXTURE PASSED" : "\nFIXTURE FAILED");
+    process.exit(landedOk ? 0 : 1);
+  }
+
+  const intent = fixture.kind === "further" ? "go_further" : "push_back";
+  const turnOneKey = fixture.kind === "further" ? "oracle_further" : "oracle_pushback";
   const turnOne = await callOracle(client, {
     moduleName: "oracle",
-    entryText: buildFollowUpEntryText({ entryText: fixture.entry, priorReading, pushback: fixture.pushback }),
-    promptContext: { key: "oracle_pushback" },
+    entryText: buildFollowUpEntryText({ entryText: fixture.entry, priorReading, pushback: fixture.pushback, intent }),
+    promptContext: { key: turnOneKey },
   });
-  report(`FIXTURE ${which} — turn 1 (oracle_pushback)`, turnOne);
+  report(`FIXTURE ${which} — turn 1 (${turnOneKey})`, turnOne);
   let ok = checkTurnOne(turnOne, fixture);
 
   if (fixture.answer) {
@@ -254,6 +343,7 @@ async function main() {
         pushback: fixture.pushback,
         reply: turnOne.parsed.feedback,
         answer: fixture.answer,
+        intent,
       }),
       promptContext: { key: "oracle_close" },
     });

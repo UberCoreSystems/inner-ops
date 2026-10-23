@@ -5,10 +5,11 @@ import { getAuth } from 'firebase/auth';
 import { generateAIFeedback, PROVENANCE, isRateLimitCode } from '../utils/aiFeedback';
 import {
   buildFollowUpEntryText,
+  buildLandedEntryText,
   FOLLOW_UP_ANSWER_MAX_CHARS,
   FOLLOW_UP_PUSHBACK_MAX_CHARS,
 } from '../utils/buildFollowUpEntryText';
-import { ARC_COPY, ARC_OUTCOME, arcOutcomeBadge } from '../utils/followUpArc';
+import { ARC_COPY, ARC_INTENT, ARC_OUTCOME, arcOutcomeBadge, setAsideLine, sitLine } from '../utils/followUpArc';
 import { resolveTriggeredCriterion } from '../utils/confrontationCriteria';
 import logger from '../utils/logger';
 import { memoryModuleForName } from '../utils/memoryConstants';
@@ -28,16 +29,21 @@ const MAX_REGEN = 3;
 // UTC), which is not midnight for most users.
 const LIMIT_LINE = 'Daily Oracle limit reached. Resets at 00:00 UTC.';
 
-// The "Go deeper" arc — fixed at two turns. Stages:
-//   idle      no exchange; Retry / Regenerate / Go deeper available
-//   pushback  the challenge box is open (Cancel returns to idle)
+// The follow-up arc. Stages:
+//   idle      no exchange; the responses to the reading are available
+//   pushback  his turn-1 box is open — a pushback or a direction, by intent
+//             (Cancel returns to idle)
 //   answer    the Oracle replied and asked its question; the answer box is open
 //   closed    the closing read landed, with its verdict and the commitment
 //   left      he left the question unanswered
-// `reading` is the judgment the arc answers, frozen at turn 1 so turn 2 is
-// built from the same text whatever the display shows by then.
+//   landed    "It landed": the receipt and its commitment; the arc ends here
+//   sit       "Sit with this": no call; the reading returns in SIT_DAYS
+// `intent` is which of the four responses he chose. `reading` is the judgment
+// the arc answers, frozen at turn 1 so turn 2 is built from the same text
+// whatever the display shows by then.
 const IDLE_ARC = Object.freeze({
   stage: 'idle',
+  intent: null,
   reading: null,
   pushback: null,
   reply: null,
@@ -58,12 +64,17 @@ function splitReply(reply, question) {
   return { body: body.slice(0, body.length - q.length).trimEnd(), heading: q };
 }
 
-function UserTurn({ label, text }) {
+// The reading's own voice. Every Oracle turn renders in it, so the exchange
+// reads as one voice continuing.
+const PROSE_CLASS = 'text-[#e0e0e0] text-[15px] leading-[1.75] font-light whitespace-pre-line';
+const CHOICE_CLASS = 'px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#2a2a2a] text-[#ababab] hover:border-[#3a3a3a] hover:text-white transition-all disabled:opacity-40';
+
+// His turns: an indented quote in a muted tone, no label. Not a bubble.
+function Quote({ text }) {
   return (
-    <div>
-      <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">{label}</div>
-      <div className="text-[#9a9a9a] text-sm leading-relaxed whitespace-pre-line">{text}</div>
-    </div>
+    <blockquote className="border-l-2 border-[#2a2a2a] pl-4 text-[#9a9a9a] text-[15px] leading-[1.75] font-light whitespace-pre-line">
+      {text}
+    </blockquote>
   );
 }
 
@@ -141,6 +152,15 @@ const OracleModal = ({
   // A question he leaves unanswered returns as Today's Reflection — true only
   // where the arc is persisted somewhere the dashboard reads (Journal).
   returnsToDashboard = false,
+  // The four responses to a reading — Push back, Go further, It landed, Sit
+  // with this — in place of the reaction row and Go deeper. Journal only;
+  // every other caller keeps the row.
+  intentChoices = false,
+  // Sit with this: records the deferral on the entry and resolves to the sit
+  // on record ({ count, until }). The Sit choice renders only with it.
+  onSit = null,
+  // The sit this reading is returning from, when it is ({ count, until }).
+  sitRecord = null,
   // BER-194: data-depth calibration — null = unknown (no constraint applied)
   entryCount = null,
   // BER-225: metacognitive depth classification (journal entries only)
@@ -179,6 +199,10 @@ const OracleModal = ({
   const [followUpLoading, setFollowUpLoading] = useState(false);
   // Submit is withheld until the daily Oracle limit resets.
   const [limitReached, setLimitReached] = useState(false);
+  // Which tap-only response is in flight ('landed' | 'sit'), and the sit
+  // recorded in this session ({ count, until }) once onSit resolved.
+  const [pendingChoice, setPendingChoice] = useState(null);
+  const [sitState, setSitState] = useState(null);
   // Bumped on every reset: a result that lands for an older arc is dropped.
   const arcIdRef = useRef(0);
   // Writes are chained so a slow turn-1 write can never land over turn 2.
@@ -193,6 +217,8 @@ const OracleModal = ({
     setDraft('');
     setFollowUpLoading(false);
     setLimitReached(false);
+    setPendingChoice(null);
+    setSitState(null);
   };
 
   useEffect(() => {
@@ -236,7 +262,7 @@ const OracleModal = ({
   // Each new turn scrolls into view. The answer box is never auto-focused, so
   // the phone keyboard does not open while he is still reading.
   useEffect(() => {
-    if (arc.stage === 'answer' || arc.stage === 'closed' || arc.stage === 'left') {
+    if (['answer', 'closed', 'left', 'landed', 'sit'].includes(arc.stage)) {
       latestTurnRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
     }
   }, [arc.stage]);
@@ -367,23 +393,28 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     }
   };
 
-  // Turn 1: his challenge. The Oracle holds or concedes on the record and
-  // closes on the question he answers next.
-  const handlePushbackSubmit = async () => {
+  // The Oracle's own prior reading rides along so it can hold, concede or
+  // deepen on the record — but only when that reading is Oracle output. A
+  // locally composed fallback is not a position the Oracle took.
+  const readingOnRecord = () => (displayProvenance === PROVENANCE.ORACLE ? currentFeedback : null);
+
+  // Turn 1: his pushback (the Oracle holds or concedes on the record) or his
+  // direction (the Oracle deepens from where it points). Either closes on the
+  // question he answers next.
+  const handleTurnOneSubmit = async () => {
     const pushback = draft.trim();
     if (!pushback || arc.stage !== 'pushback' || followUpLoading || !entryText) return;
-    // The Oracle's own prior reading rides along so it can hold or concede on
-    // the record — but only when that reading is Oracle output. A locally
-    // composed fallback is not a position the Oracle took.
-    const reading = displayProvenance === PROVENANCE.ORACLE ? currentFeedback : null;
+    const intent = arc.intent === ARC_INTENT.GO_FURTHER ? ARC_INTENT.GO_FURTHER : ARC_INTENT.PUSH_BACK;
+    const reading = readingOnRecord();
     const result = await runTurn(
-      'oracle_pushback',
-      buildFollowUpEntryText({ entryText, priorReading: reading, pushback })
+      intent === ARC_INTENT.GO_FURTHER ? 'oracle_further' : 'oracle_pushback',
+      buildFollowUpEntryText({ entryText, priorReading: reading, pushback, intent })
     );
     if (!result) return;
     const next = {
       ...IDLE_ARC,
       stage: 'answer',
+      intent,
       reading,
       pushback,
       reply: result.feedback,
@@ -392,6 +423,56 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     setArc(next);
     setDraft('');
     persistArc(next);
+  };
+
+  // "It landed": one turn. The Oracle writes the receipt of what he accepted
+  // and closes on the commitment. The arc ends here.
+  const handleLanded = async () => {
+    if (arc.stage !== 'idle' || followUpLoading || !entryText) return;
+    const reading = readingOnRecord();
+    setPendingChoice('landed');
+    try {
+      const result = await runTurn(
+        'oracle_landed',
+        buildLandedEntryText({ entryText, priorReading: reading })
+      );
+      if (!result) return;
+      const next = {
+        ...IDLE_ARC,
+        stage: 'landed',
+        intent: ARC_INTENT.LANDED,
+        reading,
+        reply: result.feedback,
+        commitment: result.commitment,
+      };
+      setArc(next);
+      persistArc(next);
+    } finally {
+      setPendingChoice(null);
+    }
+  };
+
+  // "Sit with this": no call. The deferral is written first, so the line only
+  // claims a return date the entry carries.
+  const handleSit = async () => {
+    if (arc.stage !== 'idle' || followUpLoading || !onSit) return;
+    const arcId = arcIdRef.current;
+    setPendingChoice('sit');
+    setFollowUpLoading(true);
+    try {
+      const sit = await onSit();
+      if (arcIdRef.current !== arcId) return;
+      setSitState(sit?.until ? sit : { count: (sitRecord?.count || 0) + 1, until: null });
+      setArc({ ...IDLE_ARC, stage: 'sit', intent: ARC_INTENT.SIT });
+    } catch (err) {
+      logger.warn('Sit not saved:', err?.message);
+      ouraToast.error('Not saved. Try again.');
+    } finally {
+      if (arcIdRef.current === arcId) {
+        setFollowUpLoading(false);
+        setPendingChoice(null);
+      }
+    }
   };
 
   // Turn 2: his answer. The Oracle judges it, closes on the commitment, and
@@ -407,6 +488,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         pushback: arc.pushback,
         reply: arc.reply,
         answer,
+        intent: arc.intent,
       })
     );
     if (!result) return;
@@ -473,6 +555,9 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   const arcStarted = arc.stage !== 'idle';
   const canRegen = !arcStarted && !isUnanswered && !!entryText && regenCount < MAX_REGEN && !regenLoading && !isCurrentlyLoading && !!currentFeedback;
   const canFollowUp = !arcStarted && !isUnanswered && !!entryText && !regenLoading && !retryLoading && !isCurrentlyLoading && !!currentFeedback;
+  // Sit needs a reading and a place to record it, and waits for any call in
+  // flight. It does not need the entry text: nothing is sent.
+  const canSit = !!onSit && !arcStarted && !isUnanswered && !!currentFeedback && !regenLoading && !retryLoading && !isCurrentlyLoading && !followUpLoading;
 
   const isLocal = displayProvenance === PROVENANCE.LOCAL && !!currentFeedback && !isCurrentlyLoading;
   const isRateLimited = isRateLimitCode(fallbackReason);
@@ -482,7 +567,14 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   const canRetry = showRetry && !!entryText && !isRateLimited && !retryLoading;
 
   const { body: replyBody, heading: questionHeading } = splitReply(arc.reply, arc.question);
+  // While the answer box is open its heading carries the question; otherwise
+  // the reply is shown whole, the question where it was asked.
+  const replyText = arc.stage === 'answer' ? replyBody : arc.reply;
   const outcomeBadge = arcOutcomeBadge(arc.outcome);
+  const sitText = arc.stage === 'sit' ? sitLine(sitState || {}) : null;
+  // The reading came back from a sit: said once, above the responses.
+  const setAsideText = intentChoices && arc.stage === 'idle' && sitRecord?.count > 0 ? setAsideLine(sitRecord) : null;
+  const goingFurther = arc.intent === ARC_INTENT.GO_FURTHER;
   // Pages that pass no onFollowUpStored discard the exchange on close, so
   // they must not claim it stays on the record.
   const leftLine = onFollowUpStored
@@ -492,12 +584,12 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   // question itself when the reply ended on it.
   const box = arc.stage === 'pushback'
     ? {
-        label: "Challenge the Oracle's assessment",
+        label: goingFurther ? 'Go further' : 'Push back',
         question: null,
         rows: 2,
         maxLength: FOLLOW_UP_PUSHBACK_MAX_CHARS,
-        placeholder: 'State your specific pushback...',
-        onSubmit: handlePushbackSubmit,
+        placeholder: goingFurther ? 'Point at the thread you want taken deeper...' : 'State your specific pushback...',
+        onSubmit: handleTurnOneSubmit,
         secondaryLabel: 'Cancel',
         onSecondary: resetArc,
         secondaryDisabled: false,
@@ -638,34 +730,33 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 {currentFeedback || 'The Oracle awaits your query...'}
               </div>
 
-              {/* The exchange. Each block names who is speaking; the newest
-                  turn scrolls into view. The question is shown once: as the
-                  heading of the answer box while it is open, at the end of the
-                  reply once the exchange has ended. */}
-              {arc.pushback && (
-                <div className="border-l-2 border-[#5a5a5a] pl-4 space-y-5" aria-live="polite">
-                  <UserTurn label={ARC_COPY.challenge} text={arc.pushback} />
-                  <div ref={arc.stage === 'answer' ? latestTurnRef : null}>
-                    <div className="text-[#858585] text-xs uppercase tracking-widest mb-2">{ARC_COPY.reflection}</div>
-                    {replyBody && (
-                      <div className="text-[#c0c0c0] text-sm leading-relaxed font-light whitespace-pre-line">{replyBody}</div>
-                    )}
-                    {questionHeading && arc.stage !== 'answer' && (
-                      <div className="text-[#d1d1d1] text-sm leading-relaxed mt-2">{questionHeading}</div>
-                    )}
-                  </div>
-                  {arc.answer && <UserTurn label={ARC_COPY.answer} text={arc.answer} />}
+              {/* He set this reading aside; it is back. */}
+              {setAsideText && (
+                <p className="text-[#858585] text-xs leading-relaxed">{setAsideText}</p>
+              )}
+
+              {/* The exchange, one column: his turns as indented quotes, the
+                  Oracle's replies in the reading's own voice. The newest turn
+                  scrolls into view. The question is shown once: as the heading
+                  of the answer box while it is open, at the end of the reply
+                  once the exchange has ended. */}
+              {(arc.pushback || arc.reply) && (
+                <div className="space-y-5" aria-live="polite">
+                  {arc.pushback && <Quote text={arc.pushback} />}
+                  {replyText && (
+                    <div ref={arc.stage === 'answer' || arc.stage === 'landed' ? latestTurnRef : null} className={PROSE_CLASS}>
+                      {replyText}
+                    </div>
+                  )}
+                  {arc.answer && <Quote text={arc.answer} />}
                   {arc.close && (
                     <div ref={arc.stage === 'closed' ? latestTurnRef : null}>
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-[#858585] text-xs uppercase tracking-widest">{ARC_COPY.closingRead}</span>
-                        {outcomeBadge && (
-                          <span className="text-[10px] uppercase tracking-widest" style={{ color: outcomeBadge.color }}>
-                            {outcomeBadge.label}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[#c0c0c0] text-sm leading-relaxed font-light whitespace-pre-line">{arc.close}</div>
+                      <div className={PROSE_CLASS}>{arc.close}</div>
+                      {outcomeBadge && (
+                        <div className="mt-2 text-[10px] uppercase tracking-widest" style={{ color: outcomeBadge.color }}>
+                          {outcomeBadge.label}
+                        </div>
+                      )}
                     </div>
                   )}
                   {/* The commitment the exchange closed on, lifted out of the
@@ -692,7 +783,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 </div>
               )}
 
-              {/* The arc's input box: the challenge (turn 1) or the answer (turn 2) */}
+              {sitText && (
+                <p ref={latestTurnRef} className="text-[#858585] text-xs leading-relaxed" aria-live="polite">{sitText}</p>
+              )}
+
+              {/* The arc's input box: his pushback or direction (turn 1) or the answer (turn 2) */}
               {box && (
                 <div className="space-y-3">
                   {box.question ? (
@@ -734,8 +829,49 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 </div>
               )}
 
-              {/* BER-136: Retry + Regenerate + Go deeper — only before an exchange starts */}
-              {currentFeedback && !arcStarted && (canRegen || canFollowUp || showRetry) && (
+              {/* The four responses to the reading (Journal). Push back and Go
+                  further open the box; It landed is one call; Sit with this is
+                  none. Gone once the exchange starts. */}
+              {intentChoices && !arcStarted && !!currentFeedback && !isUnanswered && !isCurrentlyLoading && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setArc({ ...IDLE_ARC, stage: 'pushback', intent: ARC_INTENT.PUSH_BACK })}
+                    disabled={!canFollowUp || followUpLoading}
+                    className={CHOICE_CLASS}
+                  >
+                    Push back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setArc({ ...IDLE_ARC, stage: 'pushback', intent: ARC_INTENT.GO_FURTHER })}
+                    disabled={!canFollowUp || followUpLoading}
+                    className={CHOICE_CLASS}
+                  >
+                    Go further
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLanded}
+                    disabled={!canFollowUp || followUpLoading}
+                    className={CHOICE_CLASS}
+                  >
+                    {pendingChoice === 'landed' ? 'Reading...' : 'It landed'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSit}
+                    disabled={!canSit}
+                    className={CHOICE_CLASS}
+                  >
+                    {pendingChoice === 'sit' ? 'Saving...' : 'Sit with this'}
+                  </button>
+                </div>
+              )}
+
+              {/* BER-136: Retry + Regenerate, and Go deeper where the four
+                  responses are not offered — only before an exchange starts */}
+              {currentFeedback && !arcStarted && (canRegen || (canFollowUp && !intentChoices) || showRetry) && (
                 <div className="flex gap-2 flex-wrap">
                   {showRetry && (
                     <button
@@ -755,9 +891,9 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                       {regenLoading ? 'Regenerating...' : `Regenerate · ${MAX_REGEN - regenCount} of ${MAX_REGEN} remaining`}
                     </button>
                   )}
-                  {canFollowUp && (
+                  {canFollowUp && !intentChoices && (
                     <button
-                      onClick={() => setArc({ ...IDLE_ARC, stage: 'pushback' })}
+                      onClick={() => setArc({ ...IDLE_ARC, stage: 'pushback', intent: ARC_INTENT.PUSH_BACK })}
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-transparent border border-[#1a1a1a] text-[#858585] hover:border-[#2a2a2a] hover:text-[#ababab] transition-all"
                     >
                       Go deeper
@@ -766,40 +902,46 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                 </div>
               )}
 
-              {/* Divider */}
-              <div className="border-t border-[#1a1a1a]" />
+              {/* The reaction row — every surface but Journal, where the four
+                  responses above replace it. */}
+              {!intentChoices && (
+                <>
+                  {/* Divider */}
+                  <div className="border-t border-[#1a1a1a]" />
 
-              {/* Reactions — about the reading, not the last turn */}
-              {currentFeedback && (
-                <div>
-                  <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">How did the reading land?</div>
-                  <div className="flex flex-wrap gap-2">
-                    {REACTIONS.map((r) => {
-                      const isSelected = selectedReaction === r.id;
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => handleReaction(r.id)}
-                          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-                            isSelected
-                              ? ''
-                              : 'bg-transparent border border-[#1a1a1a] text-[#858585] hover:border-[#2a2a2a] hover:text-[#ababab]'
-                          }`}
-                          style={isSelected ? {
-                            backgroundColor: `${r.color}12`,
-                            borderWidth: 1,
-                            borderStyle: 'solid',
-                            borderColor: `${r.color}40`,
-                            color: r.color,
-                          } : undefined}
-                        >
-                          <span className="text-[10px]">{r.icon}</span>
-                          {r.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                  {/* Reactions — about the reading, not the last turn */}
+                  {currentFeedback && (
+                    <div>
+                      <div className="text-[#858585] text-xs uppercase tracking-widest mb-3">How did the reading land?</div>
+                      <div className="flex flex-wrap gap-2">
+                        {REACTIONS.map((r) => {
+                          const isSelected = selectedReaction === r.id;
+                          return (
+                            <button
+                              key={r.id}
+                              onClick={() => handleReaction(r.id)}
+                              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                                isSelected
+                                  ? ''
+                                  : 'bg-transparent border border-[#1a1a1a] text-[#858585] hover:border-[#2a2a2a] hover:text-[#ababab]'
+                              }`}
+                              style={isSelected ? {
+                                backgroundColor: `${r.color}12`,
+                                borderWidth: 1,
+                                borderStyle: 'solid',
+                                borderColor: `${r.color}40`,
+                                color: r.color,
+                              } : undefined}
+                            >
+                              <span className="text-[10px]">{r.icon}</span>
+                              {r.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Close */}
