@@ -78,6 +78,43 @@ function Quote({ text }) {
   );
 }
 
+// The Oracle at work: two counter-rotating rings. Full size while the first
+// reading is written; compact inside the exchange while a turn is read.
+function Ring({ compact = false }) {
+  const inset = compact ? 'inset-[3px]' : 'inset-[6px]';
+  return (
+    <div className={`relative ${compact ? 'w-7 h-7' : 'w-16 h-16 mb-6'}`} aria-hidden="true">
+      <div className="absolute inset-0 rounded-full border border-[#2a2a2a]" />
+      <div
+        className="absolute inset-0 rounded-full border border-[#d1d1d1]"
+        style={{
+          borderTopColor: 'transparent',
+          borderRightColor: 'transparent',
+          animation: 'spin 2s linear infinite',
+        }}
+      />
+      <div className={`absolute ${inset} rounded-full border border-[#1a1a1a]`} />
+      <div
+        className={`absolute ${inset} rounded-full border border-[#5a5a5a]`}
+        style={{
+          borderBottomColor: 'transparent',
+          borderLeftColor: 'transparent',
+          animation: 'spin 3s linear infinite reverse',
+        }}
+      />
+    </div>
+  );
+}
+
+// A turn is being read. Sits in the exchange where the reply will land, so the
+// column reads: he spoke, the Oracle is reading, it answered.
+const ReadingIndicator = ({ innerRef }) => (
+  <div ref={innerRef} className="flex items-center gap-3 py-1" role="status" aria-live="polite">
+    <Ring compact />
+    <span className="text-[#858585] text-xs uppercase tracking-widest">Reading</span>
+  </div>
+);
+
 // BER-136: call oracle CF directly for regen/follow-up.
 // BER-229: accept entryModuleName so journal regen gets DEPTH instruction from CF.
 // Finding 3 remediation: the system-prompt fragment is now requested by key,
@@ -196,6 +233,9 @@ const OracleModal = ({
   // The "Go deeper" arc (see IDLE_ARC).
   const [arc, setArc] = useState(IDLE_ARC);
   const [draft, setDraft] = useState('');
+  // The text turn the Oracle is reading. It leaves the box the moment it is
+  // sent and shows as his quote; on failure it returns to the box.
+  const [sentTurn, setSentTurn] = useState(null);
   const [followUpLoading, setFollowUpLoading] = useState(false);
   // Submit is withheld until the daily Oracle limit resets.
   const [limitReached, setLimitReached] = useState(false);
@@ -203,6 +243,9 @@ const OracleModal = ({
   // recorded in this session ({ count, until }) once onSit resolved.
   const [pendingChoice, setPendingChoice] = useState(null);
   const [sitState, setSitState] = useState(null);
+  // An Oracle turn is in flight: his sent text or It landed. The box and the
+  // choices step aside and the exchange shows the Oracle reading.
+  const turnInFlight = sentTurn !== null || pendingChoice === 'landed';
   // Bumped on every reset: a result that lands for an older arc is dropped.
   const arcIdRef = useRef(0);
   // Writes are chained so a slow turn-1 write can never land over turn 2.
@@ -215,6 +258,7 @@ const OracleModal = ({
     arcIdRef.current += 1;
     setArc(IDLE_ARC);
     setDraft('');
+    setSentTurn(null);
     setFollowUpLoading(false);
     setLimitReached(false);
     setPendingChoice(null);
@@ -262,10 +306,10 @@ const OracleModal = ({
   // Each new turn scrolls into view. The answer box is never auto-focused, so
   // the phone keyboard does not open while he is still reading.
   useEffect(() => {
-    if (['answer', 'closed', 'left', 'landed', 'sit'].includes(arc.stage)) {
+    if (turnInFlight || ['answer', 'closed', 'left', 'landed', 'sit'].includes(arc.stage)) {
       latestTurnRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
     }
-  }, [arc.stage]);
+  }, [arc.stage, turnInFlight]);
 
   const generateOracleFeedback = async () => {
     if (!target || !moduleName) return;
@@ -393,6 +437,19 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     }
   };
 
+  // A text turn. His words leave the box as soon as they are sent and stand in
+  // the exchange while the Oracle reads them; a failed call puts them back.
+  const sendTurn = async (text, key, turnEntryText) => {
+    const arcId = arcIdRef.current;
+    setSentTurn(text);
+    setDraft('');
+    const result = await runTurn(key, turnEntryText);
+    if (arcIdRef.current !== arcId) return null;
+    setSentTurn(null);
+    if (!result) setDraft(text);
+    return result;
+  };
+
   // The Oracle's own prior reading rides along so it can hold, concede or
   // deepen on the record — but only when that reading is Oracle output. A
   // locally composed fallback is not a position the Oracle took.
@@ -406,7 +463,8 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     if (!pushback || arc.stage !== 'pushback' || followUpLoading || !entryText) return;
     const intent = arc.intent === ARC_INTENT.GO_FURTHER ? ARC_INTENT.GO_FURTHER : ARC_INTENT.PUSH_BACK;
     const reading = readingOnRecord();
-    const result = await runTurn(
+    const result = await sendTurn(
+      pushback,
       intent === ARC_INTENT.GO_FURTHER ? 'oracle_further' : 'oracle_pushback',
       buildFollowUpEntryText({ entryText, priorReading: reading, pushback, intent })
     );
@@ -421,7 +479,6 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       question: result.closingQuestion,
     };
     setArc(next);
-    setDraft('');
     persistArc(next);
   };
 
@@ -480,7 +537,8 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   const handleAnswerSubmit = async () => {
     const answer = draft.trim();
     if (!answer || arc.stage !== 'answer' || followUpLoading || !entryText) return;
-    const result = await runTurn(
+    const result = await sendTurn(
+      answer,
       'oracle_close',
       buildFollowUpEntryText({
         entryText,
@@ -501,7 +559,6 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       outcome: result.verdict,
     };
     setArc(next);
-    setDraft('');
     persistArc(next);
   };
 
@@ -569,7 +626,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
   const { body: replyBody, heading: questionHeading } = splitReply(arc.reply, arc.question);
   // While the answer box is open its heading carries the question; otherwise
   // the reply is shown whole, the question where it was asked.
-  const replyText = arc.stage === 'answer' ? replyBody : arc.reply;
+  const replyText = arc.stage === 'answer' && !turnInFlight ? replyBody : arc.reply;
   const outcomeBadge = arcOutcomeBadge(arc.outcome);
   const sitText = arc.stage === 'sit' ? sitLine(sitState || {}) : null;
   // The reading came back from a sit: said once, above the responses.
@@ -581,8 +638,10 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
     ? `${ARC_COPY.leftUnanswered} It stays on the record${returnsToDashboard ? ' and comes back on the dashboard' : ''}.`
     : ARC_COPY.leftUnanswered;
   // The arc's one input box, by stage. The answer box is headed by the
-  // question itself when the reply ended on it.
-  const box = arc.stage === 'pushback'
+  // question itself when the reply ended on it. Gone while a turn is read.
+  const box = turnInFlight
+    ? null
+    : arc.stage === 'pushback'
     ? {
         label: goingFurther ? 'Go further' : 'Push back',
         question: null,
@@ -647,27 +706,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
-              {/* Breathing ring */}
-              <div className="relative w-16 h-16 mb-6">
-                <div className="absolute inset-0 rounded-full border border-[#2a2a2a]" />
-                <div
-                  className="absolute inset-0 rounded-full border border-[#d1d1d1]"
-                  style={{
-                    borderTopColor: 'transparent',
-                    borderRightColor: 'transparent',
-                    animation: 'spin 2s linear infinite',
-                  }}
-                />
-                <div className="absolute inset-[6px] rounded-full border border-[#1a1a1a]" />
-                <div
-                  className="absolute inset-[6px] rounded-full border border-[#5a5a5a]"
-                  style={{
-                    borderBottomColor: 'transparent',
-                    borderLeftColor: 'transparent',
-                    animation: 'spin 3s linear infinite reverse',
-                  }}
-                />
-              </div>
+              <Ring />
               <div className="text-[#858585] text-xs uppercase tracking-widest">Reading</div>
             </div>
           ) : (
@@ -740,15 +779,19 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   scrolls into view. The question is shown once: as the heading
                   of the answer box while it is open, at the end of the reply
                   once the exchange has ended. */}
-              {(arc.pushback || arc.reply) && (
+              {(arc.pushback || arc.reply || turnInFlight) && (
                 <div className="space-y-5" aria-live="polite">
-                  {arc.pushback && <Quote text={arc.pushback} />}
+                  {(arc.pushback || (sentTurn !== null && arc.stage === 'pushback')) && (
+                    <Quote text={arc.pushback || sentTurn} />
+                  )}
                   {replyText && (
-                    <div ref={arc.stage === 'answer' || arc.stage === 'landed' ? latestTurnRef : null} className={PROSE_CLASS}>
+                    <div ref={!turnInFlight && (arc.stage === 'answer' || arc.stage === 'landed') ? latestTurnRef : null} className={PROSE_CLASS}>
                       {replyText}
                     </div>
                   )}
-                  {arc.answer && <Quote text={arc.answer} />}
+                  {(arc.answer || (sentTurn !== null && arc.stage === 'answer')) && (
+                    <Quote text={arc.answer || sentTurn} />
+                  )}
                   {arc.close && (
                     <div ref={arc.stage === 'closed' ? latestTurnRef : null}>
                       <div className={PROSE_CLASS}>{arc.close}</div>
@@ -780,6 +823,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                   {arc.stage === 'left' && (
                     <p ref={latestTurnRef} className="text-[#858585] text-xs leading-relaxed">{leftLine}</p>
                   )}
+                  {turnInFlight && <ReadingIndicator innerRef={latestTurnRef} />}
                 </div>
               )}
 
@@ -816,7 +860,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                       disabled={!canSubmit}
                       className="flex-1 py-2.5 text-sm font-medium rounded-xl transition-all bg-[#1a1a1a] border border-[#2a2a2a] text-[#ababab] hover:text-white disabled:opacity-40"
                     >
-                      {followUpLoading ? 'Processing...' : 'Submit'}
+                      Submit
                     </button>
                     <button
                       onClick={box.onSecondary}
@@ -831,8 +875,8 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
               {/* The four responses to the reading (Journal). Push back and Go
                   further open the box; It landed is one call; Sit with this is
-                  none. Gone once the exchange starts. */}
-              {intentChoices && !arcStarted && !!currentFeedback && !isUnanswered && !isCurrentlyLoading && (
+                  none. Gone once the exchange starts or a turn is in flight. */}
+              {intentChoices && !arcStarted && !turnInFlight && !!currentFeedback && !isUnanswered && !isCurrentlyLoading && (
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -856,7 +900,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
                     disabled={!canFollowUp || followUpLoading}
                     className={CHOICE_CLASS}
                   >
-                    {pendingChoice === 'landed' ? 'Reading...' : 'It landed'}
+                    It landed
                   </button>
                   <button
                     type="button"
@@ -871,7 +915,7 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
               {/* BER-136: Retry + Regenerate, and Go deeper where the four
                   responses are not offered — only before an exchange starts */}
-              {currentFeedback && !arcStarted && (canRegen || (canFollowUp && !intentChoices) || showRetry) && (
+              {currentFeedback && !arcStarted && !turnInFlight && (canRegen || (canFollowUp && !intentChoices) || showRetry) && (
                 <div className="flex gap-2 flex-wrap">
                   {showRetry && (
                     <button
