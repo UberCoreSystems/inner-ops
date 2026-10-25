@@ -186,6 +186,7 @@ export default function HardLessons() {
           ...(data.extractedLesson ? { extractedLesson: data.extractedLesson } : {}),
           ...(data.ruleGoingForward ? { ruleGoingForward: data.ruleGoingForward } : {}),
           ...(data.sourceJournalId ? { sourceJournalId: data.sourceJournalId } : {}),
+          ...(data.sourceSignalId ? { sourceSignalId: data.sourceSignalId } : {}),
           ...(data.isOracleExtracted ? { isOracleExtracted: true } : {}),
           ...(data.isOracleFailed ? { isOracleFailed: true } : {}),
         }));

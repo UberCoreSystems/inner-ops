@@ -14,7 +14,7 @@ import { computeDepthTrend } from '../utils/computeDepthTrend';
 import { composeSeededPreview } from '../utils/composeSeededPreview';
 import { getUserProfile } from '../utils/userProfile';
 import { formatDriftSignalText } from '../utils/relapseTaxonomy';
-import { RELAPSE_ENTRY_TYPES } from '../utils/schema';
+import { getLastBreakMs } from '../utils/ruleState';
 import { localDateKey, parseDateOnlyLocal, parseDate } from '../utils/dateUtils';
 import SignalReport from '../components/SignalReport';
 import BehavioralRecord from '../components/BehavioralRecord';
@@ -64,7 +64,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     journalEntries: 0,
     relapseEntries: 0,
-    streakDays: 0,
+    daysSinceLastRuleBreak: null,
     killTargets: 0,
     hardLessons: 0
   });
@@ -251,20 +251,15 @@ export default function Dashboard() {
         hardLessons: hardLessons.length
       });
 
-      // Days since last ACTUAL relapse — entries flagged entryType: 'relapse'
-      // only. Precursor signals do not count (they are early-warning logs,
-      // not relapse events). Null when no actual relapse has ever been
-      // logged, which prevents the early-warning tile from claiming "Recent
-      // relapse within 72 hours" for users who have never relapsed.
-      let streakDays = null;
-      const actualRelapses = relapseEntries.filter(
-        e => e.entryType === RELAPSE_ENTRY_TYPES.RELAPSE
-      );
-      if (actualRelapses.length > 0) {
-        const lastRelapse = new Date(actualRelapses[0].createdAt);
-        const today = new Date();
-        streakDays = Math.max(0, Math.floor((today - lastRelapse) / (1000 * 60 * 60 * 24)));
-      }
+      // Days since the last rule break — the newest Hard Lesson violation
+      // across every lesson (ruleState.js folds both break representations).
+      // Signals are precursors, not events, so they never count. Null when no
+      // rule was ever broken, which keeps the early-warning tile from claiming
+      // a recent break for users who never logged one.
+      const lastBreakMs = getLastBreakMs(hardLessons);
+      const daysSinceLastRuleBreak = lastBreakMs
+        ? Math.max(0, Math.floor((Date.now() - lastBreakMs) / (1000 * 60 * 60 * 24)))
+        : null;
 
       // Kills are MOVED to confirmedKills on close (KillList archive model),
       // so the live killTargets collection never counts them. All-time killed
@@ -279,7 +274,7 @@ export default function Dashboard() {
         journalEntries: journalEntries.length,  // All-time total
         journalEntriesTotal: journalEntries.length,
         relapseEntries: relapseEntries.length,
-        streakDays,
+        daysSinceLastRuleBreak,
         killTargets: contractsKilled,  // All-time killed contracts
         killTargetsTotal: contractsTotal,
         hardLessons: hardLessons.length,  // All-time total
@@ -303,7 +298,7 @@ export default function Dashboard() {
           journalEntries: journalEntries.length,
           relapseEntries: relapseEntries.length,
           killTargets: killTargets.length,
-          streakDays
+          daysSinceLastRuleBreak
         },
         recentEntries: allEntries.length
       });
@@ -375,7 +370,7 @@ export default function Dashboard() {
           });
           const negativeCount = moodDots.filter(m => m === 'red').length;
           const last5negative = moodDots.slice(0, 5).filter(m => m === 'red').length;
-          const daysSinceRelapse = stats.streakDays;
+          const daysSinceRuleBreak = stats.daysSinceLastRuleBreak;
           const daysSinceJournal = recentJournal.length > 0 ? (() => {
             const raw = recentJournal[0].createdAt;
             const d = raw?.toDate ? raw.toDate() : new Date(raw);
@@ -384,13 +379,13 @@ export default function Dashboard() {
 
           let level = 'clear';
           const signals = [];
-          if (daysSinceRelapse !== null && daysSinceRelapse < 3) { level = 'high'; signals.push('Recent relapse within 72 hours'); }
+          if (daysSinceRuleBreak !== null && daysSinceRuleBreak < 3) { level = 'high'; signals.push('Rule broken within 72 hours'); }
           if (last5negative >= 3) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Predominantly negative mood over last 5 entries'); }
           if (daysSinceJournal >= 5) { level = level === 'high' ? 'high' : 'elevated'; signals.push(`No journal entry in ${daysSinceJournal} days`); }
-          if (negativeCount >= 2 && daysSinceRelapse !== null && daysSinceRelapse < 14) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Negative mood pattern following recent relapse'); }
+          if (negativeCount >= 2 && daysSinceRuleBreak !== null && daysSinceRuleBreak < 14) { level = level === 'high' ? 'high' : 'elevated'; signals.push('Negative mood pattern following a rule break'); }
 
           if (level !== 'clear' && recentJournal.length >= 3) {
-            setEarlyWarning({ level, signals, moodDots, daysSinceRelapse, daysSinceJournal });
+            setEarlyWarning({ level, signals, moodDots, daysSinceRuleBreak, daysSinceJournal });
           }
 
           // Mirror drift signals into the existing Drift Warning banner.
@@ -407,7 +402,7 @@ export default function Dashboard() {
       return () => clearTimeout(timer);
     }
     // Recompute only when load state / raw data changes. composingReport is a
-    // re-entrancy guard; user?.uid and stats.streakDays are read from the same
+    // re-entrancy guard; user?.uid and stats.daysSinceLastRuleBreak are read from the same
     // render. Depending on them would thrash this callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, rawUserData]);
@@ -559,8 +554,8 @@ export default function Dashboard() {
 
         {/* Signal Debrief — signals whose 48h window passed unresolved.
             Prop-driven off rawUserData so an answer patches dashboard state in
-            place; "It landed" bridges into the relapse flow via sessionStorage
-            (Relapse.jsx remounts RelapseRadar, so router state won't survive). */}
+            place; the card owns both writes. "It landed" stashes the Hard
+            Lessons prefill from the signal and this surface moves there. */}
         {rawUserData && (
           <SignalDebriefCard
             entries={rawUserData.relapseEntries || []}
@@ -573,12 +568,7 @@ export default function Dashboard() {
                 ),
               } : prev);
             }}
-            onLanded={(entry) => {
-              try {
-                sessionStorage.setItem('signal_debrief_landed', JSON.stringify({ originSignalId: entry.id }));
-              } catch { /* ignore storage errors */ }
-              navigate('/relapse');
-            }}
+            onLanded={() => navigate('/hardlessons')}
           />
         )}
 
@@ -714,9 +704,9 @@ export default function Dashboard() {
                       {earlyWarning.level === 'high' ? 'High Risk' :
                        earlyWarning.level === 'elevated' ? 'Elevated Risk' : 'On Track'}
                     </span>
-                    {earlyWarning.daysSinceRelapse !== null && (
+                    {earlyWarning.daysSinceRuleBreak !== null && (
                       <span className="text-[#858585] text-xs">
-                        {earlyWarning.daysSinceRelapse === 0 ? 'relapsed today' : `${earlyWarning.daysSinceRelapse}d since last relapse`}
+                        {earlyWarning.daysSinceRuleBreak === 0 ? 'rule broken today' : `${earlyWarning.daysSinceRuleBreak}d since last rule break`}
                       </span>
                     )}
                   </div>

@@ -1,12 +1,12 @@
 /**
  * buildProtocolEntry — pure builder for a Protocol run logged from The Signal.
  * Produces a relapseEntries doc so an interrupted urge sits in the record
- * beside the signals and relapses it belongs with.
+ * beside the signals it belongs with.
  *
  * Design constraints:
- *   - entryType is always 'signal', never 'relapse'. The protocol is a fast
- *     path and must not be able to log a confirmed relapse (which would let it
- *     farm relapse-based reads). The full wizard remains the only path there.
+ *   - It is a signal like every other relapseEntries doc, and it writes no
+ *     resolution: a run opens the same 48h debrief window a wizard signal
+ *     does. Whether it held or landed is the user's call afterward.
  *   - selectedSelf (archetype) and precursorConditions stay empty;
  *     detectDriftSignals skips empty-archetype entries, so a run feeds
  *     density/recency reads without corrupting archetype-streak detection.
@@ -22,7 +22,7 @@
  * @param {string} nowISO — ISO timestamp for the event (injected for testability).
  * @returns {object} a relapseEntries doc.
  */
-import { RELAPSE_ENTRY_TYPES, RELAPSE_FIELDS } from './schema.js';
+import { RELAPSE_FIELDS } from './schema.js';
 
 export const PROTOCOL_TOOL_IDS = Object.freeze(['grounding', 'breathing', 'cold', 'movement']);
 
@@ -47,7 +47,6 @@ export function buildProtocolEntry(run = {}, nowISO) {
   const breathingCycles = Number.isFinite(cycles) && cycles > 0 ? Math.floor(cycles) : 0;
 
   return {
-    entryType: RELAPSE_ENTRY_TYPES.SIGNAL,
     selectedSelf: '',
     selectedHabits: [],
     substanceUse: [],

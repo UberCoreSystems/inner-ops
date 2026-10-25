@@ -90,7 +90,7 @@ test('activeDuration (calendar age) is NEVER used for held tiers', () => {
 
 // ─── autopsies & analyses ───────────────────────────────────────────────────
 
-test('autopsies count escape analyses across live + confirmed targets, plus relapse reflections', () => {
+test('autopsies count escape analyses across live + confirmed targets, plus written after-action reviews', () => {
   const killTargets = [
     { escapeData: [{ context: 'saw the urge coming' }, { rationalization: 'told myself once' }] },
     { escapeData: [{}] },                       // blank entry — not counted
@@ -99,14 +99,20 @@ test('autopsies count escape analyses across live + confirmed targets, plus rela
   const confirmedKills = [
     { escapeData: [{ context: 'escaped once before the kill' }] },
   ];
-  const relapseEntries = [
-    { entryType: 'relapse', reflection: 'went back to the pattern; the trigger was isolation' },
-    { entryType: 'relapse', reflection: '   ' },   // blank reflection — not counted
-    { entryType: 'signal', reflection: 'early warning only' }, // not an actual relapse
+  const hardLessons = [
+    { isFinalized: true, ruleGoingForward: 'no phone in bed', violations: [
+      { date: daysAgo(10), resolvedAt: daysAgo(9), cause: 'took it upstairs', correction: 'charger stays downstairs' }, // written
+      { date: daysAgo(3) },                                   // unresolved, nothing written — not counted
+      { date: daysAgo(20), note: 'legacy free-text review' }, // legacy note counts as written
+    ] },
+    { isFinalized: true, ruleGoingForward: 'send the email first', violations: [
+      { date: daysAgo(1), resolvedAt: daysAgo(1), cause: '  ', correction: '' }, // stamped but blank — not counted
+    ] },
   ];
-  const r = computeBehavioralRecord({ killTargets, confirmedKills, relapseEntries }, NOW);
-  // 3 escape autopsies (2+0+1 live) + 1 confirmed + 1 relapse analysis = 5
-  assert.equal(r.execution.autopsies, 5);
+  const relapseEntries = [{ reflection: 'early warning only' }]; // signals are precursors, never autopsies
+  const r = computeBehavioralRecord({ killTargets, confirmedKills, relapseEntries, hardLessons }, NOW);
+  // 3 escape autopsies (2+0+1 live) + 1 confirmed + 2 written reviews = 6
+  assert.equal(r.execution.autopsies, 6);
 });
 
 // ─── rules finalized & held ─────────────────────────────────────────────────
@@ -184,7 +190,7 @@ test('malformed inputs never throw', () => {
     confirmedKills: [null, {}, { streak: 'x' }],
     hardLessons: [null, {}],
     journalEntries: [null, {}],
-    relapseEntries: [null, { entryType: 'relapse' }],
+    relapseEntries: [null, {}],
     syntheses: [null, {}, { type: 'reckoning', meta: null }],
   }, NOW));
 });

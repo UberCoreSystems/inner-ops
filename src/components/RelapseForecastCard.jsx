@@ -14,7 +14,7 @@ import logger from '../utils/logger';
  * RelapseForecastCard — forward-looking confrontation for Relapse Radar.
  *
  * Surfaces ONLY when computeRelapseForecast fires (known antecedents of past
- * relapses are converging in the current window). The Oracle is called at most
+ * rule breaks are converging in the current window). The Oracle is called at most
  * once per convergence event: tap-to-fire (never on mount/render), deduped via
  * the confrontations signalKey so it shares the daily Oracle pool responsibly.
  * Below the trust gate (insufficient-signal) it renders nothing.
@@ -22,7 +22,6 @@ import logger from '../utils/logger';
 
 const ANTECEDENT_LABELS = {
   'relapse:signal': 'a relapse precursor signal',
-  'relapse:relapse': 'a relapse',
   'hardlesson:violation': 'breaking a hard-earned rule',
   'killlist:escape': 'a Kill List escape',
   'killlist:checkin_broke': 'a failed Kill List check-in',
@@ -48,8 +47,8 @@ function buildForecastEntryText(activeAntecedents, convergencePoint, countdownTe
   // cite them (the template forbids inventing numbers not present in the entry).
   const cd = countdownText ? ` ${countdownText}` : '';
   return (
-    `Pre-failure check. These antecedents of my past relapses are active right now: ${list}.` +
-    `${cd}${conv} No relapse has happened yet — this is the window before it.`
+    `Pre-failure check. These antecedents of my past rule breaks are active right now: ${list}.` +
+    `${cd}${conv} No rule has broken yet — this is the window before it.`
   );
 }
 
@@ -118,7 +117,7 @@ export default function RelapseForecastCard({ relapseEntries = [], killTargets =
   const headline = useMemo(() => {
     if (!forecast.fired) return '';
     const phrases = forecast.activeAntecedents.map(antecedentPhrase).filter(Boolean);
-    return `${phrases.length} known antecedent${phrases.length === 1 ? '' : 's'} of your past relapses ${phrases.length === 1 ? 'is' : 'are'} active right now: ${phrases.join('; ')}.`;
+    return `${phrases.length} known antecedent${phrases.length === 1 ? '' : 's'} of your past rule breaks ${phrases.length === 1 ? 'is' : 'are'} active right now: ${phrases.join('; ')}.`;
   }, [forecast]);
 
   // Convergence countdown — the forward projection ("the window opens in ~D days")

@@ -119,9 +119,9 @@ async function seedModules(db, uid) {
 
   // --- The Signal (relapseEntries) ---
   const signals = [
-    { entryType: 'signal', selectedSelf: 'The Self-Saboteur', selectedHabits: ['Isolation', 'Overthinking'], substanceUse: [], reflection: 'Isolated all weekend. Started rationalizing skipping the launch call.', precursorConditions: ['Isolated', 'High stress'], entryProximityFlag: 'contemporaneous', oracleFeedback: 'You called it isolation. It was avoidance wearing a quieter name.', ts: 2 },
-    { entryType: 'relapse', selectedSelf: 'The Addict', selectedHabits: ['Excessive social media scrolling'], substanceUse: [], reflection: 'Fell back into the 2am scroll after eight clean days.', precursorConditions: ['Late night', 'Bored'], entryProximityFlag: 'retrospective', ts: 5 },
-    { entryType: 'signal', selectedSelf: 'The Procrastinator', selectedHabits: ['Avoiding responsibilities'], substanceUse: [], reflection: 'Reorganized my desk instead of doing the one hard task.', precursorConditions: ['Task ambiguity'], entryProximityFlag: 'contemporaneous', ts: 8 },
+    { selectedSelf: 'The Self-Saboteur', selectedHabits: ['Isolation', 'Overthinking'], substanceUse: [], reflection: 'Isolated all weekend. Started rationalizing skipping the launch call.', precursorConditions: ['Isolated', 'High stress'], entryProximityFlag: 'contemporaneous', oracleFeedback: 'You called it isolation. It was avoidance wearing a quieter name.', ts: 2 },
+    { selectedSelf: 'The Addict', selectedHabits: ['Excessive social media scrolling'], substanceUse: [], reflection: 'Second night reaching for the 2am scroll. Calling it tiredness.', precursorConditions: ['Late night', 'Bored'], entryProximityFlag: 'retrospective', ts: 5 },
+    { selectedSelf: 'The Procrastinator', selectedHabits: ['Avoiding responsibilities'], substanceUse: [], reflection: 'Reorganized my desk instead of doing the one hard task.', precursorConditions: ['Task ambiguity'], entryProximityFlag: 'contemporaneous', ts: 8 },
   ];
   for (const s of signals) {
     const { ts, ...rest } = s;

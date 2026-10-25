@@ -14,7 +14,7 @@
  *   - Deterministic given input — no AI calls.
  */
 
-import { RELAPSE_FIELDS, RELAPSE_ENTRY_TYPES, KILL_TARGET_FIELDS } from './schema.js';
+import { RELAPSE_FIELDS, KILL_TARGET_FIELDS } from './schema.js';
 import { resolveArchetypeLabel } from './relapseTaxonomy.js';
 import { parseDateOnlyLocal, parseDate } from './dateUtils.js';
 
@@ -90,10 +90,7 @@ export function composeMirrorReading(input = {}) {
     const ts = getEntryTimestamp(e);
     return Number.isFinite(ts) && ts > fourteenDaysAgo;
   });
-  const confirmedRelapses14d = recent14d.filter(
-    (e) => e?.[RELAPSE_FIELDS.ENTRY_TYPE] === RELAPSE_ENTRY_TYPES.RELAPSE
-  );
-  const signalCount14d = recent14d.length - confirmedRelapses14d.length;
+  const signalCount14d = recent14d.length;
   const archetypeCounts = {};
   recent14d.forEach((e) => {
     const a = e?.[RELAPSE_FIELDS.ARCHETYPE];
@@ -214,9 +211,9 @@ export function composeMirrorReading(input = {}) {
 
   // Dominant archetype
   if (dominantArchetypeLabel) {
-    if (confirmedRelapses14d.length === 0) {
+    if (violatedInWindow === 0) {
       observedLines.push(
-        `Recurring archetype: '${dominantArchetypeLabel}'. Pattern surfacing without confirmed relapse.`
+        `Recurring archetype: '${dominantArchetypeLabel}'. Pattern surfacing without a broken rule.`
       );
     } else {
       observedLines.push(
@@ -256,7 +253,7 @@ export function composeMirrorReading(input = {}) {
     if (lifeTransition) {
       precursorAlert = `Routine disruption ${lifeTransition.streak} days running. The conditions for relapse are present.`;
     } else if (correlated) {
-      precursorAlert = `Ledger escape and relapse landed within 48h. The two systems are leaking into each other.`;
+      precursorAlert = `Ledger escape and a signal within 48h. The two systems are leaking into each other.`;
     } else if (precursor) {
       precursorAlert = `Recurring condition: ${precursor.condition} present across ${precursor.streak} consecutive days. Watch the next 48 hours.`;
     }
@@ -264,20 +261,15 @@ export function composeMirrorReading(input = {}) {
 
   // --- Synthesis ---
   const hasViolations = violatedInWindow > 0;
-  const hasRecentRelapse = confirmedRelapses14d.length > 0;
-  const isQuiet = !hasViolations && !hasRecentRelapse && signalCount14d === 0 && precursorSignals.length === 0;
+  const isQuiet = !hasViolations && signalCount14d === 0 && precursorSignals.length === 0;
   const isAligned =
     !hasViolations && activeCount > 0 && heldRate >= 0.6 && precursorSignals.length === 0;
-  const isDeclining = hasViolations || hasRecentRelapse || precursorSignals.length >= 2;
+  const isDeclining = hasViolations || precursorSignals.length >= 2;
 
   let synthesis = null;
   if (isDeclining) {
-    if (hasViolations && hasRecentRelapse) {
-      synthesis = 'Pressure on. Lines breaking in two places.';
-    } else if (hasViolations) {
+    if (hasViolations) {
       synthesis = 'A rule broke. The system noticed.';
-    } else if (hasRecentRelapse) {
-      synthesis = 'A relapse landed. The work continues.';
     } else {
       synthesis = 'Conditions are accumulating. Watch the next 48 hours.';
     }
@@ -304,13 +296,12 @@ export function composeMirrorReading(input = {}) {
   } else if (
     longestHold &&
     longestHold.streak >= SIGNIFICANT_HOLD_DAYS &&
-    violatedInWindow === 0 &&
-    !hasRecentRelapse
+    violatedInWindow === 0
   ) {
     question = `If '${truncateTitle(longestHold.title)}' broke today, what would break with it?`;
   } else if (hasViolations) {
     question = 'The rule broke. What did the breaking cost?';
-  } else if (dominantArchetypeLabel && confirmedRelapses14d.length === 0) {
+  } else if (dominantArchetypeLabel) {
     question = 'The pattern is showing without the event. What is rehearsing itself?';
   } else if (precursorSignals.length > 0) {
     question = 'The conditions are present. What changes in the next 24 hours?';

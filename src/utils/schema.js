@@ -35,30 +35,29 @@ export const RELAPSE_FIELDS = Object.freeze({
   PRECURSORS: 'precursorConditions',    // array of detected precursor strings
   CONTEXT_SHIFT: 'precursorContext',    // non-empty string indicates routine disruption
   REFLECTION: 'reflection',             // free-form user text
-  ENTRY_TYPE: 'entryType',              // 'signal' (precursor) | 'relapse' (actual relapse event)
-  // Signal Debrief resolution, present only on signal entries the user closed:
-  //   { outcome: 'held'|'landed', resolvedAt: ISO, via: 'checkpoint'|'debrief',
-  //     note?, relapseEntryId? }
+  // Signal Debrief resolution, present once the user closed the signal:
+  //   { outcome: 'held'|'landed', resolvedAt: ISO,
+  //     via: 'checkpoint'|'debrief'|'legacy', note? }
   RESOLUTION: 'resolution',
   // Present on signal entries logged through the Protocol (GroundingProtocol):
   //   { intensity: 1-10, trigger, toolsUsed: string[], breathingCycles }
   PROTOCOL_RUN: 'protocolRun',
 });
 
-// Allowed values for RELAPSE_FIELDS.ENTRY_TYPE. Entries written before this
-// field existed are interpreted as RELAPSE_ENTRY_TYPES.SIGNAL by readers.
-export const RELAPSE_ENTRY_TYPES = Object.freeze({
-  SIGNAL: 'signal',
-  RELAPSE: 'relapse',
-});
+// Every relapseEntries doc is a signal — a precursor log, never the event
+// itself. The event (a slip that landed) is Hard Lessons' record: a landed
+// signal bridges there (src/utils/bridgeSignalToHardLessons.js). Docs written
+// before 2026-10 under the removed 'relapse' entry type were migrated to
+// closed signals (scripts/migrate-legacy-relapse-entries.mjs) and carry
+// `legacyRelapse: true`.
 
-// Signal Debrief outcomes and provenance. Only user actions are persisted:
+// Signal Debrief outcomes and provenance. Only explicit actions are persisted:
 // 'checkpoint' = the post-save "Conditions resolved" / "I slipped" buttons,
-// 'debrief' = the Signal Debrief card. AUTO is derived, never written — a
-// relapse entry whose event time falls inside a signal's 48h window closes
-// that signal as landed at read time (src/utils/signalDebrief.js is the
-// single reader for signal state). Distinct from CONFRONTATION_FIELDS —
-// drift-signal confrontations are a separate mechanic on another collection.
+// 'debrief' = the Signal Debrief card, 'legacy' = stamped by the relapse-entry
+// migration. A signal closes only by one of these — nothing is derived from
+// other entries at read time (src/utils/signalDebrief.js is the single reader
+// for signal state). Distinct from CONFRONTATION_FIELDS — drift-signal
+// confrontations are a separate mechanic on another collection.
 export const SIGNAL_RESOLUTION_OUTCOMES = Object.freeze({
   HELD: 'held',
   LANDED: 'landed',
@@ -66,7 +65,7 @@ export const SIGNAL_RESOLUTION_OUTCOMES = Object.freeze({
 export const SIGNAL_RESOLUTION_VIA = Object.freeze({
   CHECKPOINT: 'checkpoint',
   DEBRIEF: 'debrief',
-  AUTO: 'auto',
+  LEGACY: 'legacy',
 });
 
 // Kill-target fields consumed cross-module.

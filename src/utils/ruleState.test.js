@@ -8,6 +8,7 @@ import {
   getHeldStreakDays,
   isViolatedInWindow,
   getViolatedRules,
+  getLastBreakMs,
   RULE_GRADUATION_DAYS,
 } from './ruleState.js';
 
@@ -166,5 +167,30 @@ describe('getViolatedRules', () => {
 describe('RULE_GRADUATION_DAYS', () => {
   it('is the 28-day establishing window', () => {
     assert.equal(RULE_GRADUATION_DAYS, 28);
+  });
+});
+
+describe('getLastBreakMs', () => {
+  it('returns the newest break across lessons, folding both representations', () => {
+    const lessons = [
+      rule({ id: 'a', violations: [{ date: iso(10 * DAY) }, { date: iso(30 * DAY) }] }),
+      rule({ id: 'b', violations: [], lastViolatedAt: iso(5 * DAY) }),
+      { id: 'legacy', isRuleViolation: true, violatedRuleId: 'a', createdAt: iso(2 * DAY) },
+    ];
+    assert.equal(getLastBreakMs(lessons), NOW - 2 * DAY);
+  });
+
+  it('reads the rule-doc break when it is the newest', () => {
+    const lessons = [
+      rule({ id: 'a', violations: [{ date: iso(1 * DAY) }] }),
+      { id: 'legacy', isRuleViolation: true, createdAt: iso(9 * DAY) },
+    ];
+    assert.equal(getLastBreakMs(lessons), NOW - 1 * DAY);
+  });
+
+  it('is null when nothing was ever broken', () => {
+    assert.equal(getLastBreakMs([rule(), rule({ id: 'r2' })]), null);
+    assert.equal(getLastBreakMs([]), null);
+    assert.equal(getLastBreakMs(undefined), null);
   });
 });

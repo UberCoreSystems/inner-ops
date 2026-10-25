@@ -24,7 +24,7 @@ test('inactive when the forecast did not fire', () => {
 
 test('projects the window from last occurrence + historical lead time', () => {
   // occurred 1 day ago, typically precedes by 5 days → window opens in ~4 days
-  const forecast = { fired: true, activeAntecedents: [ante()], knownRelapseAntecedents: 2 };
+  const forecast = { fired: true, activeAntecedents: [ante()], knownAntecedents: 2 };
   const cd = composeConvergenceCountdown(forecast, { now: NOW });
   assert.equal(cd.status, 'active');
   assert.equal(cd.items[0].daysUntilWindow, 4);
@@ -40,7 +40,7 @@ test('a window whose projected time has passed reads as already open (never a mi
   // occurred 4 days ago, precedes by 3 days → projected 1 day ago → open now
   const forecast = {
     fired: true,
-    knownRelapseAntecedents: 3,
+    knownAntecedents: 3,
     activeAntecedents: [
       ante({ type: 'killlist:escape', lagMedian: 3, lastOccurredAt: NOW - 4 * DAY }), // -1 → open
       ante({ type: 'relapse:signal', lagMedian: 5, lastOccurredAt: NOW - DAY }),       // +4
@@ -54,7 +54,7 @@ test('a window whose projected time has passed reads as already open (never a mi
 });
 
 test('omits the M-of-K clause when the known count is unavailable', () => {
-  const forecast = { fired: true, activeAntecedents: [ante()] }; // no knownRelapseAntecedents
+  const forecast = { fired: true, activeAntecedents: [ante()] }; // no knownAntecedents
   const cd = composeConvergenceCountdown(forecast, { now: NOW });
   assert.equal(cd.knownCount, null);
   assert.equal(countdownLine(cd), 'Based on your record, the window opens in ~4 days.');

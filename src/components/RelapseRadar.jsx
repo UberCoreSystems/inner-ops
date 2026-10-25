@@ -35,7 +35,6 @@ import {
   formatDriftSignalText,
 } from '../utils/relapseTaxonomy';
 import {
-  RELAPSE_ENTRY_TYPES,
   ORACLE_FIELDS,
   SIGNAL_RESOLUTION_OUTCOMES,
   SIGNAL_RESOLUTION_VIA,
@@ -49,6 +48,7 @@ import {
 } from '../utils/customPrecursors';
 import SignalDebriefCard from './SignalDebriefCard';
 import GroundingProtocol from './GroundingProtocol';
+import { bridgeSignalToHardLessons } from '../utils/bridgeSignalToHardLessons';
 import {
   SIGNAL_STATES,
   getSignalState,
@@ -84,13 +84,6 @@ const RelapseRadar = () => {
   const navigate = useNavigate();
   const mountedRef = useRef(true);
   const [step, setStep] = useState(1);
-  // Distinguishes a precursor signal (the module's primary use) from an actual
-  // relapse event. Default 'signal'. When the user explicitly marks an entry
-  // as 'relapse', the form still saves to relapseEntries (so drift detection
-  // and archetype counts continue to work) AND bridges to Hard Lessons via the
-  // existing sessionStorage prefill mechanism so the user can capture the
-  // assumption / cost / rule there.
-  const [entryType, setEntryType] = useState(RELAPSE_ENTRY_TYPES.SIGNAL);
   const [selectedSelf, setSelectedSelf] = useState('');
   const [selectedHabits, setSelectedHabits] = useState([]);
   const [substanceUse, setSubstanceUse] = useState([]);
@@ -167,17 +160,11 @@ const RelapseRadar = () => {
   const toggleExpand = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   // Post-save action surface — replaces the prior 3s success banner.
-  //   'signal'  → the Protocol's grounding tools + resolved/slipped checkpoint
-  //   'relapse' → forced "Extract the lesson" CTA (no auto-redirect)
-  //   null      → form is active, no panel
+  //   'signal' → the Protocol's grounding tools + resolved/slipped checkpoint
+  //   null     → form is active, no panel
   const [postSaveAction, setPostSaveAction] = useState(null);
 
-  // Signal Debrief. landedOriginRef carries the origin signal's id through
-  // the "it landed" flow — currentEntryId is overwritten when the relapse
-  // entry saves, so it can't. Cleared by the Signal toggle and after every
-  // successful submit so an abandoned flow can never stamp a later,
-  // unrelated relapse.
-  const landedOriginRef = useRef(null); // { id, via } | null
+  // Post-save checkpoint: the Signal Debrief answered in place.
   const [checkpointHeld, setCheckpointHeld] = useState(false);
   const [checkpointNote, setCheckpointNote] = useState('');
   const [checkpointBusy, setCheckpointBusy] = useState(false);
@@ -281,22 +268,6 @@ const RelapseRadar = () => {
     } catch { /* ignore */ }
   }, []);
 
-  // Dashboard debrief "It landed" bridge. sessionStorage (not router state)
-  // because Relapse.jsx remounts this component via a key bump. Read-and-
-  // delete, same idiom as relapse_extraction_prefill above.
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem('signal_debrief_landed');
-      if (!raw) return;
-      sessionStorage.removeItem('signal_debrief_landed');
-      const { originSignalId } = JSON.parse(raw);
-      if (!originSignalId) return;
-      landedOriginRef.current = { id: originSignalId, via: SIGNAL_RESOLUTION_VIA.DEBRIEF };
-      setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE);
-      setStep(1);
-    } catch { /* ignore */ }
-  }, []);
-
   // Mirror a debrief/checkpoint resolution into local state — entries load
   // via a one-shot read, so every write must be reflected here by hand.
   const applyResolutionLocally = (entryId, resolution) => {
@@ -364,15 +335,10 @@ const RelapseRadar = () => {
       .map(([id, count]) => ({ id, label: resolveArchetypeLabel(id), count }));
   }, [relapseEntries]);
 
-  // Counts ONLY entries flagged as actual relapses. Precursor signals do not
-  // reset this counter — that was the source of the "1 day since last relapse"
-  // mislabel where every check-in was treated as a relapse event.
-  const daysSinceLastRelapse = useMemo(() => {
-    const actualRelapses = relapseEntries.filter(
-      e => e.entryType === RELAPSE_ENTRY_TYPES.RELAPSE
-    );
-    if (actualRelapses.length === 0) return null;
-    const sorted = [...actualRelapses].sort((a, b) => {
+  // Age of the newest entry of any kind — the PATTERN DATA "Last entry" line.
+  const daysSinceLastEntry = useMemo(() => {
+    if (relapseEntries.length === 0) return null;
+    const sorted = [...relapseEntries].sort((a, b) => {
       const aTime = a.createdAt?.toDate?.()?.getTime() ?? a.timestamp ?? 0;
       const bTime = b.createdAt?.toDate?.()?.getTime() ?? b.timestamp ?? 0;
       return bTime - aTime;
@@ -405,7 +371,7 @@ const RelapseRadar = () => {
     relapseEntries.forEach(e => {
       const t = e.createdAt?.toDate?.()?.getTime() ?? e.timestamp ?? 0;
       if (now - t < windowMs) {
-        events.push({ type: 'relapse', date: t, label: resolveArchetypeLabel(e.selectedSelf) || 'Relapse', id: e.id });
+        events.push({ type: 'signal', date: t, label: resolveArchetypeLabel(e.selectedSelf) || 'Signal', id: e.id });
       }
     });
 
@@ -500,16 +466,15 @@ const RelapseRadar = () => {
     });
   }, [relapseEntries, searchQuery]);
 
-  // Signal lifecycle partition. States derive against the FULL entry list —
-  // never the search-filtered one — so filtering can't un-land a signal
-  // whose landing relapse is filtered out.
+  // Signal lifecycle partition. Each state derives from the entry's own
+  // stored resolution and window, so the search-filtered list is enough.
   const entryStates = useMemo(() => {
     const map = new Map();
     for (const entry of filteredRelapseEntries) {
-      map.set(entry.id, getSignalState(entry, relapseEntries));
+      map.set(entry.id, getSignalState(entry));
     }
     return map;
-  }, [filteredRelapseEntries, relapseEntries]);
+  }, [filteredRelapseEntries]);
 
   const openEntries = useMemo(
     () => filteredRelapseEntries.filter(e => entryStates.get(e.id)?.status !== SIGNAL_STATES.CLOSED),
@@ -652,7 +617,6 @@ const RelapseRadar = () => {
 
       // Save the entry before revealing reactions so currentEntryId is set
       const entry = {
-        entryType,
         selectedSelf,
         selectedHabits,
         substanceUse,
@@ -706,44 +670,7 @@ const RelapseRadar = () => {
         fallbackReason: oracleFallbackReason,
       });
 
-      const isRelapseEvent = entryType === RELAPSE_ENTRY_TYPES.RELAPSE;
-      ouraToast.success(isRelapseEvent ? 'Relapse logged' : 'Signal logged');
-
-      // "It landed" flows (post-save slip, debrief card, Dashboard bridge):
-      // stamp the origin signal landed, linked to this relapse entry.
-      // Fire-and-forget — the auto-landed derivation in signalDebrief.js is
-      // the backstop for a failed stamp, so it never blocks the save.
-      const landedOrigin = landedOriginRef.current;
-      landedOriginRef.current = null;
-      if (isRelapseEvent && landedOrigin?.id) {
-        const resolution = {
-          outcome: SIGNAL_RESOLUTION_OUTCOMES.LANDED,
-          resolvedAt: new Date().toISOString(),
-          via: landedOrigin.via,
-          relapseEntryId: savedEntry.id,
-        };
-        updateData('relapseEntries', landedOrigin.id, { resolution })
-          .then(() => applyResolutionLocally(landedOrigin.id, resolution))
-          .catch(err => logger.error('Signal landed-stamp failed:', err));
-      }
-
-      // Bridge to Hard Lessons when this was an actual relapse event so the
-      // assumption / cost / rule capture happens in the right module. Stash
-      // a prefill payload in sessionStorage under the same key the cross-
-      // module extraction flow uses, then navigate after the user dismisses
-      // the Oracle modal (delayed so they can read the feedback first).
-      if (isRelapseEvent) {
-        try {
-          sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({
-            eventDescription: reflection || '',
-            costDescription: '',
-            extractedLesson: '',
-            ruleGoingForward: '',
-            sourceRelapseEntryId: savedEntry.id,
-            isOracleExtracted: false,
-          }));
-        } catch { /* ignore storage errors */ }
-      }
+      ouraToast.success('Signal logged');
 
       // BER-133: check for archetype-kill-list correlation on new entry
       const submittedArchetype = selectedSelf;
@@ -767,7 +694,6 @@ const RelapseRadar = () => {
       }
 
       // Clear form
-      setEntryType(RELAPSE_ENTRY_TYPES.SIGNAL);
       setSelectedSelf('');
       setSelectedHabits([]);
       setSubstanceUse([]);
@@ -777,14 +703,8 @@ const RelapseRadar = () => {
       setEventOccurredAt(toDatetimeLocalString());
 
       // Post-save action surface. Replaces the prior 3s banner + 3.5s auto-
-      // navigate. Signal entries get inline grounding tools and a two-button
-      // resolution checkpoint; Relapse entries get a deliberate, non-skippable
-      // Extract-the-lesson CTA (no auto-redirect).
-      if (isRelapseEvent) {
-        setPostSaveAction('relapse');
-      } else {
-        setPostSaveAction('signal');
-      }
+      // navigate: inline grounding tools and a two-button resolution checkpoint.
+      setPostSaveAction('signal');
 
     } catch (error) {
       logger.error("Error generating Oracle feedback:", error);
@@ -849,37 +769,37 @@ const RelapseRadar = () => {
     }
   };
 
-  // Post-Signal checkpoint: user is reporting a slip. Flip the entry type to
-  // RELAPSE and reset the form. The user re-describes the slip fresh; the
-  // already-saved Signal entry stays as-is in history and is stamped landed
-  // once the relapse entry saves.
-  const handleSlipped = () => {
-    landedOriginRef.current = { id: currentEntryId, via: SIGNAL_RESOLUTION_VIA.CHECKPOINT };
-    setPostSaveAction(null);
-    setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE);
-    setStep(1);
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Post-Signal checkpoint: user is reporting a slip. Stamp this signal
+  // landed, then hand the slip to Hard Lessons with the signal prefilled —
+  // the event itself is that module's record. Write first: on failure the
+  // panel stays up with its buttons intact.
+  const handleSlipped = async () => {
+    if (!currentEntryId || checkpointBusy) return;
+    setCheckpointBusy(true);
+    const resolution = {
+      outcome: SIGNAL_RESOLUTION_OUTCOMES.LANDED,
+      resolvedAt: new Date().toISOString(),
+      via: SIGNAL_RESOLUTION_VIA.CHECKPOINT,
+    };
+    try {
+      await updateData('relapseEntries', currentEntryId, { resolution });
+      applyResolutionLocally(currentEntryId, resolution);
+      const signal = relapseEntries.find(e => e.id === currentEntryId) || { id: currentEntryId };
+      bridgeSignalToHardLessons(signal);
+      setPostSaveAction(null);
+      navigate('/hardlessons');
+    } catch (error) {
+      logger.error('Checkpoint landed write failed:', error);
+      if (redirectIfAuthLost(error)) return;
+      ouraToast.error('Save failed — signal not closed.');
+    } finally {
+      setCheckpointBusy(false);
     }
   };
 
-  // Debrief card "It landed": same target state as handleSlipped, with the
-  // origin signal carried by ref until the relapse saves. Abandoning the
-  // flow leaves the signal pending — the debrief card returns.
-  const handleDebriefLanded = (entry) => {
-    landedOriginRef.current = { id: entry.id, via: SIGNAL_RESOLUTION_VIA.DEBRIEF };
-    setPostSaveAction(null);
-    setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE);
-    setStep(1);
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  // Post-Relapse forced pass-through: user taps to commit to the rebuild step.
-  // sessionStorage hl_bridge_prefill was already stashed in submitRelapseEntry.
-  const handleExtractLesson = () => {
-    setPostSaveAction(null);
+  // Debrief card "It landed": the card owns the stamp and the prefill; this
+  // surface only moves to Hard Lessons.
+  const handleDebriefLanded = () => {
     navigate('/hardlessons');
   };
 
@@ -908,8 +828,8 @@ const RelapseRadar = () => {
     const resolvedDate = state?.resolvedAt
       ? new Date(state.resolvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : null;
-    const provenanceLine = state?.via === SIGNAL_RESOLUTION_VIA.AUTO
-      ? 'A relapse was logged inside this window'
+    const provenanceLine = state?.via === SIGNAL_RESOLUTION_VIA.LEGACY
+      ? 'Logged as a relapse before slips moved to Hard Lessons'
       : state?.via === SIGNAL_RESOLUTION_VIA.DEBRIEF
         ? 'Closed in debrief'
         : 'Closed at the checkpoint';
@@ -1051,9 +971,9 @@ const RelapseRadar = () => {
                   Top trigger: {topHabit.label} ({topHabit.count}×)
                 </div>
               )}
-              {daysSinceLastRelapse !== null && (
+              {daysSinceLastEntry !== null && (
                 <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
-                  Last entry: {daysSinceLastRelapse === 0 ? 'today' : `${daysSinceLastRelapse}d ago`}
+                  Last entry: {daysSinceLastEntry === 0 ? 'today' : `${daysSinceLastEntry}d ago`}
                 </div>
               )}
               <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
@@ -1071,33 +991,16 @@ const RelapseRadar = () => {
           </div>
         )}
 
-        {/* Days since last actual relapse + total check-ins — step 2 only.
-            daysSinceLastRelapse is null until at least one entry is flagged
-            entryType: 'relapse'. Total count includes all entries (signals
-            and relapses). */}
+        {/* Total check-ins — step 2 only. Every entry is a precursor signal. */}
         {step === 2 && relapseEntries.length > 0 && (
           <div className="mb-6 flex items-center gap-3 oura-card p-4">
-            {daysSinceLastRelapse !== null ? (
-              <>
-                <div className={`text-4xl font-light tabular-nums ${daysSinceLastRelapse === 0 ? 'text-red-400' : daysSinceLastRelapse < 3 ? 'text-oura-amber' : 'text-oura-cyan'}`}>
-                  {daysSinceLastRelapse}
-                </div>
-                <div>
-                  <div className="text-white text-sm font-light">day{daysSinceLastRelapse !== 1 ? 's' : ''} since last relapse</div>
-                  <div className="text-gray-400 text-xs">{relapseEntries.length} total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-4xl font-light tabular-nums text-oura-cyan">
-                  {relapseEntries.length}
-                </div>
-                <div>
-                  <div className="text-white text-sm font-light">total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
-                  <div className="text-gray-400 text-xs">No relapse logged yet — these are precursor signals</div>
-                </div>
-              </>
-            )}
+            <div className="text-4xl font-light tabular-nums text-oura-cyan">
+              {relapseEntries.length}
+            </div>
+            <div>
+              <div className="text-white text-sm font-light">total check-in{relapseEntries.length !== 1 ? 's' : ''}</div>
+              <div className="text-gray-400 text-xs">Precursor signals. The slip itself is recorded in Hard Lessons.</div>
+            </div>
           </div>
         )}
 
@@ -1141,44 +1044,6 @@ const RelapseRadar = () => {
             )}
           </div>
         )}
-
-        {/* Entry-type toggle — distinguishes a precursor signal (the module's
-            primary use) from an actual relapse event. Visible at every step so
-            the user can correct the framing at any point before submit. */}
-        <div className="mb-5">
-          <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">What are you logging?</div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                // Backing out of an "it landed" flow: the origin signal must
-                // stay pending, never stamp a later unrelated relapse.
-                landedOriginRef.current = null;
-                setEntryType(RELAPSE_ENTRY_TYPES.SIGNAL);
-              }}
-              className={`p-3 rounded-xl text-left transition-all duration-200 border ${
-                entryType === RELAPSE_ENTRY_TYPES.SIGNAL
-                  ? 'bg-oura-cyan/15 border-oura-cyan text-white'
-                  : 'bg-oura-card border-oura-border text-gray-400 hover:bg-oura-darker'
-              }`}
-            >
-              <div className="text-sm font-medium">Signal</div>
-              <div className="text-[11px] text-gray-400 mt-0.5">A precursor — conditions or patterns before relapse</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setEntryType(RELAPSE_ENTRY_TYPES.RELAPSE)}
-              className={`p-3 rounded-xl text-left transition-all duration-200 border ${
-                entryType === RELAPSE_ENTRY_TYPES.RELAPSE
-                  ? 'bg-red-500/15 border-red-500 text-white'
-                  : 'bg-oura-card border-oura-border text-gray-400 hover:bg-oura-darker'
-              }`}
-            >
-              <div className="text-sm font-medium">Actual relapse</div>
-              <div className="text-[11px] text-gray-400 mt-0.5">A relapse occurred — bridges to Hard Lessons after submit</div>
-            </button>
-          </div>
-        </div>
 
         <div className="w-full bg-oura-border rounded-full h-2">
           <div
@@ -1456,9 +1321,7 @@ const RelapseRadar = () => {
               value={reflection}
               onChange={(e) => setReflection(e.target.value)}
               maxLength={20000}
-              placeholder={entryType === RELAPSE_ENTRY_TYPES.RELAPSE
-                ? 'What led to this? What can you learn? How will you recover?'
-                : 'What did you notice? What conditions are stacking up?'}
+              placeholder="What did you notice? What conditions are stacking up?"
               className="w-full h-32 p-4 pr-14 bg-oura-card text-white rounded-2xl border border-oura-border focus:border-oura-cyan focus:outline-none resize-none transition-all duration-200"
             />
             <div className="absolute right-2 top-2">
@@ -1547,22 +1410,6 @@ const RelapseRadar = () => {
               </button>
             </div>
           )}
-        </div>
-      )}
-
-      {postSaveAction === 'relapse' && (
-        <div className="mb-6 oura-card border-l-4 border-[#b45309] p-5 animate-fade-in-up">
-          <h3 className="text-gray-100 text-base font-medium mb-2">A target escaped. The lesson is now the work.</h3>
-          <p className="text-gray-400 text-sm leading-relaxed mb-4">
-            Extract the rule before the moment fades. This is non-optional.
-          </p>
-          <button
-            type="button"
-            onClick={handleExtractLesson}
-            className="px-5 py-3 rounded-2xl bg-[#b45309] text-white hover:bg-[#a14808] transition-colors font-medium"
-          >
-            Extract the lesson →
-          </button>
         </div>
       )}
 
@@ -1784,7 +1631,7 @@ const RelapseRadar = () => {
               </p>
               {!searchQuery.trim() && (
                 <p className="text-[#858585] text-xs mt-2 max-w-md mx-auto leading-relaxed">
-                  Log a signal when you see drift; log a relapse when it lands. The Signal surfaces patterns before they become another failure.
+                  Log the conditions as they stack. When one lands, the lesson belongs in Hard Lessons. The Signal surfaces patterns before they become another failure.
                 </p>
               )}
               {searchQuery.trim() && (
@@ -1805,13 +1652,13 @@ const RelapseRadar = () => {
                 {crossSignalTimeline.map((event, idx) => (
                   <div key={event.id} className="flex items-start gap-3 pb-4">
                     <div className="flex flex-col items-center">
-                      <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${event.type === 'relapse' ? 'bg-oura-amber' : 'bg-red-500'}`} />
+                      <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${event.type === 'signal' ? 'bg-oura-amber' : 'bg-red-500'}`} />
                       {idx < crossSignalTimeline.length - 1 && <div className="w-px flex-1 bg-oura-border mt-1" style={{ minHeight: '24px' }} />}
                     </div>
                     <div className="pb-1">
                       <div className="text-gray-300 text-sm">{event.label}</div>
-                      <div className={`text-xs mt-0.5 ${event.type === 'relapse' ? 'text-oura-amber' : 'text-red-400'}`}>
-                        {event.type === 'relapse' ? 'Relapse' : 'Ledger Escape'} · {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      <div className={`text-xs mt-0.5 ${event.type === 'signal' ? 'text-oura-amber' : 'text-red-400'}`}>
+                        {event.type === 'signal' ? 'Signal' : 'Ledger Escape'} · {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </div>
                     </div>
                   </div>

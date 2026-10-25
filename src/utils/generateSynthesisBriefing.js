@@ -25,7 +25,6 @@ import { getViolatedRules } from './ruleState.js';
 import {
   COLLECTIONS,
   RELAPSE_FIELDS,
-  RELAPSE_ENTRY_TYPES,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
   USER_SETTINGS_FIELDS,
@@ -136,7 +135,7 @@ export async function generateSynthesisBriefing(userId, cadence = 'weekly', opti
   if (mode === 'reckoning') {
     return await generateReckoning({
       userId, cadence, options, writer,
-      killTargets, hardLessons, relapseEntries, journalEntries, identityDirection,
+      killTargets, hardLessons, journalEntries, identityDirection,
     });
   }
 
@@ -388,7 +387,6 @@ function verbatimQuote(value) {
 export function assembleReckoning({
   killTargets = [],
   hardLessons = [],
-  relapseEntries = [],
   journalEntries = [],
   now = Date.now(),
   periodDays = RECKONING_PERIOD_DAYS,
@@ -439,31 +437,8 @@ export function assembleReckoning({
     });
   }
 
-  // Standing commitment contradicted by actual relapse events this period.
-  // Anchored to a real commitment (the one already most-contradicted, else the
-  // first finalized rule / active target) so both sides carry real ids.
-  const relapses = (relapseEntries || []).filter((e) => {
-    if (e?.[RELAPSE_FIELDS.ENTRY_TYPE] !== RELAPSE_ENTRY_TYPES.RELAPSE) return false;
-    const ms = e.eventOccurredAt ? new Date(e.eventOccurredAt).getTime() : getTimestamp(e);
-    return inPeriod(ms);
-  });
-  if (relapses.length > 0) {
-    const standing = pickStandingCommitment(contradictions, killTargets, hardLessons);
-    if (standing) {
-      const evidence = relapses
-        .filter((r) => r.id)
-        .map((r) => ({
-          collection: COLLECTIONS.RELAPSE_ENTRIES,
-          eventId: r.id,
-          date: r.eventOccurredAt || new Date(getTimestamp(r)).toISOString(),
-          kind: 'relapse',
-          quote: verbatimQuote(r[RELAPSE_FIELDS.REFLECTION]),
-        }));
-      if (evidence.length > 0) {
-        contradictions.push({ type: 'relapse_vs_commitment', commitment: standing, evidence });
-      }
-    }
-  }
+  // Signals (relapseEntries) are precursors, not events: none contradicts a
+  // commitment. The slip itself is a Hard Lesson violation, covered above.
 
   // Defensive: never emit a contradiction without at least one real event id.
   const cleaned = contradictions
@@ -482,25 +457,13 @@ export function assembleReckoning({
   return { contradictions: cleaned, languageDrift };
 }
 
-function pickStandingCommitment(contradictions, killTargets, hardLessons) {
-  const mostContradicted = [...contradictions].sort((a, b) => b.evidence.length - a.evidence.length)[0];
-  if (mostContradicted) return mostContradicted.commitment;
-  const rule = (hardLessons || []).find((l) => l[HARD_LESSON_FIELDS.IS_FINALIZED] && l[HARD_LESSON_FIELDS.RULE] && l.id);
-  if (rule) return { kind: 'hardLesson', id: rule.id, text: rule[HARD_LESSON_FIELDS.RULE] };
-  const target = (killTargets || []).find((t) => t[KILL_TARGET_FIELDS.STATUS] === 'active' && t.id);
-  if (target) return { kind: 'killTarget', id: target.id, text: target[KILL_TARGET_FIELDS.TITLE] || 'an unnamed target' };
-  return null;
-}
-
 function buildReckoningEntryText({ contradictions, languageDrift, identityDirection }) {
   const lines = ['THE RECKONING — stated commitments vs documented behavior this period.'];
   contradictions.forEach((c, i) => {
     const head =
       c.commitment.kind === 'killTarget'
         ? `Commitment: eliminate "${c.commitment.text}".`
-        : c.commitment.kind === 'hardLesson'
-          ? `Committed rule: "${c.commitment.text}".`
-          : `Standing commitment: "${c.commitment.text}".`;
+        : `Committed rule: "${c.commitment.text}".`;
     const ev = c.evidence
       .map((e) => {
         const d = (e.date || '').slice(0, 10);
@@ -524,10 +487,7 @@ function buildFallbackReckoning({ contradictions }) {
     if (c.commitment.kind === 'killTarget') {
       return `You committed to eliminate "${c.commitment.text}". It escaped ${n} time${n > 1 ? 's' : ''} this period (${dates}).`;
     }
-    if (c.commitment.kind === 'hardLesson') {
-      return `You wrote the rule "${c.commitment.text}". You broke it ${n} time${n > 1 ? 's' : ''} this period (${dates}).`;
-    }
-    return `You logged ${n} relapse${n > 1 ? 's' : ''} this period (${dates}) against your standing commitment.`;
+    return `You wrote the rule "${c.commitment.text}". You broke it ${n} time${n > 1 ? 's' : ''} this period (${dates}).`;
   });
   return `${parts.join(' ')} Word and act diverged. Name the decision that allowed it.`;
 }
@@ -555,11 +515,11 @@ async function generateReckoningConfrontation(data) {
 
 async function generateReckoning({
   userId, cadence, options, writer,
-  killTargets, hardLessons, relapseEntries, journalEntries, identityDirection,
+  killTargets, hardLessons, journalEntries, identityDirection,
 }) {
   const now = Date.now();
   const { contradictions, languageDrift } = assembleReckoning({
-    killTargets, hardLessons, relapseEntries, journalEntries, now, periodDays: RECKONING_PERIOD_DAYS,
+    killTargets, hardLessons, journalEntries, now, periodDays: RECKONING_PERIOD_DAYS,
   });
 
   // Nothing contradicts the stated commitments → no reckoning, no billed call.

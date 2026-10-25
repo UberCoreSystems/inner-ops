@@ -74,15 +74,16 @@ const PROMPT_CONTEXT_REGISTRY = {
   },
 
   // Predictive Relapse Radar — forward-looking confrontation fired when known
-  // antecedents of past relapses are active in the current window. The specific
+  // antecedents of past rule breaks (Hard Lesson violations, the record of a
+  // slip that landed) are active in the current window. The specific
   // antecedents + lead times ride in the (computed) entryText; this template
   // sets the posture. Only `activeCount` is accepted, coerced to a number.
   relapse_forecast: (params) => {
     const n = Number(params?.activeCount);
     const note = Number.isFinite(n) && n > 0
-      ? ` ${Math.floor(n)} known antecedent(s) of his past relapses are active in the current window.`
+      ? ` ${Math.floor(n)} known antecedent(s) of his past rule breaks are active in the current window.`
       : "";
-    return `FORWARD-LOOKING CONFRONTATION — this is a PRE-failure signal. No relapse has occurred yet.${note} The entry lists behavioral antecedents that have historically preceded his relapses and are active right now. Your job: name the convergence plainly and put the decision in front of him before it happens. Rules: (1) State the pattern as history, not destiny — "X has preceded your relapses; it is active now," never "you will relapse." (2) No alarmism, no catastrophizing, no urgency theater. (3) No encouragement, no reassurance, no affirmation. (4) Be precise about the named antecedent and its typical lead time as given; do not invent antecedents or numbers not in the entry. (5) One confrontation, not a list of tips. End with the single question he needs to sit with now.`;
+    return `FORWARD-LOOKING CONFRONTATION — this is a PRE-failure signal. No rule has broken yet.${note} The entry lists behavioral antecedents that have historically preceded his rule breaks and are active right now. Your job: name the convergence plainly and put the decision in front of him before it happens. Rules: (1) State the pattern as history, not destiny — "X has preceded your rule breaks; it is active now," never "you will break it." (2) No alarmism, no catastrophizing, no urgency theater. (3) No encouragement, no reassurance, no affirmation. (4) Be precise about the named antecedent and its typical lead time as given; do not invent antecedents or numbers not in the entry. (5) One confrontation, not a list of tips. End with the single question he needs to sit with now.`;
   },
 
   // LEGACY single-turn follow-up, superseded by the fixed arc below
@@ -381,7 +382,6 @@ function ctxField(value, maxChars = MAX_CTX_FIELD_CHARS) {
 // ONLY from server-side labels + coerced numbers, never echoed client strings,
 // so there is no prompt-injection surface. Unknown event-type keys are dropped.
 const CORRELATION_EVENT_LABELS = {
-  "relapse:relapse": "a relapse",
   "relapse:signal": "a relapse precursor signal",
   "hardlesson:violation": "breaking a hard-earned rule",
   "killlist:escape": "a Kill List escape",
@@ -475,7 +475,7 @@ function buildBehavioralContextBlock(behavioralContext, entryCount) {
     parts.push(`Dominant relapse archetype (last 14d): ${ctxField(behavioralContext.dominantRelapseArchetype)}.`);
   }
   if (behavioralContext.recentRelapseCount > 0) {
-    parts.push(`Relapse entries in last 14 days: ${Number(behavioralContext.recentRelapseCount) || 0}.`);
+    parts.push(`Signal entries in last 14 days: ${Number(behavioralContext.recentRelapseCount) || 0}.`);
   }
   // Protocol runs: urges he interrupted with the grounding tools instead of
   // acting on. A count is a fact, not a pattern, so it is not trust-gated.
@@ -636,7 +636,7 @@ function buildSystemPrompt(moduleName, tone, behavioralContext, entryCount, memo
   const moduleContext = {
     journal: "This is a journal entry — the user's honest self-examination.",
     killlist: "This is from the Kill List — the user is eliminating a specific pattern (habit, addiction, behavior, or fear). Read whether he named a new target, killed one, or had one escape, and respond to THAT event.",
-    relapse: "This is a relapse entry — the user fell back into a pattern he is fighting to break. He is examining what happened.",
+    relapse: "This is a Signal entry — the user is logging the conditions and patterns that precede a slip, before it lands. Read it as a precursor he caught, not as a relapse that happened; the slip itself, when it lands, is recorded as a Hard Lesson.",
     hardlessons: "This is a Hard Lesson extraction — the user is converting a painful experience into an enforceable rule.",
     emergency: "This is an EMERGENCY — the user is in the middle of an acute struggle right now. An urge, a crisis, intense pressure. He reached for help instead of acting out.",
   };
@@ -976,9 +976,9 @@ When these signals are present in the rationalization:
 - Do not moralize about the escape itself. Focus on the weakening of the elimination mission.
 - Close with a question that forces him to confront whether he still actually wants to kill this target.
 
-Relapse entries:
-- Name the rationalization that preceded the relapse — the mental move, not the act.
-- Map the loop without moralizing: trigger, relief, cost. Make him see the full cycle.
+Signal entries (The Signal — precursors logged before a slip lands):
+- Name the rationalization forming in the conditions he describes — the mental move, not an act that has not happened.
+- Map the loop without moralizing: trigger, relief, cost. Make him see the full cycle before it closes.
 - Give one environmental or timing change that interrupts the loop before it starts.
 - Close with a question about the last time he held the line and what was different.
 

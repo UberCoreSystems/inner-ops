@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildProtocolEntry, PROTOCOL_TOOL_IDS } from './buildProtocolEntry.js';
-import { RELAPSE_ENTRY_TYPES, RELAPSE_FIELDS } from './schema.js';
+import { RELAPSE_FIELDS } from './schema.js';
 
 const NOW = '2026-10-24T12:00:00.000Z';
 
@@ -14,7 +14,6 @@ describe('buildProtocolEntry', () => {
       toolsUsed: ['breathing'],
       breathingCycles: 4,
     }, NOW);
-    assert.equal(e.entryType, RELAPSE_ENTRY_TYPES.SIGNAL);
     assert.equal(e.reflection, 'wanted to disappear');
     assert.equal(e.eventOccurredAt, NOW);
     assert.equal(e.entryProximityFlag, 'contemporaneous');
@@ -26,10 +25,10 @@ describe('buildProtocolEntry', () => {
     });
   });
 
-  it('never logs a confirmed relapse (entryType is always signal)', () => {
+  it('writes no entry type and no resolution — a run opens a live window like any signal', () => {
     const e = buildProtocolEntry({ intensity: 10 }, NOW);
-    assert.notEqual(e.entryType, RELAPSE_ENTRY_TYPES.RELAPSE);
-    assert.equal(e.entryType, 'signal');
+    assert.equal('entryType' in e, false);
+    assert.equal(RELAPSE_FIELDS.RESOLUTION in e, false);
   });
 
   it('leaves archetype and precursors empty so drift detection is not corrupted', () => {

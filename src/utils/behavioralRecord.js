@@ -26,7 +26,6 @@
  */
 
 import { isFinalizedRule, getHeldStreakDays } from './ruleState.js';
-import { RELAPSE_ENTRY_TYPES } from './schema.js';
 import { getConsecutiveDaysRequired as resolveThreshold } from './killTargetThreshold.js';
 import { toMs } from './dateUtils.js';
 
@@ -71,7 +70,7 @@ const escapeAutopsies = (targets) =>
 /**
  * @param {{
  *   killTargets?: object[], hardLessons?: object[], journalEntries?: object[],
- *   relapseEntries?: object[], confirmedKills?: object[], syntheses?: object[]
+ *   confirmedKills?: object[], syntheses?: object[]
  * }} data  already-fetched module arrays
  * @param {number} [now]  injectable clock for deterministic tests
  * @returns {{ execution: object, intelligence: object, isEmpty: boolean }}
@@ -81,7 +80,6 @@ export function computeBehavioralRecord(data = {}, now = Date.now()) {
     killTargets = [],
     hardLessons = [],
     journalEntries = [],
-    relapseEntries = [],
     confirmedKills = [],
     syntheses = [],
   } = data;
@@ -94,11 +92,14 @@ export function computeBehavioralRecord(data = {}, now = Date.now()) {
   const kills60 = confirmedKills.filter((k) => heldDays(k) >= 60).length;
 
   // Forensic writing: escape autopsies across live + confirmed targets, plus
-  // written relapse post-mortems (an actual relapse with a reflection).
-  const relapseAnalyses = relapseEntries.filter(
-    (e) => e?.entryType === RELAPSE_ENTRY_TYPES.RELAPSE && (e?.reflection || '').trim(),
-  ).length;
-  const autopsies = escapeAutopsies(killTargets) + escapeAutopsies(confirmedKills) + relapseAnalyses;
+  // written after-action reviews on broken rules — a break with its cause,
+  // correction, or legacy note written is the post-mortem of a slip that
+  // landed. Signals are precursors and never count.
+  const afterActionReviews = hardLessons.reduce((sum, l) => {
+    const violations = Array.isArray(l?.violations) ? l.violations : [];
+    return sum + violations.filter((v) => ['cause', 'correction', 'note'].some((k) => (v?.[k] || '').trim())).length;
+  }, 0);
+  const autopsies = escapeAutopsies(killTargets) + escapeAutopsies(confirmedKills) + afterActionReviews;
 
   // Finalized rules currently held — held excludes under-review rules
   // (getHeldStreakDays returns 0 while a rule's most-recent break is

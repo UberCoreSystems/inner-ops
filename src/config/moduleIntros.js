@@ -71,7 +71,7 @@ export const MODULE_INTROS = Object.freeze([
     id: 'relapse',
     accent: '#00d4aa',
     eyebrow: 'The Signal',
-    definition: 'Where you log the slip and what preceded it. Drift is read from the pattern, not the incident.',
+    definition: 'Where you log the conditions that precede a slip. Drift is read from the pattern, not the incident.',
     example: '11:40pm. Alone. Third night this week. The trigger was the argument, not the boredom.',
     actionLabel: 'Log a signal',
     actionRoute: null,

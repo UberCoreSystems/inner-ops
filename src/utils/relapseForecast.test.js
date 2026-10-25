@@ -11,11 +11,18 @@ const NOW = Date.UTC(2026, 5, 1, 12, 0, 0);
 const at = (daysAgo) => new Date(NOW - daysAgo * MS_PER_DAY).toISOString();
 const dateOnly = (daysAgo) => new Date(NOW - daysAgo * MS_PER_DAY).toISOString().slice(0, 10);
 
-const signal = (daysAgo) => ({ entryType: 'signal', eventOccurredAt: at(daysAgo) });
-const relapseEvent = (daysAgo) => ({ entryType: 'relapse', eventOccurredAt: at(daysAgo) });
+// Every relapseEntries doc is a signal (ISO event time).
+const signal = (daysAgo) => ({ eventOccurredAt: at(daysAgo) });
+// The failure event is a Hard Lesson rule break: a finalized rule doc carrying
+// one dated violation. Each doc also counts toward the trust gate.
+const ruleBreak = (daysAgo) => ({
+  isFinalized: true,
+  ruleGoingForward: 'rule',
+  violations: [{ date: at(daysAgo), source: 'direct' }],
+});
 const pad = (n) => Array.from({ length: n }, () => ({})); // empty hard lessons → docs, no events
 
-// Kill target whose escapes precede relapses (date-only, daily resolution).
+// Kill target whose escapes precede rule breaks (date-only, daily resolution).
 const targetWithEscapes = (daysAgoList) => ({
   status: 'active',
   createdAt: at(40),
@@ -25,7 +32,8 @@ const targetWithEscapes = (daysAgoList) => ({
 describe('computeRelapseForecast — insufficient signal', () => {
   it('fires nothing below the trust gate', () => {
     const out = computeRelapseForecast({
-      relapseEntries: [signal(2), relapseEvent(1)],
+      relapseEntries: [signal(2)],
+      hardLessons: [ruleBreak(1)],
       now: NOW,
     });
     assert.equal(out.status, 'insufficient-signal');
@@ -35,14 +43,11 @@ describe('computeRelapseForecast — insufficient signal', () => {
 });
 
 describe('computeRelapseForecast — single strong antecedent', () => {
-  // signal precedes relapse 3/4 times (conf 0.75 ≥ 0.7); most recent signal is
-  // 1 day ago → active. Fires on the strong-single path.
+  // signal precedes a rule break 3/4 times (conf 0.75 ≥ 0.7); most recent
+  // signal is 1 day ago → active. Fires on the strong-single path.
   const fixture = (signalDelta) => ({
-    relapseEntries: [
-      signal(20), signal(15), signal(10), signal(1),
-      relapseEvent(19), relapseEvent(14), relapseEvent(9),
-    ],
-    hardLessons: pad(14), // 7 + 14 = 21
+    relapseEntries: [signal(20), signal(15), signal(10), signal(1)],
+    hardLessons: [ruleBreak(19), ruleBreak(14), ruleBreak(9), ...pad(14)], // 4 + 3 + 14 = 21
     now: NOW,
     signalDelta,
   });
@@ -55,6 +60,7 @@ describe('computeRelapseForecast — single strong antecedent', () => {
     assert.ok(ante, 'relapse:signal must be active');
     assert.ok(ante.confidence >= FORECAST_SINGLE_STRONG_CONFIDENCE);
     assert.ok(out.signalKey && out.signalKey.startsWith('forecast_'));
+    assert.equal(out.knownAntecedents, 1);
   });
 
   it('still fires under an improving trend (strong single survives the downgrade)', () => {
@@ -67,13 +73,10 @@ describe('computeRelapseForecast — two moderate antecedents converge', () => {
   // Neither antecedent is strong alone (conf 0.6), but both are active → fires
   // on the multiple-antecedent path.
   const fixture = (signalDelta) => ({
-    relapseEntries: [
-      signal(20), signal(15), signal(10), signal(5), signal(1), // 3/5 followed → 0.6
-      relapseEvent(19), relapseEvent(14), relapseEvent(9),
-    ],
+    relapseEntries: [signal(20), signal(15), signal(10), signal(5), signal(1)], // 3/5 followed → 0.6
+    hardLessons: [ruleBreak(19), ruleBreak(14), ruleBreak(9), ...pad(12)],
     killTargets: [targetWithEscapes([21, 16, 11, 6, 2])], // 3/5 followed → 0.6, last escape 2d ago
-    hardLessons: pad(12), // 8 + 1 + 12 = 21
-    now: NOW,
+    now: NOW, // 5 + 15 + 1 = 21
     signalDelta,
   });
 
@@ -95,11 +98,8 @@ describe('computeRelapseForecast — two moderate antecedents converge', () => {
 describe('computeRelapseForecast — below threshold', () => {
   it('does not fire on a single moderate antecedent', () => {
     const out = computeRelapseForecast({
-      relapseEntries: [
-        signal(20), signal(15), signal(10), signal(5), signal(1), // conf 0.6
-        relapseEvent(19), relapseEvent(14), relapseEvent(9),
-      ],
-      hardLessons: pad(13), // 8 + 13 = 21
+      relapseEntries: [signal(20), signal(15), signal(10), signal(5), signal(1)], // conf 0.6
+      hardLessons: [ruleBreak(19), ruleBreak(14), ruleBreak(9), ...pad(13)], // 5 + 16 = 21
       now: NOW,
     });
     assert.equal(out.status, 'ok');
@@ -109,29 +109,26 @@ describe('computeRelapseForecast — below threshold', () => {
 });
 
 describe('computeRelapseForecast — false-positive guard', () => {
-  it('suppresses when a relapse already occurred inside the lead window', () => {
+  it('suppresses when a rule already broke inside the lead window', () => {
     const out = computeRelapseForecast({
-      relapseEntries: [
-        signal(20), signal(15), signal(10), signal(1),
-        relapseEvent(19), relapseEvent(14), relapseEvent(9),
-        relapseEvent(0), // relapse today — prediction would be post-hoc
+      relapseEntries: [signal(20), signal(15), signal(10), signal(1)],
+      hardLessons: [
+        ruleBreak(19), ruleBreak(14), ruleBreak(9),
+        ruleBreak(0), // broke today — prediction would be post-hoc
+        ...pad(13), // 4 + 17 = 21
       ],
-      hardLessons: pad(13), // 8 + 13 = 21
       now: NOW,
     });
     assert.equal(out.fired, false);
-    assert.equal(out.suppressedBy, 'recent-relapse');
+    assert.equal(out.suppressedBy, 'recent-violation');
   });
 });
 
 describe('computeRelapseForecast — determinism', () => {
   it('produces a stable signalKey across runs', () => {
     const fixture = () => ({
-      relapseEntries: [
-        signal(20), signal(15), signal(10), signal(1),
-        relapseEvent(19), relapseEvent(14), relapseEvent(9),
-      ],
-      hardLessons: pad(14),
+      relapseEntries: [signal(20), signal(15), signal(10), signal(1)],
+      hardLessons: [ruleBreak(19), ruleBreak(14), ruleBreak(9), ...pad(14)],
       now: NOW,
     });
     const a = computeRelapseForecast(fixture());

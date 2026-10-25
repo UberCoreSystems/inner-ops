@@ -3,6 +3,7 @@ import { updateData } from '../utils/firebaseUtils';
 import { getDebriefQueue, getSignalAnchorMs } from '../utils/signalDebrief';
 import { SIGNAL_RESOLUTION_OUTCOMES, SIGNAL_RESOLUTION_VIA } from '../utils/schema';
 import { resolveArchetypeLabel } from '../utils/relapseTaxonomy';
+import { bridgeSignalToHardLessons } from '../utils/bridgeSignalToHardLessons';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 
@@ -16,10 +17,9 @@ import logger from '../utils/logger';
  * hold relapseEntries state, and answering must update that state in place —
  * self-fetching here would duplicate the read and drift out of sync.
  *
- * The card owns the HELD write (then reports it via onResolved). LANDED is
- * delegated whole via onLanded(entry): nothing may be stamped until the
- * relapse entry actually saves, and the two surfaces bridge into that flow
- * differently.
+ * The card owns both writes and reports each via onResolved. LANDED also
+ * stashes the Hard Lessons prefill built from the signal; onLanded(entry)
+ * then takes the surface to /hardlessons, where the slip itself is recorded.
  */
 const SignalDebriefCard = ({ entries, onResolved, onLanded, animationDelay = '0.03s' }) => {
   const [busy, setBusy] = useState(false);
@@ -79,9 +79,25 @@ const SignalDebriefCard = ({ entries, onResolved, onLanded, animationDelay = '0.
     }
   };
 
-  const handleLanded = () => {
+  const handleLanded = async () => {
     if (!current || busy) return;
-    onLanded?.(current);
+    setBusy(true);
+    const resolution = {
+      outcome: SIGNAL_RESOLUTION_OUTCOMES.LANDED,
+      resolvedAt: new Date().toISOString(),
+      via: SIGNAL_RESOLUTION_VIA.DEBRIEF,
+    };
+    try {
+      await updateData('relapseEntries', current.id, { resolution });
+      onResolved?.(current.id, resolution);
+      bridgeSignalToHardLessons(current);
+      onLanded?.(current);
+    } catch (error) {
+      logger.error('Signal debrief landed write failed:', error);
+      ouraToast.error('Save failed — signal still pending.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Note micro-state: the signal is already closed; only the optional

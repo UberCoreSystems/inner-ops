@@ -25,8 +25,6 @@ import { readUserData } from './firebaseUtils.js';
 import logger from './logger.js';
 import {
   COLLECTIONS,
-  RELAPSE_FIELDS,
-  RELAPSE_ENTRY_TYPES,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
   PATTERN_TRUST_MIN_ENTRIES,
@@ -72,11 +70,9 @@ export function extractEvents({
 } = {}) {
   const events = [];
 
-  // --- Relapse Radar: signal vs relapse, ISO event time (eventOccurredAt) ---
+  // --- Relapse Radar: every entry is a signal, ISO event time (eventOccurredAt) ---
   for (const e of relapseEntries) {
-    const isRelapse = e?.[RELAPSE_FIELDS.ENTRY_TYPE] === RELAPSE_ENTRY_TYPES.RELAPSE;
-    const type = isRelapse ? 'relapse:relapse' : 'relapse:signal';
-    const ev = makeEvent(type, e?.eventOccurredAt, {}, getEntryTimestamp(e));
+    const ev = makeEvent('relapse:signal', e?.eventOccurredAt, {}, getEntryTimestamp(e));
     if (ev) events.push(ev);
   }
 

@@ -5,7 +5,6 @@ import { generateSynthesisBriefing, assembleReckoning, composeReadingResponseNot
 import {
   COLLECTIONS,
   RELAPSE_FIELDS,
-  RELAPSE_ENTRY_TYPES,
   KILL_TARGET_FIELDS,
   HARD_LESSON_FIELDS,
   USER_SETTINGS_FIELDS,
@@ -211,10 +210,10 @@ const reckoningData = () => ({
       [HARD_LESSON_FIELDS.VIOLATIONS]: [{ date: recentISO, note: 'scrolled until 1am' }],
     },
   ],
+  // A signal in the period: a precursor, never evidence against a commitment.
   [COLLECTIONS.RELAPSE_ENTRIES]: [
     {
       id: 'r1',
-      [RELAPSE_FIELDS.ENTRY_TYPE]: RELAPSE_ENTRY_TYPES.RELAPSE,
       eventOccurredAt: recentISO,
       [RELAPSE_FIELDS.REFLECTION]: 'told myself one more time',
     },
@@ -235,10 +234,12 @@ describe('assembleReckoning — contradictions trace to real event ids', () => {
     assert.ok(violation);
     assert.equal(violation.evidence[0].eventId, `h1#violation@${recentISO}`);
 
-    const relapse = contradictions.find((c) => c.type === 'relapse_vs_commitment');
-    assert.ok(relapse);
-    assert.equal(relapse.evidence[0].eventId, 'r1');
-    assert.equal(relapse.commitment.id ? true : false, true);
+    // Signals never contradict a commitment — only escapes and rule breaks do.
+    assert.deepEqual(
+      [...new Set(contradictions.map((c) => c.type))].sort(),
+      ['escape_vs_kill', 'violation_vs_rule']
+    );
+    assert.ok(contradictions.every((c) => c.evidence.every((ev) => ev.eventId !== 'r1')));
 
     // Every contradiction carries at least one real event id (no fabrication).
     for (const c of contradictions) {

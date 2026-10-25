@@ -54,6 +54,26 @@ export function getMostRecentBreak(lesson) {
 }
 
 /**
+ * Newest break across every lesson, in ms, folding both representations: a
+ * rule's own violations[]/lastViolatedAt and legacy docs tagged
+ * `isRuleViolation`. Null when nothing was ever broken. "Days since the last
+ * rule break" readers (the Dashboard early warning) derive from this.
+ */
+export function getLastBreakMs(hardLessons) {
+  const lessons = Array.isArray(hardLessons) ? hardLessons : [];
+  let newest = 0;
+  for (const l of lessons) {
+    const ms = toMs(breakDate(getMostRecentBreak(l)));
+    if (ms > newest) newest = ms;
+    if (l?.isRuleViolation) {
+      const legacyMs = getEntryTimestamp(l);
+      if (legacyMs > newest) newest = legacyMs;
+    }
+  }
+  return newest || null;
+}
+
+/**
  * A rule is under review when its most-recent break is unresolved — no
  * after-action (`resolvedAt`) and no legacy free-text `note`. New breaks never
  * carry `note`, so a legacy note counts as an informal resolution (back-compat).

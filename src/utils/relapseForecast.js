@@ -1,9 +1,10 @@
 /**
- * relapseForecast — forward-looking pre-failure signal for Relapse Radar.
+ * relapseForecast — forward-looking pre-failure signal for The Signal.
  *
  * Builds on crossModuleCorrelation: of the learned associations whose CONSEQUENT
- * is a relapse, which ANTECEDENTS are active in the current window? When enough
- * converge, the radar can confront the user BEFORE the relapse, not after.
+ * is a rule break (a Hard Lesson violation — the record of a slip that landed),
+ * which ANTECEDENTS are active in the current window? When enough converge,
+ * the radar can confront the user BEFORE the break, not after.
  *
  * Pure + deterministic. No reads, no UI, no Oracle call — the caller decides
  * whether to surface the result and fire the (rate-limited) confrontation.
@@ -11,7 +12,7 @@
  * Guards (never cry wolf):
  *   - insufficient-signal (engine trust gate) → nothing fires.
  *   - support>=minSupport and lift>1 already enforced by the engine.
- *   - an already-occurred relapse inside the lead window suppresses the forecast
+ *   - an already-logged break inside the lead window suppresses the forecast
  *     (the prediction would be post-hoc).
  *   - an 'improving' synthesis signalDelta downgrades the weaker multi-signal
  *     path, requiring a single strong antecedent to fire.
@@ -22,7 +23,7 @@ import { extractEvents, computeCorrelations, DEFAULT_WINDOW_DAYS } from './cross
 export const FORECAST_MIN_ACTIVE_ANTECEDENTS = 2;
 export const FORECAST_SINGLE_STRONG_CONFIDENCE = 0.7;
 
-const RELAPSE_CONSEQUENT = 'relapse:relapse';
+const FAILURE_CONSEQUENT = 'hardlesson:violation';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_HOUR = 60 * 60 * 1000;
 
@@ -80,20 +81,20 @@ export function computeRelapseForecast({
     return { status, fired: false, activeAntecedents: [], convergenceScore: 0, signalKey: null };
   }
 
-  // Total distinct relapse antecedents the engine knows about — the "K" in the
+  // Total distinct break antecedents the engine knows about — the "K" in the
   // convergence countdown's "M of K antecedents active" framing (additive field).
-  const knownRelapseAntecedents = correlations.filter(
-    (c) => c.consequent === RELAPSE_CONSEQUENT
+  const knownAntecedents = correlations.filter(
+    (c) => c.consequent === FAILURE_CONSEQUENT
   ).length;
 
   // Most-recent event per type (events are time-sorted ascending).
   const lastByType = new Map();
   for (const e of events) lastByType.set(e.type, e);
 
-  // Of relapse antecedents, which are active in their lead window right now?
+  // Of break antecedents, which are active in their lead window right now?
   const active = [];
   for (const c of correlations) {
-    if (c.consequent !== RELAPSE_CONSEQUENT) continue;
+    if (c.consequent !== FAILURE_CONSEQUENT) continue;
     const last = lastByType.get(c.antecedent);
     if (!last) continue;
     const lead = leadWindowMs(c, windowDays);
@@ -114,22 +115,22 @@ export function computeRelapseForecast({
   }
 
   if (active.length === 0) {
-    return { status: 'ok', fired: false, activeAntecedents: [], convergenceScore: 0, signalKey: null, knownRelapseAntecedents };
+    return { status: 'ok', fired: false, activeAntecedents: [], convergenceScore: 0, signalKey: null, knownAntecedents };
   }
 
-  // False-positive guard: a relapse already happened inside the lead window —
-  // the forecast would be post-hoc, so suppress it.
+  // False-positive guard: a rule already broke inside the lead window — the
+  // forecast would be post-hoc, so suppress it.
   const maxLead = Math.max(...active.map((a) => a.leadWindowMs));
-  const lastRelapse = lastByType.get(RELAPSE_CONSEQUENT);
-  if (lastRelapse && now - lastRelapse.tMs >= 0 && now - lastRelapse.tMs <= maxLead) {
+  const lastBreak = lastByType.get(FAILURE_CONSEQUENT);
+  if (lastBreak && now - lastBreak.tMs >= 0 && now - lastBreak.tMs <= maxLead) {
     return {
       status: 'ok',
       fired: false,
       activeAntecedents: active,
       convergenceScore: 0,
       signalKey: null,
-      suppressedBy: 'recent-relapse',
-      knownRelapseAntecedents,
+      suppressedBy: 'recent-violation',
+      knownAntecedents,
     };
   }
 
@@ -143,7 +144,7 @@ export function computeRelapseForecast({
   const fired = signalDelta === 'improving' ? hasStrongSingle : hasMultiple || hasStrongSingle;
 
   if (!fired) {
-    return { status: 'ok', fired: false, activeAntecedents: active, convergenceScore, signalKey: null, knownRelapseAntecedents };
+    return { status: 'ok', fired: false, activeAntecedents: active, convergenceScore, signalKey: null, knownAntecedents };
   }
 
   // Episode-specific dedupe key: the active antecedent set + each one's
@@ -153,5 +154,5 @@ export function computeRelapseForecast({
     'forecast_' +
     active.map((a) => `${a.type}:${a.triggeringDayIndex}`).sort().join('|');
 
-  return { status: 'ok', fired: true, activeAntecedents: active, convergenceScore, signalKey, knownRelapseAntecedents };
+  return { status: 'ok', fired: true, activeAntecedents: active, convergenceScore, signalKey, knownAntecedents };
 }

@@ -95,9 +95,9 @@ describe('getBehavioralContext — protocol runs (14d window)', () => {
   it('counts signal entries carrying a protocolRun and surfaces the latest intensity', async () => {
     const data = {
       [COLLECTIONS.RELAPSE_ENTRIES]: [
-        { id: 'p1', timestamp: T0 - 1 * dayMs, [RELAPSE_FIELDS.ENTRY_TYPE]: 'signal', [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 8, trigger: 'the call', toolsUsed: ['breathing'], breathingCycles: 4 } },
-        { id: 'p2', timestamp: T0 - 3 * dayMs, [RELAPSE_FIELDS.ENTRY_TYPE]: 'signal', [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 4, trigger: '', toolsUsed: [], breathingCycles: 0 } },
-        { id: 'p-old', timestamp: T0 - 20 * dayMs, [RELAPSE_FIELDS.ENTRY_TYPE]: 'signal', [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 9 } },
+        { id: 'p1', timestamp: T0 - 1 * dayMs, [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 8, trigger: 'the call', toolsUsed: ['breathing'], breathingCycles: 4 } },
+        { id: 'p2', timestamp: T0 - 3 * dayMs, [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 4, trigger: '', toolsUsed: [], breathingCycles: 0 } },
+        { id: 'p-old', timestamp: T0 - 20 * dayMs, [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 9 } },
         { id: 'r1', timestamp: T0 - 2 * dayMs, [RELAPSE_FIELDS.ARCHETYPE]: 'Avoider' },
       ],
     };
@@ -204,12 +204,12 @@ describe('getBehavioralContext — partial fetch failures', () => {
 describe('getBehavioralContext — temporal correlations (computed field)', () => {
   const BASE = Date.UTC(2026, 0, 1, 0, 0, 0);
   const iso = (d, h = 10) => new Date(BASE + d * dayMs + h * 3600000).toISOString();
-  const relapseEntry = (d) => ({ [RELAPSE_FIELDS.ENTRY_TYPE]: 'relapse', eventOccurredAt: iso(d) });
+  const signalEntry = (d) => ({ eventOccurredAt: iso(d) });
   const journalEntry = (d, h) => ({ eventOccurredAt: iso(d, h) });
 
   it('forwards a size-bounded correlation result when signal clears the gate', async () => {
     const data = {
-      [COLLECTIONS.RELAPSE_ENTRIES]: [relapseEntry(0), relapseEntry(5), relapseEntry(10)],
+      [COLLECTIONS.RELAPSE_ENTRIES]: [signalEntry(0), signalEntry(5), signalEntry(10)],
       [COLLECTIONS.JOURNAL_ENTRIES]: [journalEntry(0, 12), journalEntry(5, 13), journalEntry(10, 11)],
       [COLLECTIONS.HARD_LESSONS]: Array.from({ length: 15 }, () => ({})), // pad to 21
     };
@@ -220,9 +220,9 @@ describe('getBehavioralContext — temporal correlations (computed field)', () =
     assert.ok(ctx.temporalCorrelations.items.length <= 3, 'capped to top 3');
 
     const item = ctx.temporalCorrelations.items.find(
-      (c) => c.antecedent === 'relapse:relapse' && c.consequent === 'journal:entry'
+      (c) => c.antecedent === 'relapse:signal' && c.consequent === 'journal:entry'
     );
-    assert.ok(item, 'expected relapse→journal correlation');
+    assert.ok(item, 'expected signal→journal correlation');
     // Only scalar fields are forwarded — no heavy sub-objects.
     assert.equal(item.lagUnit, 'hours');
     assert.equal(typeof item.lagMedian, 'number');
@@ -230,7 +230,7 @@ describe('getBehavioralContext — temporal correlations (computed field)', () =
   });
 
   it('returns insufficient-signal when the record is sparse', async () => {
-    const data = { [COLLECTIONS.RELAPSE_ENTRIES]: [relapseEntry(0), relapseEntry(1)] };
+    const data = { [COLLECTIONS.RELAPSE_ENTRIES]: [signalEntry(0), signalEntry(1)] };
     const ctx = await getBehavioralContext('u1', noDeps(data));
     assert.equal(ctx.temporalCorrelations.status, 'insufficient-signal');
     assert.deepEqual(ctx.temporalCorrelations.items, []);

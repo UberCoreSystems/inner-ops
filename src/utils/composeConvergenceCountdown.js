@@ -1,8 +1,8 @@
 /**
- * composeConvergenceCountdown — the forward PROJECTION on top of a fired relapse
- * forecast. computeRelapseForecast answers "which antecedents of past relapses
- * are active now?"; this answers "based on when each actually occurred and its
- * historical lead time, when does the relapse window open?"
+ * composeConvergenceCountdown — the forward PROJECTION on top of a fired
+ * forecast. computeRelapseForecast answers "which antecedents of past rule
+ * breaks are active now?"; this answers "based on when each actually occurred
+ * and its historical lead time, when does the break window open?"
  *
  * Pure + deterministic. No reads, no UI, no Oracle call. Every number is derived
  * solely from the forecast's own validated correlation data (lag medians measured
@@ -13,7 +13,7 @@
  *     never fires on its own — it inherits the forecast's cry-wolf gates.
  *   - projections are history-based WINDOWS, not appointments. Consuming copy
  *     must say "the window opens in ~D days" / "the window is open now", never
- *     "you will relapse on <date>".
+ *     "you will break it on <date>".
  *   - a window whose projected open time has already passed reads as "open now"
  *     (daysUntilWindow <= 0), not as a missed/false prediction.
  */
@@ -36,7 +36,7 @@ function lagMs(antecedent) {
  *   soonestDays: number|null,   // min daysUntilWindow; <= 0 means already open
  *   windowOpenNow: boolean,     // any antecedent's projected window has opened
  *   activeCount: number,        // M — antecedents converging now
- *   knownCount: number|null,    // K — distinct relapse antecedents the engine knows
+ *   knownCount: number|null,    // K — distinct break antecedents the engine knows
  * }}
  */
 export function composeConvergenceCountdown(forecast, { now = Date.now() } = {}) {
@@ -71,8 +71,8 @@ export function composeConvergenceCountdown(forecast, { now = Date.now() } = {})
   });
 
   const soonestDays = Math.min(...items.map((i) => i.daysUntilWindow));
-  const knownCount = Number.isFinite(forecast.knownRelapseAntecedents)
-    ? forecast.knownRelapseAntecedents
+  const knownCount = Number.isFinite(forecast.knownAntecedents)
+    ? forecast.knownAntecedents
     : null;
 
   return {

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { composeMirrorReading } from './composeMirrorReading.js';
-import { RELAPSE_FIELDS, RELAPSE_ENTRY_TYPES, KILL_TARGET_FIELDS } from './schema.js';
+import { RELAPSE_FIELDS, KILL_TARGET_FIELDS } from './schema.js';
 
 // Fixed reference instant so tests don't drift with the wall clock.
 const NOW = Date.UTC(2026, 4, 26, 12, 0, 0); // 2026-05-26T12:00:00Z
@@ -32,10 +32,10 @@ const checkIn = ({ daysAgo = 1, held = true } = {}) => ({
   held,
 });
 
-const relapse = ({ daysAgo = 1, archetype = null, entryType = RELAPSE_ENTRY_TYPES.SIGNAL } = {}) => ({
+// Every relapseEntries doc is a signal.
+const signal = ({ daysAgo = 1, archetype = null } = {}) => ({
   timestamp: NOW - daysAgo * DAY,
   [RELAPSE_FIELDS.ARCHETYPE]: archetype,
-  [RELAPSE_FIELDS.ENTRY_TYPE]: entryType,
 });
 
 describe('composeMirrorReading — cold start', () => {
@@ -310,14 +310,14 @@ describe('composeMirrorReading — precursor alert', () => {
 });
 
 describe('composeMirrorReading — synthesis', () => {
-  it('"lines breaking in two places" when both violation + confirmed relapse', () => {
+  it('"a rule broke" when a violation and a recent signal coincide', () => {
     const out = composeMirrorReading({
       now: NOW,
       hardLessons: [rule()],
-      relapseEntries: [relapse({ daysAgo: 2, entryType: RELAPSE_ENTRY_TYPES.RELAPSE })],
+      relapseEntries: [signal({ daysAgo: 2 })],
       signalReport: { ruleIntegrity: { violatedInWindow: 1 } },
     });
-    assert.match(out.synthesis, /breaking in two places/);
+    assert.match(out.synthesis, /A rule broke/);
   });
 
   it('"a rule broke" when only violation', () => {
@@ -329,13 +329,14 @@ describe('composeMirrorReading — synthesis', () => {
     assert.match(out.synthesis, /A rule broke/);
   });
 
-  it('"a relapse landed" when only confirmed relapse', () => {
+  it('a signal alone is never read as a failure', () => {
     const out = composeMirrorReading({
       now: NOW,
-      relapseEntries: [relapse({ daysAgo: 2, entryType: RELAPSE_ENTRY_TYPES.RELAPSE })],
+      hardLessons: [rule()],
+      relapseEntries: [signal({ daysAgo: 2 })],
       signalReport: { ruleIntegrity: { violatedInWindow: 0 } },
     });
-    assert.match(out.synthesis, /relapse landed/);
+    assert.doesNotMatch(out.synthesis || '', /relapse|rule broke/i);
   });
 
   it('"longest line you\'ve drawn" when aligned with significant hold', () => {
