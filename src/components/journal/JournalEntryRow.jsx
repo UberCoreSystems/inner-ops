@@ -23,7 +23,6 @@ export default function JournalEntryRow({ entry, onOpen }) {
     ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     : '—';
   const color = getMoodStripColor(entry.mood);
-  const opacity = 0.25 + ((entry.intensity || 3) / 5) * 0.75;
   // A locally-composed reading gets a muted dot and says so, rather than
   // signalling an Oracle reading the entry never received. Missing field =
   // pre-provenance document; left as-is.
@@ -38,7 +37,7 @@ export default function JournalEntryRow({ entry, onOpen }) {
     >
       <span
         className="w-2.5 h-2.5 rounded-full shrink-0"
-        style={{ backgroundColor: color, opacity }}
+        style={{ backgroundColor: color }}
         title={entry.mood || 'No mood'}
       />
       <span className="text-[#858585] text-[11px] tabular-nums w-12 shrink-0">

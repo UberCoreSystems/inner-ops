@@ -11,7 +11,7 @@ import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
 import ModuleIntro from '../components/help/ModuleIntro';
 import { getModuleIntro } from '../config/moduleIntros';
-import { moodCategories, moodOptions, intensityLevels, getMoodStripColor } from '../constants/moods';
+import { moodCategories, moodOptions, getMoodStripColor } from '../constants/moods';
 import { MoodIcons } from '../components/journal/MoodIcons';
 import JournalMonthGroup from '../components/journal/JournalMonthGroup';
 import JournalEntryRow from '../components/journal/JournalEntryRow';
@@ -71,53 +71,9 @@ const DEFAULT_MOOD_CATEGORY =
 // silently truncating the record being searched.
 const SEARCH_DRAIN_MAX_PAGES = 40;
 
-// Mood/intensity taxonomy lives in [src/constants/moods.js] so the
+// Mood taxonomy lives in [src/constants/moods.js] so the
 // Journal page and the Today's Reflection modal stay in sync.
 
-// Intensity ring visualization component — concentric rings whose count
-// encodes the level; outer container scaled 20% smaller than the original
-// design (w-14 → w-11, inner-ring sizing 28+i*10 → 22+i*8) for the Journal
-// page's tightened form footprint.
-const IntensityRing = ({ level, selected, onClick }) => {
-  const rings = intensityLevels.find(l => l.value === level)?.rings || 1;
-  const isActive = selected >= level;
-
-  const getColor = () => '#4da6ff';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative flex flex-col items-center transition-all duration-300"
-    >
-      <div className="relative w-11 h-11 flex items-center justify-center">
-        {[...Array(rings)].map((_, i) => (
-          <div
-            key={i}
-            className={`absolute rounded-full border-2 transition-all duration-500 ${
-              isActive
-                ? 'opacity-100'
-                : 'opacity-20 group-hover:opacity-40'
-            }`}
-            style={{
-              width: `${22 + i * 8}px`,
-              height: `${22 + i * 8}px`,
-              borderColor: isActive ? getColor() : '#3a3a3a',
-              animationDelay: `${i * 0.1}s`,
-              boxShadow: isActive && selected === level ? `0 0 ${8 + i * 4}px ${getColor()}40` : 'none',
-            }}
-          />
-        ))}
-        <div
-          className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-            isActive ? 'scale-100' : 'scale-50 opacity-30'
-          }`}
-          style={{ backgroundColor: isActive ? getColor() : '#3a3a3a' }}
-        />
-      </div>
-    </button>
-  );
-};
 
 // 30-day mood strip — single-row flex of 30 cells that auto-scale to the
 // container width. Replaces the former grid; the takeaway lives outside.
@@ -150,15 +106,13 @@ const MoodStrip = ({ entries }) => {
         const k = toLocalKey(day);
         const e = entryMap[k]?.entry;
         const color = e ? getMoodStripColor(e.mood) : null;
-        const intensity = e?.intensity || 3;
-        const opacity = color ? 0.25 + (intensity / 5) * 0.75 : 1;
         const isToday = k === todayKey;
         return (
           <div
             key={k}
             title={`${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${e ? `: ${e.mood}` : ': no entry'}`}
             className={`h-6 flex-1 rounded-sm ${isToday ? 'ring-1 ring-white/40' : ''}`}
-            style={{ backgroundColor: color || '#1a1a1a', opacity }}
+            style={{ backgroundColor: color || '#1a1a1a' }}
           />
         );
       })}
@@ -171,10 +125,10 @@ const MoodStrip = ({ entries }) => {
 // the save flow and the path that reopens a stored reading, so a follow-up
 // turn is built from the same text the first reading answered.
 const RETROSPECTIVE_NOTE = '\n[ENTRY CONTEXT: This entry was written significantly after the event. The user\'s recollection may be reconstructed rather than accurate. Weight behavioral specifics cautiously and probe for what details may have been edited by hindsight.]';
-function composeOracleInput({ content, mood, intensity, entryProximityFlag }) {
+function composeOracleInput({ content, mood, entryProximityFlag }) {
   const moodLabel = moodOptions.find(m => m.value === mood)?.label || mood;
   const proximityNote = entryProximityFlag === 'retrospective' ? RETROSPECTIVE_NOTE : '';
-  return `Mood: ${moodLabel} (${intensity}/5)\n${content}${proximityNote}`;
+  return `Mood: ${moodLabel}\n${content}${proximityNote}`;
 }
 
 // How many further pages the sit-return path will load looking for its entry
@@ -191,7 +145,6 @@ export default function Journal() {
   const [entry, setEntry] = useState('');
   const [eventOccurredAt, setEventOccurredAt] = useState(() => toDatetimeLocalString());
   const [mood, setMood] = useState(DEFAULT_MOOD);
-  const [intensity, setIntensity] = useState(3);
   const [selectedCategory, setSelectedCategory] = useState(DEFAULT_MOOD_CATEGORY);
   const [entries, setEntries] = useState([]);
   // Pagination: entries are loaded a page at a time (most-recent first) so a
@@ -547,7 +500,6 @@ export default function Journal() {
         // Create context from current entry state
         const currentContext = {
           mood,
-          intensity,
           content: entry,
           wordCount: entry.trim().split(/\s+/).length
         };
@@ -581,11 +533,11 @@ export default function Journal() {
       clearTimeout(timeoutId);
       isMounted = false;
     };
-  }, [entry, mood, intensity, entries]);
+  }, [entry, mood, entries]);
 
   // Generate contextual insights based on current writing
   const generateContextualInsights = async (currentContext, recentEntries) => {
-    const { mood, intensity, content, wordCount } = currentContext;
+    const { mood, content, wordCount } = currentContext;
     
     // Analyze writing patterns
     const insights = [];
@@ -603,8 +555,8 @@ export default function Journal() {
       insights.push("Name the one thing here you'd fight to keep. Why that one?");
     }
 
-    // Mood and intensity insights
-    if (mood === 'chaotic' && intensity >= 4) {
+    // Mood insights
+    if (mood === 'chaotic') {
       insights.push("Scattered and running hot. What's the one thing actually worth your attention right now?");
     }
 
@@ -694,7 +646,6 @@ export default function Journal() {
     setEntry('');
     setMood(DEFAULT_MOOD);
     setSelectedCategory(DEFAULT_MOOD_CATEGORY);
-    setIntensity(3);
     setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
   };
 
@@ -703,7 +654,6 @@ export default function Journal() {
     setEntry(entryToEdit.content || '');
     const editMood = entryToEdit.mood || DEFAULT_MOOD;
     setMood(editMood);
-    setIntensity(entryToEdit.intensity || 3);
     // Switch category tab to match the saved mood
     const cat = moodCategories.find(c => c.moods.some(m => m.value === editMood));
     setSelectedCategory(cat?.name || DEFAULT_MOOD_CATEGORY);
@@ -736,14 +686,13 @@ export default function Journal() {
 
     try {
       if (editingEntryId) {
-        // Update existing entry — preserve oracle data, just update content/mood/intensity
+        // Update existing entry — preserve oracle data, just update content/mood
         await updateData('journalEntries', editingEntryId, {
           content: entry,
           mood,
-          intensity,
         });
         setEntries(prev =>
-          prev.map(e => e.id === editingEntryId ? { ...e, content: entry, mood, intensity } : e)
+          prev.map(e => e.id === editingEntryId ? { ...e, content: entry, mood } : e)
         );
         ouraToast.success('Journal entry updated');
         // Re-classify the edited entry — the content may have moved between buckets.
@@ -763,7 +712,7 @@ export default function Journal() {
       const gapHours = (nowMs - occurredAt.getTime()) / 3_600_000;
       const entryProximityFlag = gapHours > 12 ? 'retrospective' : 'contemporaneous';
 
-      const inputText = composeOracleInput({ content: entry, mood, intensity, entryProximityFlag });
+      const inputText = composeOracleInput({ content: entry, mood, entryProximityFlag });
       // `entries` is newest-first, so the Oracle's "recent entries" context is
       // the HEAD of the list. slice(-3) took the tail — the three oldest loaded
       // entries, up to a page back.
@@ -793,7 +742,6 @@ export default function Journal() {
         newEntry = await writeData('journalEntries', {
           content: entry,
           mood,
-          intensity,
           eventOccurredAt: occurredAt.toISOString(),
           entryProximityFlag,
           ...(feedbackText ? { oracleJudgment: feedbackText } : {}),
@@ -854,7 +802,6 @@ export default function Journal() {
       setEntry('');
       setMood(DEFAULT_MOOD);
       setSelectedCategory(DEFAULT_MOOD_CATEGORY);
-      setIntensity(3);
       setEventOccurredAt(toDatetimeLocalString());
       setAiInsights({ reflections: [], isGenerating: false, lastUpdated: null });
 
@@ -1342,45 +1289,6 @@ export default function Journal() {
                       </button>
                     );
                   })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-gray-400 text-xs uppercase tracking-widest mb-4 font-medium">Intensity Level</label>
-                <div className="space-y-4">
-                  {/* Ring-based intensity visualization — restored from de5e9d3 at 20% smaller (w-11) */}
-                  <div className="flex justify-between items-center px-3">
-                    {intensityLevels.map((level) => (
-                      <IntensityRing
-                        key={level.value}
-                        level={level.value}
-                        selected={intensity}
-                        onClick={() => setIntensity(level.value)}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Progress line with gradient */}
-                  <div className="relative h-1 mx-3 bg-[#1a1a1a] rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${((intensity - 1) / 4) * 100}%`,
-                        background: `linear-gradient(90deg, #4da6ff 0%, #7cc4ff 100%)`,
-                        boxShadow: '0 0 8px rgba(77, 166, 255, 0.25)',
-                      }}
-                    />
-                  </div>
-
-                  {/* Selected intensity card */}
-                  <div className="text-center p-4 bg-gradient-to-b from-[#0a0a0a] to-black rounded-xl border border-[#1a1a1a]">
-                    <div className="text-white text-base font-light tracking-wide mb-0.5">
-                      {intensityLevels.find(level => level.value === intensity)?.label}
-                    </div>
-                    <div className="text-[#858585] text-xs font-light">
-                      {intensityLevels.find(level => level.value === intensity)?.description}
-                    </div>
-                  </div>
                 </div>
               </div>
 

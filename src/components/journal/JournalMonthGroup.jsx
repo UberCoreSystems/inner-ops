@@ -4,7 +4,7 @@ import JournalEntryRow from './JournalEntryRow';
 
 // Per-day cells for one month, so a collapsed group still shows the shape of
 // that month at a glance. Mirrors the 30-day strip's encoding: valence color,
-// opacity by intensity, blank cell for a day with no entry.
+// blank cell for a day with no entry.
 const MonthStrip = ({ group }) => {
   if (typeof group.year !== 'number') return null;
   const daysInMonth = new Date(group.year, group.month + 1, 0).getDate();
@@ -30,7 +30,6 @@ const MonthStrip = ({ group }) => {
             className="h-3 flex-1 rounded-[1px]"
             style={{
               backgroundColor: e ? getMoodStripColor(e.mood) : '#151515',
-              opacity: e ? 0.25 + ((e.intensity || 3) / 5) * 0.75 : 1,
             }}
           />
         );

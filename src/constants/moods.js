@@ -53,6 +53,9 @@ export const moodOptions = moodCategories.flatMap(cat =>
 export const getMoodStripColor = (mood) =>
   moodCategories.find(cat => cat.moods.some(m => m.value === mood))?.color || '#3a3a3a';
 
+// Legacy only. The intensity control was removed from the Journal form on
+// 2026-10-24; entries written before then still carry `intensity`, and the
+// entry detail labels it. Nothing writes or computes on it.
 export const intensityLevels = [
   { value: 1, label: 'Subtle', description: 'A whisper in the background', rings: 1 },
   { value: 2, label: 'Present', description: 'Noticeable but manageable', rings: 2 },
