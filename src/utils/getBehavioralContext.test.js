@@ -91,6 +91,35 @@ describe('getBehavioralContext — relapse archetype dominance (14d window)', ()
   });
 });
 
+describe('getBehavioralContext — protocol runs (14d window)', () => {
+  it('counts signal entries carrying a protocolRun and surfaces the latest intensity', async () => {
+    const data = {
+      [COLLECTIONS.RELAPSE_ENTRIES]: [
+        { id: 'p1', timestamp: T0 - 1 * dayMs, [RELAPSE_FIELDS.ENTRY_TYPE]: 'signal', [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 8, trigger: 'the call', toolsUsed: ['breathing'], breathingCycles: 4 } },
+        { id: 'p2', timestamp: T0 - 3 * dayMs, [RELAPSE_FIELDS.ENTRY_TYPE]: 'signal', [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 4, trigger: '', toolsUsed: [], breathingCycles: 0 } },
+        { id: 'p-old', timestamp: T0 - 20 * dayMs, [RELAPSE_FIELDS.ENTRY_TYPE]: 'signal', [RELAPSE_FIELDS.PROTOCOL_RUN]: { intensity: 9 } },
+        { id: 'r1', timestamp: T0 - 2 * dayMs, [RELAPSE_FIELDS.ARCHETYPE]: 'Avoider' },
+      ],
+    };
+    const ctx = await getBehavioralContext('u1', noDeps(data));
+    assert.equal(ctx.protocolRuns14d, 2);
+    assert.equal(ctx.lastProtocolIntensity, 8);
+    // A protocol run is still a signal entry in the density count.
+    assert.equal(ctx.recentRelapseCount, 3);
+  });
+
+  it('returns zero / null when no entry carries a protocolRun', async () => {
+    const data = {
+      [COLLECTIONS.RELAPSE_ENTRIES]: [
+        { id: 'r1', timestamp: T0 - 2 * dayMs, [RELAPSE_FIELDS.ARCHETYPE]: 'Avoider' },
+      ],
+    };
+    const ctx = await getBehavioralContext('u1', noDeps(data));
+    assert.equal(ctx.protocolRuns14d, 0);
+    assert.equal(ctx.lastProtocolIntensity, null);
+  });
+});
+
 describe('getBehavioralContext — violated hard lessons', () => {
   it('surfaces only entries flagged as violation with a rule', async () => {
     const data = {

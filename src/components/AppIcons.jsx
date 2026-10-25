@@ -226,6 +226,37 @@ export const Icons = {
     </svg>
   ),
 
+  // Protocol grounding tools (GroundingProtocol.jsx)
+  eye: (size = 24) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+      <circle cx="12" cy="12" r="3" opacity="0.7" />
+    </svg>
+  ),
+
+  breath: (size = 24) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M8 12h8" opacity="0.7" />
+      <path d="M12 8v8" opacity="0.7" />
+    </svg>
+  ),
+
+  droplet: (size = 24) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z" />
+      <path d="M9.5 14.5a2.5 2.5 0 0 0 2 2.4" opacity="0.7" />
+    </svg>
+  ),
+
+  movement: (size = 24) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="14" cy="4.5" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M6 20l4-7 3 2 2-4 4 3" />
+      <path d="M10 13l-1-5 4-1 2 4" opacity="0.7" />
+    </svg>
+  ),
+
   // Shield (for recovery/protection) - already have streak, adding dedicated shield
   shield: (size = 24) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

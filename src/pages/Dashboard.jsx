@@ -741,6 +741,14 @@ export default function Dashboard() {
                       <span className="text-[#858585] text-xs ml-1">← recent</span>
                     </div>
                   )}
+                  {(earlyWarning.level === 'high' || earlyWarning.level === 'elevated') && (
+                    <Link
+                      to="/relapse?protocol=1"
+                      className="inline-block mt-4 text-sm text-[#00d4aa] hover:text-white transition-colors"
+                    >
+                      Run protocol →
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>

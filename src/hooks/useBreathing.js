@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 
 const PHASES = ['inhale', 'hold1', 'exhale', 'hold2'];
 const TOTAL_CYCLES = 3;
+// breathCount runs 0..TOTAL_CYCLES inclusive, so one round is four cycles.
+export const CYCLES_PER_ROUND = TOTAL_CYCLES + 1;
 
 export const useBreathing = () => {
   const [breathPhase, setBreathPhase] = useState('ready');
@@ -60,7 +62,7 @@ export const useBreathing = () => {
       case 'hold1': return 'Hold...';
       case 'exhale': return 'Breathe Out...';
       case 'hold2': return 'Hold...';
-      case 'complete': return 'Well Done';
+      case 'complete': return 'Complete';
       default: return 'Ready';
     }
   };

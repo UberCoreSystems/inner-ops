@@ -95,6 +95,17 @@ export async function getBehavioralContext(userId, deps = {}) {
     );
     const recentRelapseCount = recentRelapses.length;
 
+    // Protocol runs: signal entries carrying a protocolRun — urges the user
+    // interrupted with the grounding tools instead of acting on. Count and
+    // the most recent intensity, same 14d window. Null when none.
+    const protocolRuns = recentRelapses
+      .filter(e => e[RELAPSE_FIELDS.PROTOCOL_RUN] && typeof e[RELAPSE_FIELDS.PROTOCOL_RUN] === 'object')
+      .sort((a, b) => getTimestamp(b) - getTimestamp(a));
+    const protocolRuns14d = protocolRuns.length;
+    const lastProtocolIntensity = protocolRuns14d > 0
+      ? (Number(protocolRuns[0][RELAPSE_FIELDS.PROTOCOL_RUN].intensity) || null)
+      : null;
+
     const archetypeCounts = {};
     recentRelapses.forEach(e => {
       const archetype = e[RELAPSE_FIELDS.ARCHETYPE];
@@ -163,6 +174,8 @@ export async function getBehavioralContext(userId, deps = {}) {
       activeKillTargets,
       dominantRelapseArchetype,
       recentRelapseCount,
+      protocolRuns14d,
+      lastProtocolIntensity,
       violatedHardLessons,
       journalLanguagePattern,
       identityDirection, // BER-137
@@ -185,6 +198,8 @@ function buildEmpty() {
     activeKillTargets: [],
     dominantRelapseArchetype: null,
     recentRelapseCount: 0,
+    protocolRuns14d: 0,
+    lastProtocolIntensity: null,
     violatedHardLessons: [],
     journalLanguagePattern: null,
     identityDirection: null,

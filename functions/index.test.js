@@ -73,6 +73,19 @@ test("absent journal pattern produces no journal line but keeps other context", 
   );
 });
 
+test("protocol runs render as a count with the last intensity, and are not trust-gated", () => {
+  const block = buildBehavioralContextBlock({ protocolRuns14d: 2, lastProtocolIntensity: 7 }, 5);
+  assert.match(block, /Protocol runs in last 14 days[^:]*: 2\./);
+  assert.match(block, /Last urge intensity: 7\/10/);
+});
+
+test("no protocol line when there are no runs; out-of-range intensity is dropped", () => {
+  assert.ok(!/Protocol runs/.test(buildBehavioralContextBlock({ protocolRuns14d: 0, lastProtocolIntensity: 7 })));
+  const block = buildBehavioralContextBlock({ protocolRuns14d: 1, lastProtocolIntensity: 42 });
+  assert.match(block, /Protocol runs in last 14 days[^:]*: 1\./);
+  assert.ok(!/Last urge intensity/.test(block));
+});
+
 // ── Trust-gating of pattern-framed context lines ────────────────────────────
 
 test("below the trust threshold, archetype + journal-language lines are gated out", () => {

@@ -48,6 +48,7 @@ import {
   sanitizeCustomList,
 } from '../utils/customPrecursors';
 import SignalDebriefCard from './SignalDebriefCard';
+import GroundingProtocol from './GroundingProtocol';
 import {
   SIGNAL_STATES,
   getSignalState,
@@ -78,23 +79,6 @@ const PRECURSOR_CONDITIONS = [
 // which stays last in the grid.
 const NONE_OF_THE_ABOVE = 'None of the above';
 const BUILTIN_PRECURSORS = PRECURSOR_CONDITIONS.filter(c => c !== NONE_OF_THE_ABOVE);
-
-// Post-Signal grounding tools. Same content as EmergencyButton's panel so the
-// two surfaces stay coherent — keeping a local copy here avoids importing a
-// component for its constants.
-const GROUNDING_TECHNIQUES = [
-  { name: '5-4-3-2-1 Grounding', icon: '👁️', description: 'Name 5 things you see, 4 you hear, 3 you feel, 2 you smell, 1 you taste' },
-  { name: 'Box Breathing', icon: '🫁', description: 'Breathe in 4 sec → Hold 4 sec → Out 4 sec → Hold 4 sec' },
-  { name: 'Cold Water Reset', icon: '💧', description: 'Splash cold water on your face or hold ice cubes' },
-  { name: 'Physical Movement', icon: '🏃', description: '10 jumping jacks, walk around the block, or stretch' },
-];
-const SIGNAL_MANTRAS = [
-  'Name what this is. A feeling, not an instruction.',
-  'Urge ≠ action. 90 seconds and it passes.',
-  'This is a craving, not a command. Wait it out.',
-  'The craving will pass whether I act on it or not.',
-  'Act against the urge once. Make it a pattern.',
-];
 
 const RelapseRadar = () => {
   const navigate = useNavigate();
@@ -183,11 +167,10 @@ const RelapseRadar = () => {
   const toggleExpand = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   // Post-save action surface — replaces the prior 3s success banner.
-  //   'signal'  → inline grounding tools + resolved/slipped checkpoint
+  //   'signal'  → the Protocol's grounding tools + resolved/slipped checkpoint
   //   'relapse' → forced "Extract the lesson" CTA (no auto-redirect)
   //   null      → form is active, no panel
   const [postSaveAction, setPostSaveAction] = useState(null);
-  const [postSaveMantra, setPostSaveMantra] = useState('');
 
   // Signal Debrief. landedOriginRef carries the origin signal's id through
   // the "it landed" flow — currentEntryId is overwritten when the relapse
@@ -801,7 +784,6 @@ const RelapseRadar = () => {
         setPostSaveAction('relapse');
       } else {
         setPostSaveAction('signal');
-        setPostSaveMantra(SIGNAL_MANTRAS[Math.floor(Math.random() * SIGNAL_MANTRAS.length)]);
       }
 
     } catch (error) {
@@ -1048,7 +1030,7 @@ const RelapseRadar = () => {
           onLanded={handleDebriefLanded}
         />
       )}
-    <div className="oura-card p-6">
+    <div id="signal-entry" className="oura-card p-6">
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-light text-white tracking-tight">The Signal</h2>
@@ -1510,26 +1492,7 @@ const RelapseRadar = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {GROUNDING_TECHNIQUES.map((t) => (
-              <div key={t.name} className="oura-card p-4 border border-oura-border">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl flex-shrink-0" aria-hidden="true">{t.icon}</span>
-                  <div className="min-w-0">
-                    <h4 className="text-gray-100 text-sm font-medium mb-1">{t.name}</h4>
-                    <p className="text-gray-400 text-xs leading-relaxed">{t.description}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {postSaveMantra && (
-            <div className="oura-card p-4 border border-oura-blue/20">
-              <p className="text-xs text-gray-400 uppercase tracking-widest mb-2">A reminder</p>
-              <p className="text-gray-200 text-sm italic leading-relaxed">"{postSaveMantra}"</p>
-            </div>
-          )}
+          <GroundingProtocol mode="tools" source="post_save" />
 
           {checkpointHeld ? (
             <div className="pt-1 space-y-3 animate-fade-in">

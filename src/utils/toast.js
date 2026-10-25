@@ -138,7 +138,7 @@ export const toasterConfig = {
   position: 'bottom-right',
   gutter: 12,
   containerStyle: {
-    bottom: 80, // Above the emergency button
+    bottom: 80, // Clear of the mobile bottom nav
   },
   toastOptions: {
     duration: 3000,

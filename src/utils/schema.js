@@ -40,6 +40,9 @@ export const RELAPSE_FIELDS = Object.freeze({
   //   { outcome: 'held'|'landed', resolvedAt: ISO, via: 'checkpoint'|'debrief',
   //     note?, relapseEntryId? }
   RESOLUTION: 'resolution',
+  // Present on signal entries logged through the Protocol (GroundingProtocol):
+  //   { intensity: 1-10, trigger, toolsUsed: string[], breathingCycles }
+  PROTOCOL_RUN: 'protocolRun',
 });
 
 // Allowed values for RELAPSE_FIELDS.ENTRY_TYPE. Entries written before this

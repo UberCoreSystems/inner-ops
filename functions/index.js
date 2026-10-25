@@ -477,6 +477,14 @@ function buildBehavioralContextBlock(behavioralContext, entryCount) {
   if (behavioralContext.recentRelapseCount > 0) {
     parts.push(`Relapse entries in last 14 days: ${Number(behavioralContext.recentRelapseCount) || 0}.`);
   }
+  // Protocol runs: urges he interrupted with the grounding tools instead of
+  // acting on. A count is a fact, not a pattern, so it is not trust-gated.
+  if (Number(behavioralContext.protocolRuns14d) > 0) {
+    const runs = Number(behavioralContext.protocolRuns14d);
+    const last = Number(behavioralContext.lastProtocolIntensity);
+    const lastLine = last >= 1 && last <= 10 ? ` Last urge intensity: ${last}/10.` : "";
+    parts.push(`Protocol runs in last 14 days (urges he interrupted with the grounding tools rather than acted on): ${runs}.${lastLine}`);
+  }
   if (Array.isArray(behavioralContext.activeKillTargets) && behavioralContext.activeKillTargets.length > 0) {
     const targets = behavioralContext.activeKillTargets
       .slice(0, MAX_CTX_ITEMS)

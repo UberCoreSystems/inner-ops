@@ -132,8 +132,8 @@ export default function DashboardWalkthrough({ source = 'launcher', onFinish }) 
     track('walkthrough_step_viewed', { stepId: step.id, index });
   }, [phase, step, index]);
 
-  // Escape exits. Mandatory rather than a nicety: the scrim sits above
-  // EmergencyButton, so the user must always have a one-key way out.
+  // Escape exits. Mandatory rather than a nicety: the scrim sits above all
+  // app chrome, so the user must always have a one-key way out.
   useEffect(() => {
     const onKeyDown = (e) => { if (e.key === 'Escape') skip(); };
     document.addEventListener('keydown', onKeyDown);

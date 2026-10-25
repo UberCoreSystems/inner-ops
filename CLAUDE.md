@@ -16,7 +16,7 @@ It is **not** a habit tracker, wellness app, or motivational tool. Enforce this 
 
 - No wellness framing. No "self-care" or "mindfulness" language.
 - No motivational copy. No "you got this," no encouragement, no affirmations.
-- Emergency/crisis surfaces use **grounding language**, not inspirational messaging (ref: EmergencyButton fix).
+- The Protocol (grounding tools on The Signal) uses **grounding language**, not inspirational messaging.
 - Philosophical precision is required. When in doubt, err toward stark clarity over softness.
 - Identity Frameworks v2 is part of the product definition — reference it for tone and conceptual alignment.
 
@@ -35,7 +35,7 @@ It is **not** a habit tracker, wellness app, or motivational tool. Enforce this 
 | **Journaling** | `src/pages/Journal.jsx` | `aiFeedback.js` |
 | **Kill List** | `src/pages/KillList.jsx` | `useKillTargets.js` (used by `KillListDashboard.jsx`) |
 | **Hard Lessons** | `src/pages/HardLessons.jsx` | Lesson extraction via Oracle cloud function |
-| **Relapse Radar** | `src/pages/Relapse.jsx` → `RelapseRadar.jsx` | `detectDriftSignals.js`, `detectEvasionMarkers.js` |
+| **Relapse Radar** | `src/pages/Relapse.jsx` → `RelapseRadar.jsx`; the Protocol (`GroundingProtocol.jsx`, grounding tools behind the header pill, deep-linked from Dashboard Early Warning via `?protocol=1`) logs a signal entry with `protocolRun` | `detectDriftSignals.js`, `detectEvasionMarkers.js`, `buildProtocolEntry.js` |
 | **Synthesis** | `src/pages/SynthesisBriefing.jsx` | `generateSynthesisBriefing.js`, `getBehavioralContext.js` |
 | **Dashboard** | `src/pages/Dashboard.jsx` | `clarityScore.js`, `KillListDashboard.jsx`, `DailyPrompt.jsx` |
 

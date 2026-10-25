@@ -160,8 +160,8 @@ export default function SpotlightOverlay({
               Step {stepIndex + 1} of {stepCount}
             </p>
             <div className="flex items-center gap-2">
-              {/* Skip is present on every step. The scrim covers EmergencyButton
-                  at z-50, so a one-tap exit is mandatory, not a courtesy. */}
+              {/* Skip is present on every step. The scrim covers the whole app
+                  at z-60, so a one-tap exit is mandatory, not a courtesy. */}
               <button
                 onClick={onSkip}
                 className="text-[#858585] hover:text-[#ababab] text-sm transition-colors min-h-11 px-3"

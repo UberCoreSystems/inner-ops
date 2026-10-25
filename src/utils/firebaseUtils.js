@@ -28,7 +28,7 @@ const ensureAuthenticated = async () => {
   throw new Error("Please sign in to continue using the app");
 };
 
-// Finding 8 remediation: callers that write sensitive data (emergency logs,
+// Finding 8 remediation: callers that write sensitive data (protocol runs,
 // crisis reflections) can pass `{ sensitive: true }` as a third argument so
 // payload fields are never logged. The `sensitive` marker itself is not
 // persisted — it only controls local telemetry.

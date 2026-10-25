@@ -858,7 +858,7 @@ export const generateFeedback = async ({
 
   // UXR-002 Spec 5: evasion-aware tone calibration.
   // Runs for every module (Journal, Kill List, Hard Lessons, Relapse Radar,
-  // Emergency) so confrontation precision scales with avoidance
+  // the Protocol) so confrontation precision scales with avoidance
   // density regardless of entry surface. detectEvasionMarkers short-circuits
   // entries under 20 chars internally, so this is safe for brief inputs.
   const evasionMarkers = detectEvasionMarkers(cleanEntry);
@@ -975,7 +975,7 @@ export const composeJournalContent = ({ event = '', attribution = '', expansion 
  *
  * The structured form is used by the retired-mood Journal entry flow
  * (Spec 3, UXR-002). Other modules (Kill List, Hard Lessons, Relapse Radar,
- * Emergency, OracleModal) continue to pass the legacy string form.
+ * the Protocol, OracleModal) continue to pass the legacy string form.
  */
 export const generateAIFeedback = async (moduleNameOrArgs, userInput, pastEntries = [], behavioralContext = null) => {
   let moduleName;

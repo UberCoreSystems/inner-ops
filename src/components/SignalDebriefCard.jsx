@@ -132,8 +132,16 @@ const SignalDebriefCard = ({ entries, onResolved, onLanded, animationDelay = '0.
   const loggedLine = anchorMs
     ? `Logged ${new Date(anchorMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
     : 'Logged — date unknown';
-  const archetypeLabel = resolveArchetypeLabel(current.selectedSelf) || 'Quick log';
+  const protocolRun = current.protocolRun && typeof current.protocolRun === 'object' ? current.protocolRun : null;
+  const archetypeLabel = resolveArchetypeLabel(current.selectedSelf) || (protocolRun ? 'Protocol' : 'Signal');
   const precursors = Array.isArray(current.precursorConditions) ? current.precursorConditions : [];
+  const protocolLine = protocolRun
+    ? [
+        `Protocol run · intensity ${Number(protocolRun.intensity) || '?'}/10`,
+        protocolRun.breathingCycles > 0 ? `${protocolRun.breathingCycles} breathing cycles` : null,
+        protocolRun.trigger ? `trigger: ${protocolRun.trigger}` : null,
+      ].filter(Boolean).join(' · ')
+    : null;
 
   return (
     <section id="signal-debrief-card" className="mb-10 animate-fade-in-up" style={{ animationDelay }}>
@@ -153,6 +161,9 @@ const SignalDebriefCard = ({ entries, onResolved, onLanded, animationDelay = '0.
         <div key={current.id} className="animate-fade-in mb-5">
           <div className="text-oura-cyan font-light text-lg">{archetypeLabel}</div>
           <div className="text-gray-400 text-sm mt-1">{loggedLine}</div>
+          {protocolLine && (
+            <div className="text-[#00d4aa]/80 text-xs mt-2">{protocolLine}</div>
+          )}
           {precursors.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {precursors.map(c => (

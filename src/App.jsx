@@ -13,7 +13,6 @@ import './App.css';
 // Core components (loaded immediately)
 import Navbar from './components/Navbar';
 import AuthGate from './components/AuthGate';
-import EmergencyButton from './components/EmergencyButton';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
 import OnboardingGate from './components/OnboardingGate';
 import VerifyEmailGate from './components/VerifyEmailGate';
@@ -182,9 +181,6 @@ function App() {
         <Toaster {...toasterConfig} />
         <InlineErrorBoundary name="Navbar">
           {user && <Navbar onLogout={handleLogout} user={user} />}
-        </InlineErrorBoundary>
-        <InlineErrorBoundary name="EmergencyButton">
-          {user && <EmergencyButton />}
         </InlineErrorBoundary>
         <SynthesisGuard>
         <OnboardingGate user={user}>

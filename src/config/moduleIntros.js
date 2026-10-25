@@ -75,7 +75,7 @@ export const MODULE_INTROS = Object.freeze([
     example: '11:40pm. Alone. Third night this week. The trigger was the argument, not the boredom.',
     actionLabel: 'Log a signal',
     actionRoute: null,
-    entrySelector: '#quick-signal-input',
+    entrySelector: '#signal-entry',
   },
   {
     id: 'synthesis',
