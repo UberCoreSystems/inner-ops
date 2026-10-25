@@ -1895,8 +1895,8 @@ const KillList = () => {
                       </div>
                     )}
                     {target.closureOracleResponse && (
-                      <div className="mt-2 pt-2 border-t border-[#a855f7]/20">
-                        <div className="text-[#a855f7] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
+                      <div className="mt-2 pt-2 border-t border-[#4da6ff]/20">
+                        <div className="text-[#4da6ff] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
                         <p className="text-[#ababab] text-xs italic leading-relaxed">{coerceClosureResponseText(target.closureOracleResponse)}</p>
                       </div>
                     )}
@@ -1937,8 +1937,8 @@ const KillList = () => {
                         </div>
                       )}
                       {target.escapeOracleResponse && (
-                        <div className="mt-2 pt-2 border-t border-[#a855f7]/20">
-                          <div className="text-[#a855f7] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
+                        <div className="mt-2 pt-2 border-t border-[#4da6ff]/20">
+                          <div className="text-[#4da6ff] text-[10px] uppercase tracking-widest mb-1">Oracle</div>
                           <p className="text-[#ababab] text-xs italic leading-relaxed">{target.escapeOracleResponse}</p>
                         </div>
                       )}
@@ -2001,7 +2001,7 @@ const KillList = () => {
                       </button>
                       <button
                         onClick={() => recontractTarget(target)}
-                        className="px-3 py-2 bg-transparent text-[#a855f7] border border-[#a855f7]/30 rounded-xl text-xs hover:bg-[#a855f7]/10 transition-colors"
+                        className="px-3 py-2 bg-transparent text-[#4da6ff] border border-[#4da6ff]/30 rounded-xl text-xs hover:bg-[#4da6ff]/10 transition-colors"
                       >
                         Re-contract
                       </button>

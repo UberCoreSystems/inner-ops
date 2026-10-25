@@ -39,7 +39,7 @@
 export const MODULE_INTROS = Object.freeze([
   {
     id: 'journal',
-    accent: '#a855f7',
+    accent: '#4da6ff',
     eyebrow: 'Journal',
     definition: 'Raw input. Everything the system knows about you starts here.',
     example: 'Skipped the gym again. Told myself I was tired. I wasn’t — I was avoiding the call with my father.',

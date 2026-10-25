@@ -178,7 +178,7 @@ export default function JournalEntryDetail({ entry, onClose, onEdit, onArchive, 
           </p>
 
           {oracleText && (
-            <div className={`p-4 bg-black border border-[#1a1a1a] border-l-2 rounded-2xl ${isLocalReading ? 'border-l-[#5a5a5a]' : 'border-l-[#a855f7]'}`}>
+            <div className={`p-4 bg-black border border-[#1a1a1a] border-l-2 rounded-2xl ${isLocalReading ? 'border-l-[#5a5a5a]' : 'border-l-[#4da6ff]'}`}>
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-[#888] font-medium text-xs uppercase tracking-widest">
                   {isLocalReading ? 'Oracle · Local' : 'Oracle'}

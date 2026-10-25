@@ -78,7 +78,7 @@ export const PROMPT_LIBRARY = {
 // for relapse/kill modules' palette; `clarity` for synthesis; `shadowWork`
 // for hard lessons. Journal stays on `selfAwareness`.
 export const ORACLE_SOURCE_META = {
-  journalEntries: { icon: 'search', label: 'From Your Journal', color: '#a855f7' },
+  journalEntries: { icon: 'search', label: 'From Your Journal', color: '#4da6ff' },
   hardLessons: { icon: 'bolt', label: 'From a Hard Lesson', color: '#f59e0b' },
   relapseEntries: { icon: 'shield', label: 'From a Relapse Log', color: '#ef4444' },
   killTargets: { icon: 'target', label: 'From a Kill Escape', color: '#ef4444' },
@@ -87,7 +87,7 @@ export const ORACLE_SOURCE_META = {
 };
 
 export const STATIC_CATEGORY_META = {
-  selfAwareness: { icon: 'search', label: 'Self-Awareness', color: '#a855f7' },
+  selfAwareness: { icon: 'search', label: 'Self-Awareness', color: '#4da6ff' },
   actionOriented: { icon: 'bolt', label: 'Take Action', color: '#22c55e' },
   shadowWork: { icon: 'moon', label: 'Shadow Work', color: '#6366f1' },
   gratitude: { icon: 'heart', label: 'Gratitude', color: '#f59e0b' },

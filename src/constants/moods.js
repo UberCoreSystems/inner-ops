@@ -1,8 +1,8 @@
 // Mood taxonomy — shared between the Journal page and the Today's Reflection modal.
 // Three valence categories × four moods each. Colors are mood-semantic
-// (Energized blue, Grounded grey, Challenged amber) and intentionally
-// distinct from the per-module accent palette so a journal entry's mood
-// reads independently of which surface it was captured from.
+// (Energized blue, Grounded grey, Challenged amber). Energized shares the
+// app-wide Oracle/Journal blue (#4da6ff); Grounded and Challenged stay
+// distinct from the per-module accent palette.
 
 export const moodCategories = [
   {

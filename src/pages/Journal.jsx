@@ -82,7 +82,7 @@ const IntensityRing = ({ level, selected, onClick }) => {
   const rings = intensityLevels.find(l => l.value === level)?.rings || 1;
   const isActive = selected >= level;
 
-  const getColor = () => '#a855f7';
+  const getColor = () => '#4da6ff';
 
   return (
     <button
@@ -1194,12 +1194,12 @@ export default function Journal() {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-2xl bg-[#a855f7]/10 border border-[#a855f7]/20 flex items-center justify-center shrink-0">
-              <AppIcon name="journal" size={22} color="#a855f7" glow={false} />
+            <div className="w-10 h-10 rounded-2xl bg-[#4da6ff]/10 border border-[#4da6ff]/20 flex items-center justify-center shrink-0">
+              <AppIcon name="journal" size={22} color="#4da6ff" glow={false} />
             </div>
             <h1 className="text-3xl font-bold text-white">Journal</h1>
           </div>
-          <div className="border-l-4 border-[#a855f7] pl-4 py-1">
+          <div className="border-l-4 border-[#4da6ff] pl-4 py-1">
             <p className="text-[#ababab]">{getModuleIntro('journal').definition}</p>
           </div>
         </header>
@@ -1208,29 +1208,29 @@ export default function Journal() {
 
         {/* Entry Form */}
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className={`oura-card p-6 mb-8 ${editingEntryId ? 'border border-[#a855f7]/40' : ''}`}>
+          <div className={`oura-card p-6 mb-8 ${editingEntryId ? 'border border-[#4da6ff]/40' : ''}`}>
             {editingEntryId && (
-              <div className="flex items-center justify-between mb-5 p-3 bg-[#a855f7]/10 border border-[#a855f7]/20 rounded-xl">
-                <span className="text-[#a855f7] text-sm font-medium">Editing entry — Oracle feedback will not regenerate on update</span>
-                <button type="button" onClick={cancelEdit} className="text-[#a855f7] text-xs hover:text-white transition-colors">Cancel</button>
+              <div className="flex items-center justify-between mb-5 p-3 bg-[#4da6ff]/10 border border-[#4da6ff]/20 rounded-xl">
+                <span className="text-[#4da6ff] text-sm font-medium">Editing entry — Oracle feedback will not regenerate on update</span>
+                <button type="button" onClick={cancelEdit} className="text-[#4da6ff] text-xs hover:text-white transition-colors">Cancel</button>
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Dynamic AI Insights */}
               {(aiInsights.reflections.length > 0 || aiInsights.isGenerating) && (
-                <div className="mb-6 p-5 bg-[#0a0a0a] border border-[#a855f7]/20 rounded-2xl">
+                <div className="mb-6 p-5 bg-[#0a0a0a] border border-[#4da6ff]/20 rounded-2xl">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-[#a855f7] font-medium text-sm uppercase tracking-wider">Live Reading</h3>
+                    <h3 className="text-[#4da6ff] font-medium text-sm uppercase tracking-wider">Live Reading</h3>
                     {aiInsights.isGenerating && (
-                      <div className="flex items-center text-[#a855f7] text-xs">
-                        <div className="animate-spin rounded-full h-3 w-3 border-b border-[#a855f7] mr-2"></div>
+                      <div className="flex items-center text-[#4da6ff] text-xs">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b border-[#4da6ff] mr-2"></div>
                         Reading...
                       </div>
                     )}
                   </div>
                   <div className="space-y-2">
                     {aiInsights.isGenerating && aiInsights.reflections.length === 0 ? (
-                      <div className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl animate-pulse">
+                      <div className="text-[#7cc4ff] text-sm bg-[#4da6ff]/10 p-3 rounded-xl animate-pulse">
                         Reading the signal in what you're writing...
                       </div>
                     ) : (
@@ -1238,7 +1238,7 @@ export default function Journal() {
                         // Pass 2 Finding 3 remediation: free-form AI strings can
                         // collide; use index as the key — the list is append-only
                         // and never reordered, so positional keys are safe here.
-                        <div key={idx} className="text-[#d8b4fe] text-sm bg-[#a855f7]/10 p-3 rounded-xl transition-all duration-300 ease-in-out">
+                        <div key={idx} className="text-[#7cc4ff] text-sm bg-[#4da6ff]/10 p-3 rounded-xl transition-all duration-300 ease-in-out">
                           {insight}
                         </div>
                       ))
@@ -1366,8 +1366,8 @@ export default function Journal() {
                       className="h-full rounded-full transition-all duration-500"
                       style={{
                         width: `${((intensity - 1) / 4) * 100}%`,
-                        background: `linear-gradient(90deg, #a855f7 0%, #c084fc 100%)`,
-                        boxShadow: '0 0 8px rgba(168, 85, 247, 0.25)',
+                        background: `linear-gradient(90deg, #4da6ff 0%, #7cc4ff 100%)`,
+                        boxShadow: '0 0 8px rgba(77, 166, 255, 0.25)',
                       }}
                     />
                   </div>
@@ -1398,9 +1398,9 @@ export default function Journal() {
                       }}
                       className={`text-center p-5 ${
                         currentPromptIndex < oraclePrompts.length
-                          ? 'bg-gradient-to-r from-[#a855f7]/80 to-[#a855f7]/40 hover:from-[#a855f7] hover:to-[#a855f7]/60 border border-[#a855f7]/30'
-                          : 'bg-gradient-to-r from-[#a855f7] to-[#9333ea] hover:from-[#9333ea] hover:to-[#7e22ce]'
-                      } text-white rounded-2xl text-sm font-medium transition-all duration-600 transform ${
+                          ? 'bg-gradient-to-r from-[#4da6ff]/80 to-[#4da6ff]/40 hover:from-[#4da6ff] hover:to-[#4da6ff]/60 border border-[#4da6ff]/30'
+                          : 'bg-gradient-to-r from-[#4da6ff] to-[#3d8fd9] hover:from-[#3d8fd9] hover:to-[#347ab8]'
+                      } text-black rounded-2xl text-sm font-medium transition-all duration-600 transform ${
                         promptVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
                       } min-h-[5rem] flex items-center justify-center shadow-lg hover:shadow-xl max-w-2xl mx-auto w-full`}
                       style={{
@@ -1423,7 +1423,7 @@ export default function Journal() {
                         <div
                           key={index}
                           className={`w-2 h-2 rounded-full transition-colors duration-300 ${
-                            index === currentPromptIndex ? 'bg-[#a855f7]' : 'bg-[#2a2a2a]'
+                            index === currentPromptIndex ? 'bg-[#4da6ff]' : 'bg-[#2a2a2a]'
                           }`}
                         />
                       ))}
@@ -1441,7 +1441,7 @@ export default function Journal() {
                     onBlur={() => setIsTextareaFocused(false)}
                     rows={6}
                     style={{ minHeight: '11rem' }}
-                    className={`w-full p-4 pr-14 bg-[#121216] text-white rounded-2xl border focus:border-[#a855f7] focus:outline-none resize-none transition-colors overflow-hidden ${
+                    className={`w-full p-4 pr-14 bg-[#121216] text-white rounded-2xl border focus:border-[#4da6ff] focus:outline-none resize-none transition-colors overflow-hidden ${
                       !entry.trim() && !isTextareaFocused
                         ? 'animate-border-breathe-journal'
                         : 'border-[#2a2a2a]'
@@ -1469,7 +1469,7 @@ export default function Journal() {
                     value={eventOccurredAt}
                     max={toDatetimeLocalString()}
                     onChange={(e) => setEventOccurredAt(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none transition-colors text-sm"
+                    className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#4da6ff] focus:outline-none transition-colors text-sm"
                   />
                 </div>
               )}
@@ -1527,8 +1527,8 @@ export default function Journal() {
           <div className="mb-8 border border-[#1a1a1a] animate-border-breathe rounded-2xl p-4 animate-fade-in-up">
             <div className="flex items-center gap-3 mb-1.5">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a855f7] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#a855f7]"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4da6ff] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4da6ff]"></span>
               </span>
               <p className="text-white text-sm font-medium">
                 Reading entry for patterns, lessons, and signals…
@@ -1609,7 +1609,7 @@ export default function Journal() {
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Search entries..."
-                  className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#a855f7] focus:outline-none transition-colors"
+                  className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#4da6ff] focus:outline-none transition-colors"
                 />
                 {searchInput && (
                   <button
@@ -1650,7 +1650,7 @@ export default function Journal() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => restoreArchivedJournalEntry(entry)}
-                          className="px-3 py-1.5 text-xs rounded-lg border border-[#a855f7]/30 text-[#a855f7] hover:bg-[#a855f7]/10 transition-colors"
+                          className="px-3 py-1.5 text-xs rounded-lg border border-[#4da6ff]/30 text-[#4da6ff] hover:bg-[#4da6ff]/10 transition-colors"
                         >
                           Restore
                         </button>
@@ -1778,7 +1778,7 @@ export default function Journal() {
                             document.getElementById('journal-entry-input')?.focus();
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
-                          className="px-6 py-2.5 bg-[#a855f7] hover:bg-[#9333ea] text-white rounded-xl transition-all duration-300 font-medium text-sm"
+                          className="px-6 py-2.5 bg-[#4da6ff] hover:bg-[#3d8fd9] text-black rounded-xl transition-all duration-300 font-medium text-sm"
                         >
                           Write Your First Entry
                         </button>

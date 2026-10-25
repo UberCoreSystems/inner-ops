@@ -250,7 +250,7 @@ const EmergencyButton = () => {
                   <div className="space-y-3">
                     <button
                       onClick={startBreathing}
-                      className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl font-medium hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                      className="w-full py-4 bg-gradient-to-r from-[#4da6ff] to-[#3d8fd9] text-black rounded-2xl font-medium hover:opacity-90 transition-all flex items-center justify-center gap-2"
                     >
                       <span>🫁</span> Start Box Breathing (1 min)
                     </button>

@@ -50,12 +50,12 @@ export const ouraToast = {
     });
   },
 
-  // Loading - Purple glow
+  // Loading - Blue glow
   loading: (message, options = {}) => {
     return toast.loading(message, {
       style: {
         ...baseStyle,
-        borderColor: '#a855f730',
+        borderColor: '#4da6ff30',
       },
       ...options,
     });
@@ -120,7 +120,7 @@ export const ouraToast = {
         loading: {
           style: {
             ...baseStyle,
-            borderColor: '#a855f730',
+            borderColor: '#4da6ff30',
           },
         },
         ...options,

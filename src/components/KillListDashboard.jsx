@@ -411,7 +411,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                 }))}
                 className="flex items-center gap-2 text-sm text-[#858585] hover:text-white transition-colors mb-3"
               >
-                <AppIcon name="journal" size={14} color="#a855f7" glow={false} />
+                <AppIcon name="journal" size={14} color="#4da6ff" glow={false} />
                 <span className="font-light">Reflection Notes</span>
                 <svg 
                   width="12" 
@@ -435,7 +435,7 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                       [target.id]: e.target.value
                     }))}
                     placeholder="How did this target challenge you? What did you learn?"
-                    className="w-full h-24 p-4 bg-[#0a0a0a] text-white border border-[#2a2a2a] rounded-xl text-sm font-light resize-none focus:outline-none focus:border-[#a855f7]/50 placeholder-[#828282] transition-all"
+                    className="w-full h-24 p-4 bg-[#0a0a0a] text-white border border-[#2a2a2a] rounded-xl text-sm font-light resize-none focus:outline-none focus:border-[#4da6ff]/50 placeholder-[#828282] transition-all"
                   />
                   <div className="flex gap-2">
                     <button
@@ -456,18 +456,18 @@ const KillListDashboard = React.memo(function KillListDashboard() {
                     </button>
                     <button
                       onClick={() => openOracleModal(target)}
-                      className="px-4 py-2 text-sm font-light bg-[#1a1a1a] text-[#a855f7] border border-[#2a2a2a] rounded-xl hover:border-[#a855f7]/50 transition-all flex items-center gap-2"
+                      className="px-4 py-2 text-sm font-light bg-[#1a1a1a] text-[#4da6ff] border border-[#2a2a2a] rounded-xl hover:border-[#4da6ff]/50 transition-all flex items-center gap-2"
                     >
-                      <AppIcon name="insight" size={14} color="#a855f7" glow={false} />
+                      <AppIcon name="insight" size={14} color="#4da6ff" glow={false} />
                       Oracle Read
                     </button>
                   </div>
 
                   {/* Oracle Wisdom Display */}
                   {oracleFeedbacks[target.id] && (
-                    <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#a855f7]/30 rounded-xl">
-                      <h4 className="text-[#a855f7] font-light text-sm mb-2 flex items-center gap-2">
-                        <AppIcon name="insight" size={14} color="#a855f7" />
+                    <div className="mt-4 p-4 bg-[#0a0a0a] border border-[#4da6ff]/30 rounded-xl">
+                      <h4 className="text-[#4da6ff] font-light text-sm mb-2 flex items-center gap-2">
+                        <AppIcon name="insight" size={14} color="#4da6ff" />
                         Oracle Read
                       </h4>
                       <div className="text-[#ababab] text-sm leading-relaxed font-light italic">

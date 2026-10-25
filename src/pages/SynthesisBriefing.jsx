@@ -312,7 +312,7 @@ export default function SynthesisBriefing() {
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-[#a855f7]/30 border-t-[#a855f7] rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-[#4da6ff]/30 border-t-[#4da6ff] rounded-full animate-spin" />
       </div>
     );
   }
@@ -346,7 +346,7 @@ export default function SynthesisBriefing() {
               onClick={handleGenerate}
               disabled={generating || !hasCrossModuleData}
               title={!hasCrossModuleData ? 'Add a Kill Contract, Hard Lesson, or Relapse entry first' : undefined}
-              className="px-6 py-2.5 bg-[#a855f7] hover:bg-[#9333ea] hover:shadow-lg hover:shadow-[#a855f7]/20 disabled:bg-[#1a1a1a] disabled:text-[#858585] disabled:shadow-none disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all text-sm flex items-center gap-2"
+              className="px-6 py-2.5 bg-[#4da6ff] hover:bg-[#3d8fd9] hover:shadow-lg hover:shadow-[#4da6ff]/20 disabled:bg-[#1a1a1a] disabled:text-[#858585] disabled:shadow-none disabled:cursor-not-allowed text-black rounded-xl font-medium transition-all text-sm flex items-center gap-2"
             >
               {generating ? (
                 <>

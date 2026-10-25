@@ -71,7 +71,7 @@ export default function BriefingScreen({
           )}
 
           {sample && (
-            <div className="mt-8 border-l-2 border-[#a855f7]/40 pl-4">
+            <div className="mt-8 border-l-2 border-[#4da6ff]/40 pl-4">
               <p className="text-[#828282] text-xs uppercase tracking-widest mb-2">What someone wrote</p>
               <p className="text-[#858585] text-sm italic leading-relaxed mb-4">{sample.context}</p>
               <p className="text-[#828282] text-xs uppercase tracking-widest mb-2">The Oracle</p>

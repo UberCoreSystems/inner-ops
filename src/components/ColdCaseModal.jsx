@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { AppIcon } from './AppIcons';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 
-const ORACLE = '#a855f7';
+const ORACLE = '#4da6ff';
 const ENGAGE = '#ef4444';
 
 /**
@@ -143,7 +143,7 @@ export default function ColdCaseModal({
               </div>
               {oraclePhase === 'loading' ? (
                 <div className="flex items-center gap-2 text-[#858585] text-sm italic">
-                  <div className="w-3 h-3 border border-[#a855f7] border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3 h-3 border border-[#4da6ff] border-t-transparent rounded-full animate-spin" />
                   Reading the file…
                 </div>
               ) : (

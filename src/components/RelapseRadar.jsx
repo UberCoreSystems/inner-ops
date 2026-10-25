@@ -1019,8 +1019,8 @@ const RelapseRadar = () => {
           </div>
         )}
         {entry.oracleFeedback && (
-          <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-purple rounded-xl">
-            <h4 className="text-oura-purple font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
+          <div className="mt-4 p-4 bg-oura-darker border-l-4 border-oura-blue rounded-xl">
+            <h4 className="text-oura-blue font-light text-sm mb-2 tracking-wide">ORACLE'S JUDGMENT</h4>
             <p className={`text-gray-300 text-xs leading-relaxed whitespace-pre-wrap ${expandedSections[`${entry.id}_oracle`] ? '' : 'line-clamp-3'}`}>
               {entry.oracleFeedback}
             </p>
@@ -1056,8 +1056,8 @@ const RelapseRadar = () => {
         </div>
         {/* Pattern Data */}
         {relapseEntries.length > 0 && step === 2 && (
-          <div className="mb-6 oura-card border-l-4 border-oura-purple p-5">
-            <h3 className="text-oura-purple font-light text-base mb-4 tracking-wide">PATTERN DATA</h3>
+          <div className="mb-6 oura-card border-l-4 border-oura-blue p-5">
+            <h3 className="text-oura-blue font-light text-base mb-4 tracking-wide">PATTERN DATA</h3>
             <div className="space-y-2">
               {archetypeFrequency[0] && (
                 <div className="text-gray-300 text-sm bg-oura-darker p-3 rounded-xl">
@@ -1525,7 +1525,7 @@ const RelapseRadar = () => {
           </div>
 
           {postSaveMantra && (
-            <div className="oura-card p-4 border border-oura-purple/20">
+            <div className="oura-card p-4 border border-oura-blue/20">
               <p className="text-xs text-gray-400 uppercase tracking-widest mb-2">A reminder</p>
               <p className="text-gray-200 text-sm italic leading-relaxed">"{postSaveMantra}"</p>
             </div>

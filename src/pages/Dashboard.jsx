@@ -444,7 +444,7 @@ export default function Dashboard() {
 
   const getActivityMeta = useCallback((type) => {
     const meta = {
-      journal: { icon: <AppIcon name="journal" size={18} color="#a855f7" glow={false} />, color: '#a855f7', label: 'Journal' },
+      journal: { icon: <AppIcon name="journal" size={18} color="#4da6ff" glow={false} />, color: '#4da6ff', label: 'Journal' },
       relapse: { icon: <AppIcon name="relapse" size={18} color="#f59e0b" glow={false} />, color: '#f59e0b', label: 'Awareness' },
       hardlesson: { icon: <AppIcon name="bolt" size={18} color="#f59e0b" glow={false} />, color: '#f59e0b', label: 'Hard Lesson' }
     };
@@ -643,9 +643,9 @@ export default function Dashboard() {
         <section data-tour="quick-actions" className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.08s' }}>
           <h3 className="text-[#858585] text-xs uppercase tracking-widest mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link to="/journal" className="oura-card p-5 group hover:border-[#a855f7]/50 transition-all" style={cardGlow('#a855f7')}>
-              <div className="w-12 h-12 rounded-2xl bg-[#a855f7]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <AppIcon name="journal" size={28} color="#a855f7" />
+            <Link to="/journal" className="oura-card p-5 group hover:border-[#4da6ff]/50 transition-all" style={cardGlow('#4da6ff')}>
+              <div className="w-12 h-12 rounded-2xl bg-[#4da6ff]/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <AppIcon name="journal" size={28} color="#4da6ff" />
               </div>
               <h4 className="text-white font-medium mb-1">Journal</h4>
               <p className="text-[#858585] text-sm">Today's reflection</p>
@@ -967,7 +967,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 auto-rows-fr gap-4 flex-1">
               <ScoreCard score={stats.killTargets} label="Kills" sublabel={`of ${stats.killTargetsTotal || 0} contracts`} color="#ef4444" icon={<AppIcon name="target" size={20} color="#ef4444" />} size="small" glow />
               <ScoreCard score={stats.hardLessons} label="Lessons" sublabel={`of ${stats.hardLessonsTotal || 0} total`} color="#f59e0b" icon={<AppIcon name="hardLessons" size={20} color="#f59e0b" />} size="small" glow />
-              <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#a855f7" icon={<AppIcon name="journal" size={20} color="#a855f7" />} size="small" glow />
+              <ScoreCard score={stats.journalEntries} label="Journal" sublabel={`of ${stats.journalEntriesTotal || 0} total`} color="#4da6ff" icon={<AppIcon name="journal" size={20} color="#4da6ff" />} size="small" glow />
               <ScoreCard score={stats.relapseEntries || 0} label="Signal" sublabel={`of ${stats.relapseEntries || 0} total`} color="#00d4aa" icon={<AppIcon name="relapse" size={20} color="#00d4aa" />} size="small" glow />
             </div>
           </section>

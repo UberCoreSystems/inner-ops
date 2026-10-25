@@ -1121,7 +1121,7 @@ export default function HardLessons() {
             </div>
 
             {!showAllFields && (
-              <div className="px-4 py-3 rounded-xl border border-[#a855f7]/20 bg-[#a855f7]/5">
+              <div className="px-4 py-3 rounded-xl border border-[#4da6ff]/20 bg-[#4da6ff]/5">
                 <p className="text-sm text-[#ababab] leading-relaxed">
                   Describe what happened above, then let the Oracle extract the assumption, the ignored signal, the cost, the lesson, and the rule. You edit everything after.
                 </p>
@@ -1131,7 +1131,7 @@ export default function HardLessons() {
             {showAllFields && (
             <>
             {newLesson.isOracleExtracted && (
-              <p className="text-xs uppercase tracking-widest text-[#a855f7]">Review &amp; edit the extraction</p>
+              <p className="text-xs uppercase tracking-widest text-[#4da6ff]">Review &amp; edit the extraction</p>
             )}
             {/* My Assumption */}
             <div>
@@ -1241,7 +1241,7 @@ export default function HardLessons() {
                   <button
                     onClick={() => submitLesson(false)}
                     disabled={loading}
-                    className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
+                    className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
                   >
                     {loading ? 'Saving...' : 'Save Draft'}
                   </button>
@@ -1249,7 +1249,7 @@ export default function HardLessons() {
                   <button
                     onClick={() => submitLesson(true)}
                     disabled={loading}
-                    className="px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
+                    className="px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
                   >
                     {loading ? 'Finalizing...' : 'Finalize Lesson'}
                   </button>
@@ -1259,7 +1259,7 @@ export default function HardLessons() {
               <button
                 onClick={seekOracleExtraction}
                 disabled={loading || (newLesson.eventDescription?.trim().length ?? 0) < 30}
-                className="px-6 py-3 bg-[#a855f7] hover:bg-[#9333ea] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
+                className="px-6 py-3 bg-[#4da6ff] hover:bg-[#3d8fd9] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
               >
                 {showAllFields ? 'Re-extract with Oracle' : 'Ask Oracle to Extract Lesson & Rule'}
               </button>
@@ -1394,7 +1394,7 @@ export default function HardLessons() {
               <button
                 onClick={generateCostPatternNarrative}
                 disabled={loadingNarrative}
-                className="px-4 py-1.5 text-xs bg-[#1a1a1a] text-[#a855f7] border border-[#a855f7]/30 rounded-lg hover:bg-[#a855f7]/10 transition-colors disabled:opacity-40"
+                className="px-4 py-1.5 text-xs bg-[#1a1a1a] text-[#4da6ff] border border-[#4da6ff]/30 rounded-lg hover:bg-[#4da6ff]/10 transition-colors disabled:opacity-40"
               >
                 {loadingNarrative ? 'Analyzing…' : 'Generate Pattern'}
               </button>
@@ -1781,7 +1781,7 @@ export default function HardLessons() {
                         {lesson.oracleWisdom && typeof lesson.oracleWisdom === 'string' && (
                           <div className="border-t border-[#1a1a1a] pt-5">
                             <div className="flex items-center gap-2 mb-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-[#a855f7]" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-[#4da6ff]" />
                               <h4 className="text-[#858585] font-medium text-xs uppercase tracking-wider">Oracle</h4>
                             </div>
                             <p className="text-[#ababab] text-sm leading-relaxed">{lesson.oracleWisdom}</p>
@@ -1839,7 +1839,7 @@ export default function HardLessons() {
                       <button
                         onClick={submitScarInventory}
                         disabled={savingScars || scarInventory.every(s => !s.trim())}
-                        className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-white rounded-2xl transition-all duration-300 font-medium"
+                        className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
                       >
                         {savingScars ? 'Saving...' : 'Record These Scars'}
                       </button>

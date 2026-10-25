@@ -20,7 +20,6 @@ export default {
           // Score colors
           cyan: '#00d4aa',
           blue: '#4da6ff',
-          purple: '#a855f7',
           amber: '#f59e0b',
           red: '#ef4444',
           green: '#22c55e',

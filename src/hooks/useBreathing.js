@@ -67,9 +67,9 @@ export const useBreathing = () => {
 
   const getColor = () => {
     switch (breathPhase) {
-      case 'inhale': return 'bg-blue-500';
+      case 'inhale': return 'bg-[#4da6ff]';
       case 'hold1':
-      case 'hold2': return 'bg-purple-500';
+      case 'hold2': return 'bg-[#347ab8]';
       case 'exhale': return 'bg-green-500';
       case 'complete': return 'bg-oura-cyan';
       default: return 'bg-gray-500';

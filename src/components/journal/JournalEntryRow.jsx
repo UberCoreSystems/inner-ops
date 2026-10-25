@@ -51,7 +51,7 @@ export default function JournalEntryRow({ entry, onOpen }) {
         <OracleReactionChip entry={entry} />
         {entry.oracleJudgment && (
           <span
-            className={`w-1.5 h-1.5 rounded-full ${isLocalReading ? 'bg-[#5a5a5a]' : 'bg-[#a855f7]'}`}
+            className={`w-1.5 h-1.5 rounded-full ${isLocalReading ? 'bg-[#5a5a5a]' : 'bg-[#4da6ff]'}`}
             title={isLocalReading ? 'Reading assembled locally — the Oracle did not respond' : 'Oracle reading recorded'}
           />
         )}

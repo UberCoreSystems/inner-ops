@@ -9,7 +9,7 @@ const AnimatedRings = () => (
     {/* Large outer ring */}
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full border border-[#4da6ff]/10 animate-pulse" style={{ animationDuration: '4s' }} />
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-[#4da6ff]/10 animate-pulse" style={{ animationDuration: '3s', animationDelay: '0.5s' }} />
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full border border-[#a855f7]/10 animate-pulse" style={{ animationDuration: '3.5s', animationDelay: '1s' }} />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full border border-[#4da6ff]/10 animate-pulse" style={{ animationDuration: '3.5s', animationDelay: '1s' }} />
     {/* Glow effect */}
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] rounded-full bg-gradient-radial from-[#4da6ff]/5 to-transparent" />
   </div>
@@ -28,7 +28,7 @@ const Logo = () => (
           <linearGradient id="logoGradient" x1="0" y1="0" x2="48" y2="48">
             <stop offset="0%" stopColor="#4da6ff" />
             <stop offset="50%" stopColor="#4da6ff" />
-            <stop offset="100%" stopColor="#a855f7" />
+            <stop offset="100%" stopColor="#7cc4ff" />
           </linearGradient>
         </defs>
       </svg>

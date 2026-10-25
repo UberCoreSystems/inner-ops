@@ -263,14 +263,14 @@ export default function KillClosureModal({
               )}
             </div>
 
-            <div className="p-4 bg-[#0a0a0a] border border-[#a855f7]/30 rounded-xl">
-              <div className="text-[#a855f7] text-xs uppercase tracking-widest mb-2 flex items-center gap-2">
-                <AppIcon name="insight" size={12} color="#a855f7" />
+            <div className="p-4 bg-[#0a0a0a] border border-[#4da6ff]/30 rounded-xl">
+              <div className="text-[#4da6ff] text-xs uppercase tracking-widest mb-2 flex items-center gap-2">
+                <AppIcon name="insight" size={12} color="#4da6ff" />
                 Oracle
               </div>
               {oraclePhase === 'loading' ? (
                 <div className="flex items-center gap-2 text-[#858585] text-sm italic">
-                  <div className="w-3 h-3 border border-[#a855f7] border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3 h-3 border border-[#4da6ff] border-t-transparent rounded-full animate-spin" />
                   Reading the closure…
                 </div>
               ) : (
