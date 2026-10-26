@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 
 import {
   SIGNAL_WINDOW_MS,
+  SIGNAL_REMINDER_AFTER_MS,
   SIGNAL_STATES,
   getSignalAnchorMs,
   getSignalState,
   getDebriefQueue,
+  getOpenSignals,
   formatWindowRemaining,
 } from './signalDebrief.js';
 import {
@@ -52,9 +54,19 @@ describe('getSignalState — basic states', () => {
     assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.LIVE);
   });
 
-  it('unresolved signal past 48h is pending', () => {
-    const s = signal({ eventMs: NOW - 49 * hourMs });
+  it('unresolved signal past 72h is pending', () => {
+    const s = signal({ eventMs: NOW - 73 * hourMs });
     assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.PENDING);
+  });
+
+  it('unresolved signal at 49h is still live — the window is 72h', () => {
+    const s = signal({ eventMs: NOW - 49 * hourMs });
+    assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.LIVE);
+  });
+
+  it('window and reminder constants pin the product numbers', () => {
+    assert.equal(SIGNAL_WINDOW_MS, 72 * hourMs);
+    assert.equal(SIGNAL_REMINDER_AFTER_MS, 24 * hourMs);
   });
 
   it('stored held resolution passes through as closed/held with provenance', () => {
@@ -76,10 +88,10 @@ describe('getSignalState — basic states', () => {
 
   it('stored landed resolution is closed/landed with its provenance', () => {
     const s = signal({
-      eventMs: NOW - 60 * hourMs,
+      eventMs: NOW - 80 * hourMs,
       resolution: {
         outcome: SIGNAL_RESOLUTION_OUTCOMES.LANDED,
-        resolvedAt: iso(NOW - 55 * hourMs),
+        resolvedAt: iso(NOW - 75 * hourMs),
         via: SIGNAL_RESOLUTION_VIA.CHECKPOINT,
       },
     });
@@ -115,7 +127,7 @@ describe('getSignalState — basic states', () => {
   });
 
   it('an unknown outcome is not a resolution — the window still governs', () => {
-    const s = signal({ eventMs: NOW - 60 * hourMs, resolution: { outcome: 'maybe' } });
+    const s = signal({ eventMs: NOW - 80 * hourMs, resolution: { outcome: 'maybe' } });
     assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.PENDING);
   });
 
@@ -133,8 +145,8 @@ describe('getSignalState — basic states', () => {
 
 describe('getSignalState — nothing is derived from other entries', () => {
   it('a passed window stays pending no matter what else is on the record', () => {
-    const s = signal({ id: 's1', eventMs: NOW - 60 * hourMs });
-    const later = signal({ id: 's2', eventMs: NOW - 55 * hourMs });
+    const s = signal({ id: 's1', eventMs: NOW - 80 * hourMs });
+    const later = signal({ id: 's2', eventMs: NOW - 75 * hourMs });
     assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.PENDING);
     assert.equal(getSignalState(later, NOW).status, SIGNAL_STATES.PENDING);
   });
@@ -166,19 +178,19 @@ describe('getSignalState — nothing is derived from other entries', () => {
   });
 });
 
-describe('getSignalState — boundaries (half-open [anchor, anchor+48h))', () => {
-  it('at exactly +48h the window has passed', () => {
+describe('getSignalState — boundaries (half-open [anchor, anchor+72h))', () => {
+  it('at exactly +72h the window has passed', () => {
     const s = signal({ eventMs: NOW - SIGNAL_WINDOW_MS });
     assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.PENDING);
   });
 
-  it('one ms before +48h it is still live', () => {
+  it('one ms before +72h it is still live', () => {
     const s = signal({ eventMs: NOW - SIGNAL_WINDOW_MS + 1 });
     assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.LIVE);
   });
 
-  it('retrospective signal (event 3d before logging) is pending immediately', () => {
-    const s = signal({ eventMs: NOW - 3 * dayMs, createdAt: iso(NOW - hourMs) });
+  it('retrospective signal (event 4d before logging) is pending immediately', () => {
+    const s = signal({ eventMs: NOW - 4 * dayMs, createdAt: iso(NOW - hourMs) });
     assert.equal(getSignalState(s, NOW).status, SIGNAL_STATES.PENDING);
   });
 });
@@ -216,6 +228,34 @@ describe('getDebriefQueue', () => {
 
   it('empty input yields empty queue', () => {
     assert.deepEqual(getDebriefQueue([], NOW), []);
+  });
+});
+
+describe('getOpenSignals', () => {
+  it('walks pending oldest first, then live newest first; closed drop out', () => {
+    const pendingOld = signal({ id: 'pOld', eventMs: NOW - 20 * dayMs });
+    const pendingNew = signal({ id: 'pNew', eventMs: NOW - 4 * dayMs });
+    const liveOld = signal({ id: 'lOld', eventMs: NOW - 50 * hourMs });
+    const liveNew = signal({ id: 'lNew', eventMs: NOW - hourMs });
+    const held = signal({
+      id: 'held',
+      eventMs: NOW - hourMs,
+      resolution: { outcome: SIGNAL_RESOLUTION_OUTCOMES.HELD, resolvedAt: iso(NOW), via: 'checkpoint' },
+    });
+    const open = getOpenSignals([liveOld, held, pendingNew, liveNew, pendingOld], NOW);
+    assert.deepEqual(open.map(o => o.entry.id), ['pOld', 'pNew', 'lNew', 'lOld']);
+    assert.deepEqual(open.map(o => o.state.status), ['pending', 'pending', 'live', 'live']);
+    assert.equal(open[2].state.windowEndsAtMs, NOW - hourMs + SIGNAL_WINDOW_MS);
+  });
+
+  it('a live signal moves to the pending side at exactly +72h', () => {
+    const s = signal({ id: 's', eventMs: NOW - SIGNAL_WINDOW_MS + 1 });
+    assert.equal(getOpenSignals([s], NOW)[0].state.status, SIGNAL_STATES.LIVE);
+    assert.equal(getOpenSignals([s], NOW + 1)[0].state.status, SIGNAL_STATES.PENDING);
+  });
+
+  it('empty input yields empty list', () => {
+    assert.deepEqual(getOpenSignals([], NOW), []);
   });
 });
 

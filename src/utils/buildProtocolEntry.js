@@ -5,7 +5,7 @@
  *
  * Design constraints:
  *   - It is a signal like every other relapseEntries doc, and it writes no
- *     resolution: a run opens the same 48h debrief window a wizard signal
+ *     resolution: a run opens the same 72h debrief window a wizard signal
  *     does. Whether it held or landed is the user's call afterward.
  *   - selectedSelf (archetype) and precursorConditions stay empty;
  *     detectDriftSignals skips empty-archetype entries, so a run feeds

@@ -1377,6 +1377,10 @@ async function eraseUserAccount(db, auth, uid) {
   return summary;
 }
 
+// signalReminders — scheduled email reminders for open signals (+24h and at
+// window close). Defined in its own module; see functions/signalReminders.js.
+exports.signalReminders = require("./signalReminders").signalReminders;
+
 // deleteUserData — permanently erase the caller's account: all Firestore data
 // and the Firebase Auth record. Auth-gated; a user can only delete their own
 // account (uid comes from the verified token, never from the client payload).

@@ -42,6 +42,9 @@ export const RELAPSE_FIELDS = Object.freeze({
   // Present on signal entries logged through the Protocol (GroundingProtocol):
   //   { intensity: 1-10, trigger, toolsUsed: string[], breathingCycles }
   PROTOCOL_RUN: 'protocolRun',
+  // { h24?: ISO, close?: ISO } — email reminder stamps. Server-written only
+  // (functions/signalReminders.js); the client never sets or reads them.
+  REMINDERS: 'reminders',
 });
 
 // Every relapseEntries doc is a signal — a precursor log, never the event
@@ -208,6 +211,8 @@ export const ENGAGEMENT_TRIGGERS = Object.freeze({
   KILL_LIST_CHECK_IN: 'killListCheckIn',
   SYNTHESIS_READY: 'synthesisReady',
   IDENTITY_DIRECTION_REVIEW: 'identityDirectionReview',
+  // Email only — no in-app evaluator. Read by functions/signalReminders.js.
+  SIGNAL_REMINDERS: 'signalReminders',
 });
 
 // Default notification preferences for new accounts. Journal-staleness (the
@@ -219,6 +224,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
   [ENGAGEMENT_TRIGGERS.KILL_LIST_CHECK_IN]: { enabled: false },
   [ENGAGEMENT_TRIGGERS.SYNTHESIS_READY]: { enabled: true },
   [ENGAGEMENT_TRIGGERS.IDENTITY_DIRECTION_REVIEW]: { enabled: false },
+  [ENGAGEMENT_TRIGGERS.SIGNAL_REMINDERS]: { enabled: true },
 });
 
 // Oracle-related fields. The Oracle Cloud Function now returns a structured

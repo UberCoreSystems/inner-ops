@@ -348,7 +348,7 @@ export default function Settings() {
           <div className="mb-5">
             <h2 className="text-lg font-light text-white">Notifications</h2>
             <p className="text-[#858585] text-xs mt-1">
-              In-app banner prompts. Off by default except where journaling has stalled.
+              Prompts in the app and by email. Off by default except where journaling has stalled and for open signals.
             </p>
           </div>
 
@@ -366,6 +366,14 @@ export default function Settings() {
             enabled={!!notificationPreferences[ENGAGEMENT_TRIGGERS.SYNTHESIS_READY]?.enabled}
             disabled={savingNotifications || !loaded}
             onToggle={() => toggleTrigger(ENGAGEMENT_TRIGGERS.SYNTHESIS_READY)}
+          />
+
+          <ToggleRow
+            label="Signal reminders by email"
+            description="At 24 hours, and when the 72-hour window closes. Sent to your sign-in address while a signal is still pending conversion to a Hard Lesson or a close."
+            enabled={!!notificationPreferences[ENGAGEMENT_TRIGGERS.SIGNAL_REMINDERS]?.enabled}
+            disabled={savingNotifications || !loaded}
+            onToggle={() => toggleTrigger(ENGAGEMENT_TRIGGERS.SIGNAL_REMINDERS)}
           />
 
           <ToggleRow

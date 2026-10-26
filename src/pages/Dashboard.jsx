@@ -552,7 +552,7 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Signal Debrief — signals whose 48h window passed unresolved.
+        {/* Signal Debrief — open signals: pending (72h window passed) first, then live.
             Prop-driven off rawUserData so an answer patches dashboard state in
             place; the card owns both writes. "It landed" stashes the Hard
             Lessons prefill from the signal and this surface moves there. */}

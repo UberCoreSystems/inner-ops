@@ -1351,7 +1351,7 @@ const RelapseRadar = () => {
           <div className="oura-card border-l-4 border-oura-cyan p-4">
             <h3 className="text-gray-100 text-base font-medium mb-1">Signal logged. The window is open.</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
-              Use one of these now. Then mark how it resolved.
+              Use one of these now. The signal stays pending for 72 hours until you convert it to a Hard Lesson or close it.
             </p>
           </div>
 

@@ -286,7 +286,7 @@ export default function GroundingProtocol({ mode = 'full', source = 'signal', on
         {view === 'done' && full && (
           <div className="space-y-4 animate-fade-in">
             <p className="text-white text-sm leading-relaxed">
-              Logged. A 48-hour window is open on this signal. When it closes, the Debrief asks you to call it: held or landed.
+              Logged. A 72-hour window is open on this signal. It stays pending until you convert it to a Hard Lesson or close it.
             </p>
             <button type="button" onClick={onClose} className={`${SECONDARY_BUTTON} w-full sm:w-auto sm:px-6 sm:flex-none`}>
               Close
