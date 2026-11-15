@@ -15,10 +15,13 @@
  * (ISO). A stamp is written only after a successful send, so a failed send is
  * retried on the next run. Server-written only; the client never touches it.
  *
- * Transport: Google Workspace SMTP as noreply@innerops.io with an app
- * password in the SIGNAL_REMINDER_SMTP_PASSWORD secret. The innerops.io SPF
- * record must include _spf.google.com and Workspace DKIM must be published,
- * or Gmail spam-folders these.
+ * Transport: Google Workspace SMTP. noreply@innerops.io is an alias, not a
+ * mailbox, so the function signs in as the owning Workspace user
+ * (SIGNAL_REMINDER_SMTP_USER secret, with an app password in
+ * SIGNAL_REMINDER_SMTP_PASSWORD) and sends as the alias, which must be set up
+ * under Gmail → Settings → Accounts → "Send mail as" or Gmail rewrites From.
+ * The innerops.io SPF record must include _spf.google.com and Workspace DKIM
+ * must be published, or Gmail spam-folders these.
  *
  * Opt-out: userSettings.notificationPreferences.signalReminders.enabled ===
  * false (on unless explicitly off, like the in-app triggers). Unverified
@@ -28,6 +31,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 
+const smtpUser = defineSecret("SIGNAL_REMINDER_SMTP_USER");
 const smtpPassword = defineSecret("SIGNAL_REMINDER_SMTP_PASSWORD");
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -45,8 +49,7 @@ const PREFERENCE_ID = "signalReminders";
 
 const SMTP_HOST = "smtp.gmail.com";
 const SMTP_PORT = 465;
-const SMTP_USER = "noreply@innerops.io";
-const SENDER = `Inner Ops <${SMTP_USER}>`;
+const SENDER = "Inner Ops <noreply@innerops.io>";
 const APP_URL = "https://innerops.io";
 const DASHBOARD_URL = `${APP_URL}/dashboard`;
 const SETTINGS_URL = `${APP_URL}/settings`;
@@ -297,7 +300,7 @@ function buildFirebaseDeps(nowMs) {
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: true,
-    auth: { user: SMTP_USER, pass: smtpPassword.value() },
+    auth: { user: smtpUser.value(), pass: smtpPassword.value() },
   });
 
   return {
@@ -344,7 +347,7 @@ const signalReminders = onSchedule(
     schedule: "every 30 minutes",
     region: "us-central1",
     timeoutSeconds: 120,
-    secrets: [smtpPassword],
+    secrets: [smtpUser, smtpPassword],
   },
   async () => {
     await runSignalReminders(buildFirebaseDeps(Date.now()));
