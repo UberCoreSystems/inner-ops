@@ -279,7 +279,16 @@ async function runSignalReminders(deps) {
       stats.sent += 1;
     } catch (error) {
       stats.failed += 1;
-      log.error("signalReminders: user send failed", { uid, signals: items.length, message: error?.message });
+      // "message" is the logger's own field; a payload key of that name is
+      // overwritten and the cause is lost.
+      log.error("signalReminders: user send failed", {
+        uid,
+        signals: items.length,
+        reason: error?.message,
+        code: error?.code,
+        smtpResponseCode: error?.responseCode,
+        smtpCommand: error?.command,
+      });
     }
   }
 
