@@ -309,7 +309,8 @@ function buildFirebaseDeps(nowMs) {
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: true,
-    auth: { user: smtpUser.value(), pass: smtpPassword.value() },
+    // Google shows app passwords in spaced groups; a paste keeps the spaces.
+    auth: { user: smtpUser.value().trim(), pass: smtpPassword.value().replace(/\s+/g, "") },
   });
 
   return {
