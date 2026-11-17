@@ -723,11 +723,12 @@ const RelapseRadar = () => {
     setLoggedSignal(null);
     setReceiptToolsOpen(false);
     setStep(1);
-    requestAnimationFrame(() => {
+    // The card mounts on this same update; wait for it to be in the page.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       const target = document.getElementById('signal-debrief-card') || document.getElementById('signal-entry');
       // 'center', not 'start': the fixed nav covers the top of the viewport.
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+    }));
   };
 
   // Debrief card "It landed": the card owns the stamp and the prefill; this
@@ -876,7 +877,9 @@ const RelapseRadar = () => {
 
   return (
     <>
-      {entriesLoaded && !loadError && (
+      {/* Held back while the post-save receipt is up: one path forward at a
+          time. Done brings the card in, with the new signal on it. */}
+      {entriesLoaded && !loadError && postSaveAction === null && (
         <SignalDebriefCard
           entries={relapseEntries}
           onResolved={applyResolutionLocally}
