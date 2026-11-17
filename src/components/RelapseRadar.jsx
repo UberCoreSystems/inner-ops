@@ -48,7 +48,6 @@ import {
 } from '../utils/customPrecursors';
 import SignalDebriefCard from './SignalDebriefCard';
 import GroundingProtocol from './GroundingProtocol';
-import { bridgeSignalToHardLessons } from '../utils/bridgeSignalToHardLessons';
 import {
   SIGNAL_STATES,
   getSignalState,
@@ -159,15 +158,15 @@ const RelapseRadar = () => {
   const [expandedSections, setExpandedSections] = useState({});
   const toggleExpand = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // Post-save action surface — replaces the prior 3s success banner.
-  //   'signal' → the Protocol's grounding tools + resolved/slipped checkpoint
-  //   null     → form is active, no panel
+  // Post-save surface — the close of a log.
+  //   'signal' → the receipt: window closing time, Done, a link to the tools
+  //   null     → form is active, no receipt
   const [postSaveAction, setPostSaveAction] = useState(null);
 
-  // Post-save checkpoint: the Signal Debrief answered in place.
-  const [checkpointHeld, setCheckpointHeld] = useState(false);
-  const [checkpointNote, setCheckpointNote] = useState('');
-  const [checkpointBusy, setCheckpointBusy] = useState(false);
+  // The entry the receipt is about. Held separately from currentEntryId,
+  // which the Oracle modal clears on close.
+  const [loggedSignal, setLoggedSignal] = useState(null);
+  const [receiptToolsOpen, setReceiptToolsOpen] = useState(false);
 
   // BER-182: Oura Ring biometric precursor data
   const {
@@ -657,7 +656,10 @@ const RelapseRadar = () => {
       }
       setCurrentEntryId(savedEntry.id);
       const now = new Date();
-      setRelapseEntries(prev => [{ ...savedEntry, createdAt: now, timestamp: now }, ...prev]);
+      const localEntry = { ...savedEntry, createdAt: now, timestamp: now };
+      setRelapseEntries(prev => [localEntry, ...prev]);
+      setLoggedSignal(localEntry);
+      setReceiptToolsOpen(false);
 
       // Long-term memory — fire-and-forget; never blocks the save.
       updateMemory('relapse', savedEntry.id);
@@ -669,8 +671,6 @@ const RelapseRadar = () => {
         provenance: oracleProvenance,
         fallbackReason: oracleFallbackReason,
       });
-
-      ouraToast.success('Signal logged');
 
       // BER-133: check for archetype-kill-list correlation on new entry
       const submittedArchetype = selectedSelf;
@@ -702,8 +702,8 @@ const RelapseRadar = () => {
       setPrecursorContext('');
       setEventOccurredAt(toDatetimeLocalString());
 
-      // Post-save action surface. Replaces the prior 3s banner + 3.5s auto-
-      // navigate: inline grounding tools and a two-button resolution checkpoint.
+      // Post-save receipt: the close of the log. Held or landed is answered
+      // on the Signal Debrief card, never here.
       setPostSaveAction('signal');
 
     } catch (error) {
@@ -716,85 +716,18 @@ const RelapseRadar = () => {
     }
   };
 
-  // Post-Signal checkpoint: user confirms the precursor passed. Write first —
-  // the held close never depends on the optional note. On failure the panel
-  // stays up with its buttons intact; the tap must not silently vanish.
-  const handleConditionsResolved = async () => {
-    if (!currentEntryId || checkpointBusy) return;
-    setCheckpointBusy(true);
-    const resolution = {
-      outcome: SIGNAL_RESOLUTION_OUTCOMES.HELD,
-      resolvedAt: new Date().toISOString(),
-      via: SIGNAL_RESOLUTION_VIA.CHECKPOINT,
-    };
-    try {
-      await updateData('relapseEntries', currentEntryId, { resolution });
-      applyResolutionLocally(currentEntryId, resolution);
-      setCheckpointNote('');
-      setCheckpointHeld(true);
-    } catch (error) {
-      logger.error('Checkpoint held write failed:', error);
-      if (redirectIfAuthLost(error)) return;
-      ouraToast.error('Save failed — signal not closed.');
-    } finally {
-      setCheckpointBusy(false);
-    }
-  };
-
-  const exitCheckpoint = () => {
-    setCheckpointHeld(false);
-    setCheckpointNote('');
+  // Done on the receipt: the log is finished. Reset the wizard and put the
+  // Signal Debrief card, where this signal now waits, in view.
+  const finishLog = () => {
     setPostSaveAction(null);
+    setLoggedSignal(null);
+    setReceiptToolsOpen(false);
     setStep(1);
-    ouraToast.success('Signal closed — held.');
-  };
-
-  // Optional "what held?" one-liner, merged into the already-written held
-  // resolution. A failed note write never un-holds the signal.
-  const handleCheckpointNoteSave = async () => {
-    const trimmed = checkpointNote.trim();
-    if (!trimmed) { exitCheckpoint(); return; }
-    setCheckpointBusy(true);
-    const existing = relapseEntries.find(e => e.id === currentEntryId)?.resolution;
-    const resolution = { ...existing, note: trimmed };
-    try {
-      await updateData('relapseEntries', currentEntryId, { resolution });
-      applyResolutionLocally(currentEntryId, resolution);
-    } catch (error) {
-      logger.error('Checkpoint note write failed:', error);
-      ouraToast.error('Note not saved.');
-    } finally {
-      setCheckpointBusy(false);
-      exitCheckpoint();
-    }
-  };
-
-  // Post-Signal checkpoint: user is reporting a slip. Stamp this signal
-  // landed, then hand the slip to Hard Lessons with the signal prefilled —
-  // the event itself is that module's record. Write first: on failure the
-  // panel stays up with its buttons intact.
-  const handleSlipped = async () => {
-    if (!currentEntryId || checkpointBusy) return;
-    setCheckpointBusy(true);
-    const resolution = {
-      outcome: SIGNAL_RESOLUTION_OUTCOMES.LANDED,
-      resolvedAt: new Date().toISOString(),
-      via: SIGNAL_RESOLUTION_VIA.CHECKPOINT,
-    };
-    try {
-      await updateData('relapseEntries', currentEntryId, { resolution });
-      applyResolutionLocally(currentEntryId, resolution);
-      const signal = relapseEntries.find(e => e.id === currentEntryId) || { id: currentEntryId };
-      bridgeSignalToHardLessons(signal);
-      setPostSaveAction(null);
-      navigate('/hardlessons');
-    } catch (error) {
-      logger.error('Checkpoint landed write failed:', error);
-      if (redirectIfAuthLost(error)) return;
-      ouraToast.error('Save failed — signal not closed.');
-    } finally {
-      setCheckpointBusy(false);
-    }
+    requestAnimationFrame(() => {
+      const target = document.getElementById('signal-debrief-card') || document.getElementById('signal-entry');
+      // 'center', not 'start': the fixed nav covers the top of the viewport.
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   };
 
   // Debrief card "It landed": the card owns the stamp and the prefill; this
@@ -954,7 +887,7 @@ const RelapseRadar = () => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-light text-white tracking-tight">The Signal</h2>
-          <div className="text-sm text-gray-400">Step {step} of 5</div>
+          {postSaveAction === null && <div className="text-sm text-gray-400">Step {step} of 5</div>}
         </div>
         {/* Pattern Data */}
         {relapseEntries.length > 0 && step === 2 && (
@@ -1313,7 +1246,7 @@ const RelapseRadar = () => {
         </div>
       )}
 
-      {step === 5 && (
+      {step === 5 && postSaveAction === null && (
         <div className="space-y-6 animate-fade-in-up">
           <h3 className="text-xl font-light text-white tracking-tight">Reflection</h3>
           <div className="relative">
@@ -1346,72 +1279,54 @@ const RelapseRadar = () => {
         </div>
       )}
 
-      {postSaveAction === 'signal' && (
-        <div className="mb-6 space-y-4 animate-fade-in-up">
-          <div className="oura-card border-l-4 border-oura-cyan p-4">
-            <h3 className="text-gray-100 text-base font-medium mb-1">Signal logged. The window is open.</h3>
-            <p className="text-gray-400 text-sm leading-relaxed">
-              Use one of these now. The signal stays pending for 72 hours until you convert it to a Hard Lesson or close it.
-            </p>
+      {postSaveAction === 'signal' && (() => {
+        const receiptState = getSignalState(loggedSignal);
+        const windowOpen = receiptState?.status === 'live';
+        const closesAt = windowOpen
+          ? new Date(receiptState.windowEndsAtMs).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+          : null;
+        return (
+          <div id="signal-receipt" className="mb-6 space-y-4 animate-fade-in-up">
+            <div className="oura-card border-l-4 border-oura-cyan p-5">
+              <p className="text-oura-cyan text-xs font-medium uppercase tracking-widest mb-2">Signal logged</p>
+              <p className="text-gray-100 text-base leading-relaxed">
+                {windowOpen
+                  ? `Window open until ${closesAt}.`
+                  : 'Its 72-hour window has already passed.'}
+              </p>
+              <p className="text-gray-400 text-sm leading-relaxed mt-1">
+                {windowOpen
+                  ? 'Pending until you call it: held or landed.'
+                  : 'Call it on the Signal Debrief card: held or landed.'}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-5">
+                <button
+                  type="button"
+                  onClick={finishLog}
+                  className="px-6 py-2.5 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] transition-colors min-h-11"
+                >
+                  Done
+                </button>
+                {!receiptToolsOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setReceiptToolsOpen(true)}
+                    className="text-[#00d4aa] hover:text-[#00e6b8] text-sm transition-colors min-h-11"
+                  >
+                    Run protocol →
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {receiptToolsOpen && (
+              <div className="oura-card p-5">
+                <GroundingProtocol mode="tools" source="post_save" onClose={() => setReceiptToolsOpen(false)} />
+              </div>
+            )}
           </div>
-
-          <GroundingProtocol mode="tools" source="post_save" />
-
-          {checkpointHeld ? (
-            <div className="pt-1 space-y-3 animate-fade-in">
-              <div>
-                <p className="text-white text-sm">Held. What held?</p>
-                <p className="text-[#858585] text-xs mt-0.5">One line. Optional.</p>
-              </div>
-              <input
-                type="text"
-                value={checkpointNote}
-                onChange={(e) => setCheckpointNote(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCheckpointNoteSave(); }}
-                maxLength={200}
-                className="w-full px-4 py-3 rounded-xl bg-oura-darker border border-oura-border text-gray-200 text-sm placeholder-gray-500 focus:outline-none focus:border-oura-cyan/40"
-              />
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={handleCheckpointNoteSave}
-                  disabled={checkpointBusy}
-                  className="px-5 py-2.5 bg-white text-black text-sm font-medium rounded-xl hover:bg-[#d1d1d1] disabled:opacity-50 transition-all"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={exitCheckpoint}
-                  disabled={checkpointBusy}
-                  className="text-[#858585] hover:text-[#ababab] text-xs transition-colors"
-                >
-                  Skip
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={handleConditionsResolved}
-                disabled={checkpointBusy}
-                className="px-5 py-3 rounded-2xl bg-oura-card border border-oura-cyan/40 text-oura-cyan hover:bg-oura-cyan/10 disabled:opacity-50 transition-colors font-medium"
-              >
-                Conditions resolved
-              </button>
-              <button
-                type="button"
-                onClick={handleSlipped}
-                disabled={checkpointBusy}
-                className="px-5 py-3 rounded-2xl bg-oura-card border border-[#b45309]/40 text-[#b45309] hover:bg-[#b45309]/10 disabled:opacity-50 transition-colors font-medium"
-              >
-                I slipped
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {archetypeMatchPrompt && (
         <div className="mb-6 oura-card border border-oura-amber/30 bg-oura-amber/5 p-4 animate-fade-in-up">
@@ -1442,22 +1357,24 @@ const RelapseRadar = () => {
         </div>
       )}
 
+      {postSaveAction === null && (
       <div className="flex justify-between mt-8 gap-4">
         <button
           onClick={prevStep}
-          disabled={step === 1 || submitSuccess || postSaveAction !== null}
+          disabled={step === 1 || submitSuccess}
           className="px-6 py-3 bg-oura-card text-white rounded-2xl disabled:opacity-30 hover:bg-oura-darker transition-all duration-200 border border-oura-border"
         >
           Previous
         </button>
         <button
           onClick={nextStep}
-          disabled={loading || submitSuccess || postSaveAction !== null || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf) || (step === 5 && (!selectedSelf || !reflection.trim()))}
+          disabled={loading || submitSuccess || (step === 1 && selectedPrecursors.length === 0) || (step === 2 && !selectedSelf) || (step === 5 && (!selectedSelf || !reflection.trim()))}
           className="px-6 py-3 bg-oura-cyan text-black font-medium rounded-2xl disabled:opacity-30 hover:bg-[#00e6b8] transition-all duration-200"
         >
           {loading ? 'Submitting...' : submitSuccess ? 'Success!' : (step === 5 ? 'Submit' : 'Next')}
         </button>
       </div>
+      )}
 
       {loadError && (
         <div className="mt-10 oura-card p-8 text-center">

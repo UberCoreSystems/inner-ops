@@ -3,27 +3,24 @@ import { writeData } from '../utils/firebaseUtils';
 import { generateAIFeedback } from '../utils/aiFeedback';
 import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
 import { buildProtocolEntry } from '../utils/buildProtocolEntry';
+import { PROTOCOL_TOOLS, getProtocolTool } from '../utils/protocolTools';
 import { track } from '../utils/analytics';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { useBreathing, CYCLES_PER_ROUND } from '../hooks/useBreathing';
+import { useCountdown } from '../hooks/useCountdown';
 import { useOracleModal } from '../hooks/useOracleModal';
 import OracleModal from './OracleModal';
 import VoiceInputButton from './VoiceInputButton';
 import { AppIcon } from './AppIcons';
 
 // The Protocol: the grounding tools, run while the window between urge and
-// action is open. Two homes on The Signal:
-//   mode="full"  — the header pill. Tools → optional breathing → check-in →
-//                  a signal entry carrying a protocolRun → Oracle reading.
-//   mode="tools" — the post-save panel after a Signal entry. Tools only;
-//                  the entry already exists and the checkpoint follows.
-const TOOLS = [
-  { id: 'grounding', name: '5-4-3-2-1', icon: 'eye', description: 'Name 5 things you see, 4 you hear, 3 you feel, 2 you smell, 1 you taste.' },
-  { id: 'breathing', name: 'Box breathing', icon: 'breath', description: 'In 4 seconds. Hold 4. Out 4. Hold 4. Four cycles.' },
-  { id: 'cold', name: 'Cold water', icon: 'droplet', description: 'Cold water on the face, or ice in the hands, until the body answers.' },
-  { id: 'movement', name: 'Movement', icon: 'movement', description: 'Ten jumping jacks, a walk around the block, or a full stretch.' },
-];
+// action is open. Every tool runs to a finish (protocolTools.js); a tool
+// counts as used only once it gets there. Two homes on The Signal:
+//   mode="full"  — the header pill. Tools → check-in → a signal entry
+//                  carrying a protocolRun → Oracle reading.
+//   mode="tools" — opened from the post-save receipt. Tools only, nothing
+//                  written: the signal it belongs to already exists.
 
 const MANTRAS = [
   'Name what this is. A feeling, not an instruction.',
@@ -39,14 +36,20 @@ const PRIMARY_BUTTON = 'flex-1 py-3 rounded-2xl bg-[#00d4aa] text-black text-sm 
 
 export default function GroundingProtocol({ mode = 'full', source = 'signal', onLogged, onClose }) {
   const full = mode === 'full';
-  const [view, setView] = useState('tools'); // tools | breathing | checkin | done
+  const [view, setView] = useState('tools'); // tools | breathing | steps | timer | checkin | done
+  const [activeToolId, setActiveToolId] = useState(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [stepsDone, setStepsDone] = useState(false);
+  const [toolsUsed, setToolsUsed] = useState([]);
   const [mantra] = useState(() => MANTRAS[Math.floor(Math.random() * MANTRAS.length)]);
   const [intensity, setIntensity] = useState(5);
   const [trigger, setTrigger] = useState('');
   const [reflection, setReflection] = useState('');
   const [saving, setSaving] = useState(false);
   const [rounds, setRounds] = useState(0);
-  const { breathPhase, breathCount, start, getInstruction, getColor } = useBreathing();
+  const { breathPhase, breathCount, start, reset: resetBreathing, getInstruction, getColor } = useBreathing();
+  const countdown = useCountdown();
+  const activeTool = getProtocolTool(activeToolId);
   const { oracleModal, openLoading, openWithContent, close: closeOracle } = useOracleModal();
 
   useEffect(() => {
@@ -56,13 +59,57 @@ export default function GroundingProtocol({ mode = 'full', source = 'signal', on
   // One round is CYCLES_PER_ROUND cycles; count rounds as they complete so
   // the entry records how much breathing actually happened.
   useEffect(() => {
-    if (breathPhase === 'complete') setRounds((r) => r + 1);
+    if (breathPhase === 'complete') {
+      setRounds((r) => r + 1);
+      markUsed('breathing');
+    }
   }, [breathPhase]);
 
-  const startBreathing = () => {
-    setView('breathing');
-    start();
-    track('protocol_tool_used', { tool: 'breathing' });
+  // startTool clears the countdown before a tool becomes active, so `done`
+  // here always belongs to the tool that is active now.
+  useEffect(() => {
+    if (countdown.done && activeToolId) markUsed(activeToolId);
+  }, [countdown.done, activeToolId]);
+
+  const markUsed = (toolId) => {
+    setToolsUsed((prev) => (prev.includes(toolId) ? prev : [...prev, toolId]));
+  };
+
+  const startTool = (tool) => {
+    track('protocol_tool_used', { tool: tool.id });
+    countdown.reset();
+    setActiveToolId(tool.id);
+    if (tool.kind === 'breath') {
+      setView('breathing');
+      start();
+    } else if (tool.kind === 'steps') {
+      setStepIndex(0);
+      setStepsDone(false);
+      setView('steps');
+    } else {
+      countdown.start(tool.seconds);
+      setView('timer');
+    }
+  };
+
+  const startBreathing = () => startTool(getProtocolTool('breathing'));
+
+  // Leaving a tool stops it: a run that was walked away from never reaches
+  // its finish, so it is never counted as used.
+  const backToTools = () => {
+    countdown.reset();
+    resetBreathing();
+    setView('tools');
+  };
+
+  const advanceStep = () => {
+    if (!activeTool) return;
+    if (stepIndex >= activeTool.steps.length - 1) {
+      setStepsDone(true);
+      markUsed(activeTool.id);
+    } else {
+      setStepIndex((i) => i + 1);
+    }
   };
 
   const handleLog = async () => {
@@ -73,7 +120,7 @@ export default function GroundingProtocol({ mode = 'full', source = 'signal', on
       intensity,
       trigger,
       reflection,
-      toolsUsed: rounds > 0 ? ['breathing'] : [],
+      toolsUsed,
       breathingCycles,
     }, new Date().toISOString());
 
@@ -87,14 +134,15 @@ export default function GroundingProtocol({ mode = 'full', source = 'signal', on
       return;
     }
 
-    track('protocol_logged', { intensity, breathingCycles });
+    track('protocol_logged', { intensity, breathingCycles, tools: toolsUsed.length });
     setSaving(false);
     setView('done');
     onLogged?.(saved?.id ?? null);
 
     openLoading();
     try {
-      const context = `Protocol run. Urge intensity ${intensity}/10. Trigger: ${trigger.trim() || 'unspecified'}. Reflection: ${reflection.trim() || 'none'}.`;
+      const toolsRun = toolsUsed.map((id) => getProtocolTool(id)?.name).filter(Boolean).join(', ') || 'none';
+      const context = `Protocol run. Urge intensity ${intensity}/10. Tools run: ${toolsRun}. Trigger: ${trigger.trim() || 'unspecified'}. Reflection: ${reflection.trim() || 'none'}.`;
       const { text, provenance, fallbackReason } = await generateAIFeedback('emergency', context, []);
       openWithContent({ content: text, entryCount: getCachedTotalEntryCount(), provenance, fallbackReason });
     } catch (error) {
@@ -129,7 +177,14 @@ export default function GroundingProtocol({ mode = 'full', source = 'signal', on
             )}
           </div>
         ) : (
-          <p className="text-gray-400 text-sm italic">{mantra}</p>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-gray-400 text-sm italic">{mantra}</p>
+            {onClose && (
+              <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-xs shrink-0 min-h-8">
+                Close
+              </button>
+            )}
+          </div>
         )}
 
         {view === 'tools' && (
@@ -161,25 +216,21 @@ export default function GroundingProtocol({ mode = 'full', source = 'signal', on
             <div>
               <h3 className="text-white font-light mb-3">Run one now.</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {TOOLS.map((tool) => {
-                  const isBreathing = tool.id === 'breathing';
-                  const tile = 'p-4 bg-oura-darker rounded-2xl border border-oura-border text-left';
-                  const inner = (
-                    <>
-                      <AppIcon name={tool.icon} size={20} color={ACCENT} glow={false} />
-                      <h4 className="text-white text-sm font-medium mt-2">{tool.name}</h4>
-                      <p className="text-gray-400 text-xs mt-1 leading-relaxed">{tool.description}</p>
-                      {isBreathing && <span className="block text-[#00d4aa] text-xs mt-2">Start →</span>}
-                    </>
-                  );
-                  return isBreathing ? (
-                    <button key={tool.id} type="button" onClick={startBreathing} className={`${tile} w-full hover:border-[#00d4aa]/60 transition-colors`}>
-                      {inner}
-                    </button>
-                  ) : (
-                    <div key={tool.id} className={tile}>{inner}</div>
-                  );
-                })}
+                {PROTOCOL_TOOLS.map((tool) => (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    onClick={() => startTool(tool)}
+                    className="p-4 bg-oura-darker rounded-2xl border border-oura-border text-left w-full hover:border-[#00d4aa]/60 transition-colors"
+                  >
+                    <AppIcon name={tool.icon} size={20} color={ACCENT} glow={false} />
+                    <h4 className="text-white text-sm font-medium mt-2">{tool.name}</h4>
+                    <p className="text-gray-400 text-xs mt-1 leading-relaxed">{tool.description}</p>
+                    <span className="block text-[#00d4aa] text-xs mt-2">
+                      {toolsUsed.includes(tool.id) ? 'Run again →' : 'Start →'}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -221,16 +272,95 @@ export default function GroundingProtocol({ mode = 'full', source = 'signal', on
                       Check in
                     </button>
                   ) : (
-                    <button type="button" onClick={() => setView('tools')} className={SECONDARY_BUTTON}>
+                    <button type="button" onClick={backToTools} className={SECONDARY_BUTTON}>
                       Back to tools
                     </button>
                   )}
                 </div>
               </div>
             ) : (
-              <button type="button" onClick={() => setView('tools')} className="text-gray-400 hover:text-white text-sm">
+              <button type="button" onClick={backToTools} className="text-gray-400 hover:text-white text-sm">
                 ← Back to tools
               </button>
+            )}
+          </div>
+        )}
+
+        {view === 'steps' && activeTool && (
+          <div className="space-y-6 text-center animate-fade-in">
+            <p className="text-[#00d4aa] text-xs font-medium uppercase tracking-widest">{activeTool.name}</p>
+            {stepsDone ? (
+              <div className="space-y-4 animate-fade-in">
+                <p className="text-oura-cyan text-sm">{activeTool.finish}</p>
+                <div className="flex gap-3">
+                  <button type="button" onClick={backToTools} className={SECONDARY_BUTTON}>
+                    Back to tools
+                  </button>
+                  {full && (
+                    <button type="button" onClick={() => setView('checkin')} className={PRIMARY_BUTTON}>
+                      Check in
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div key={stepIndex} className="animate-fade-in">
+                  <div className="text-7xl font-light text-white tabular-nums leading-none">{activeTool.steps[stepIndex].count}</div>
+                  <p className="text-gray-300 text-base mt-3">{activeTool.steps[stepIndex].prompt}</p>
+                  <p className="text-gray-400 text-xs mt-2">Name each one. Out loud if you can.</p>
+                </div>
+                <div className="text-gray-400 text-sm">
+                  {stepIndex + 1} of {activeTool.steps.length}
+                </div>
+                <div className="flex gap-3">
+                  <button type="button" onClick={backToTools} className={SECONDARY_BUTTON}>
+                    Back to tools
+                  </button>
+                  <button type="button" onClick={advanceStep} className={PRIMARY_BUTTON}>
+                    {stepIndex >= activeTool.steps.length - 1 ? 'Finish' : 'Next'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {view === 'timer' && activeTool && (
+          <div className="space-y-6 text-center animate-fade-in">
+            <p className="text-[#00d4aa] text-xs font-medium uppercase tracking-widest">{activeTool.name}</p>
+            {countdown.done ? (
+              <div className="space-y-4 animate-fade-in">
+                <p className="text-oura-cyan text-sm">{activeTool.finish}</p>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => countdown.start(activeTool.seconds)} className={SECONDARY_BUTTON}>
+                    Again
+                  </button>
+                  {full ? (
+                    <button type="button" onClick={() => { countdown.reset(); setView('checkin'); }} className={PRIMARY_BUTTON}>
+                      Check in
+                    </button>
+                  ) : (
+                    <button type="button" onClick={backToTools} className={SECONDARY_BUTTON}>
+                      Back to tools
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div
+                  className="text-7xl font-light text-white tabular-nums leading-none"
+                  role="timer"
+                  aria-label={`${countdown.remaining} seconds remaining`}
+                >
+                  {countdown.remaining}
+                </div>
+                <p className="text-gray-300 text-sm leading-relaxed max-w-xs mx-auto">{activeTool.instruction}</p>
+                <button type="button" onClick={backToTools} className="text-gray-400 hover:text-white text-sm">
+                  ← Back to tools
+                </button>
+              </>
             )}
           </div>
         )}

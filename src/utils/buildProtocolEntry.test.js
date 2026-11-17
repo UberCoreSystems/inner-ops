@@ -55,6 +55,12 @@ describe('buildProtocolEntry', () => {
     assert.ok(PROTOCOL_TOOL_IDS.includes('breathing'));
   });
 
+  it('records all four tools when all four were run', () => {
+    const e = buildProtocolEntry({ toolsUsed: ['grounding', 'cold', 'movement', 'breathing'], breathingCycles: 4 }, NOW);
+    assert.deepEqual(e.protocolRun.toolsUsed, ['grounding', 'cold', 'movement', 'breathing']);
+    assert.equal(e.protocolRun.breathingCycles, 4);
+  });
+
   it('floors breathing cycles at zero', () => {
     assert.equal(buildProtocolEntry({ breathingCycles: -1 }, NOW).protocolRun.breathingCycles, 0);
     assert.equal(buildProtocolEntry({ breathingCycles: 2.9 }, NOW).protocolRun.breathingCycles, 2);

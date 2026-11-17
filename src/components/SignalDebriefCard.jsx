@@ -4,6 +4,7 @@ import { getOpenSignals, formatWindowRemaining, SIGNAL_STATES } from '../utils/s
 import { SIGNAL_RESOLUTION_OUTCOMES, SIGNAL_RESOLUTION_VIA } from '../utils/schema';
 import { resolveArchetypeLabel } from '../utils/relapseTaxonomy';
 import { bridgeSignalToHardLessons } from '../utils/bridgeSignalToHardLessons';
+import { describeProtocolRun } from '../utils/protocolTools';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 
@@ -168,13 +169,7 @@ const SignalDebriefCard = ({ entries, onResolved, onLanded, animationDelay = '0.
   const protocolRun = entry.protocolRun && typeof entry.protocolRun === 'object' ? entry.protocolRun : null;
   const archetypeLabel = resolveArchetypeLabel(entry.selectedSelf) || (protocolRun ? 'Protocol' : 'Signal');
   const precursors = Array.isArray(entry.precursorConditions) ? entry.precursorConditions : [];
-  const protocolLine = protocolRun
-    ? [
-        `Protocol run · intensity ${Number(protocolRun.intensity) || '?'}/10`,
-        protocolRun.breathingCycles > 0 ? `${protocolRun.breathingCycles} breathing cycles` : null,
-        protocolRun.trigger ? `trigger: ${protocolRun.trigger}` : null,
-      ].filter(Boolean).join(' · ')
-    : null;
+  const protocolLine = describeProtocolRun(protocolRun);
 
   return (
     <section id="signal-debrief-card" className="mb-10 animate-fade-in-up" style={{ animationDelay }}>

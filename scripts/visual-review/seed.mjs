@@ -45,17 +45,32 @@ function connect() {
   return { auth, db };
 }
 
-async function ensureUser(auth, { email, password }) {
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    return cred.user.uid;
-  } catch (err) {
-    if (err?.code === 'auth/email-already-in-use') {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      return cred.user.uid;
+// firestore.rules require a verified email on every write. The Auth emulator's
+// admin endpoint ("Bearer owner") flips the flag; the token is then refreshed
+// so the claim is on the requests that follow.
+async function markEmailVerified(user) {
+  const res = await fetch(
+    `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts:update`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer owner' },
+      body: JSON.stringify({ localId: user.uid, emailVerified: true }),
     }
-    throw err;
+  );
+  if (!res.ok) throw new Error(`could not mark ${user.email} verified: ${res.status}`);
+  await user.getIdToken(true);
+}
+
+async function ensureUser(auth, { email, password }) {
+  let cred;
+  try {
+    cred = await createUserWithEmailAndPassword(auth, email, password);
+  } catch (err) {
+    if (err?.code !== 'auth/email-already-in-use') throw err;
+    cred = await signInWithEmailAndPassword(auth, email, password);
   }
+  await markEmailVerified(cred.user);
+  return cred.user.uid;
 }
 
 async function seedProfile(db, uid, populated, onboardedAtIso = isoDaysAgo(30)) {
