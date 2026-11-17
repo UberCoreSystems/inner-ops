@@ -1,5 +1,6 @@
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
 import { generateAIFeedback, PROVENANCE, isRateLimitCode } from '../utils/aiFeedback';
@@ -681,7 +682,11 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
 
   if (!isOpen) return null;
 
-  return (
+  // Portaled to <body>: a `fixed` overlay is positioned against the nearest
+  // transformed ancestor, not the viewport. Rendered inline it sat inside
+  // cards that lift on hover (.oura-card) or fade in with a transform, so it
+  // jumped between the card and the screen as the cursor moved.
+  return createPortal(
     <InlineErrorBoundary name="OracleModal">
     <div
       role="dialog"
@@ -1000,7 +1005,8 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
         </div>
       </div>
     </div>
-    </InlineErrorBoundary>
+    </InlineErrorBoundary>,
+    document.body
   );
 };
 

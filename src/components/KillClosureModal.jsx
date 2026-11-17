@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AppIcon } from './AppIcons';
 import { coerceClosureResponseText } from '../utils/composeClosureFeedback';
 
@@ -133,7 +134,10 @@ export default function KillClosureModal({
   const showForm = oraclePhase === 'idle';
   const showOracle = oraclePhase === 'loading' || oraclePhase === 'done';
 
-  return (
+  // Portaled to <body>: rendered inline it sat inside the Dashboard's Kill
+  // List card, which lifts on hover, and a `fixed` overlay follows the nearest
+  // transformed ancestor instead of the viewport.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       onClick={oraclePhase === 'done' ? onClose : undefined}
@@ -294,6 +298,7 @@ export default function KillClosureModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
