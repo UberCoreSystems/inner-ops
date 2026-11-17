@@ -211,7 +211,8 @@ export const ENGAGEMENT_TRIGGERS = Object.freeze({
   KILL_LIST_CHECK_IN: 'killListCheckIn',
   SYNTHESIS_READY: 'synthesisReady',
   IDENTITY_DIRECTION_REVIEW: 'identityDirectionReview',
-  // Email only — no in-app evaluator. Read by functions/signalReminders.js.
+  // Email only — no in-app evaluator. Read by functions/signalReminders.js,
+  // which is parked (not deployed); no Settings toggle until it ships.
   SIGNAL_REMINDERS: 'signalReminders',
 });
 

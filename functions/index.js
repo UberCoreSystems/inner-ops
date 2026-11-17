@@ -1377,9 +1377,10 @@ async function eraseUserAccount(db, auth, uid) {
   return summary;
 }
 
-// signalReminders — scheduled email reminders for open signals (+24h and at
-// window close). Defined in its own module; see functions/signalReminders.js.
-exports.signalReminders = require("./signalReminders").signalReminders;
+// signalReminders (scheduled email reminders for open signals) is parked:
+// built and tested in functions/signalReminders.js, not deployed. Gmail SMTP
+// sign-in never authenticated; re-enable by exporting it here once a send-only
+// transport (Resend) replaces the Workspace app password.
 
 // deleteUserData — permanently erase the caller's account: all Firestore data
 // and the Firebase Auth record. Auth-gated; a user can only delete their own
