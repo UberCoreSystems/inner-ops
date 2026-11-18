@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getAuth } from '../firebase';
 import { readUserData, upsertUserSettings } from '../utils/firebaseUtils';
 import { getUserProfile, saveUserProfile } from '../utils/userProfile';
 import { readMemoryDocs } from '../utils/updateMemory';
 import { buildExportPayload } from '../utils/exportData';
 import { localDateKey } from '../utils/dateUtils';
-import { authService } from '../utils/authService';
 import {
   ENGAGEMENT_TRIGGERS,
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -33,7 +31,7 @@ const EXPORTABLE_COLLECTIONS = [
   'hardLessonsArchive', 'relapseEntriesArchive',
 ];
 
-export default function Settings() {
+export default function Settings({ onEraseAccount }) {
   // Notifications state
   const [notificationPreferences, setNotificationPreferences] = useState(
     DEFAULT_NOTIFICATION_PREFERENCES
@@ -66,12 +64,6 @@ export default function Settings() {
   const [showDelete, setShowDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
-  // Deletion receipt: the manifest of what was erased. The server has already
-  // removed the data and the Auth record; the local session survives until
-  // token refresh, so the receipt stays readable until the user acknowledges
-  // it and we sign out locally.
-  const [deletionReceipt, setDeletionReceipt] = useState(null);
-  const [finishing, setFinishing] = useState(false);
 
   // First-run help resets
   const [resettingHelp, setResettingHelp] = useState(false);
@@ -293,35 +285,19 @@ export default function Settings() {
       // Deletion is a sensitive operation — re-authenticate first.
       const cred = EmailAuthProvider.credential(user.email, deletePassword);
       await reauthenticateWithCredential(user, cred);
-      // Server-side erasure: all Firestore data AND the Auth record. The local
-      // session stays live until acknowledgment (the SDK only learns the user
-      // is gone on token refresh), which keeps the receipt readable.
-      const functions = getFunctions();
-      // Server timeoutSeconds is 120; the SDK default (70s) gave up while the
-      // wipe was still running. Outlast the server deadline plus network.
-      const res = await httpsCallable(functions, 'deleteUserData', { timeout: 130000 })();
-      setDeletePassword('');
-      setDeletionReceipt(res?.data?.manifest || {});
     } catch (err) {
-      logger.error('Account deletion failed:', { code: err?.code });
+      logger.error('Password confirmation failed:', { code: err?.code });
       if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
         ouraToast.error('Incorrect password.');
       } else {
-        ouraToast.error('Could not delete your account. Please try again.');
+        ouraToast.error('Could not confirm your password. Try again.');
       }
+      return;
     } finally {
       setDeleting(false);
     }
-  };
-
-  // The account no longer exists server-side (deleteUserData removed both the
-  // data and the Auth record). All that remains is clearing the local session.
-  const finishDeletion = async () => {
-    setFinishing(true);
-    try {
-      await authService.signOut();
-    } catch { /* local session only — swap to auth surface regardless */ }
-    navigate('/auth');
+    // App replaces the whole app with the erasure surface; this page unmounts.
+    onEraseAccount();
   };
 
   if (showBriefing) {
@@ -471,13 +447,6 @@ export default function Settings() {
             </p>
           </div>
 
-          {deletionReceipt ? (
-            <DeletionReceipt
-              manifest={deletionReceipt}
-              finishing={finishing}
-              onFinish={finishDeletion}
-            />
-          ) : (
           <div className="space-y-3">
             <Link
               to="/privacy"
@@ -542,68 +511,15 @@ export default function Settings() {
                       disabled={deleting || !deletePassword}
                       className="px-4 py-2 text-xs bg-[#ef4444] text-white hover:bg-[#dc2626] disabled:opacity-40 rounded-xl transition-colors"
                     >
-                      {deleting ? 'Deleting…' : 'Permanently delete'}
+                      {deleting ? 'Confirming…' : 'Permanently delete'}
                     </button>
                   </div>
                 </div>
               )}
             </div>
           </div>
-          )}
         </div>
       </div>
-    </div>
-  );
-}
-
-// Human-readable label for a manifest key. camelCase → spaced; a couple of
-// keys get explicit names so the receipt reads in product voice.
-const RECEIPT_LABELS = {
-  memory: 'Memory records',
-  userProfile: 'Profile record',
-};
-function receiptLabel(key) {
-  if (RECEIPT_LABELS[key]) return RECEIPT_LABELS[key];
-  const spaced = key.replace(/([A-Z])/g, ' $1');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-// Receipt of exactly what account deletion erased. Shown while the user is
-// still authenticated; the auth user is removed only on acknowledgment.
-function DeletionReceipt({ manifest, finishing, onFinish }) {
-  const rows = Object.entries(manifest || {})
-    .filter(([, v]) => typeof v === 'number' && v > 0)
-    .sort((a, b) => b[1] - a[1]);
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-white text-sm">Your account and all data have been erased.</p>
-        <p className="text-[#858585] text-xs mt-1">
-          What was removed from the record:
-        </p>
-      </div>
-
-      {rows.length === 0 ? (
-        <p className="text-[#858585] text-sm">No stored records were found.</p>
-      ) : (
-        <ul className="space-y-1">
-          {rows.map(([key, count]) => (
-            <li key={key} className="flex justify-between text-sm border-b border-[#1a1a1a] py-1.5">
-              <span className="text-[#ababab]">{receiptLabel(key)}</span>
-              <span className="text-white tabular-nums">{count}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <button
-        onClick={onFinish}
-        disabled={finishing}
-        className="w-full px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
-      >
-        {finishing ? 'Signing out…' : 'Finish — sign out'}
-      </button>
     </div>
   );
 }

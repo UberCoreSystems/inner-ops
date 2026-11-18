@@ -16,6 +16,8 @@ import AuthGate from './components/AuthGate';
 import { InlineErrorBoundary } from './components/ErrorBoundary';
 import OnboardingGate from './components/OnboardingGate';
 import VerifyEmailGate from './components/VerifyEmailGate';
+import AccountErasure from './components/AccountErasure';
+import { eraseAccount } from './utils/eraseAccount';
 import BannerStack from './components/banner/BannerStack';
 import ScrollToTop from './components/ScrollToTop';
 
@@ -70,6 +72,8 @@ function App() {
   // bails out of re-rendering. VerifyEmailGate bumps this after a confirmed
   // verification to force the gate condition to re-evaluate.
   const [, bumpAuthVersion] = useReducer((n) => n + 1, 0);
+  // null, or { status: 'erasing' | 'erased' | 'failed', manifest }.
+  const [erasure, setErasure] = useState(null);
 
   // Unverified sessions must not touch Firestore (rules deny the read anyway).
   useSynthesisAutoGenerate(user && user.emailVerified ? user.uid : null);
@@ -149,6 +153,14 @@ function App() {
     }
   };
 
+  const runErasure = async ({ itemized }) => {
+    setErasure({ status: 'erasing' });
+    const result = await eraseAccount();
+    // A retry's counts cover its own pass only, not what the first attempt
+    // already removed.
+    setErasure(itemized ? result : { ...result, manifest: null });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-black text-white">
@@ -157,6 +169,19 @@ function App() {
           <p className="mt-4 text-sm text-oura-textSecondary tracking-wide">Initializing Inner Ops</p>
         </div>
       </div>
+    );
+  }
+
+  // An erasure replaces the whole app until the page is left. The server
+  // deletes the profile mid-wipe, which OnboardingGate would read as a new
+  // user, and the session outlives the account until it is closed here.
+  if (erasure) {
+    return (
+      <AccountErasure
+        erasure={erasure}
+        onRetry={() => runErasure({ itemized: false })}
+        onSignOut={handleLogout}
+      />
     );
   }
 
@@ -277,7 +302,7 @@ function App() {
               <InlineErrorBoundary name="Settings">
                 {user ? (
                   <Suspense fallback={<PageLoader />}>
-                    <Settings />
+                    <Settings onEraseAccount={() => runErasure({ itemized: true })} />
                   </Suspense>
                 ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
