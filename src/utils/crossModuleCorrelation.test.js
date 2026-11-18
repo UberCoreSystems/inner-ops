@@ -158,6 +158,16 @@ describe('extractEvents normalization', () => {
     const violations = events.filter((e) => e.type === 'hardlesson:violation');
     assert.equal(violations.length, 3);
   });
+
+  it('a break linked from a lesson is one event on the rule; the lesson itself emits none', () => {
+    const events = extractEvents({
+      hardLessons: [
+        { [HARD_LESSON_FIELDS.VIOLATIONS]: [{ date: iso(1), source: 'lesson', lessonId: 'l9' }] },
+        { id: 'l9', eventDescription: 'The slip itself, recorded as a lesson draft.' },
+      ],
+    });
+    assert.equal(events.filter((e) => e.type === 'hardlesson:violation').length, 1);
+  });
 });
 
 describe('getCrossModuleCorrelations — reader wiring', () => {

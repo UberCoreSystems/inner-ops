@@ -86,11 +86,13 @@ export const HARD_LESSON_FIELDS = Object.freeze({
   RULE: 'ruleGoingForward',
   LESSON: 'extractedLesson',
   // Per-rule violation log. Each entry:
-  //   { date: ISO, source: 'direct' | 'weekly_review',
+  //   { date: ISO, source: 'direct' | 'weekly_review' | 'lesson',
+  //     lessonId?: string,                  // the lesson that recorded this break
   //     note?: string,                      // legacy free-text (pre after-action)
   //     cause?: string, correction?: string, resolvedAt?: ISO }  // after-action
-  // Written by the in-the-moment "Rule broken" button on the Hard Lessons page
-  // and by the weekly rule review on the Dashboard. An unresolved most-recent
+  // Written by the in-the-moment "Rule broken" button on the Hard Lessons page,
+  // by a lesson whose event the user says broke this rule (lessonDraft.js), and
+  // by the weekly rule review on the Dashboard. An unresolved most-recent
   // break (no resolvedAt / note) means the rule is "under review"; completing
   // the after-action review stamps resolvedAt and re-affirms the rule. State is
   // derived in src/utils/ruleState.js — the single reader for every module.
@@ -100,6 +102,12 @@ export const HARD_LESSON_FIELDS = Object.freeze({
   VIOLATION_RESOLVED_AT: 'resolvedAt',
   VIOLATION_CAUSE: 'cause',
   VIOLATION_CORRECTION: 'correction',
+  VIOLATION_LESSON_ID: 'lessonId',
+  // Fields whose current text is the Oracle's, unedited by the user.
+  ORACLE_FILLED: 'oracleFilled',
+  // { extractedLesson, ruleGoingForward } — offered, never written into the
+  // fields until the user takes it. Stripped when the lesson is locked.
+  ORACLE_SUGGESTION: 'oracleSuggestion',
 });
 
 // Journal-entry fields consumed cross-module.

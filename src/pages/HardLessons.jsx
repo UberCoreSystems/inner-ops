@@ -1,65 +1,122 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { getAuth } from 'firebase/auth';
 import { writeData, readUserData, updateData } from '../utils/firebaseUtils';
 import { updateMemory } from '../utils/updateMemory';
 import { archiveEntry, restoreEntry, deleteArchivedEntry, subscribeToArchive } from '../utils/archiveUtils';
 import { redirectIfAuthLost } from '../utils/authErrorHandler';
-import { generateAIFeedback, PROVENANCE } from '../utils/aiFeedback';
+import { generateAIFeedback } from '../utils/aiFeedback';
 import { extractHardLessonDirect } from '../utils/crossModuleExtraction';
-import { getCachedTotalEntryCount } from '../utils/getBehavioralContext';
-import OracleModal from '../components/OracleModal';
+import { clearBehavioralContextCache } from '../utils/getBehavioralContext';
 import ArchiveToggle from '../components/ArchiveToggle';
 import { AppIcon } from '../components/AppIcons';
 import ModuleIntro from '../components/help/ModuleIntro';
 import { getModuleIntro } from '../config/moduleIntros';
+import LessonForm, { ORACLE_MIN_CHARS, fieldId } from '../components/hardLessons/LessonForm';
 import ouraToast from '../utils/toast';
-import { useOracleModal } from '../hooks/useOracleModal';
 import logger from '../utils/logger';
+import { track } from '../utils/analytics';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { SkeletonList, SkeletonCard } from '../components/SkeletonLoader';
 import { isUnderReview, getHeldStreakDays, getMostRecentBreak } from '../utils/ruleState';
 import { toMs, localDateKey } from '../utils/dateUtils';
+import {
+  EVENT_CATEGORIES,
+  COST_CATEGORIES,
+  categoryLabel,
+  costLabel,
+  emptyDraft,
+  canSaveDraft,
+  missingForFinalize,
+  lessonFromPrefill,
+  draftFromLesson,
+  applyEdit,
+  takeSuggestion,
+  mergeExtraction,
+  buildLessonPayload,
+  draftsEqual,
+  lessonSource,
+  findMatchingRule,
+  findLinkedRule,
+  linkLessonBreak,
+  closeLessonBreak,
+  readLocalDraft,
+  writeLocalDraft,
+  clearLocalDraft,
+} from '../utils/lessonDraft';
 
-// Scar-flow skip flag. localStorage throws in Safari private mode and can be
-// unavailable in a WKWebView, so both accessors swallow and fail toward showing
-// the flow rather than suppressing it on a storage error.
-const SCAR_FLOW_SKIPPED_KEY = 'inner_ops_scar_flow_skipped';
+const PREFILL_KEY = 'hl_bridge_prefill';
 
-const readScarFlowSkipped = () => {
+const currentUid = () => {
+  try { return getAuth().currentUser?.uid || null; } catch { return null; }
+};
+
+const peekPrefill = () => {
   try {
-    return localStorage.getItem(SCAR_FLOW_SKIPPED_KEY) === 'true';
+    const raw = sessionStorage.getItem(PREFILL_KEY);
+    return raw ? JSON.parse(raw) : null;
   } catch {
-    return false;
+    return null;
   }
 };
 
-const writeScarFlowSkipped = () => {
-  try {
-    localStorage.setItem(SCAR_FLOW_SKIPPED_KEY, 'true');
-  } catch { /* noop */ }
+const dropPrefill = () => {
+  try { sessionStorage.removeItem(PREFILL_KEY); } catch { /* noop */ }
 };
 
-// Event categories for Hard Lessons
-const eventCategories = [
-  { value: 'relationship_misjudgment', label: 'Relationship Misjudgment', icon: '💔' },
-  { value: 'leadership_error', label: 'Leadership Error', icon: '👑' },
-  { value: 'boundary_failure', label: 'Boundary Failure', icon: '🚧' },
-  { value: 'overconfidence', label: 'Overconfidence', icon: '🎯' },
-  { value: 'underestimation', label: 'Underestimation', icon: '⚖️' },
-  { value: 'ignored_intuition', label: 'Ignored Intuition', icon: '🔮' },
-  { value: 'physiological_misread', label: 'Hormonal/Physiological Misread', icon: '🧬' },
-  { value: 'trust_without_verification', label: 'Trust Given Without Verification', icon: '🤝' },
-  { value: 'other', label: 'Other', icon: '⚡' }
-];
+const stubLabel = (lesson) => (lesson.isWeeklyAutopsy ? 'Sunday autopsy' : lesson.isScarStub ? 'Scar' : null);
 
-// Cost categories for tracking real consequences
-const costCategories = [
-  { value: 'emotional', label: 'Emotional', icon: '💭' },
-  { value: 'financial', label: 'Financial', icon: '💰' },
-  { value: 'relational', label: 'Relational', icon: '👥' },
-  { value: 'physical', label: 'Physical', icon: '🏥' },
-  { value: 'professional', label: 'Professional', icon: '💼' },
-  { value: 'time', label: 'Time/Opportunity', icon: '⏰' }
-];
+// BER-131: after a lesson that broke a rule is locked, offer to carry the rule
+// to the General Ledger. No doc is written here — the prefill is stashed and
+// the user reviews the contract on the Ledger page.
+function LedgerBridgePrompt({ prompt, onChange, onAdd, onDismiss }) {
+  const trapRef = useFocusTrap(true);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onDismiss(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onDismiss]);
+  const days = parseInt(prompt.consecutiveDaysRequired, 10);
+  return (
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+      <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby="hl-bridge-title" tabIndex={-1} className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-8">
+        <h3 id="hl-bridge-title" className="text-white text-lg font-light mb-2">Rule violated. Add it to the Ledger?</h3>
+        <p className="text-[#858585] text-xs uppercase tracking-widest mb-5">A rule in writing that doesn't produce behavioral warfare is decoration.</p>
+        <label htmlFor="hl-bridge-rule" className="sr-only">Rule</label>
+        <input
+          id="hl-bridge-rule"
+          type="text"
+          value={prompt.ruleText}
+          onChange={(e) => onChange({ ruleText: e.target.value })}
+          className="w-full p-4 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm mb-4"
+        />
+        <div className="mb-6">
+          <label htmlFor="hl-bridge-days" className="block text-[#ababab] text-xs uppercase tracking-widest mb-2">Consecutive Days Required</label>
+          <input
+            id="hl-bridge-days"
+            type="number"
+            min={21}
+            step={1}
+            value={prompt.consecutiveDaysRequired}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              onChange({ consecutiveDaysRequired: e.target.value === '' || !Number.isFinite(n) ? '' : n });
+            }}
+            onBlur={() => { if (!Number.isFinite(days) || days < 21) onChange({ consecutiveDaysRequired: 21 }); }}
+            className="w-full p-3 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm tabular-nums"
+          />
+          <p className="text-[#858585] text-xs mt-2">
+            Kill requires {Number.isFinite(days) ? Math.max(21, days) : 21} consecutive days of held execution. Minimum 21.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onAdd} className="flex-1 px-5 min-h-11 bg-[#f59e0b] hover:bg-[#ea580c] text-black rounded-xl font-medium transition-colors">Add to Ledger</button>
+          <button onClick={onDismiss} className="px-5 min-h-11 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] hover:text-white rounded-xl font-medium transition-colors">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function HardLessons() {
   const navigate = useNavigate();
@@ -70,38 +127,60 @@ export default function HardLessons() {
   // pendingFocusId and clear the state so a refresh does not re-fire.
   const [pendingFocusId, setPendingFocusId] = useState(null);
   const [highlightId, setHighlightId] = useState(null);
+  const arrivedByDeepLink = useRef(false);
 
   useEffect(() => {
+    track('hl_viewed');
     const focusId = location.state?.focusLessonId;
     if (!focusId) return;
+    arrivedByDeepLink.current = true;
     setPendingFocusId(focusId);
     navigate(location.pathname, { replace: true, state: {} });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Form state for new lesson
-  const [newLesson, setNewLesson] = useState({
-    eventCategory: '',
-    eventDescription: '',
-    myAssumption: '',
-    signalIgnored: '',
-    costs: [],
-    costDescription: '',
-    extractedLesson: '',
-    ruleGoingForward: '',
-    isFinalized: false,
-    isRuleViolation: false,
-    violatedRuleId: null,
-  });
+  // The open draft lives here, not in the form: Collapse and the Rules Library
+  // toggle hide the form, and the text must survive both.
+  const [draft, setDraft] = useState(emptyDraft);
+  const [baseline, setBaseline] = useState(emptyDraft);
+  const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [oracle, setOracle] = useState({ pending: false, message: null });
+  const [ruleMatch, setRuleMatch] = useState(null);
+  // An unsaved draft that something else wants to replace (an arriving prefill,
+  // or Edit on another lesson). Nothing is written until the user picks.
+  const [conflict, setConflict] = useState(null);
+  // Bumped whenever a different draft is loaded, so the form's own UI state
+  // (missing markers, review sheet) starts clean — but not when the same draft
+  // merely gains an id.
+  const [formKey, setFormKey] = useState(0);
+  const submittingRef = useRef(false);
+  const autosaveReady = useRef(false);
+  const dismissedMatches = useRef(new Set());
 
   // Module state
   const [lessons, setLessons] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  const [view, setView] = useState('active');
+  const [archivedLessons, setArchivedLessons] = useState([]);
+
+  const [bridgePrompt, setBridgePrompt] = useState({ visible: false, ruleText: '', consecutiveDaysRequired: 30, lessonId: null });
+
+  // BER-130: Rules Library
+  const [showRulesLibrary, setShowRulesLibrary] = useState(false);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [libraryFilterCost, setLibraryFilterCost] = useState('');
+  const [libraryFilterCategory, setLibraryFilterCategory] = useState('');
+  const [costPatternNarrative, setCostPatternNarrative] = useState('');
+  const [loadingNarrative, setLoadingNarrative] = useState(false);
+  const [breakConfirmId, setBreakConfirmId] = useState(null);
 
   // Once the deep-linked lesson is loaded and rendered, scroll to its card and
-  // flash the ring for ~1.8s. Runs when the pending id or the loaded list
-  // changes, so it fires as soon as the target exists in the DOM.
+  // flash the ring for ~1.8s.
   useEffect(() => {
     if (!pendingFocusId) return;
     if (!lessons.some(l => l.id === pendingFocusId)) return;
@@ -114,43 +193,6 @@ export default function HardLessons() {
     const timer = setTimeout(() => setHighlightId(null), 1800);
     return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
   }, [pendingFocusId, lessons]);
-  const [loadError, setLoadError] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [showSkeleton, setShowSkeleton] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  // Oracle-first entry: a fresh extraction starts with just the event + the
-  // "Ask Oracle" action. The downstream forensic fields appear once the Oracle
-  // populates them or the user opts into filling them in by hand.
-  const [manualMode, setManualMode] = useState(false);
-  const [editingLesson, setEditingLesson] = useState(null);
-  const { oracleModal, openLoading: openOracleLoading, openWithContent: openOracleWithContent, close: closeOracle } = useOracleModal();
-  const [pendingOracleReaction, setPendingOracleReaction] = useState(null);
-  const [pendingOracleWisdom, setPendingOracleWisdom] = useState('');
-  const [pendingOracleClosingQuestion, setPendingOracleClosingQuestion] = useState(null);
-  const autoOpenedIds = useRef(new Set());
-  const submittingRef = useRef(false);
-  const savingScarsRef = useRef(false); // synchronous guard — setSavingScars is async
-
-  // Scar Inventory state (first-time guided flow)
-  const [scarInventory, setScarInventory] = useState(['', '', '']);
-  const [showScarFlow, setShowScarFlow] = useState(false);
-  const [savingScars, setSavingScars] = useState(false);
-
-  // BER-131: Kill List bridge
-  const [bridgePrompt, setBridgePrompt] = useState({ visible: false, ruleText: '', consecutiveDaysRequired: 30, lessonId: null });
-
-  // BER-130: Rules Library + Rule Violation Detection
-  const [showRulesLibrary, setShowRulesLibrary] = useState(false);
-  const [librarySearch, setLibrarySearch] = useState('');
-  const [libraryFilterCost, setLibraryFilterCost] = useState('');
-  const [libraryFilterCategory, setLibraryFilterCategory] = useState('');
-  const [violationPrompt, setViolationPrompt] = useState({ visible: false, matchedRule: null });
-  const [pendingViolation, setPendingViolation] = useState({ isRuleViolation: false, violatedRuleId: null });
-  const [costPatternNarrative, setCostPatternNarrative] = useState('');
-  const [loadingNarrative, setLoadingNarrative] = useState(false);
-  const violationCheckedRef = useRef('');
-  const [view, setView] = useState('active');
-  const [archivedLessons, setArchivedLessons] = useState([]);
 
   useEffect(() => {
     let unsub = null;
@@ -164,46 +206,27 @@ export default function HardLessons() {
     return () => { mounted = false; if (unsub) try { unsub(); } catch {} };
   }, []);
 
-  useEffect(() => {
-    loadHardLessons();
-    // Cross-module prefill consumer. Originally added for the Kill List autopsy
-    // bridge (eventDescription only, BER-131); now also receives the rich
-    // Oracle-extracted payload from Journal's "Extract Lesson" flow so the
-    // user lands on a fully prefilled draft and finalizes (or discards) it
-    // themselves rather than having a draft auto-written behind the scenes.
-    const prefill = sessionStorage.getItem('hl_bridge_prefill');
-    if (prefill) {
-      try {
-        const data = JSON.parse(prefill);
-        setNewLesson(prev => ({
-          ...prev,
-          ...(data.eventCategory ? { eventCategory: data.eventCategory } : {}),
-          ...(data.eventDescription ? { eventDescription: data.eventDescription } : {}),
-          ...(data.myAssumption ? { myAssumption: data.myAssumption } : {}),
-          ...(data.signalIgnored ? { signalIgnored: data.signalIgnored } : {}),
-          ...(Array.isArray(data.costs) ? { costs: data.costs } : {}),
-          ...(data.costDescription ? { costDescription: data.costDescription } : {}),
-          ...(data.extractedLesson ? { extractedLesson: data.extractedLesson } : {}),
-          ...(data.ruleGoingForward ? { ruleGoingForward: data.ruleGoingForward } : {}),
-          ...(data.sourceJournalId ? { sourceJournalId: data.sourceJournalId } : {}),
-          ...(data.sourceSignalId ? { sourceSignalId: data.sourceSignalId } : {}),
-          ...(data.isOracleExtracted ? { isOracleExtracted: true } : {}),
-          ...(data.isOracleFailed ? { isOracleFailed: true } : {}),
-        }));
-        setShowForm(true);
-        sessionStorage.removeItem('hl_bridge_prefill');
-      } catch {}
+  const loadHardLessons = useCallback(async () => {
+    setLoadError(false);
+    try {
+      const savedLessons = await readUserData('hardLessons');
+      const deduped = Array.from(new Map((savedLessons || []).map(l => [l.id, l])).values());
+      setLessons(deduped);
+      return deduped;
+    } catch (error) {
+      logger.error('Error loading hard lessons:', error);
+      setLoadError(true);
+      return null;
+    } finally {
+      setInitialLoading(false);
     }
   }, []);
 
   // Delay showing skeleton to prevent flicker
   useEffect(() => {
     const skeletonTimer = setTimeout(() => {
-      if (initialLoading) {
-        setShowSkeleton(true);
-      }
+      if (initialLoading) setShowSkeleton(true);
     }, 250);
-
     return () => clearTimeout(skeletonTimer);
   }, [initialLoading]);
 
@@ -216,137 +239,319 @@ export default function HardLessons() {
     return () => clearTimeout(dwellTimer);
   }, [initialLoading, showSkeleton]);
 
-  const loadHardLessons = async () => {
-    setInitialLoading(true);
-    setLoadError(false);
-    try {
-      const savedLessons = await readUserData('hardLessons');
-      const deduped = Array.from(new Map((savedLessons || []).map(l => [l.id, l])).values());
-      setLessons(deduped);
-    } catch (error) {
-      logger.error('❌ Error loading hard lessons:', error);
-      setLoadError(true);
-    } finally {
-      setInitialLoading(false);
-    }
-  };
+  const clearOracleContext = () => clearBehavioralContextCache(currentUid());
 
-  // Show scar flow when lessons load empty (first time), unless previously skipped.
-  // Persisted in localStorage, not sessionStorage — a session-scoped flag brought
-  // the flow back in every new tab until a lesson was finally saved.
-  useEffect(() => {
-    if (!initialLoading && lessons.length === 0 && !readScarFlowSkipped()) {
-      setShowScarFlow(true);
-    }
-  }, [initialLoading, lessons.length]);
+  // ── Rule match ───────────────────────────────────────────────────────────
+  // Runs when a draft arrives, when the Oracle is asked and when the review
+  // sheet opens — never on a field blur or on Save draft.
+  const runRuleMatch = useCallback((d, lessonId, list) => {
+    const linked = findLinkedRule(list, lessonId);
+    if (linked) { setRuleMatch({ rule: linked, answer: 'broke', linking: false }); return; }
+    const text = (d?.eventDescription || '').trim();
+    if (text.length < ORACLE_MIN_CHARS || dismissedMatches.current.has(text)) { setRuleMatch(null); return; }
+    const rule = findMatchingRule(text, list, { beforeMs: Date.now(), excludeId: lessonId });
+    setRuleMatch(rule ? { rule, answer: null, linking: false } : null);
+  }, []);
 
-  // Auto-open the form if we arrived with an Oracle-extracted draft (from Journal bridge)
-  useEffect(() => {
-    if (initialLoading || lessons.length === 0) return;
-    const extracted = lessons.find(l => l.isOracleExtracted && !l.isFinalized && !autoOpenedIds.current.has(l.id));
-    if (extracted) {
-      // Track in a session ref so reloads of lessons state don't re-trigger the effect
-      autoOpenedIds.current.add(extracted.id);
-      setNewLesson({
-        eventCategory: extracted.eventCategory || '',
-        eventDescription: extracted.eventDescription || '',
-        myAssumption: extracted.myAssumption || '',
-        signalIgnored: extracted.signalIgnored || '',
-        costs: Array.isArray(extracted.costs) ? extracted.costs : [],
-        costDescription: extracted.costDescription || '',
-        extractedLesson: extracted.extractedLesson || '',
-        ruleGoingForward: extracted.ruleGoingForward || '',
-        isFinalized: false,
-      });
-      setEditingLesson(extracted);
+  const openDraft = useCallback((d, { id = null, base = emptyDraft(), list, open = true }) => {
+    setDraft(d);
+    setBaseline(base);
+    setEditingId(id);
+    setFormKey(k => k + 1);
+    setOracle({ pending: false, message: null });
+    runRuleMatch(d, id, list);
+    if (open) {
       setShowForm(true);
-      setShowScarFlow(false);
-      // Scroll to top after a tick so the form is visible
-      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+      setShowRulesLibrary(false);
+      requestAnimationFrame(() => document.getElementById('hl-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     }
-  }, [initialLoading, lessons]);
+  }, [runRuleMatch]);
 
-  const submitScarInventory = async () => {
-    const filled = scarInventory.filter(s => s.trim().length > 0);
-    if (filled.length === 0) return;
-    // Synchronous re-entry guard — setSavingScars only disables the button on
-    // the next render, so a rapid double-click would otherwise write the scar
-    // stubs twice.
-    if (savingScarsRef.current) return;
-    savingScarsRef.current = true;
+  const consumePrefill = useCallback((list) => {
+    const prefill = peekPrefill();
+    dropPrefill();
+    if (!prefill) return false;
+    openDraft(lessonFromPrefill(prefill), { list });
+    return true;
+  }, [openDraft]);
 
-    setSavingScars(true);
-    try {
-      const newLessons = [];
-      for (const scar of filled) {
-        const stub = await writeData('hardLessons', {
-          eventCategory: '',
-          eventDescription: scar.trim(),
-          myAssumption: '',
-          signalIgnored: '',
-          costs: [],
-          costDescription: '',
-          extractedLesson: '',
-          ruleGoingForward: '',
-          isFinalized: false,
-          isScarStub: true,
-          createdAt: new Date().toISOString(),
+  // Mount order: a bridge prefill (Signal, Journal, Ledger) and an unsaved
+  // local draft can both be waiting. The local draft is never overwritten or
+  // written to Firestore without a tap.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await loadHardLessons();
+      if (cancelled) return;
+      const known = list || [];
+      const local = readLocalDraft(currentUid());
+      const localLive = local && canSaveDraft(local.draft);
+      const prefill = peekPrefill();
+      if (localLive && prefill) {
+        setConflict({ draft: local.draft, editingId: local.editingId, next: { type: 'prefill' } });
+      } else if (localLive) {
+        const target = known.find(l => l.id === local.editingId && !l.isFinalized);
+        openDraft(local.draft, {
+          id: target ? target.id : null,
+          base: target ? draftFromLesson(target) : emptyDraft(),
+          list: known,
+          open: !arrivedByDeepLink.current,
         });
-        newLessons.push(stub);
+      } else if (prefill) {
+        consumePrefill(known);
       }
-      setLessons(prev => [...newLessons, ...prev]);
-      setShowScarFlow(false);
-      setScarInventory(['', '', '']);
-      ouraToast.success(`${filled.length} scar${filled.length > 1 ? 's' : ''} recorded. Complete each record to lock in the lesson.`);
+      autosaveReady.current = true;
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dirty = canSaveDraft(draft) && !draftsEqual(draft, baseline);
+
+  // Keep the unsaved form on this device so leaving the page loses nothing.
+  useEffect(() => {
+    if (!autosaveReady.current || conflict) return;
+    const uid = currentUid();
+    const timer = setTimeout(() => {
+      if (dirty) writeLocalDraft(uid, { draft, editingId });
+      else clearLocalDraft(uid);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [draft, editingId, dirty, conflict]);
+
+  const resetForm = useCallback(() => {
+    setDraft(emptyDraft());
+    setBaseline(emptyDraft());
+    setEditingId(null);
+    setFormKey(k => k + 1);
+    setShowForm(false);
+    setOracle({ pending: false, message: null });
+    setRuleMatch(null);
+    clearLocalDraft(currentUid());
+  }, []);
+
+  // ── Writes ───────────────────────────────────────────────────────────────
+  const persist = async (d, id, { finalize = false } = {}) => {
+    const payload = buildLessonPayload(d, { finalize });
+    const target = id ? lessons.find(l => l.id === id && !l.isFinalized) : null;
+    if (target) {
+      await updateData('hardLessons', target.id, payload);
+      return target.id;
+    }
+    const saved = await writeData('hardLessons', payload);
+    return saved?.id || null;
+  };
+
+  const saveDraft = async () => {
+    if (!canSaveDraft(draft) || submittingRef.current) return;
+    submittingRef.current = true;
+    setSaving(true);
+    try {
+      const isNew = !editingId;
+      await persist(draft, editingId);
+      if (isNew) track('lesson_saved', { finalized: false, source: lessonSource(draft), oracleUsed: !!draft.isOracleExtracted, brokeRule: false });
+      resetForm();
+      await loadHardLessons();
+      ouraToast.success('Draft saved.');
     } catch (error) {
-      logger.error('Error saving scar inventory:', error);
-      ouraToast.error('Failed to save scars');
+      logger.error('Error saving Hard Lesson draft:', error);
+      if (redirectIfAuthLost(error)) return;
+      ouraToast.error('Draft not saved. Your text is kept.');
     } finally {
-      setSavingScars(false);
-      savingScarsRef.current = false;
+      setSaving(false);
+      submittingRef.current = false;
     }
   };
 
+  const lockLesson = async () => {
+    if (missingForFinalize(draft).length > 0 || submittingRef.current) return false;
+    submittingRef.current = true;
+    setSaving(true);
+    try {
+      const savedId = await persist(draft, editingId, { finalize: true });
+      const linked = findLinkedRule(lessons, savedId);
+      if (linked) {
+        const closed = closeLessonBreak(linked, savedId, draft);
+        if (closed) await updateData('hardLessons', linked.id, closed);
+      }
+      // Long-term memory — finalized lessons only. Fire-and-forget; the CF
+      // re-checks isFinalized on the stored doc.
+      if (savedId) updateMemory('hardLessons', savedId);
+      clearOracleContext();
+      track('lesson_saved', { finalized: true, source: lessonSource(draft), oracleUsed: !!draft.isOracleExtracted, brokeRule: !!linked });
+
+      if (linked && savedId) {
+        let dismissed = false;
+        try { dismissed = !!sessionStorage.getItem(`bridge_dismissed_${savedId}`); } catch { /* noop */ }
+        if (!dismissed) {
+          const breaks = Array.isArray(linked.violations) ? linked.violations.length : 0;
+          setBridgePrompt({ visible: true, ruleText: draft.ruleGoingForward.trim(), consecutiveDaysRequired: breaks >= 2 ? 60 : 30, lessonId: savedId });
+        }
+      }
+      resetForm();
+      await loadHardLessons();
+      ouraToast.success('Lesson locked.');
+      return true;
+    } catch (error) {
+      logger.error('Error locking Hard Lesson:', error);
+      if (redirectIfAuthLost(error)) return false;
+      ouraToast.error('Lesson not locked. Your text is kept.');
+      return false;
+    } finally {
+      setSaving(false);
+      submittingRef.current = false;
+    }
+  };
+
+  // "It broke" writes at once: the draft is saved to get an id, then the break
+  // goes on the matched rule's own violations[] — the one shape every reader
+  // counts. No unwritten break ever sits in local storage.
+  const answerMatch = async (answer) => {
+    if (!ruleMatch?.rule || ruleMatch.linking) return;
+    if (answer === 'different') {
+      dismissedMatches.current.add(draft.eventDescription.trim());
+      setRuleMatch(null);
+      return;
+    }
+    if (!canSaveDraft(draft)) return;
+    setRuleMatch(m => ({ ...m, linking: true }));
+    try {
+      const lessonId = await persist(draft, editingId);
+      if (!lessonId) throw new Error('draft save returned no id');
+      setEditingId(lessonId);
+      setBaseline(draft);
+      const fresh = (await loadHardLessons()) || lessons;
+      const rule = fresh.find(l => l.id === ruleMatch.rule.id) || ruleMatch.rule;
+      const patch = linkLessonBreak(rule, lessonId);
+      if (patch) {
+        await updateData('hardLessons', rule.id, patch);
+        track('rule_broken', { source: 'lesson' });
+      }
+      clearOracleContext();
+      await loadHardLessons();
+      setRuleMatch({ rule, answer: 'broke', linking: false });
+    } catch (error) {
+      logger.error('Error recording break from lesson:', { code: error?.code, message: error?.message });
+      if (redirectIfAuthLost(error)) return;
+      setRuleMatch(m => (m ? { ...m, linking: false } : m));
+      ouraToast.error('Break not recorded. Try again.');
+    }
+  };
+
+  const askOracle = async () => {
+    const description = draft.eventDescription.trim();
+    if (description.length < ORACLE_MIN_CHARS || oracle.pending) return;
+    runRuleMatch(draft, editingId, lessons);
+    setOracle({ pending: true, message: null });
+    const { status, extraction } = await extractHardLessonDirect(description, { tone: 'stoic' });
+    track('lesson_extract', { outcome: status });
+    if (status === 'ok') {
+      setDraft(d => mergeExtraction(d, extraction));
+      setOracle({ pending: false, message: null });
+    } else if (status === 'empty') {
+      setOracle({ pending: false, message: 'Oracle found no lesson in this. Add what it cost you.' });
+    } else {
+      setOracle({ pending: false, message: 'Oracle unavailable. Your text is kept.' });
+    }
+  };
+
+  const focusForm = (d) => {
+    requestAnimationFrame(() => {
+      document.getElementById('hl-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const first = missingForFinalize(d)[0] || 'eventDescription';
+      document.getElementById(fieldId(first))?.focus?.({ preventScroll: true });
+    });
+  };
+
+  const openEdit = (lesson, list = lessons) => {
+    const d = draftFromLesson(lesson);
+    openDraft(d, { id: lesson.id, base: d, list });
+    focusForm(d);
+  };
+
+  const editLesson = (lesson) => {
+    if (lesson.isFinalized) return;
+    if (editingId === lesson.id) { setShowForm(true); setShowRulesLibrary(false); focusForm(draft); return; }
+    if (dirty) {
+      setConflict({ draft, editingId, next: { type: 'edit', lessonId: lesson.id } });
+      return;
+    }
+    openEdit(lesson);
+  };
+
+  const startNew = () => {
+    setShowForm(true);
+    setShowRulesLibrary(false);
+  };
+
+  const resolveConflict = async (save) => {
+    if (!conflict || submittingRef.current) return;
+    submittingRef.current = true;
+    let list = lessons;
+    try {
+      if (save) {
+        setSaving(true);
+        const isNew = !conflict.editingId;
+        await persist(conflict.draft, conflict.editingId);
+        if (isNew) track('lesson_saved', { finalized: false, source: lessonSource(conflict.draft), oracleUsed: !!conflict.draft.isOracleExtracted, brokeRule: false });
+        list = (await loadHardLessons()) || lessons;
+        ouraToast.success('Draft saved.');
+      }
+    } catch (error) {
+      logger.error('Error saving unsaved lesson:', error);
+      setSaving(false);
+      submittingRef.current = false;
+      if (redirectIfAuthLost(error)) return;
+      ouraToast.error('Draft not saved. Your text is kept.');
+      return;
+    }
+    setSaving(false);
+    submittingRef.current = false;
+    const next = conflict.next;
+    setConflict(null);
+    clearLocalDraft(currentUid());
+    if (next?.type === 'edit') {
+      const target = list.find(l => l.id === next.lessonId && !l.isFinalized);
+      if (target) openEdit(target, list);
+      else resetForm();
+    } else if (!consumePrefill(list)) {
+      resetForm();
+    }
+  };
+
+  // ── Rules ────────────────────────────────────────────────────────────────
   const costFrequency = useMemo(() => {
-    if (lessons.length === 0) return [];
     const counts = {};
-    lessons.forEach(l => {
-      (l.costs || []).forEach(cost => {
-        counts[cost] = (counts[cost] || 0) + 1;
-      });
+    lessons.filter(l => l.isFinalized).forEach(l => {
+      (l.costs || []).forEach(cost => { counts[cost] = (counts[cost] || 0) + 1; });
     });
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .map(([value, count]) => {
-        const def = costCategories.find(c => c.value === value);
-        return { value, label: def?.label ?? value, icon: def?.icon ?? '⚡', count };
-      });
+      .map(([value, count]) => ({ value, label: costLabel(value), count }));
   }, [lessons]);
 
   const filteredLessons = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return lessons;
-
     return lessons.filter((lesson) => {
-      const categoryLabel = eventCategories.find(cat => cat.value === lesson.eventCategory)?.label || '';
-      const statusLabel = lesson.isFinalized ? 'finalized' : 'draft';
       const haystack = [
-        categoryLabel,
+        categoryLabel(lesson.eventCategory),
         lesson.eventDescription,
         lesson.myAssumption,
         lesson.signalIgnored,
         lesson.costDescription,
         lesson.extractedLesson,
         lesson.ruleGoingForward,
-        statusLabel
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
+        lesson.isFinalized ? 'locked finalized' : 'draft',
+      ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(normalizedQuery);
     });
   }, [lessons, searchQuery]);
+
+  const finalizedRuleCount = useMemo(
+    () => lessons.filter(l => l.isFinalized && l.ruleGoingForward?.trim()).length,
+    [lessons]
+  );
 
   // BER-130: finalized rules aggregated for the library
   const finalizedRules = useMemo(() => {
@@ -354,15 +559,11 @@ export default function HardLessons() {
     const base = lessons
       .filter(l => l.isFinalized && l.ruleGoingForward?.trim())
       .map(l => {
-        // Combine two violation sources: (1) legacy — separate lesson docs
-        // tagged isRuleViolation pointing at this rule via violatedRuleId,
-        // (2) direct — entries in this rule's own violations[] array,
-        // populated by the "Rule broken" button + Weekly Rule Review.
+        // Two break sources: legacy sibling docs tagged isRuleViolation that
+        // point here via violatedRuleId (no longer written), and this rule's
+        // own violations[].
         const legacyCount = lessons.filter(x => x.isRuleViolation && x.violatedRuleId === l.id).length;
         const directCount = Array.isArray(l.violations) ? l.violations.length : 0;
-        // Derived breach state — single source of truth in ruleState.js.
-        const underReview = isUnderReview(l);
-        const heldStreakDays = getHeldStreakDays(l, now);
         const reaffirmedAt = (Array.isArray(l.violations) ? l.violations : [])
           .reduce((latest, v) => Math.max(latest, toMs(v?.resolvedAt)), 0);
         return {
@@ -370,8 +571,8 @@ export default function HardLessons() {
           rule: l.ruleGoingForward,
           lesson: l,
           violationCount: legacyCount + directCount,
-          underReview,
-          heldStreakDays,
+          underReview: isUnderReview(l),
+          heldStreakDays: getHeldStreakDays(l, now),
           reaffirmedAt: reaffirmedAt || null,
         };
       })
@@ -386,108 +587,57 @@ export default function HardLessons() {
     });
   }, [lessons, librarySearch, libraryFilterCost, libraryFilterCategory]);
 
-  // Simple keyword-based rule violation detection (no ML — token overlap)
-  const tokenizeSimple = (text) => String(text || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length > 3);
-
-  const findMatchingRule = useCallback((description) => {
-    const descTokens = new Set(tokenizeSimple(description));
-    if (descTokens.size < 3) return null;
-    const finalized = lessons.filter(l => l.isFinalized && l.ruleGoingForward?.trim());
-    let bestMatch = null;
-    let bestScore = 0;
-    finalized.forEach(l => {
-      const ruleTokens = tokenizeSimple(l.ruleGoingForward + ' ' + (l.extractedLesson || ''));
-      const ruleSet = new Set(ruleTokens);
-      let intersection = 0;
-      descTokens.forEach(t => { if (ruleSet.has(t)) intersection++; });
-      const score = intersection / Math.max(descTokens.size, ruleSet.size, 1);
-      if (score > bestScore) { bestScore = score; bestMatch = l; }
-    });
-    return bestScore >= 0.12 ? bestMatch : null;
-  }, [lessons]);
-
-  const handleEventDescriptionBlur = useCallback(() => {
-    const desc = newLesson.eventDescription.trim();
-    if (desc.length < 30 || desc === violationCheckedRef.current) return;
-    if (editingLesson?.id) return; // skip on edit of existing lesson
-    violationCheckedRef.current = desc;
-    const matched = findMatchingRule(desc);
-    if (matched) {
-      setViolationPrompt({ visible: true, matchedRule: matched });
-    }
-  }, [newLesson.eventDescription, findMatchingRule, editingLesson]);
-
-  const handleViolationConfirm = (isViolation) => {
-    if (isViolation && violationPrompt.matchedRule) {
-      setPendingViolation({ isRuleViolation: true, violatedRuleId: violationPrompt.matchedRule.id });
-      setNewLesson(prev => ({ ...prev, isRuleViolation: true, violatedRuleId: violationPrompt.matchedRule.id }));
-    } else {
-      setPendingViolation({ isRuleViolation: false, violatedRuleId: null });
-      setNewLesson(prev => ({ ...prev, isRuleViolation: false, violatedRuleId: null }));
-    }
-    setViolationPrompt({ visible: false, matchedRule: null });
-  };
-
   // After-action review panel — opens on a fresh break (the rule is now under
   // review) and on demand for an already-breached rule. Completing it stamps
   // the break with cause/correction/resolvedAt, which re-affirms the rule and
   // restarts its held streak. Skipping leaves the rule under review.
   const [aarPanel, setAarPanel] = useState({ ruleId: null, cause: '', correction: '', violationDate: null });
   const [savingAar, setSavingAar] = useState(false);
-  const ruleBreakingRef = useRef(new Set()); // synchronous guard against rapid double-taps
+  const ruleBreakingRef = useRef(new Set());
 
-  // Direct violation logger — fires when the user taps "Rule broken" on a
-  // finalized rule card. Writes an unresolved entry to the rule's own
-  // violations[] (the shape every reader now agrees on via ruleState.js) →
-  // the rule goes under review. Daily dedupe: one per rule per UTC day.
-  const markRuleBroken = useCallback(async (rule) => {
-    if (!rule?.id) return;
-    if (ruleBreakingRef.current.has(rule.id)) return; // re-entry guard
+  // Writes an unresolved entry to the rule's own violations[] → the rule goes
+  // under review. Reached only through the inline confirm. One per rule per
+  // local day.
+  const markRuleBroken = async (rule) => {
+    if (!rule?.id || ruleBreakingRef.current.has(rule.id)) return;
     ruleBreakingRef.current.add(rule.id);
     try {
       const todayKey = localDateKey();
       const existing = Array.isArray(rule.violations) ? rule.violations : [];
       const alreadyToday = existing.some(v => {
         const d = v?.date || v?.timestamp;
-        if (!d) return false;
-        return localDateKey(d) === todayKey;
+        return d ? localDateKey(d) === todayKey : false;
       });
       if (alreadyToday) {
-        ouraToast.info('Already logged a break for this rule today');
+        ouraToast.info('A break is already logged for this rule today.');
         return;
       }
       const nowIso = new Date().toISOString();
-      const violations = [...existing, { date: nowIso, source: 'direct' }];
       await updateData('hardLessons', rule.id, {
-        violations,
+        violations: [...existing, { date: nowIso, source: 'direct' }],
         lastViolatedAt: nowIso,
       });
+      track('rule_broken', { source: 'direct' });
+      clearOracleContext();
       await loadHardLessons();
-      ouraToast.success('Rule broken — under review');
+      ouraToast.info('Break logged. Rule under review.');
       setAarPanel({ ruleId: rule.id, cause: '', correction: '', violationDate: nowIso });
     } catch (err) {
-      // Surface the real Firestore error instead of hard-redirecting to /auth.
-      // A failed in-page write must not nuke the session/context — and the
-      // redirect was hiding the actual error code.
       logger.error('markRuleBroken failed:', { code: err?.code, message: err?.message });
-      ouraToast.error('Could not log the break — try again');
+      ouraToast.error('Break not logged. Try again.');
     } finally {
       ruleBreakingRef.current.delete(rule.id);
+      setBreakConfirmId(null);
     }
-  }, []);
+  };
 
-  // Open the after-action panel for an already-breached rule, targeting its
-  // most-recent (unresolved) break.
   const openAfterAction = useCallback((rule) => {
     const b = getMostRecentBreak(rule);
     if (!b?.date) return;
     setAarPanel({ ruleId: rule.id, cause: '', correction: '', violationDate: b.date });
   }, []);
 
-  // Complete the after-action review: stamp the targeted break with cause,
-  // correction, and resolvedAt. resolvedAt re-affirms the rule (clears under
-  // review, restarts the held streak). Both fields required.
-  const saveAfterAction = useCallback(async () => {
+  const saveAfterAction = async () => {
     const { ruleId, cause, correction, violationDate } = aarPanel;
     if (!ruleId || !violationDate || !cause.trim() || !correction.trim()) return;
     setSavingAar(true);
@@ -497,30 +647,26 @@ export default function HardLessons() {
       const resolvedAt = new Date().toISOString();
       const violations = (Array.isArray(rule.violations) ? rule.violations : []).map(v => {
         const d = v?.date || v?.timestamp;
-        if (d === violationDate) {
-          return { ...v, cause: cause.trim(), correction: correction.trim(), resolvedAt };
-        }
-        return v;
+        return d === violationDate ? { ...v, cause: cause.trim(), correction: correction.trim(), resolvedAt } : v;
       });
       await updateData('hardLessons', ruleId, { violations });
+      track('after_action_completed');
+      clearOracleContext();
       await loadHardLessons();
-      ouraToast.success('Rule re-affirmed');
+      ouraToast.success('Rule re-affirmed.');
       setAarPanel({ ruleId: null, cause: '', correction: '', violationDate: null });
     } catch (err) {
       logger.error('saveAfterAction failed:', { code: err?.code, message: err?.message });
-      ouraToast.error('Could not save the after-action review — try again');
+      ouraToast.error('After-action review not saved. Try again.');
     } finally {
       setSavingAar(false);
     }
-  }, [aarPanel, lessons]);
+  };
 
-  const dismissAfterAction = useCallback(() => {
-    setAarPanel({ ruleId: null, cause: '', correction: '', violationDate: null });
-  }, []);
+  const dismissAfterAction = () => setAarPanel({ ruleId: null, cause: '', correction: '', violationDate: null });
 
   // After-action handoff from the Weekly Rule Review: open the library with the
-  // breached rule's after-action panel ready. Waits for lessons to load so the
-  // target rule is resolvable.
+  // breached rule's after-action panel ready.
   const aarPrefillRef = useRef(false);
   useEffect(() => {
     if (aarPrefillRef.current || lessons.length === 0) return;
@@ -533,39 +679,41 @@ export default function HardLessons() {
       const rule = lessons.find(l => l.id === ruleId);
       if (rule) {
         setShowRulesLibrary(true);
+        setShowForm(false);
         openAfterAction(rule);
       }
     } catch {}
     try { sessionStorage.removeItem('hl_aar_open'); } catch {}
   }, [lessons, openAfterAction]);
 
-  // BER-131: send rule to the Kill List intake form. Per the cross-module
-  // rule, no doc is written here — we stash the prefill and navigate so the
-  // user reviews the target on the Ledger page and chooses to initiate.
-  const addToKillListFromBridge = () => {
-    if (!bridgePrompt.ruleText.trim()) return;
-    const daysRaw = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
-    const days = Number.isFinite(daysRaw) && daysRaw >= 21 ? daysRaw : 30;
-    try {
-      sessionStorage.setItem('kl_extraction_prefill', JSON.stringify({
-        targetTitle: bridgePrompt.ruleText.trim(),
-        consecutiveDaysRequired: days,
-        fromHardLessonId: bridgePrompt.lessonId,
-      }));
-    } catch { /* ignore storage errors */ }
-    setBridgePrompt(prev => ({ ...prev, visible: false }));
+  const stashLedgerPrefill = (payload) => {
+    try { sessionStorage.setItem('kl_extraction_prefill', JSON.stringify(payload)); } catch { /* ignore storage errors */ }
     navigate('/ledger');
   };
 
+  const addToKillListFromBridge = () => {
+    if (!bridgePrompt.ruleText.trim()) return;
+    const daysRaw = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
+    setBridgePrompt(prev => ({ ...prev, visible: false }));
+    stashLedgerPrefill({
+      targetTitle: bridgePrompt.ruleText.trim(),
+      consecutiveDaysRequired: Number.isFinite(daysRaw) && daysRaw >= 21 ? daysRaw : 30,
+      fromHardLessonId: bridgePrompt.lessonId,
+    });
+  };
+
+  const dismissBridge = useCallback(() => {
+    setBridgePrompt(prev => {
+      if (prev.lessonId) {
+        try { sessionStorage.setItem(`bridge_dismissed_${prev.lessonId}`, '1'); } catch { /* noop */ }
+      }
+      return { ...prev, visible: false };
+    });
+  }, []);
+
   const addToKillListFromLesson = (lesson) => {
     if (!lesson.ruleGoingForward?.trim()) return;
-    try {
-      sessionStorage.setItem('kl_extraction_prefill', JSON.stringify({
-        targetTitle: lesson.ruleGoingForward.trim(),
-        fromHardLessonId: lesson.id,
-      }));
-    } catch { /* ignore storage errors */ }
-    navigate('/ledger');
+    stashLedgerPrefill({ targetTitle: lesson.ruleGoingForward.trim(), fromHardLessonId: lesson.id });
   };
 
   const generateCostPatternNarrative = async () => {
@@ -580,10 +728,7 @@ export default function HardLessons() {
         });
       });
       const grouped = Object.entries(byType)
-        .map(([type, rules]) => {
-          const label = costCategories.find(c => c.value === type)?.label || type;
-          return `${label}: ${rules.join('; ')}`;
-        })
+        .map(([type, rules]) => `${costLabel(type)}: ${rules.join('; ')}`)
         .join('\n');
       const prompt = `The following are the user's finalized behavioral rules, grouped by cost type they emerged from:\n\n${grouped}\n\nIdentify the dominant cost pattern in 2-3 sentences. Pattern identification only — no advice, no affirmation, no suggestions.`;
       const { text: result } = await generateAIFeedback('hardLessons', prompt, []);
@@ -595,278 +740,18 @@ export default function HardLessons() {
     }
   };
 
-  const handleCostToggle = (costValue) => {
-    setNewLesson(prev => ({
-      ...prev,
-      costs: prev.costs.includes(costValue)
-        ? prev.costs.filter(c => c !== costValue)
-        : [...prev.costs, costValue]
-    }));
-  };
-
-  const validateLesson = () => {
-    const fieldLabels = {
-      eventCategory: 'Event Category',
-      eventDescription: 'Event Description',
-      myAssumption: 'My Assumption',
-      signalIgnored: 'Signal Ignored',
-      costDescription: 'Cost Description',
-      extractedLesson: 'Extracted Lesson',
-      ruleGoingForward: 'Rule Going Forward',
-    };
-
-    const required = [
-      'eventCategory',
-      'eventDescription',
-      'myAssumption',
-      'signalIgnored',
-      'costDescription',
-      'extractedLesson',
-      'ruleGoingForward'
-    ];
-
-    for (const field of required) {
-      if (!newLesson[field]?.trim()) {
-        ouraToast.warning(`Please complete: ${fieldLabels[field] ?? field}`);
-        return false;
-      }
-    }
-
-    if (newLesson.costs.length === 0) {
-      ouraToast.warning('Please select at least one cost category');
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleOracleReaction = (reactionId) => {
-    setPendingOracleReaction(reactionId);
-  };
-
-  // Button is single-purpose: call lessonExtraction, populate empty fields,
-  // auto-save the draft when editing an existing doc (scar stub or draft),
-  // and surface a synthesized wisdom string in the Oracle modal for reaction.
-  // Gated on eventDescription length only — full validation is reserved for
-  // Save Draft / Finalize Lesson.
-  const seekOracleExtraction = async () => {
-    const description = newLesson.eventDescription?.trim() || '';
-    if (description.length < 30) {
-      ouraToast.warning('Add more detail to the event description before asking Oracle to extract.');
-      return;
-    }
-
-    setPendingOracleReaction(null);
-    setPendingOracleWisdom('');
-    setPendingOracleClosingQuestion(null);
-    openOracleLoading();
-
-    try {
-      const extraction = await extractHardLessonDirect(description, { tone: 'stoic' });
-
-      if (!extraction) {
-        closeOracle();
-        ouraToast.warning("Oracle couldn't extract a lesson — add more detail about what happened and what it cost you.");
-        return;
-      }
-
-      const merged = {
-        eventCategory:    newLesson.eventCategory    || extraction.suggestedCategory || '',
-        myAssumption:     newLesson.myAssumption     || extraction.myAssumption || '',
-        signalIgnored:    newLesson.signalIgnored    || extraction.signalIgnored || '',
-        costs:            newLesson.costs.length     ? newLesson.costs : (Array.isArray(extraction.suggestedCosts) ? extraction.suggestedCosts : []),
-        costDescription:  newLesson.costDescription  || extraction.costDescription || '',
-        extractedLesson:  newLesson.extractedLesson  || extraction.extractedLesson || '',
-        ruleGoingForward: newLesson.ruleGoingForward || extraction.ruleGoingForward || '',
-      };
-
-      setNewLesson(prev => ({
-        ...prev,
-        ...merged,
-        isOracleExtracted: true,
-      }));
-
-      if (editingLesson) {
-        try {
-          await updateData('hardLessons', editingLesson.id, {
-            ...merged,
-            isOracleExtracted: true,
-            isScarStub: false,
-          });
-          await loadHardLessons();
-        } catch (writeErr) {
-          if (redirectIfAuthLost(writeErr)) return;
-          logger.error('Failed to auto-save Oracle extraction:', writeErr);
-          ouraToast.error('Oracle extracted but the draft could not be saved. Click Save Draft to retry.');
-        }
-      }
-
-      const wisdom = [
-        extraction.signalIgnored   ? `Signal ignored: ${extraction.signalIgnored}` : null,
-        extraction.costDescription ? `Cost: ${extraction.costDescription}` : null,
-        '─',
-        extraction.extractedLesson ? `Lesson: ${extraction.extractedLesson}` : null,
-        extraction.ruleGoingForward? `Rule: ${extraction.ruleGoingForward}` : null,
-      ].filter(Boolean).join('\n');
-
-      setPendingOracleWisdom(wisdom);
-      // Reaching here means the extractor returned a real result — the null and
-      // throw paths above both bail out — so this is genuinely Claude's output.
-      openOracleWithContent({
-        content: wisdom,
-        entryCount: getCachedTotalEntryCount(),
-        entryText: description,
-        entryModuleName: 'hard_lessons',
-        provenance: PROVENANCE.ORACLE,
-      });
-    } catch (error) {
-      logger.error('Error seeking Oracle extraction:', error);
-      closeOracle();
-      ouraToast.error('Oracle unavailable. Try again in a moment.');
-    }
-  };
-
-  const submitLesson = async (finalize = false) => {
-    if (!validateLesson()) return;
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-
-    setLoading(true);
-
-    try {
-      // Strip server-/path-managed meta so we never persist them into the doc.
-      // Persisting `id` in particular is what corrupted the canonical doc id
-      // (readUserData spreads doc data; a stored `id` used to win). userId,
-      // timestamps, and lastUpdated are owned by firebaseUtils on write.
-      const {
-        id: _omitId,
-        createdAt: _omitCreatedAt,
-        timestamp: _omitTimestamp,
-        userId: _omitUserId,
-        lastUpdated: _omitLastUpdated,
-        ...cleanLesson
-      } = newLesson;
-      const lessonData = {
-        ...cleanLesson,
-        isFinalized: finalize,
-        finalizedAt: finalize ? new Date().toISOString() : null,
-        isRuleViolation: pendingViolation.isRuleViolation,
-        violatedRuleId: pendingViolation.violatedRuleId,
-        ...(pendingOracleReaction ? { oracleReaction: pendingOracleReaction } : {}),
-        ...(pendingOracleWisdom ? { oracleWisdom: pendingOracleWisdom } : {}),
-        ...(pendingOracleClosingQuestion ? { oracleClosingQuestion: pendingOracleClosingQuestion } : {})
-      };
-
-      let savedLessonId;
-      if (editingLesson) {
-        // Handle edits with immutability constraints
-        if (editingLesson.isFinalized) {
-          ouraToast.info('Finalized lessons cannot be edited. Create a new entry if the rule was violated again.');
-          setLoading(false);
-          return;
-        }
-
-        lessonData.originalCreatedAt = editingLesson.createdAt;
-        await updateData('hardLessons', editingLesson.id, lessonData);
-        savedLessonId = editingLesson.id;
-      } else {
-        const savedLesson = await writeData('hardLessons', lessonData);
-        savedLessonId = savedLesson?.id;
-      }
-
-      await loadHardLessons();
-
-      // Long-term memory — finalized lessons only (drafts must never be quoted).
-      // Fire-and-forget; the CF also re-checks isFinalized on the stored doc.
-      if (finalize && savedLessonId) {
-        updateMemory('hardLessons', savedLessonId);
-      }
-
-      // BER-131: bridge trigger 1 — rule violation → Kill List prompt
-      if (finalize && lessonData.isRuleViolation && lessonData.ruleGoingForward?.trim()) {
-        const dismissKey = `bridge_dismissed_${editingLesson?.id || 'new'}`;
-        const alreadyDismissed = sessionStorage.getItem(dismissKey);
-        if (!alreadyDismissed) {
-          const violationCount = lessons.filter(l => l.isRuleViolation && l.violatedRuleId === lessonData.violatedRuleId).length;
-          const suggestedDays = violationCount >= 2 ? 60 : 30;
-          setBridgePrompt({ visible: true, ruleText: lessonData.ruleGoingForward, consecutiveDaysRequired: suggestedDays, lessonId: editingLesson?.id || null });
-        }
-      }
-
-      resetForm();
-
-      if (finalize) {
-        ouraToast.success('Hard Lesson finalized and locked');
-      } else {
-        ouraToast.success('Hard Lesson saved');
-      }
-
-    } catch (error) {
-      logger.error('Error saving Hard Lesson:', error);
-      if (redirectIfAuthLost(error)) return;
-      ouraToast.error('Failed to save Hard Lesson');
-    } finally {
-      setLoading(false);
-      submittingRef.current = false;
-    }
-  };
-
-  const resetForm = () => {
-    setNewLesson({
-      eventCategory: '',
-      eventDescription: '',
-      myAssumption: '',
-      signalIgnored: '',
-      costs: [],
-      costDescription: '',
-      extractedLesson: '',
-      ruleGoingForward: '',
-      isFinalized: false,
-      isRuleViolation: false,
-      violatedRuleId: null,
-    });
-    setShowForm(false);
-    setManualMode(false);
-    setEditingLesson(null);
-    setPendingOracleWisdom('');
-    setPendingOracleReaction(null);
-    setPendingOracleClosingQuestion(null);
-    setPendingViolation({ isRuleViolation: false, violatedRuleId: null });
-    setViolationPrompt({ visible: false, matchedRule: null });
-    violationCheckedRef.current = '';
-  };
-
-  const editLesson = (lesson) => {
-    if (lesson.isFinalized) {
-      ouraToast.info('This lesson is finalized. Create a new entry if the rule was violated again.');
-      return;
-    }
-
-    setNewLesson({ ...lesson, isScarStub: false, isWeeklyAutopsy: false });
-    // Seed from the lesson being edited — submitLesson always writes
-    // pendingViolation, and the default would silently strip existing flags.
-    setPendingViolation({
-      isRuleViolation: !!lesson.isRuleViolation,
-      violatedRuleId: lesson.violatedRuleId ?? null,
-    });
-    setEditingLesson(lesson);
-    setShowForm(true);
-  };
-
-  const deleteLesson = async (lessonId) => {
+  // ── Archive ──────────────────────────────────────────────────────────────
+  const archiveLesson = async (lessonId) => {
     const lesson = lessons.find(l => l.id === lessonId);
     const lessonIndex = lessons.findIndex(l => l.id === lessonId);
-
-    if (lesson?.isFinalized) {
-      ouraToast.info('Finalized lessons cannot be archived. They are permanent strategic assets.');
-      return;
-    }
-    if (!lesson) return;
+    if (!lesson || lesson.isFinalized) return;
 
     setLessons(prev => prev.filter(l => l.id !== lessonId));
     try {
       await archiveEntry('hardLessons', lesson);
-      ouraToast.success('Lesson archived');
+      track('lesson_archived');
+      if (editingId === lessonId) resetForm();
+      ouraToast.success('Lesson archived.');
     } catch (error) {
       logger.error('Error archiving Hard Lesson:', error);
       setLessons(prev => {
@@ -875,7 +760,7 @@ export default function HardLessons() {
         next.splice(Math.min(lessonIndex, next.length), 0, lesson);
         return next;
       });
-      ouraToast.error('Failed to archive lesson');
+      ouraToast.error('Lesson not archived.');
     }
   };
 
@@ -883,13 +768,12 @@ export default function HardLessons() {
     try {
       await restoreEntry('hardLessons', archived);
       setLessons(prev => [{ ...archived, archivedAt: undefined }, ...prev]);
-      ouraToast.success('Lesson restored');
+      ouraToast.success('Lesson restored.');
     } catch (error) {
       logger.error('Error restoring Hard Lesson:', error);
       if (redirectIfAuthLost(error)) return;
-      // Refresh from server so the active list reflects truth.
       loadHardLessons();
-      ouraToast.error('Failed to restore lesson');
+      ouraToast.error('Lesson not restored.');
     }
   };
 
@@ -897,38 +781,15 @@ export default function HardLessons() {
     if (!window.confirm('Permanently delete this lesson? This cannot be undone.')) return;
     try {
       await deleteArchivedEntry('hardLessons', archived);
-      ouraToast.success('Lesson permanently deleted');
+      ouraToast.success('Lesson permanently deleted.');
     } catch (error) {
       logger.error('Error permanently deleting Hard Lesson:', error);
-      ouraToast.error('Failed to delete lesson');
+      ouraToast.error('Lesson not deleted.');
     }
   };
 
-  // Derive which of the 7 form fields are complete
-  const formSteps = [
-    { key: 'eventCategory',    label: 'Category',   done: !!newLesson.eventCategory },
-    { key: 'eventDescription', label: 'Event',       done: !!newLesson.eventDescription?.trim() },
-    { key: 'myAssumption',     label: 'Assumption',  done: !!newLesson.myAssumption?.trim() },
-    { key: 'signalIgnored',    label: 'Signal',      done: !!newLesson.signalIgnored?.trim() },
-    { key: 'costs',            label: 'Cost',        done: newLesson.costs.length > 0 && !!newLesson.costDescription?.trim() },
-    { key: 'extractedLesson',  label: 'Lesson',      done: !!newLesson.extractedLesson?.trim() },
-    { key: 'ruleGoingForward', label: 'Rule',        done: !!newLesson.ruleGoingForward?.trim() },
-  ];
-  const completedSteps = formSteps.filter(s => s.done).length;
-
-  // Reveal the full forensic field set once there's anything to edit: the user
-  // opted into manual entry, the Oracle has extracted, an existing lesson is
-  // being edited, or a prefill already carried downstream content. Otherwise
-  // the form stays in its Oracle-first state (event + Ask Oracle only).
-  const hasDownstreamContent = !!(
-    newLesson.myAssumption?.trim() ||
-    newLesson.signalIgnored?.trim() ||
-    newLesson.costDescription?.trim() ||
-    newLesson.extractedLesson?.trim() ||
-    newLesson.ruleGoingForward?.trim() ||
-    newLesson.costs.length
-  );
-  const showAllFields = manualMode || newLesson.isOracleExtracted || !!editingLesson || hasDownstreamContent;
+  const smallAction = 'px-3 py-1.5 max-sm:min-h-11 text-xs rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+  const filterChip = (on, onClass) => `px-3 py-1.5 max-sm:min-h-11 rounded-lg text-xs transition-colors ${on ? onClass : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`;
 
   return (
     <div className="min-h-screen bg-black">
@@ -944,13 +805,8 @@ export default function HardLessons() {
           <p className="text-[#ababab] text-lg mb-4">
             {getModuleIntro('hardlessons').definition}
           </p>
-          {/* The permanent "Purpose:" card that used to sit here was replaced
-              by the dismissible first-run intro. That lost the only lasting
-              statement of what this module is, since dismissal is permanent —
-              so the definition moved up into the header line above, which is
-              never dismissible. */}
-          <ModuleIntro moduleId="hardlessons" onAction={() => setShowForm(true)} />
-          <p className="text-[#858585] text-xs mt-3">Lesson maps to active pattern → <Link to="/ledger" className="text-[#ababab] hover:text-white transition-colors">General Ledger</Link></p>
+          <ModuleIntro moduleId="hardlessons" onAction={startNew} />
+          <p className="text-[#858585] text-xs mt-3">Lesson maps to active pattern → <Link to="/ledger" className="inline-flex items-center max-sm:min-h-11 text-[#ababab] hover:text-white transition-colors">General Ledger</Link></p>
         </div>
 
         {/* Stats Overview */}
@@ -960,7 +816,7 @@ export default function HardLessons() {
             <div className="oura-score text-white">{lessons.length}</div>
           </div>
           <div className="oura-card p-3 sm:p-6 text-center">
-            <div className="text-[#858585] text-[10px] sm:text-xs uppercase tracking-widest mb-2">Finalized</div>
+            <div className="text-[#858585] text-[10px] sm:text-xs uppercase tracking-widest mb-2">Locked</div>
             <div className="oura-score text-[#22c55e]">{lessons.filter(l => l.isFinalized).length}</div>
           </div>
           <div className="oura-card p-3 sm:p-6 text-center">
@@ -969,23 +825,18 @@ export default function HardLessons() {
           </div>
         </div>
 
-        {/* Cost type distribution */}
+        {/* Cost type distribution — locked lessons only */}
         {costFrequency.length >= 2 && (
           <div className="oura-card p-5 mb-8 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
             <h3 className="text-xs text-[#858585] uppercase tracking-widest mb-4">Cost Distribution</h3>
             <div className="space-y-2.5">
-              {costFrequency.map(({ value, label, icon, count }) => {
-                const maxCount = costFrequency[0].count;
-                const pct = Math.round((count / maxCount) * 100);
+              {costFrequency.map(({ value, label, count }) => {
+                const pct = Math.round((count / costFrequency[0].count) * 100);
                 return (
                   <div key={value} className="flex items-center gap-3">
-                    <div className="text-sm w-4 shrink-0">{icon}</div>
-                    <div className="text-[#ababab] text-xs w-28 shrink-0 truncate">{label}</div>
+                    <div className="text-[#ababab] text-xs w-32 shrink-0 truncate">{label}</div>
                     <div className="flex-1 bg-[#1a1a1a] rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="h-1.5 rounded-full bg-[#f59e0b] transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
+                      <div className="h-1.5 rounded-full bg-[#f59e0b] transition-all duration-500" style={{ width: `${pct}%` }} />
                     </div>
                     <div className="text-[#858585] text-xs w-4 text-right shrink-0">{count}</div>
                   </div>
@@ -995,914 +846,443 @@ export default function HardLessons() {
           </div>
         )}
 
-        {/* Action Buttons — Extract Lesson uses the General Ledger
-            "Add New Kill Contract" collapsed-card → expand pattern (see
-            KillList.jsx). When collapsed, a full-width card opens the form;
-            when open, the collapse control lives in the form header below. */}
+        {/* Entry point + Rules Library toggle */}
         <div className="mb-8 animate-fade-in-up space-y-3" style={{ animationDelay: '0.2s' }}>
-          {!showForm && (
+          {!showForm && !conflict && (
             <button
               type="button"
-              onClick={() => { setShowForm(true); setShowRulesLibrary(false); }}
+              onClick={startNew}
               className="oura-card w-full p-4 flex items-center justify-between text-left hover:border-[#2a2a2a] transition-all"
             >
               <span className="flex items-center gap-3">
                 <span className="w-8 h-8 rounded-xl bg-[#f59e0b]/10 border border-[#f59e0b]/20 flex items-center justify-center text-[#f59e0b] text-xl leading-none">+</span>
-                <span className="text-white font-medium">Extract New Lesson</span>
+                <span className="text-white font-medium">{dirty ? 'Continue unsaved lesson' : 'Record a lesson'}</span>
               </span>
               <span className="text-[#858585] text-xs uppercase tracking-widest">Open</span>
             </button>
           )}
-          {lessons.some(l => l.isFinalized && l.ruleGoingForward) && (
+          {finalizedRuleCount > 0 && (
             <button
               onClick={() => { setShowRulesLibrary(!showRulesLibrary); setShowForm(false); }}
-              className={`px-6 py-3 rounded-2xl transition-all duration-300 font-medium border ${showRulesLibrary ? 'bg-white text-black border-white' : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#f59e0b] hover:text-white'}`}
+              aria-pressed={showRulesLibrary}
+              className={`px-6 min-h-11 rounded-2xl transition-all duration-300 font-medium border ${showRulesLibrary ? 'bg-white text-black border-white' : 'bg-transparent text-[#ababab] border-[#2a2a2a] hover:border-[#f59e0b] hover:text-white'}`}
             >
-              📋 Rules Library ({lessons.filter(l => l.isFinalized && l.ruleGoingForward).length})
+              Rules Library ({finalizedRuleCount})
             </button>
           )}
         </div>
 
-      {/* Lesson Extraction Form */}
-      {showForm && (
-        <div className="oura-card p-8 mb-8 border-l-4 border-[#f59e0b] animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <h2 className="text-2xl font-bold text-white">
-              {editingLesson ? 'Edit Hard Lesson (Draft)' : 'Extract Hard Lesson'}
-            </h2>
-            <div className="flex items-center gap-4 shrink-0">
-              <span className="text-sm text-[#858585] font-light tabular-nums">
-                <span className={completedSteps === 7 ? 'text-[#22c55e]' : 'text-[#f59e0b]'}>
-                  {completedSteps}
-                </span>
-                <span>/7 complete</span>
-              </span>
-              {/* Collapse — GL pattern: hide the form without wiping input.
-                  Distinct from the in-form Cancel button (resetForm), which
-                  clears all state. */}
+        {conflict && (
+          <div className="oura-card p-5 mb-8 border-l-4 border-[#b45309]" role="group" aria-label="Unsaved lesson">
+            <p className="text-xs uppercase tracking-widest text-[#858585] mb-1">Unsaved lesson</p>
+            <p className="text-[#d1d1d1] text-sm leading-relaxed mb-4">
+              "{conflict.draft.eventDescription.trim().slice(0, 60)}{conflict.draft.eventDescription.trim().length > 60 ? '…' : ''}"
+            </p>
+            <div className="flex flex-wrap gap-2">
               <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="text-[#858585] hover:text-white text-xs uppercase tracking-widest transition-colors"
+                onClick={() => resolveConflict(true)}
+                disabled={saving}
+                className="px-4 min-h-11 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-xl text-sm font-medium transition-colors"
               >
-                Collapse
-              </button>
-            </div>
-          </div>
-
-          {/* Step progress bar */}
-          <div className="mb-8">
-            <div className="flex items-center gap-1.5 mb-2">
-              {formSteps.map((step) => (
-                <div key={step.key} className="flex-1 flex flex-col items-center gap-1">
-                  <div className={`h-1.5 w-full rounded-full transition-all duration-300 ${
-                    step.done ? 'bg-[#f59e0b]' : 'bg-[#1a1a1a]'
-                  }`} />
-                  <span className={`text-[9px] uppercase tracking-wide leading-none transition-colors duration-200 ${
-                    step.done ? 'text-[#f59e0b]' : 'text-[#858585]'
-                  }`}>{step.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {newLesson.isOracleFailed && (
-            <div className="mb-6 px-4 py-3 rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/5 text-sm text-[#ef4444]">
-              Oracle extraction failed. The event description below is raw journal content — edit it before finalizing.
-            </div>
-          )}
-
-          <div className="space-y-6">
-            {/* Event Category */}
-            <div>
-              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-4">
-                <span className={newLesson.eventCategory ? 'text-[#f59e0b]' : 'text-[#ababab]'}>Event Category</span>
-                {newLesson.eventCategory && <span className="text-[#22c55e] text-xs">✓</span>}
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                {eventCategories.map(cat => (
-                  <button
-                    key={cat.value}
-                    type="button"
-                    onClick={() => setNewLesson(prev => ({ ...prev, eventCategory: cat.value }))}
-                    className={`p-4 rounded-2xl border transition-all duration-300 text-left ${
-                      newLesson.eventCategory === cat.value
-                        ? 'border-[#f59e0b] bg-[#f59e0b]/10 scale-105'
-                        : 'border-[#1a1a1a] hover:border-[#2a2a2a] bg-[#0a0a0a]'
-                    }`}
-                  >
-                    <div className="text-xl mb-2">{cat.icon}</div>
-                    <div className="text-xs text-[#ababab]">{cat.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* The Event */}
-            <div>
-              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
-                <span className={newLesson.eventDescription?.trim() ? 'text-[#f59e0b]' : 'text-[#ababab]'}>The Event</span>
-                {newLesson.eventDescription?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
-              </label>
-              <p className="text-xs text-[#858585] mb-3">What actually happened (no interpretation, just facts)</p>
-              {newLesson.isRuleViolation && newLesson.violatedRuleId && (
-                <div className="mb-3 px-4 py-2 rounded-xl bg-red-900/20 border border-red-500/30 text-red-400 text-xs">
-                  Rule violation flagged — this event will be marked as a repeated breach.
-                </div>
-              )}
-              <textarea
-                id="hard-lessons-event"
-                value={newLesson.eventDescription}
-                onChange={(e) => setNewLesson(prev => ({ ...prev, eventDescription: e.target.value }))}
-                onBlur={handleEventDescriptionBlur}
-                rows={3}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
-                placeholder="Describe the concrete event that occurred..."
-              />
-            </div>
-
-            {!showAllFields && (
-              <div className="px-4 py-3 rounded-xl border border-[#4da6ff]/20 bg-[#4da6ff]/5">
-                <p className="text-sm text-[#ababab] leading-relaxed">
-                  Describe what happened above, then let the Oracle extract the assumption, the ignored signal, the cost, the lesson, and the rule. You edit everything after.
-                </p>
-              </div>
-            )}
-
-            {showAllFields && (
-            <>
-            {newLesson.isOracleExtracted && (
-              <p className="text-xs uppercase tracking-widest text-[#4da6ff]">Review &amp; edit the extraction</p>
-            )}
-            {/* My Assumption */}
-            <div>
-              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
-                <span className={newLesson.myAssumption?.trim() ? 'text-[#f59e0b]' : 'text-[#ababab]'}>My Assumption</span>
-                {newLesson.myAssumption?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
-              </label>
-              <p className="text-xs text-[#858585] mb-3">What you believed that turned out to be false</p>
-              <textarea
-                value={newLesson.myAssumption}
-                onChange={(e) => setNewLesson(prev => ({ ...prev, myAssumption: e.target.value }))}
-                rows={2}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
-                placeholder="I assumed that..."
-              />
-            </div>
-
-            {/* The Signal I Ignored */}
-            <div>
-              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
-                <span className={newLesson.signalIgnored?.trim() ? 'text-[#f59e0b]' : 'text-[#ababab]'}>The Signal I Ignored</span>
-                {newLesson.signalIgnored?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
-              </label>
-              <p className="text-xs text-[#858585] mb-3">The warning you noticed but discounted</p>
-              <textarea
-                value={newLesson.signalIgnored}
-                onChange={(e) => setNewLesson(prev => ({ ...prev, signalIgnored: e.target.value }))}
-                rows={2}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
-                placeholder="I ignored the signal that..."
-              />
-            </div>
-
-            {/* The Cost */}
-            <div>
-              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
-                <span className={(newLesson.costs.length > 0 && newLesson.costDescription?.trim()) ? 'text-[#f59e0b]' : 'text-[#ababab]'}>The Cost</span>
-                {(newLesson.costs.length > 0 && newLesson.costDescription?.trim()) ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
-              </label>
-              <p className="text-xs text-[#858585] mb-3">Real consequences (select all that apply)</p>
-
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                {costCategories.map(cost => (
-                  <button
-                    key={cost.value}
-                    type="button"
-                    onClick={() => handleCostToggle(cost.value)}
-                    className={`p-3 rounded-xl border text-left text-sm transition-all duration-300 ${
-                      newLesson.costs.includes(cost.value)
-                        ? 'border-[#f59e0b] bg-[#f59e0b]/10 text-white scale-105'
-                        : 'border-[#1a1a1a] hover:border-[#2a2a2a] text-[#ababab] bg-[#0a0a0a]'
-                    }`}
-                  >
-                    <span className="mr-2">{cost.icon}</span>
-                    {cost.label}
-                  </button>
-                ))}
-              </div>
-
-              <textarea
-                value={newLesson.costDescription}
-                onChange={(e) => setNewLesson(prev => ({ ...prev, costDescription: e.target.value }))}
-                rows={2}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors resize-none"
-                placeholder="Describe the specific costs you paid..."
-              />
-            </div>
-
-            {/* The Lesson */}
-            <div>
-              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
-                <span className={newLesson.extractedLesson?.trim() ? 'text-[#f59e0b]' : 'text-[#ababab]'}>The Lesson</span>
-                {newLesson.extractedLesson?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
-              </label>
-              <p className="text-xs text-[#858585] mb-3">One sentence. Brutally precise.</p>
-              <input
-                type="text"
-                value={newLesson.extractedLesson}
-                onChange={(e) => setNewLesson(prev => ({ ...prev, extractedLesson: e.target.value }))}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
-                placeholder="The core lesson is..."
-              />
-            </div>
-
-            {/* The Rule Going Forward */}
-            <div>
-              <label className="flex items-center gap-2 text-sm uppercase tracking-wider mb-3">
-                <span className={newLesson.ruleGoingForward?.trim() ? 'text-[#f59e0b]' : 'text-[#ababab]'}>The Rule Going Forward</span>
-                {newLesson.ruleGoingForward?.trim() ? <span className="text-[#22c55e] text-xs">✓</span> : <span className="text-[#f59e0b]">*</span>}
-              </label>
-              <p className="text-xs text-[#858585] mb-3">An enforceable constraint, not advice</p>
-              <input
-                type="text"
-                value={newLesson.ruleGoingForward}
-                onChange={(e) => setNewLesson(prev => ({ ...prev, ruleGoingForward: e.target.value }))}
-                className="w-full p-4 bg-[#0a0a0a] text-white rounded-2xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
-                placeholder='If... then... / Always... / Never...'
-              />
-            </div>
-            </>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 pt-6 border-t border-[#1a1a1a] max-sm:sticky max-sm:bottom-16 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:z-10 max-sm:pb-3">
-              {showAllFields && (
-                <>
-                  <button
-                    onClick={() => submitLesson(false)}
-                    disabled={loading}
-                    className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
-                  >
-                    {loading ? 'Saving...' : 'Save Draft'}
-                  </button>
-
-                  <button
-                    onClick={() => submitLesson(true)}
-                    disabled={loading}
-                    className="px-6 py-3 bg-[#ef4444] hover:bg-[#dc2626] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
-                  >
-                    {loading ? 'Finalizing...' : 'Finalize Lesson'}
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={seekOracleExtraction}
-                disabled={loading || (newLesson.eventDescription?.trim().length ?? 0) < 30}
-                className="px-6 py-3 bg-[#4da6ff] hover:bg-[#3d8fd9] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
-              >
-                {showAllFields ? 'Re-extract with Oracle' : 'Ask Oracle to Extract Lesson & Rule'}
-              </button>
-
-              {!showAllFields && (
-                <button
-                  onClick={() => setManualMode(true)}
-                  className="px-6 py-3 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-[#ababab] rounded-2xl transition-all duration-300 font-medium border border-[#1a1a1a]"
-                >
-                  Fill in manually instead
-                </button>
-              )}
-
-              <button
-                onClick={resetForm}
-                className="px-6 py-3 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-[#ababab] rounded-2xl transition-all duration-300 font-medium border border-[#1a1a1a]"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* BER-131: Kill List Bridge Prompt */}
-      {bridgePrompt.visible && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-8">
-            <h3 className="text-white text-lg font-light mb-2">Rule violated. Add it to the Ledger?</h3>
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-5">A rule in writing that doesn't produce behavioral warfare is decoration.</p>
-            <input
-              type="text"
-              value={bridgePrompt.ruleText}
-              onChange={(e) => setBridgePrompt(prev => ({ ...prev, ruleText: e.target.value }))}
-              className="w-full p-4 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm mb-4"
-            />
-            <div className="mb-6">
-              <label className="block text-[#ababab] text-xs uppercase tracking-widest mb-2">Consecutive Days Required</label>
-              <input
-                type="number"
-                min={21}
-                step={1}
-                value={bridgePrompt.consecutiveDaysRequired}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === '') { setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: '' })); return; }
-                  const n = parseInt(raw, 10);
-                  setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: Number.isFinite(n) ? n : '' }));
-                }}
-                onBlur={() => {
-                  const n = parseInt(bridgePrompt.consecutiveDaysRequired, 10);
-                  if (!Number.isFinite(n) || n < 21) setBridgePrompt(prev => ({ ...prev, consecutiveDaysRequired: 21 }));
-                }}
-                className="w-full p-3 bg-[#0f0f0f] text-white rounded-xl border border-[#2a2a2a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm tabular-nums"
-              />
-              <p className="text-[#858585] text-xs mt-2">
-                Kill requires {Number.isFinite(parseInt(bridgePrompt.consecutiveDaysRequired, 10)) ? Math.max(21, parseInt(bridgePrompt.consecutiveDaysRequired, 10)) : 21} consecutive days of held execution. Minimum 21.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={addToKillListFromBridge} className="flex-1 px-5 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-xl font-medium transition-colors">Add to Ledger</button>
-              <button onClick={() => {
-                if (bridgePrompt.lessonId) sessionStorage.setItem(`bridge_dismissed_${bridgePrompt.lessonId}`, '1');
-                setBridgePrompt(prev => ({ ...prev, visible: false }));
-              }} className="px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] hover:text-white rounded-xl font-medium transition-colors">Dismiss</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Rule Violation Overlay */}
-      {violationPrompt.visible && violationPrompt.matchedRule && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-8">
-            <h3 className="text-white text-lg font-light mb-2">Rule match detected</h3>
-            <p className="text-[#858585] text-xs uppercase tracking-widest mb-4">You have a prior rule that may apply to this event</p>
-            <div className="bg-[#0f0f0f] border-l-4 border-[#f59e0b] rounded-r-xl p-4 mb-6">
-              <p className="text-[#fbbf24] text-sm leading-relaxed">{violationPrompt.matchedRule.ruleGoingForward}</p>
-              <p className="text-[#858585] text-xs mt-2">From: {violationPrompt.matchedRule.extractedLesson}</p>
-            </div>
-            <p className="text-white text-base mb-6">Was this rule in effect when this happened?</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleViolationConfirm(true)}
-                className="flex-1 px-5 py-3 bg-[#ef4444] hover:bg-[#dc2626] text-white rounded-xl font-medium transition-colors"
-              >
-                Yes — rule violated
+                {saving ? 'Saving...' : 'Save it and continue'}
               </button>
               <button
-                onClick={() => handleViolationConfirm(false)}
-                className="flex-1 px-5 py-3 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] hover:text-white rounded-xl font-medium transition-colors"
+                onClick={() => resolveConflict(false)}
+                disabled={saving}
+                className="px-4 min-h-11 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#ababab] hover:text-white rounded-xl text-sm font-medium transition-colors"
               >
-                No — different situation
+                Discard it
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Rules Library */}
-      {showRulesLibrary && (
-        <div className="mb-8 animate-fade-in-up">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-            <h2 className="text-2xl font-light text-white tracking-tight flex-1">Rules Library</h2>
-            <input
-              type="search"
-              value={librarySearch}
-              onChange={(e) => setLibrarySearch(e.target.value)}
-              placeholder="Search rules..."
-              className="w-full sm:w-64 px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm"
-            />
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            <button onClick={() => setLibraryFilterCost('')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${!libraryFilterCost ? 'bg-[#f59e0b] text-black font-medium' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}>All Costs</button>
-            {costCategories.map(c => (
-              <button key={c.value} onClick={() => setLibraryFilterCost(libraryFilterCost === c.value ? '' : c.value)} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${libraryFilterCost === c.value ? 'bg-[#f59e0b] text-black font-medium' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}>{c.icon} {c.label}</button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2 mb-6">
-            <button onClick={() => setLibraryFilterCategory('')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${!libraryFilterCategory ? 'bg-[#2a2a2a] text-white' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}>All Categories</button>
-            {eventCategories.map(c => (
-              <button key={c.value} onClick={() => setLibraryFilterCategory(libraryFilterCategory === c.value ? '' : c.value)} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${libraryFilterCategory === c.value ? 'bg-[#2a2a2a] text-white' : 'bg-[#1a1a1a] text-[#ababab] hover:text-white'}`}>{c.icon} {c.label}</button>
-            ))}
-          </div>
-
-          {/* Cost Pattern Narrative */}
-          <div className="oura-card p-5 mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs text-[#858585] uppercase tracking-widest">Cost Pattern Analysis</h4>
-              <button
-                onClick={generateCostPatternNarrative}
-                disabled={loadingNarrative}
-                className="px-4 py-1.5 text-xs bg-[#1a1a1a] text-[#4da6ff] border border-[#4da6ff]/30 rounded-lg hover:bg-[#4da6ff]/10 transition-colors disabled:opacity-40"
-              >
-                {loadingNarrative ? 'Analyzing…' : 'Generate Pattern'}
-              </button>
-            </div>
-            {costPatternNarrative ? (
-              <p className="text-[#ababab] text-sm leading-relaxed">{costPatternNarrative}</p>
-            ) : (
-              <p className="text-[#858585] text-sm">Pattern identification across all finalized rules, grouped by cost type.</p>
-            )}
-          </div>
-
-          {/* Rules List */}
-          {finalizedRules.length === 0 ? (
-            <div className="oura-card p-8 text-center">
-              <p className="text-[#858585] text-sm">No rules match the current filter.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {finalizedRules.map(({ id, rule, lesson, violationCount, underReview, heldStreakDays, reaffirmedAt }) => {
-                const category = eventCategories.find(c => c.value === lesson.eventCategory);
-                const lessonCosts = costCategories.filter(c => lesson.costs?.includes(c.value));
-                const aarOpen = aarPanel.ruleId === id;
-                return (
-                  <div key={id} className={`oura-card p-5 hover:shadow-oura-glow-amber transition-shadow duration-300 ${underReview ? 'border-[#b45309]/50' : violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="text-[#fbbf24] font-medium leading-relaxed border-l-4 border-[#f59e0b] pl-3">{rule}</p>
-                        <p className="text-[#858585] text-xs mt-2">{lesson.extractedLesson}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-3">
-                          {category && <span className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">{category.icon} {category.label}</span>}
-                          {lessonCosts.map(c => <span key={c.value} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">{c.icon} {c.label}</span>)}
-                          <span className="text-[10px] text-[#858585]">{new Date(lesson.finalizedAt || lesson.createdAt).toLocaleDateString()}</span>
-                          {underReview ? (
-                            <span className="text-[10px] px-2 py-0.5 bg-[#b45309]/10 text-[#b45309] rounded-lg border border-[#b45309]/40 uppercase tracking-wider">Under review — after-action required</span>
-                          ) : (
-                            <span className="text-[10px] text-[#00d4aa]">Held {heldStreakDays}d{reaffirmedAt ? ` · re-affirmed ${new Date(reaffirmedAt).toLocaleDateString()}` : ''}</span>
-                          )}
-                        </div>
-                      </div>
-                      {violationCount > 0 && (
-                        <div className="shrink-0 text-center">
-                          <div className="text-red-400 text-xl font-light tabular-nums">{violationCount}</div>
-                          <div className="text-red-500/60 text-[10px] uppercase tracking-wider">break{violationCount !== 1 ? 's' : ''}</div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Breach action. "Rule broken" commits an unresolved entry
-                        to violations[] → the rule goes under review and the
-                        after-action panel opens. An already-breached rule shows
-                        the after-action CTA instead. */}
-                    <div className="mt-4 pt-3 border-t border-[#1a1a1a] flex items-center justify-end">
-                      {underReview ? (
-                        <button
-                          onClick={() => openAfterAction(lesson)}
-                          disabled={aarOpen}
-                          className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Complete after-action review
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => markRuleBroken(lesson)}
-                          disabled={aarOpen}
-                          className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Rule broken
-                        </button>
-                      )}
-                    </div>
-
-                    {aarOpen && (
-                      <div className="mt-3 p-4 bg-[#0a0a0a] border border-[#b45309]/30 rounded-xl">
-                        <div className="text-[#b45309] text-[10px] uppercase tracking-widest mb-3">
-                          After-action review{aarPanel.violationDate ? ` · break ${new Date(aarPanel.violationDate).toLocaleDateString()}` : ''}
-                        </div>
-                        <label className="block text-[#858585] text-xs mb-1">Why did it break?</label>
-                        <textarea
-                          value={aarPanel.cause}
-                          onChange={(e) => setAarPanel(prev => ({ ...prev, cause: e.target.value }))}
-                          rows={2}
-                          placeholder="The conditions, the assumption, the moment it gave way."
-                          className="w-full p-2 mb-3 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#828282]"
-                        />
-                        <label className="block text-[#858585] text-xs mb-1">What changes so it holds?</label>
-                        <textarea
-                          value={aarPanel.correction}
-                          onChange={(e) => setAarPanel(prev => ({ ...prev, correction: e.target.value }))}
-                          rows={2}
-                          placeholder="The specific change that makes the next outcome different."
-                          className="w-full p-2 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#828282]"
-                        />
-                        <div className="flex justify-end gap-2 mt-3">
-                          <button
-                            onClick={dismissAfterAction}
-                            className="px-3 py-1.5 text-xs text-[#858585] hover:text-[#ababab] transition-colors"
-                          >
-                            Later
-                          </button>
-                          <button
-                            onClick={saveAfterAction}
-                            disabled={!aarPanel.cause.trim() || !aarPanel.correction.trim() || savingAar}
-                            className="px-3 py-1.5 text-xs rounded-lg border border-[#00d4aa]/40 text-[#00d4aa] hover:bg-[#00d4aa]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            {savingAar ? 'Saving...' : 'Re-affirm rule'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Lessons List */}
-      <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <h3 className="text-[#858585] text-xs uppercase tracking-widest">
-              {view === 'archive' ? 'Archive' : 'Extracted Lessons'}
-              {searchQuery.trim() && view === 'active' && (
-                <span className="text-[#858585] ml-2">({filteredLessons.length}/{lessons.length})</span>
-              )}
-            </h3>
-            <ArchiveToggle
-              view={view}
-              onChange={setView}
-              activeCount={lessons.length}
-              archiveCount={archivedLessons.length}
-            />
-          </div>
-          {view === 'active' && (
-            <div className="relative w-full sm:w-80">
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search lessons..."
-                className="w-full px-4 py-2.5 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#858585] hover:text-white text-xs"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {view === 'archive' && (
-          <div className="space-y-3">
-            {archivedLessons.length === 0 ? (
-              <div className="oura-card p-10 text-center">
-                <p className="text-[#858585] text-sm">No archived lessons.</p>
-              </div>
-            ) : archivedLessons.map(l => (
-              <div key={l.id} className="oura-card p-5 opacity-75 hover:opacity-100 transition-opacity">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium">{l.eventDescription || 'Untitled lesson'}</p>
-                    {l.extractedLesson && <p className="text-[#858585] text-xs mt-2">{l.extractedLesson}</p>}
-                    <p className="text-[#858585] text-xs mt-2">
-                      Archived {l.archivedAt ? new Date(l.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => restoreArchivedLesson(l)}
-                      className="px-3 py-1.5 text-xs rounded-lg border border-[#f59e0b]/30 text-[#f59e0b] hover:bg-[#f59e0b]/10 transition-colors"
-                    >
-                      Restore
-                    </button>
-                    <button
-                      onClick={() => permanentlyDeleteArchivedLesson(l)}
-                      className="px-3 py-1.5 text-xs rounded-lg border border-[#b45309]/30 text-[#b45309] hover:bg-[#b45309]/10 transition-colors"
-                    >
-                      Delete permanently
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         )}
 
-        {view === 'active' && (
-        <div className="relative">
-          <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
-            <SkeletonList count={3} ItemComponent={SkeletonCard} />
-          </div>
+        {showForm && !conflict && (
+          <LessonForm
+            key={formKey}
+            draft={draft}
+            onChange={(patch) => setDraft(d => applyEdit(d, patch))}
+            isEdit={!!editingId}
+            oracle={oracle}
+            ruleMatch={ruleMatch}
+            onAnswerMatch={answerMatch}
+            onAskOracle={askOracle}
+            onUseSuggestion={(field) => setDraft(d => takeSuggestion(d, field))}
+            onSaveDraft={saveDraft}
+            onReview={() => runRuleMatch(draft, editingId, lessons)}
+            onLock={lockLesson}
+            onDiscard={resetForm}
+            onCollapse={() => setShowForm(false)}
+            saving={saving}
+          />
+        )}
 
-          <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
-            {loadError ? (
-              <div className="oura-card p-12 text-center">
-                <p className="text-[#ef4444] mb-4 text-sm">Failed to load hard lessons. Please check your connection.</p>
+        {bridgePrompt.visible && (
+          <LedgerBridgePrompt
+            prompt={bridgePrompt}
+            onChange={(patch) => setBridgePrompt(prev => ({ ...prev, ...patch }))}
+            onAdd={addToKillListFromBridge}
+            onDismiss={dismissBridge}
+          />
+        )}
+
+        {/* Rules Library */}
+        {showRulesLibrary && (
+          <div className="mb-8 animate-fade-in-up">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+              <h2 className="text-2xl font-light text-white tracking-tight flex-1">Rules Library</h2>
+              <input
+                type="search"
+                aria-label="Search rules"
+                value={librarySearch}
+                onChange={(e) => setLibrarySearch(e.target.value)}
+                placeholder="Search rules..."
+                className="w-full sm:w-64 px-4 min-h-11 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors text-sm"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-6" role="group" aria-label="Filter by cost">
+              <button onClick={() => setLibraryFilterCost('')} aria-pressed={!libraryFilterCost} className={filterChip(!libraryFilterCost, 'bg-[#f59e0b] text-black font-medium')}>All costs</button>
+              {COST_CATEGORIES.map(c => (
+                <button key={c.value} onClick={() => setLibraryFilterCost(libraryFilterCost === c.value ? '' : c.value)} aria-pressed={libraryFilterCost === c.value} className={filterChip(libraryFilterCost === c.value, 'bg-[#f59e0b] text-black font-medium')}>{c.label}</button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 mb-6" role="group" aria-label="Filter by category">
+              <button onClick={() => setLibraryFilterCategory('')} aria-pressed={!libraryFilterCategory} className={filterChip(!libraryFilterCategory, 'bg-[#2a2a2a] text-white')}>All categories</button>
+              {EVENT_CATEGORIES.map(c => (
+                <button key={c.value} onClick={() => setLibraryFilterCategory(libraryFilterCategory === c.value ? '' : c.value)} aria-pressed={libraryFilterCategory === c.value} className={filterChip(libraryFilterCategory === c.value, 'bg-[#2a2a2a] text-white')}>{c.label}</button>
+              ))}
+            </div>
+
+            {/* Cost Pattern Narrative */}
+            <div className="oura-card p-5 mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs text-[#858585] uppercase tracking-widest">Cost Pattern Analysis</h4>
                 <button
-                  onClick={loadHardLessons}
-                  className="px-5 py-2.5 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 rounded-xl hover:bg-[#ef4444]/20 transition-colors text-sm font-medium"
+                  onClick={generateCostPatternNarrative}
+                  disabled={loadingNarrative}
+                  className="px-4 py-1.5 max-sm:min-h-11 text-xs bg-[#1a1a1a] text-[#4da6ff] border border-[#4da6ff]/30 rounded-lg hover:bg-[#4da6ff]/10 transition-colors disabled:opacity-40"
                 >
-                  Retry
+                  {loadingNarrative ? 'Analyzing…' : 'Generate Pattern'}
                 </button>
               </div>
-            ) : filteredLessons.length > 0 ? (
-              <div className="space-y-4">
-                {filteredLessons.map((lesson) => {
-                  const category = eventCategories.find(cat => cat.value === lesson.eventCategory);
-                  const selectedCosts = costCategories.filter(cost => lesson.costs?.includes(cost.value));
+              {costPatternNarrative ? (
+                <p className="text-[#ababab] text-sm leading-relaxed">{costPatternNarrative}</p>
+              ) : (
+                <p className="text-[#858585] text-sm">Pattern identification across all finalized rules, grouped by cost type.</p>
+              )}
+            </div>
 
-                  // Weekly autopsy stubs get a compact card with "Expand Autopsy" CTA
-                  if (lesson.isWeeklyAutopsy && !lesson.isFinalized) {
-                    return (
-                      <div key={lesson.id} id={`lesson-${lesson.id}`} style={{ '--lit-accent': '#f59e0b' }} className={`oura-card p-5 border-dashed border-[#6366f1]/30 transition-all${highlightId === lesson.id ? ' entry-focus' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[#6366f1] text-xs uppercase tracking-widest font-medium">Weekly Autopsy</span>
-                              <span className="text-[#858585] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            <p className="text-[#d1d1d1] text-sm leading-relaxed truncate">{lesson.eventDescription}</p>
-                          </div>
-                          <div className="flex items-center gap-2 ml-4 shrink-0">
-                            <button
-                              onClick={() => editLesson(lesson)}
-                              className="px-4 py-2 text-xs font-medium bg-[#6366f1]/10 text-[#6366f1] border border-[#6366f1]/30 rounded-xl hover:bg-[#6366f1]/20 transition-colors"
-                            >
-                              Expand Autopsy
-                            </button>
-                            <button
-                              onClick={() => deleteLesson(lesson.id)}
-                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // Scar stubs get a compact card
-                  if (lesson.isScarStub && !lesson.extractedLesson) {
-                    return (
-                      <div key={lesson.id} id={`lesson-${lesson.id}`} style={{ '--lit-accent': '#f59e0b' }} className={`oura-card p-5 border-dashed border-[#f59e0b]/30 transition-all${highlightId === lesson.id ? ' entry-focus' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[#f59e0b] text-xs uppercase tracking-widest font-medium">Scar</span>
-                              <span className="text-[#858585] text-xs">{new Date(lesson.createdAt).toLocaleDateString()}</span>
-                            </div>
-                            <p className="text-[#d1d1d1] text-sm leading-relaxed truncate">{lesson.eventDescription}</p>
-                          </div>
-                          <div className="flex items-center gap-2 ml-4 shrink-0">
-                            <button
-                              onClick={() => editLesson(lesson)}
-                              className="px-4 py-2 text-xs font-medium bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30 rounded-xl hover:bg-[#f59e0b]/20 transition-colors"
-                            >
-                              Extract Lesson
-                            </button>
-                            <button
-                              onClick={() => deleteLesson(lesson.id)}
-                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors text-xs"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
+            {finalizedRules.length === 0 ? (
+              <div className="oura-card p-8 text-center">
+                <p className="text-[#858585] text-sm">No rules match the current filter.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {finalizedRules.map(({ id, rule, lesson, violationCount, underReview, heldStreakDays, reaffirmedAt }) => {
+                  const aarOpen = aarPanel.ruleId === id;
+                  const confirming = breakConfirmId === id;
                   return (
-                    <div key={lesson.id} id={`lesson-${lesson.id}`} style={{ '--lit-accent': '#f59e0b' }} className={`oura-card p-6 hover:shadow-oura-glow-amber transition-shadow duration-300 ${
-                      lesson.isFinalized
-                        ? 'border-[#f59e0b]/50'
-                        : 'border-[#f59e0b]/20'
-                    }${highlightId === lesson.id ? ' entry-focus' : ''}`}>
-                      <div className="flex items-start justify-between mb-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 rounded-full bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center">
-                            <span className="text-2xl">{category?.icon || '⚡'}</span>
-                          </div>
-                          <div>
-                            <h3 className="text-white font-medium">{category?.label || 'Uncategorized'}</h3>
-                            <div className="flex items-center space-x-3 text-xs text-[#858585] mt-1">
-                              <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
-                              <span className={`px-2 py-1 rounded-lg ${
-                                lesson.isFinalized
-                                  ? 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30'
-                                  : 'bg-[#8a8a8a]/10 text-[#ababab] border border-[#2a2a2a]'
-                              }`}>
-                                {lesson.isFinalized ? '🔒 FINALIZED' : '📝 DRAFT'}
-                              </span>
-                            </div>
+                    <div key={id} className={`oura-card p-5 hover:shadow-oura-glow-amber transition-shadow duration-300 ${underReview ? 'border-[#b45309]/50' : violationCount > 0 ? 'border-red-500/40' : 'border-[#f59e0b]/20'}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="text-[#fbbf24] font-medium leading-relaxed border-l-4 border-[#f59e0b] pl-3">{rule}</p>
+                          <p className="text-[#858585] text-xs mt-2">{lesson.extractedLesson}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-3">
+                            {categoryLabel(lesson.eventCategory) && <span className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">{categoryLabel(lesson.eventCategory)}</span>}
+                            {(lesson.costs || []).map(c => <span key={c} className="text-[10px] px-2 py-0.5 bg-[#1a1a1a] text-[#ababab] rounded-lg border border-[#2a2a2a]">{costLabel(c)}</span>)}
+                            <span className="text-[10px] text-[#858585]">{new Date(lesson.finalizedAt || lesson.createdAt).toLocaleDateString()}</span>
+                            {underReview ? (
+                              <span className="text-[10px] px-2 py-0.5 bg-[#b45309]/10 text-[#d97706] rounded-lg border border-[#b45309]/40 uppercase tracking-wider">Under review — after-action required</span>
+                            ) : (
+                              <span className="text-[10px] text-[#00d4aa]">Held {heldStreakDays}d{reaffirmedAt ? ` · re-affirmed ${new Date(reaffirmedAt).toLocaleDateString()}` : ''}</span>
+                            )}
                           </div>
                         </div>
-
-                        <div className="flex space-x-2 items-center">
-                          {!lesson.isFinalized && (
-                            <button
-                              onClick={() => editLesson(lesson)}
-                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#f59e0b]/10 text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-colors"
-                            >
-                              ✏️
-                            </button>
-                          )}
-                          {!lesson.isFinalized && (
-                            <button
-                              onClick={() => deleteLesson(lesson.id)}
-                              className="w-8 h-8 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] hover:bg-[#ef4444]/20 transition-colors"
-                            >
-                              🗑️
-                            </button>
-                          )}
-                          {lesson.isFinalized && (
-                            <span className="text-[#ababab] text-xs">Permanent record. Create a new entry if the rule was violated again.</span>
-                          )}
-                        </div>
+                        {violationCount > 0 && (
+                          <div className="shrink-0 text-center">
+                            <div className="text-red-400 text-xl font-light tabular-nums">{violationCount}</div>
+                            <div className="text-red-400/80 text-[10px] uppercase tracking-wider">break{violationCount !== 1 ? 's' : ''}</div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="space-y-5">
-                        <div>
-                          <h4 className="text-[#ababab] text-xs uppercase tracking-wider mb-2">The Event</h4>
-                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.eventDescription}</p>
-                        </div>
-
-                        <div>
-                          <h4 className="text-[#ababab] text-xs uppercase tracking-wider mb-2">My Assumption</h4>
-                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.myAssumption}</p>
-                        </div>
-
-                        <div>
-                          <h4 className="text-[#ababab] text-xs uppercase tracking-wider mb-2">The Signal I Ignored</h4>
-                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.signalIgnored}</p>
-                        </div>
-
-                        <div>
-                          <h4 className="text-[#ababab] text-xs uppercase tracking-wider mb-2">The Cost</h4>
-                          <div className="flex items-center gap-2 mb-3">
-                            {selectedCosts.map(cost => (
-                              <span key={cost.value} className="px-2 py-1 bg-[#0a0a0a] text-[#ababab] rounded-lg text-xs border border-[#1a1a1a]">
-                                {cost.icon} {cost.label}
-                              </span>
-                            ))}
-                          </div>
-                          <p className="text-[#d1d1d1] leading-relaxed">{lesson.costDescription}</p>
-                        </div>
-
-                        <div className="border-t border-[#1a1a1a] pt-5">
-                          <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Lesson</h4>
-                          <p className="text-[#f59e0b] font-medium leading-relaxed">{lesson.extractedLesson}</p>
-                        </div>
-
-                        <div>
-                          <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The Rule Going Forward</h4>
-                          <p className="text-[#fbbf24] font-medium border-l-4 border-[#f59e0b] pl-4 bg-[#f59e0b]/10 py-3 rounded-r-xl leading-relaxed">
-                            {lesson.ruleGoingForward}
-                          </p>
-                        </div>
-
-                        {/* BER-131: Add to Ledger */}
-                        {lesson.isFinalized && lesson.ruleGoingForward?.trim() && (
-                          <button
-                            onClick={() => addToKillListFromLesson(lesson)}
-                            className="w-full px-4 py-2.5 bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#fbbf24] border border-[#f59e0b]/30 rounded-xl text-xs font-medium transition-colors text-left"
-                          >
-                            + Add to Ledger
+                      <div className="mt-4 pt-3 border-t border-[#1a1a1a] flex flex-wrap items-center justify-end gap-2">
+                        {underReview ? (
+                          <button onClick={() => openAfterAction(lesson)} disabled={aarOpen} className={`${smallAction} border-[#b45309]/40 text-[#d97706] hover:bg-[#b45309]/10`}>
+                            Complete after-action review
+                          </button>
+                        ) : confirming ? (
+                          <>
+                            <span className="text-xs text-[#ababab] mr-1">Log a break for this rule?</span>
+                            <button onClick={() => markRuleBroken(lesson)} className={`${smallAction} border-[#ef4444]/40 text-[#ef4444] hover:bg-[#ef4444]/10`}>Log break</button>
+                            <button onClick={() => setBreakConfirmId(null)} className={`${smallAction} border-[#2a2a2a] text-[#ababab] hover:text-white`}>Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => setBreakConfirmId(id)} disabled={aarOpen} className={`${smallAction} border-[#b45309]/40 text-[#d97706] hover:bg-[#b45309]/10`}>
+                            Rule broken
                           </button>
                         )}
-
-                        {/* Rule violation indicator */}
-                        {lesson.isRuleViolation && (
-                          <div className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-xl">
-                            <span className="text-red-400 text-xs font-medium uppercase tracking-wider">Rule Violation</span>
-                          </div>
-                        )}
-
-                        {/* Oracle wisdom — saved from extraction */}
-                        {lesson.oracleWisdom && typeof lesson.oracleWisdom === 'string' && (
-                          <div className="border-t border-[#1a1a1a] pt-5">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-[#4da6ff]" />
-                              <h4 className="text-[#858585] font-medium text-xs uppercase tracking-wider">Oracle</h4>
-                            </div>
-                            <p className="text-[#ababab] text-sm leading-relaxed">{lesson.oracleWisdom}</p>
-                          </div>
-                        )}
                       </div>
+
+                      {aarOpen && (
+                        <div className="mt-3 p-4 bg-[#0a0a0a] border border-[#b45309]/30 rounded-xl">
+                          <div className="text-[#d97706] text-[10px] uppercase tracking-widest mb-3">
+                            After-action review{aarPanel.violationDate ? ` · break ${new Date(aarPanel.violationDate).toLocaleDateString()}` : ''}
+                          </div>
+                          <label htmlFor={`aar-cause-${id}`} className="block text-[#858585] text-xs mb-1">Why did it break?</label>
+                          <textarea
+                            id={`aar-cause-${id}`}
+                            value={aarPanel.cause}
+                            onChange={(e) => setAarPanel(prev => ({ ...prev, cause: e.target.value }))}
+                            rows={2}
+                            placeholder="The conditions, the assumption, the moment it gave way."
+                            className="w-full p-2 mb-3 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#828282]"
+                          />
+                          <label htmlFor={`aar-correction-${id}`} className="block text-[#858585] text-xs mb-1">What changes so it holds?</label>
+                          <textarea
+                            id={`aar-correction-${id}`}
+                            value={aarPanel.correction}
+                            onChange={(e) => setAarPanel(prev => ({ ...prev, correction: e.target.value }))}
+                            rows={2}
+                            placeholder="The specific change that makes the next outcome different."
+                            className="w-full p-2 bg-[#050505] text-white rounded-lg border border-[#1a1a1a] focus:border-[#b45309] focus:outline-none resize-none text-sm placeholder-[#828282]"
+                          />
+                          <div className="flex justify-end gap-2 mt-3">
+                            <button onClick={dismissAfterAction} className={`${smallAction} border-transparent text-[#858585] hover:text-[#ababab]`}>Later</button>
+                            <button
+                              onClick={saveAfterAction}
+                              disabled={!aarPanel.cause.trim() || !aarPanel.correction.trim() || savingAar}
+                              className={`${smallAction} border-[#00d4aa]/40 text-[#00d4aa] hover:bg-[#00d4aa]/10`}
+                            >
+                              {savingAar ? 'Saving...' : 'Re-affirm rule'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
-            ) : (
-              <div>
-                {searchQuery.trim() ? (
-                  <div className="oura-card p-12 text-center">
-                    <h3 className="text-lg font-light text-white mb-2">{`No matches for "${searchQuery.trim()}"`}</h3>
-                    <p className="text-[#858585] mb-6 text-sm">Try a different keyword or clear the search.</p>
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="px-6 py-3 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
-                    >
-                      Clear Search
-                    </button>
-                  </div>
-                ) : showScarFlow ? (
-                  /* ── Scar Inventory: first-time guided flow ── */
-                  <div className="oura-card p-8 border-l-4 border-[#f59e0b] animate-fade-in-up">
-                    <h2 className="text-2xl font-light text-white mb-2">Before you extract your first lesson, name 3 events that left you scarred.</h2>
-                    <p className="text-[#858585] text-sm mb-8">No analysis. No explanation. Just name the events. You can extract the full lesson later.</p>
+            )}
+          </div>
+        )}
 
-                    <div className="space-y-4">
-                      {scarInventory.map((scar, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <span className="text-[#f59e0b] text-sm font-medium tabular-nums w-5 shrink-0">{i + 1}.</span>
-                          <input
-                            type="text"
-                            value={scar}
-                            onChange={(e) => setScarInventory(prev => {
-                              const next = [...prev];
-                              next[i] = e.target.value;
-                              return next;
-                            })}
-                            placeholder={
-                              i === 0 ? 'The trust I gave that was used against me...' :
-                              i === 1 ? 'The warning I ignored that cost me...' :
-                              'The decision I made that changed everything...'
-                            }
-                            className="flex-1 p-4 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors placeholder-[#828282]"
-                            autoFocus={i === 0}
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-wrap gap-3 mt-8">
-                      <button
-                        onClick={submitScarInventory}
-                        disabled={savingScars || scarInventory.every(s => !s.trim())}
-                        className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] disabled:bg-[#1a1a1a] disabled:text-[#858585] text-black rounded-2xl transition-all duration-300 font-medium"
-                      >
-                        {savingScars ? 'Saving...' : 'Record These Scars'}
-                      </button>
-                      <button
-                        onClick={() => {
-                          writeScarFlowSkipped();
-                          setShowScarFlow(false);
-                          setShowForm(true);
-                          setTimeout(() => {
-                            document.getElementById('hard-lessons-event')?.focus();
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }, 0);
-                        }}
-                        className="px-6 py-3 bg-transparent border border-[#1a1a1a] text-[#858585] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
-                      >
-                        Skip — I'll extract a full lesson now
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  /* ── Standard empty state (after scar flow dismissed or skipped) ── */
-                  <div className="oura-card p-12 text-center">
-                    <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-[#0a0a0a] border border-[#1a1a1a] flex items-center justify-center text-2xl">
-                      ⚡
-                    </div>
-                    <h3 className="text-lg font-light text-white mb-2">No Hard Lessons Extracted Yet</h3>
-                    <p className="text-[#858585] mb-6 text-sm">Turn a painful event into an enforceable rule you never pay for twice.</p>
-                    <button
-                      onClick={() => {
-                        setShowForm(true);
-                        setTimeout(() => {
-                          document.getElementById('hard-lessons-event')?.focus();
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }, 0);
-                      }}
-                      className="px-6 py-3 bg-[#f59e0b] hover:bg-[#ea580c] text-white rounded-2xl transition-all duration-300 font-medium"
-                    >
-                      Extract Your First Lesson
-                    </button>
-                  </div>
+        {/* Lessons List */}
+        <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              <h3 className="text-[#858585] text-xs uppercase tracking-widest">
+                {view === 'archive' ? 'Archive' : 'Lessons'}
+                {searchQuery.trim() && view === 'active' && (
+                  <span className="text-[#858585] ml-2">({filteredLessons.length}/{lessons.length})</span>
+                )}
+              </h3>
+              <ArchiveToggle
+                view={view}
+                onChange={setView}
+                activeCount={lessons.length}
+                archiveCount={archivedLessons.length}
+              />
+            </div>
+            {view === 'active' && (
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="search"
+                  aria-label="Search lessons"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search lessons..."
+                  className="w-full px-4 min-h-11 bg-[#0a0a0a] text-white rounded-xl border border-[#1a1a1a] focus:border-[#f59e0b] focus:outline-none transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 px-3 min-h-11 text-[#858585] hover:text-white text-xs"
+                  >
+                    Clear
+                  </button>
                 )}
               </div>
             )}
           </div>
-        </div>
-        )}
-      </section>
 
-      {/* Oracle Modal */}
-      <OracleModal
-        isOpen={oracleModal.isOpen}
-        onClose={closeOracle}
-        content={oracleModal.content}
-        isLoading={oracleModal.isLoading}
-        title="Oracle's Extraction Wisdom"
-        onReaction={handleOracleReaction}
-        entryCount={oracleModal.entryCount}
-        entryText={oracleModal.entryText}
-        entryModuleName={oracleModal.entryModuleName}
-        provenance={oracleModal.provenance}
-        fallbackReason={oracleModal.fallbackReason}
-      />
+          {view === 'archive' && (
+            <div className="space-y-3">
+              {archivedLessons.length === 0 ? (
+                <div className="oura-card p-10 text-center">
+                  <p className="text-[#858585] text-sm">No archived lessons.</p>
+                </div>
+              ) : archivedLessons.map(l => (
+                <div key={l.id} className="oura-card p-5 opacity-75 hover:opacity-100 transition-opacity">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium">{l.eventDescription || 'Untitled lesson'}</p>
+                      {l.extractedLesson && <p className="text-[#858585] text-xs mt-2">{l.extractedLesson}</p>}
+                      <p className="text-[#858585] text-xs mt-2">
+                        Archived {l.archivedAt ? new Date(l.archivedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => restoreArchivedLesson(l)} className={`${smallAction} border-[#f59e0b]/30 text-[#f59e0b] hover:bg-[#f59e0b]/10`}>Restore</button>
+                      <button onClick={() => permanentlyDeleteArchivedLesson(l)} className={`${smallAction} border-[#b45309]/40 text-[#d97706] hover:bg-[#b45309]/10`}>Delete permanently</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {view === 'active' && (
+            <div className="relative">
+              <div className={`fade-pane ${initialLoading && showSkeleton ? 'visible' : 'hidden'}`}>
+                <SkeletonList count={3} ItemComponent={SkeletonCard} />
+              </div>
+
+              <div className={`fade-pane ${initialLoading || showSkeleton ? 'hidden' : 'visible'}`}>
+                {loadError ? (
+                  <div className="oura-card p-12 text-center">
+                    <p className="text-[#ef4444] mb-4 text-sm">Lessons did not load. Check the connection.</p>
+                    <button
+                      onClick={loadHardLessons}
+                      className="px-5 min-h-11 bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30 rounded-xl hover:bg-[#ef4444]/20 transition-colors text-sm font-medium"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : filteredLessons.length > 0 ? (
+                  <div className="space-y-4">
+                    {filteredLessons.map((lesson) => {
+                      const sections = [
+                        ['The event', lesson.eventDescription],
+                        ['My assumption', lesson.myAssumption],
+                        ['The signal I ignored', lesson.signalIgnored],
+                      ].filter(([, value]) => (value || '').trim());
+                      const costs = (lesson.costs || []).filter(Boolean);
+                      const hasCost = costs.length > 0 || (lesson.costDescription || '').trim();
+                      const label = stubLabel(lesson);
+
+                      return (
+                        <div key={lesson.id} id={`lesson-${lesson.id}`} style={{ '--lit-accent': '#f59e0b' }} className={`oura-card p-5 sm:p-6 hover:shadow-oura-glow-amber transition-shadow duration-300 ${
+                          lesson.isFinalized ? 'border-[#f59e0b]/50' : 'border-dashed border-[#f59e0b]/30'
+                        }${highlightId === lesson.id ? ' entry-focus' : ''}`}>
+                          <div className="flex items-start justify-between gap-3 mb-5 flex-wrap">
+                            <div>
+                              <h3 className="text-white font-medium">{categoryLabel(lesson.eventCategory) || (lesson.isFinalized ? 'Lesson' : 'Draft')}</h3>
+                              <div className="flex items-center flex-wrap gap-2 text-xs text-[#858585] mt-1">
+                                <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                                <span className={`px-2 py-1 rounded-lg uppercase tracking-wider ${
+                                  lesson.isFinalized
+                                    ? 'bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30'
+                                    : 'bg-[#8a8a8a]/10 text-[#ababab] border border-[#2a2a2a]'
+                                }`}>
+                                  {lesson.isFinalized ? 'Locked' : 'Draft'}
+                                </span>
+                                {!lesson.isFinalized && label && <span className="uppercase tracking-wider">{label}</span>}
+                              </div>
+                            </div>
+
+                            {lesson.isFinalized ? (
+                              <span className="text-[#ababab] text-xs max-w-[16rem] sm:text-right">Locked. Log breaks on the rule in the Rules Library.</span>
+                            ) : (
+                              <div className="flex gap-2 items-center">
+                                <button onClick={() => editLesson(lesson)} className={`${smallAction} border-[#f59e0b]/30 text-[#f59e0b] hover:bg-[#f59e0b]/10`}>
+                                  {sections.length > 1 || hasCost ? 'Edit' : 'Continue'}
+                                </button>
+                                <button onClick={() => archiveLesson(lesson.id)} className={`${smallAction} border-[#2a2a2a] text-[#ababab] hover:text-white`}>
+                                  Archive
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-5">
+                            {sections.map(([heading, value]) => (
+                              <div key={heading}>
+                                <h4 className="text-[#ababab] text-xs uppercase tracking-wider mb-2">{heading}</h4>
+                                <p className="text-[#d1d1d1] leading-relaxed">{value}</p>
+                              </div>
+                            ))}
+
+                            {hasCost && (
+                              <div>
+                                <h4 className="text-[#ababab] text-xs uppercase tracking-wider mb-2">The cost</h4>
+                                {costs.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    {costs.map(c => (
+                                      <span key={c} className="px-2 py-1 bg-[#0a0a0a] text-[#ababab] rounded-lg text-xs border border-[#1a1a1a]">{costLabel(c)}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                {(lesson.costDescription || '').trim() && <p className="text-[#d1d1d1] leading-relaxed">{lesson.costDescription}</p>}
+                              </div>
+                            )}
+
+                            {(lesson.extractedLesson || '').trim() && (
+                              <div className="border-t border-[#1a1a1a] pt-5">
+                                <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The lesson</h4>
+                                <p className="text-[#f59e0b] font-medium leading-relaxed">{lesson.extractedLesson}</p>
+                              </div>
+                            )}
+
+                            {(lesson.ruleGoingForward || '').trim() && (
+                              <div>
+                                <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wider">The rule going forward</h4>
+                                <p className="text-[#fbbf24] font-medium border-l-4 border-[#f59e0b] pl-4 bg-[#f59e0b]/10 py-3 rounded-r-xl leading-relaxed">
+                                  {lesson.ruleGoingForward}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* BER-131: Add to Ledger */}
+                            {lesson.isFinalized && lesson.ruleGoingForward?.trim() && (
+                              <button
+                                onClick={() => addToKillListFromLesson(lesson)}
+                                className="w-full px-4 min-h-11 bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#fbbf24] border border-[#f59e0b]/30 rounded-xl text-xs font-medium transition-colors text-left"
+                              >
+                                + Add to Ledger
+                              </button>
+                            )}
+
+                            {/* Legacy: a lesson flagged as a violation before breaks moved onto the rule. */}
+                            {lesson.isRuleViolation && (
+                              <div className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-xl">
+                                <span className="text-red-400 text-xs font-medium uppercase tracking-wider">Rule Violation</span>
+                              </div>
+                            )}
+
+                            {/* Legacy: Oracle text stored with older lessons. */}
+                            {lesson.oracleWisdom && typeof lesson.oracleWisdom === 'string' && (
+                              <div className="border-t border-[#1a1a1a] pt-5">
+                                <h4 className="text-[#858585] font-medium text-xs uppercase tracking-wider mb-2">Oracle</h4>
+                                <p className="text-[#ababab] text-sm leading-relaxed whitespace-pre-line">{lesson.oracleWisdom}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : searchQuery.trim() ? (
+                  <div className="oura-card p-12 text-center">
+                    <h3 className="text-lg font-light text-white mb-2">{`No matches for "${searchQuery.trim()}"`}</h3>
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="mt-4 px-6 min-h-11 bg-transparent border border-[#1a1a1a] text-[#ababab] hover:text-white hover:border-[#2a2a2a] rounded-2xl transition-all duration-300 font-medium"
+                    >
+                      Clear search
+                    </button>
+                  </div>
+                ) : (
+                  <div className="oura-card p-10 text-center">
+                    <h3 className="text-lg font-light text-white mb-2">No lessons recorded.</h3>
+                    <p className="text-[#858585] text-sm">A lesson starts with one event. The rest can wait.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

@@ -199,16 +199,19 @@ export function buildClassificationPayload(results) {
 }
 
 /**
- * Direct Hard-Lesson extractor used by the in-page "Ask Oracle to Extract Lesson
- * & Rule" button on the HardLessons form. Skips the classifier step (we already
- * know the user is on a Hard Lesson) and skips the session dedupe (an explicit
- * button click must always re-run). Returns the parsed `hardLesson` object on
- * success, or `null` when the description is too sparse or the Oracle response
- * is unparseable / empty.
+ * Direct Hard-Lesson extractor used by the in-page "Ask Oracle" button on the
+ * HardLessons form. Skips the classifier step (we already know the user is on a
+ * Hard Lesson) and skips the session dedupe (an explicit button click must
+ * always re-run). Returns `{ status, extraction }`:
+ *   ok      — parsed extraction
+ *   empty   — the Oracle found no lesson in the text (or the text is too short)
+ *   timeout — the call ran past its deadline
+ *   error   — the call failed or the response was unusable
+ * so the page never blames the user's writing for a server failure.
  */
 export async function extractHardLessonDirect(text, { tone = 'stoic' } = {}) {
   const trimmed = String(text || '').trim();
-  if (trimmed.length < 30) return null;
+  if (trimmed.length < 30) return { status: 'empty', extraction: null };
 
   try {
     const { getFunctions, httpsCallable } = await import('firebase/functions');
@@ -223,21 +226,28 @@ export async function extractHardLessonDirect(text, { tone = 'stoic' } = {}) {
       return null;
     });
 
-    const result = await oracleFn({
-      entryText: trimmed,
-      moduleName: 'lessonExtraction',
-      userContext: {},
-      tone,
-      behavioralContext,
-    }).catch((err) => {
+    let result;
+    try {
+      result = await oracleFn({
+        entryText: trimmed,
+        moduleName: 'lessonExtraction',
+        userContext: {},
+        tone,
+        behavioralContext,
+      });
+    } catch (err) {
       logger.error('[extractHardLessonDirect] CF call FAILED:', err?.code, err?.message);
-      return null;
-    });
+      const timedOut = err?.code === 'deadline-exceeded' || err?.code === 'functions/deadline-exceeded';
+      return { status: timedOut ? 'timeout' : 'error', extraction: null };
+    }
 
-    return parseExtraction(result, 'lessonExtraction');
+    const raw = typeof result?.data?.feedback === 'string' ? result.data.feedback.trim() : '';
+    if (raw === 'null') return { status: 'empty', extraction: null };
+    const extraction = parseExtraction(result, 'lessonExtraction');
+    return extraction ? { status: 'ok', extraction } : { status: 'error', extraction: null };
   } catch (err) {
     logger.error('[extractHardLessonDirect] unexpected error:', err?.message, err);
-    return null;
+    return { status: 'error', extraction: null };
   }
 }
 

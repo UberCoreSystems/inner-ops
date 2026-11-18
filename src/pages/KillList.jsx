@@ -2073,7 +2073,7 @@ const KillList = () => {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Link to="/hardlessons" onClick={() => {
-                    sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({ eventDescription: `${target.title} — ${target.escapeData.length} escapes recorded` }));
+                    sessionStorage.setItem('hl_bridge_prefill', JSON.stringify({ eventDescription: `${target.title} — ${target.escapeData.length} escapes recorded`, sourceKillTargetId: target.id }));
                   }} className="px-3 py-1.5 bg-transparent text-[#b45309] border border-[#b45309]/30 rounded-lg text-xs hover:bg-[#b45309]/10 transition-colors">Document</Link>
                   <button onClick={() => handleHlBridgeDismiss(target.id)} className="px-3 py-1.5 bg-[#1a1a1a] text-[#858585] rounded-lg text-xs hover:text-white transition-colors">×</button>
                 </div>

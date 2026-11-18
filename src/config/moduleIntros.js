@@ -65,7 +65,7 @@ export const MODULE_INTROS = Object.freeze([
     example: 'Cost: lost the contract by going quiet for three weeks. Rule: when I want to disappear, I send the email first.',
     actionLabel: 'Record a lesson',
     actionRoute: null,
-    entrySelector: '#hard-lessons-event',
+    entrySelector: '#hl-field-eventDescription',
   },
   {
     id: 'relapse',

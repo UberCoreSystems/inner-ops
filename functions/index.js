@@ -901,7 +901,7 @@ Return ONLY a valid JSON object:
   "costDescription": "What it actually cost him — be specific and concrete.",
   "extractedLesson": "The core lesson in one sentence. Brutally precise.",
   "ruleGoingForward": "An enforceable rule — not advice. Format: 'If... then...' or 'Never...' or 'Always...'",
-  "suggestedCategory": "One of: relationship_misjudgment, leadership_error, boundary_failure, overconfidence, underestimation, ignored_intuition, trust_without_verification, other",
+  "suggestedCategory": "One of: relationship_misjudgment, leadership_error, boundary_failure, overconfidence, underestimation, ignored_intuition, physiological_misread, trust_without_verification, other",
   "evidenceFromEntry": "The specific language from his journal entry that surfaced this lesson",
   "suggestedCosts": ["Array of applicable cost types from: emotional, financial, relational, physical, professional, time"]
 }

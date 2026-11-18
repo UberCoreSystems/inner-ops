@@ -7,6 +7,7 @@ import { isUnderReview, getMostRecentBreak, RULE_GRADUATION_DAYS } from '../util
 import { toMs, MS_PER_DAY } from '../utils/dateUtils';
 import logger from '../utils/logger';
 import ouraToast from '../utils/toast';
+import { track } from '../utils/analytics';
 
 /**
  * WeeklyRuleReview — Sunday-anchored retrospective sweep. Renders on the
@@ -150,6 +151,7 @@ export default function WeeklyRuleReview() {
             [HARD_LESSON_FIELDS.VIOLATIONS]: violations,
             [HARD_LESSON_FIELDS.LAST_VIOLATED_AT]: nowIso,
           });
+          track('rule_broken', { source: 'weekly_review' });
         } catch (err) {
           logger.error('WeeklyRuleReview: violation write failed', { ruleId: rule.id, err: err?.message });
           failed.push(rule);
