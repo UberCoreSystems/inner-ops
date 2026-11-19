@@ -482,7 +482,7 @@ export default function Onboarding() {
         )}
 
         {/* Navigation */}
-        <div className="flex justify-between items-center mt-12 max-sm:mt-8 max-sm:sticky max-sm:bottom-16 max-sm:z-10 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:-mx-4 max-sm:px-4 max-sm:py-3">
+        <div className="flex justify-between items-center mt-12 max-sm:mt-8 max-sm:sticky max-sm:bottom-[calc(4rem+env(safe-area-inset-bottom))] max-sm:z-10 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:-mx-4 max-sm:px-4 max-sm:py-3">
           <button
             onClick={() => setStep(step - 1)}
             className="text-[#858585] hover:text-white transition-colors text-sm min-h-11 inline-flex items-center"

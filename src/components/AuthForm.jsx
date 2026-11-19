@@ -116,7 +116,7 @@ export default function AuthForm({ onAuthSuccess }) {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-4 relative">
+    <div className="min-h-screen bg-black flex items-center justify-center px-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] relative">
       {/* Animated background rings */}
       <AnimatedRings />
       

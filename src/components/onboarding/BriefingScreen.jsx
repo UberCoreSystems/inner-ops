@@ -16,6 +16,9 @@
  *   sample — optional { context, response } shown as a quoted Oracle example
  *            below the body. Used only on the pre-auth surface to demonstrate
  *            the Oracle's voice before signup; omitted during onboarding.
+ *   edgeToEdge — true on the pre-auth surface, where no app bar frames the
+ *                screen: its padding then absorbs the notch and home-indicator
+ *                insets (both zero in a browser tab)
  */
 export default function BriefingScreen({
   onContinue,
@@ -29,9 +32,14 @@ export default function BriefingScreen({
   heading = 'This is your inner command center.',
   paragraphs = null,
   sample = null,
+  edgeToEdge = false,
 }) {
+  // Same 3rem as py-12 until an inset needs more room than that.
+  const verticalPadding = edgeToEdge
+    ? 'pt-[max(3rem,calc(1rem+env(safe-area-inset-top)))] pb-[max(3rem,calc(1rem+env(safe-area-inset-bottom)))]'
+    : 'py-12';
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-4 py-12">
+    <div className={`min-h-screen bg-black flex items-center justify-center px-4 ${verticalPadding}`}>
       <div className="max-w-xl w-full">
         {showProgress && (
           <div className="flex gap-1.5 mb-10">

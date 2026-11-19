@@ -33,6 +33,7 @@ export default function AuthGate({ onAuthSuccess }) {
 
   return (
     <BriefingScreen
+      edgeToEdge
       onContinue={enterAuth}
       primaryLabel="Enter"
       eyebrow="Inner Operations"

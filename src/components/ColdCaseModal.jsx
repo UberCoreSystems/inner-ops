@@ -56,7 +56,7 @@ export default function ColdCaseModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center overlay-safe bg-black/85 backdrop-blur-md"
       onClick={step === 'oracle' && oraclePhase === 'done' ? onClose : undefined}
     >
       <div
@@ -65,7 +65,7 @@ export default function ColdCaseModal({
         aria-modal="true"
         aria-label="Cold case"
         onKeyDown={handleEscapeKey}
-        className="w-full max-w-lg bg-black border border-[#1a1a1a] rounded-2xl max-h-[calc(100dvh-2rem)] flex flex-col"
+        className="w-full max-w-lg bg-black border border-[#1a1a1a] rounded-2xl max-h-full flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — present in every phase. */}

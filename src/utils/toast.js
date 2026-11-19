@@ -138,7 +138,8 @@ export const toasterConfig = {
   position: 'bottom-right',
   gutter: 12,
   containerStyle: {
-    bottom: 80, // Clear of the mobile bottom nav
+    // Clear of the mobile bottom nav, which grows by the home-indicator inset.
+    bottom: 'calc(80px + env(safe-area-inset-bottom))',
   },
   toastOptions: {
     duration: 3000,

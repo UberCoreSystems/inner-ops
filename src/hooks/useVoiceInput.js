@@ -3,11 +3,15 @@
 
 import { useState, useRef } from 'react';
 import logger from '../utils/logger';
+import { isNativePlatform } from '../utils/platform';
 
 export const useVoiceInput = () => {
   const [isListening, setIsListening] = useState(false);
+  // The native shell exposes the API but denies it without a speech usage
+  // string; the iOS keyboard's own dictation covers voice entry there.
   const [isSupported] = useState(
-    'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
+    !isNativePlatform() &&
+      ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
   );
   const recognitionRef = useRef(null);
 

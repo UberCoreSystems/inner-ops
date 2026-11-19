@@ -99,14 +99,14 @@ function ReviewSheet({ draft, ruleMatch, onAnswerMatch, onLock, onBack, saving }
 
   const unanswered = ruleMatch?.rule && !ruleMatch.answer;
   return createPortal(
-    <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center overlay-safe">
       <div
         ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="hl-review-title"
         tabIndex={-1}
-        className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-6 max-h-[85vh] overflow-y-auto"
+        className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl max-w-lg w-full p-6 max-h-[min(85vh,100%)] overflow-y-auto"
       >
         <h3 id="hl-review-title" className="text-white text-lg font-light mb-1">Lock this lesson</h3>
         <p className="text-[#858585] text-xs mb-5">Locked lessons cannot be edited or archived.</p>
@@ -208,7 +208,7 @@ export default function LessonForm({
   );
 
   return (
-    <div id="hl-form" className="oura-card p-5 sm:p-8 mb-8 border-l-4 border-[#f59e0b] scroll-mt-24">
+    <div id="hl-form" className="oura-card p-5 sm:p-8 mb-8 border-l-4 border-[#f59e0b] scroll-mt-[calc(6rem+env(safe-area-inset-top))]">
       <div className="flex items-start justify-between gap-3 mb-6">
         <h2 className="text-xl sm:text-2xl font-bold text-white">{isEdit ? 'Edit draft' : 'Record a lesson'}</h2>
         <div className="flex items-center gap-1 shrink-0">
@@ -347,7 +347,7 @@ export default function LessonForm({
           </>
         )}
 
-        <div className="flex gap-3 pt-4 border-t border-[#1a1a1a] max-sm:sticky max-sm:bottom-16 max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:z-10 max-sm:py-3 max-sm:-mx-5 max-sm:px-5">
+        <div className="flex gap-3 pt-4 border-t border-[#1a1a1a] max-sm:sticky max-sm:bottom-[calc(4rem+env(safe-area-inset-bottom))] max-sm:bg-black/95 max-sm:backdrop-blur-sm max-sm:z-10 max-sm:py-3 max-sm:-mx-5 max-sm:px-5">
           <button
             type="button"
             onClick={onSaveDraft}

@@ -692,9 +692,9 @@ Reflection: ${target.reflectionNotes || 'No reflection yet'}`;
       role="dialog"
       aria-modal="true"
       aria-label="Oracle feedback"
-      className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 overlay-safe"
     >
-      <div ref={trapRef} className="bg-black rounded-2xl max-w-2xl w-full max-h-[calc(100dvh-2rem)] overflow-hidden shadow-2xl flex flex-col border border-[#1a1a1a]">
+      <div ref={trapRef} className="bg-black rounded-2xl max-w-2xl w-full max-h-full overflow-hidden shadow-2xl flex flex-col border border-[#1a1a1a]">
 
         {/* Content */}
         <div className="p-6 flex-1 overflow-y-auto">

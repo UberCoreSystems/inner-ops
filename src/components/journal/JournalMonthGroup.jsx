@@ -50,7 +50,7 @@ export default function JournalMonthGroup({ group, isOpen, onToggle, onOpenEntry
         type="button"
         onClick={() => onToggle(group.key)}
         aria-expanded={isOpen}
-        className="w-full sticky top-16 z-20 flex items-center gap-3 px-4 py-3 rounded-t-[20px] bg-[#080808]/95 backdrop-blur-sm hover:bg-[#111]/95 transition-colors"
+        className="w-full sticky top-[calc(4rem+env(safe-area-inset-top))] z-20 flex items-center gap-3 px-4 py-3 rounded-t-[20px] bg-[#080808]/95 backdrop-blur-sm hover:bg-[#111]/95 transition-colors"
       >
         <svg
           width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"

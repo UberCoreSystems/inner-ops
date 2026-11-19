@@ -205,7 +205,12 @@ function App() {
       <div className="min-h-[100dvh] bg-gray-900 text-white pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         <Toaster {...toasterConfig} />
         <InlineErrorBoundary name="Navbar">
-          {user && <Navbar onLogout={handleLogout} user={user} />}
+          {/* Signed-out screens have no top bar, so this strip backs the
+              status bar while they scroll (zero height in a browser tab).
+              Fixed, so it adds no height to those full-screen layouts. */}
+          {user
+            ? <Navbar onLogout={handleLogout} user={user} />
+            : <div className="fixed top-0 inset-x-0 z-50 h-[env(safe-area-inset-top)] bg-black" />}
         </InlineErrorBoundary>
         <SynthesisGuard>
         <OnboardingGate user={user}>

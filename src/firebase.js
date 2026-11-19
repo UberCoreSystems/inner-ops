@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import logger from './utils/logger.js';
+import { isNativePlatform } from './utils/platform.js';
 
 // Vite injects `import.meta.env`; Node (test runner) does not. Guard here so
 // utility modules that transitively import firebase.js can be loaded under
@@ -45,6 +46,9 @@ const firebaseConfig = {
 // server-side (per-function `enforceAppCheck`) only once real traffic is
 // verified in monitoring mode. Never runs in the Node test context.
 const initAppCheck = (firebaseApp) => {
+  // reCAPTCHA v3 cannot attest from the native web view, and the iOS shell
+  // has no native provider yet.
+  if (isNativePlatform()) return;
   const siteKey = viteEnv.VITE_APPCHECK_SITE_KEY;
   if (!siteKey) {
     if (viteEnv.DEV) {
@@ -98,8 +102,20 @@ const USE_EMULATORS = viteEnv.VITE_USE_EMULATORS === 'true' && !!viteEnv.DEV;
 
 const initializeAuth = async () => {
   if (!authInitialized) {
-    const { getAuth, connectAuthEmulator, signInAnonymously: signInAnon } = await import('firebase/auth');
-    auth = getAuth(app);
+    const {
+      getAuth,
+      initializeAuth: initializeSdkAuth,
+      indexedDBLocalPersistence,
+      connectAuthEmulator,
+      signInAnonymously: signInAnon,
+    } = await import('firebase/auth');
+    // getAuth() attaches the browser popup/redirect resolver, and on iOS the
+    // SDK waits on its iframe before restoring the session. That iframe cannot
+    // load from the native shell's capacitor:// origin, and email/password
+    // sign-in never needs it.
+    auth = isNativePlatform()
+      ? initializeSdkAuth(app, { persistence: indexedDBLocalPersistence })
+      : getAuth(app);
     if (USE_EMULATORS) {
       connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
       logger.log("🧪 Auth pointed at emulator (127.0.0.1:9099)");

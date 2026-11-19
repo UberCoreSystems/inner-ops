@@ -1,0 +1,6 @@
+{
+  "appId": "io.innerops.app",
+  "appName": "Inner Ops",
+  "webDir": "dist",
+  "backgroundColor": "#000000"
+}

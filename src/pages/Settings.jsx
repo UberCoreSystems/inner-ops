@@ -15,6 +15,7 @@ import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { resetHelp } from '../utils/onboardingHelp';
 import { track } from '../utils/analytics';
+import { isNativePlatform } from '../utils/platform';
 import BriefingScreen from '../components/onboarding/BriefingScreen';
 import TheRecord from '../components/TheRecord';
 import { parseLines, linesToText, PERSONAL_CONTEXT_LIMITS } from '../utils/personalContext';
@@ -455,18 +456,23 @@ export default function Settings({ onEraseAccount }) {
               How your data is handled →
             </Link>
 
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-[#858585] text-xs">
-                Download everything you have written as a JSON file.
-              </p>
-              <button
-                onClick={handleExport}
-                disabled={exporting}
-                className="shrink-0 px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
-              >
-                {exporting ? 'Exporting…' : 'Export my data'}
-              </button>
-            </div>
+            {/* The native web view cancels browser downloads, so the export
+                would report records it never saved. Hidden there until it
+                goes through the share sheet. */}
+            {!isNativePlatform() && (
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-[#858585] text-xs">
+                  Download everything you have written as a JSON file.
+                </p>
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="shrink-0 px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
+                >
+                  {exporting ? 'Exporting…' : 'Export my data'}
+                </button>
+              </div>
+            )}
 
             <div className="border-t border-[#1a1a1a] pt-4">
               {!showDelete ? (

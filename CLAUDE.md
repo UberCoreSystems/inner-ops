@@ -27,6 +27,7 @@ It is **not** a habit tracker, wellness app, or motivational tool. Enforce this 
 - Tailwind CSS (animations via Tailwind utilities and CSS keyframes — no animation library)
 - Sentry (error tracking), PostHog (analytics)
 - Claude API via Firebase Cloud Function proxy — **never expose API keys client-side**
+- Capacitor 8 iOS shell (`ios/`, Swift Package Manager) around the same `dist/` build — see iOS Shell
 
 ## Modules (v1)
 
@@ -67,6 +68,16 @@ Synthesis and Oracle both read across all modules via `readUserData`. Key data f
 - `npm run build` — production build
 - `npm test` — node:test unit suites in `src/utils` and `functions`, no emulators. Files are listed one by one in `package.json`, so a new `*.test.js` runs only once it is added there.
 - `npm run test:rules` — Firestore rules tests plus `functions/eraseUserData.emulator.test.js`, against the emulators (needs Java).
+- `npm run ios:sync` — production build, then `cap sync ios` copies it into the native project. `npm run ios:open` opens that project in Xcode.
+
+## iOS Shell (Capacitor)
+
+- `ios/` is a committed Capacitor 8 project: iPhone only, portrait, dark, iOS 15+. It bundles the same `vite build` output as the website and serves it from `capacitor://localhost`; there is no `server.url` and no plugin. `capacitor.config.json` holds the app id `io.innerops.app`. A simulator build talks to the production Firebase project.
+- Native differences sit behind `isNativePlatform()` (`src/utils/platform.js`; it reads the bridge global, so no Capacitor code ships to the web): Auth uses `initializeAuth` with IndexedDB persistence, App Check is skipped (no native provider yet), the voice button is hidden (no mic or speech usage strings), and Settings hides Export (the web view cancels browser downloads; share-sheet export is the open follow-up).
+- The service worker cannot register in the app: WebKit exposes that API to a web view only with App-Bound Domains and refuses worker scripts that are not http(s). Revisit if `server.url` or App-Bound Domains are ever introduced.
+- Safe areas are plain `env(safe-area-inset-*)` CSS shared with the web: `overlay-safe` (`src/index.css`) on modal overlays, and sticky rows offset by the bar height plus the inset. The keyboard is the iOS default; there is no Keyboard plugin.
+- Xcode 27: do not use `npx cap run ios` (Capacitor issue 8620), and decline "Update to recommended settings" and any project-format conversion (issue 8607). Keep the three Capacitor packages on one exact version: the CLI writes it into `ios/App/CapApp-SPM/Package.swift`.
+- App icon and launch mark come from `node scripts/generate-pwa-icons.mjs ios`. iOS will not render a launch screen whose image decodes to more than 25 MB (Capacitor's template 2732px square is 29.9 MB and launches blank), so `LaunchScreen.storyboard` paints `#111827` itself and centres a 200pt mark. The simulator caches launch images per boot: restart it after changing them.
 
 ## Agent Pipeline (Paperclip)
 

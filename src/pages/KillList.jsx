@@ -2780,8 +2780,8 @@ const KillList = () => {
 
         {/* Revise Implementation Intention Modal */}
         {reviseTarget && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6 max-h-[calc(100dvh-2rem)] flex flex-col">
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 overlay-safe">
+            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6 max-h-full flex flex-col">
               <div className="flex items-center justify-between mb-4 shrink-0">
                 <h3 className="text-white font-medium">Revise Intention: {reviseTarget.title}</h3>
                 <button onClick={() => { setReviseTarget(null); setReviseIntention({ trigger: '', response: '' }); }} aria-label="Close" className="w-7 h-7 max-sm:w-11 max-sm:h-11 flex items-center justify-center text-[#858585] hover:text-white transition-colors">
@@ -2815,8 +2815,8 @@ const KillList = () => {
 
         {/* Escape Autopsy Modal */}
         {autopsyTarget && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6 max-h-[calc(100dvh-2rem)] flex flex-col">
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 overlay-safe">
+            <div className="bg-black border border-[#1a1a1a] rounded-2xl max-w-lg w-full p-6 max-h-full flex flex-col">
               <div className="flex items-center justify-between mb-4 shrink-0">
                 <h3 className="text-white font-medium">Escape Autopsy: {autopsyTarget.title}</h3>
                 <button onClick={() => { setAutopsyTarget(null); setAutopsyData({ context: '', rationalization: '', prevention: '', intentionActivated: '', intentionFailReason: '', eventDate: '' }); }} aria-label="Close" className="w-7 h-7 max-sm:w-11 max-sm:h-11 flex items-center justify-center text-[#858585] hover:text-white transition-colors">

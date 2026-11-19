@@ -167,7 +167,7 @@ export default function ContractClosedModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center overlay-safe bg-black/90 backdrop-blur-md"
       onClick={step === 'oracle' && oraclePhase === 'done' ? onClose : undefined}
     >
       <div
@@ -176,7 +176,7 @@ export default function ContractClosedModal({
         aria-modal="true"
         aria-label="Contract closed"
         onKeyDown={handleEscapeKey}
-        className="w-full max-w-lg bg-black border border-[#1a1a1a] rounded-2xl max-h-[calc(100dvh-2rem)] flex flex-col"
+        className="w-full max-w-lg bg-black border border-[#1a1a1a] rounded-2xl max-h-full flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — the verdict. Present in every phase. */}

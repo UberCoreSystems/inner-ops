@@ -65,7 +65,7 @@ export default function RedirectTargetModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overlay-safe bg-black/80 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -73,7 +73,7 @@ export default function RedirectTargetModal({
         role="dialog"
         aria-modal="true"
         aria-label="Framing Check"
-        className="w-full max-w-lg bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg bg-[#0a0a0a] border border-[#2a2a2a] rounded-2xl p-6 shadow-2xl max-h-[min(90vh,100%)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5">
