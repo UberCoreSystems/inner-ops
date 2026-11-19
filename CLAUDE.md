@@ -65,7 +65,8 @@ Synthesis and Oracle both read across all modules via `readUserData`. Key data f
 
 - `npm run dev` — Vite dev server
 - `npm run build` — production build
-- `npm test` — runs node:test on `aiFeedback.test.js`, `clarityScore.test.js`, `dailyBrief.test.js`, `oracleQuestionExtractor.test.js`, `dateUtils.test.js`, `detectDriftSignals.test.js`, `getBehavioralContext.test.js`, and `generateSynthesisBriefing.test.js`
+- `npm test` — node:test unit suites in `src/utils` and `functions`, no emulators. Files are listed one by one in `package.json`, so a new `*.test.js` runs only once it is added there.
+- `npm run test:rules` — Firestore rules tests plus `functions/eraseUserData.emulator.test.js`, against the emulators (needs Java).
 
 ## Agent Pipeline (Paperclip)
 
