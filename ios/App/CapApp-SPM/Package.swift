@@ -14,7 +14,9 @@ let package = Package(
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.6.2"),
         .package(name: "CapacitorFilesystem", path: "../../../node_modules/@capacitor/filesystem"),
         .package(name: "CapacitorLocalNotifications", path: "../../../node_modules/@capacitor/local-notifications"),
-        .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share")
+        .package(name: "CapacitorPrivacyScreen", path: "../../../node_modules/@capacitor/privacy-screen"),
+        .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
+        .package(name: "CapgoCapacitorNativeBiometric", path: "../../../node_modules/@capgo/capacitor-native-biometric")
     ],
     targets: [
         .target(
@@ -24,7 +26,9 @@ let package = Package(
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
                 .product(name: "CapacitorFilesystem", package: "CapacitorFilesystem"),
                 .product(name: "CapacitorLocalNotifications", package: "CapacitorLocalNotifications"),
-                .product(name: "CapacitorShare", package: "CapacitorShare")
+                .product(name: "CapacitorPrivacyScreen", package: "CapacitorPrivacyScreen"),
+                .product(name: "CapacitorShare", package: "CapacitorShare"),
+                .product(name: "CapgoCapacitorNativeBiometric", package: "CapgoCapacitorNativeBiometric")
             ]
         )
     ]

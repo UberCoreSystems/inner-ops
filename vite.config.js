@@ -2,11 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// Chunks built purely from Capacitor packages: the plugins' JS, reached only
-// through a dynamic import that runs inside the iOS shell.
+// Chunks built purely from Capacitor packages (@capgo publishes the biometric
+// plugin): the plugins' JS, reached only through a dynamic import that runs
+// inside the iOS shell.
 const isCapacitorOnly = (chunk) =>
   chunk.moduleIds.length > 0 &&
-  chunk.moduleIds.every((id) => id.includes('node_modules/@capacitor/'))
+  chunk.moduleIds.every((id) => /node_modules\/@(capacitor|capgo)\//.test(id))
 
 export default defineConfig({
   plugins: [

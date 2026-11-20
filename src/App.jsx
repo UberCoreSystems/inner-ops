@@ -8,6 +8,7 @@ import { checkFirebaseConnection } from './firebase';
 import { identify } from './utils/analytics';
 import { useSynthesisAutoGenerate } from './hooks/useSynthesisAutoGenerate';
 import { useJournalReminder } from './hooks/useJournalReminder';
+import { useAppLock } from './hooks/useAppLock';
 import SynthesisGuard from './components/SynthesisGuard';
 import './App.css';
 
@@ -22,6 +23,7 @@ import { eraseAccount } from './utils/eraseAccount';
 import BannerStack from './components/banner/BannerStack';
 import ScrollToTop from './components/ScrollToTop';
 import PendingRoute from './components/PendingRoute';
+import AppLockScreen from './components/AppLockScreen';
 
 // Oura Ring is deferred (post-v1), gated behind an env flag.
 // When false: the /oura/callback route is not mounted and the Oura UI in
@@ -77,11 +79,22 @@ function App() {
   // null, or { status: 'erasing' | 'erased' | 'failed', manifest }.
   const [erasure, setErasure] = useState(null);
 
+  // iOS app only: the app lock. It guards the routed app, so it has nothing
+  // to do while signed out, unverified, or erasing the account. `lockUp` is
+  // its screen being shown; `lockHolds` is the stretch from a cold start to
+  // the first unlock, when nothing that shows user data may mount.
+  const appLock = useAppLock();
+  const { disable: disableAppLock } = appLock;
+  const lockGuards = !!user && user.emailVerified && !erasure;
+  const lockUp = lockGuards && appLock.phase !== 'open';
+  const lockHolds = lockGuards && !appLock.opened;
+
   // Unverified sessions must not touch Firestore (rules deny the read anyway).
-  useSynthesisAutoGenerate(user && user.emailVerified ? user.uid : null);
+  useSynthesisAutoGenerate(user && user.emailVerified && !lockHolds ? user.uid : null);
 
   // iOS app only. Unknown until auth resolves; nobody while signed out,
-  // unverified, or erasing the account.
+  // unverified, or erasing the account. The app lock never changes this: with
+  // nobody here the reminders are cancelled, and they must outlast a lock.
   const reminderUserId = loading
     ? undefined
     : (user && user.emailVerified && !erasure ? user.uid : null);
@@ -117,6 +130,9 @@ function App() {
             identify(firebaseUser.uid, {});
           } else {
             logger.log("🔐 No authenticated user - waiting for login");
+            // The app lock belongs to the session: no session, no lock. Only
+            // Firebase saying so reaches here; a failed init never calls back.
+            disableAppLock();
           }
           setUser(firebaseUser);
           setLoading(false);
@@ -146,7 +162,7 @@ function App() {
       isMounted = false;
       if (cleanup) cleanup();
     };
-  }, []);
+  }, [disableAppLock]);
 
   const handleAuthSuccess = (authResult) => {
     logger.log("✅ Authentication successful:", authResult);
@@ -209,6 +225,19 @@ function App() {
   }
 
   return (
+    <>
+    {/* The app lock sits above the Router, so above OnboardingGate and every
+        listener inside it. From a cold start the Router is not mounted until
+        the first unlock. After that a re-lock covers it and leaves it
+        mounted: an unsaved entry lives only in the page's own state. */}
+    {lockUp && (
+      <AppLockScreen
+        asking={appLock.phase === 'locked'}
+        onUnlocked={appLock.unlock}
+        onSignOut={handleLogout}
+      />
+    )}
+    {!lockHolds && (
     <Router>
       <ScrollToTop />
       <div className="min-h-[100dvh] bg-gray-900 text-white pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
@@ -316,7 +345,7 @@ function App() {
               <InlineErrorBoundary name="Settings">
                 {user ? (
                   <Suspense fallback={<PageLoader />}>
-                    <Settings onEraseAccount={() => runErasure({ itemized: true })} />
+                    <Settings onEraseAccount={() => runErasure({ itemized: true })} appLock={appLock} />
                   </Suspense>
                 ) : <Navigate to="/auth" />}
               </InlineErrorBoundary>
@@ -381,8 +410,13 @@ function App() {
         </OnboardingGate>
         </SynthesisGuard>
       </div>
-      <PendingRoute route={reminderRoute} signedIn={!!user} onTaken={setReminderRoute} />
+      {/* Not rendered while the lock is up: a tapped reminder waits in
+          `reminderRoute` and is opened after the unlock. Passing
+          signedIn={false} instead would drop it. */}
+      {!lockUp && <PendingRoute route={reminderRoute} signedIn={!!user} onTaken={setReminderRoute} />}
     </Router>
+    )}
+    </>
   );
 }
 

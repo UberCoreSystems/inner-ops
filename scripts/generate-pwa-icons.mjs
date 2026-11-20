@@ -9,9 +9,10 @@ const SOURCE_SVG = resolve(ROOT, 'public/brand/inner-ops-icon.svg');
 const PUBLIC = resolve(ROOT, 'public');
 const IOS_ASSETS = resolve(ROOT, 'ios/App/App/Assets.xcassets');
 const IOS_SPLASH = resolve(IOS_ASSETS, 'Splash.imageset');
+const IOS_COVER = resolve(IOS_ASSETS, 'LaunchImage.imageset');
 
 // node scripts/generate-pwa-icons.mjs        PWA icons in public/
-// node scripts/generate-pwa-icons.mjs ios    app icon and launch image in ios/
+// node scripts/generate-pwa-icons.mjs ios    app icon, launch image and app-switcher cover in ios/
 const targetSets = {
   pwa: [
     { dir: PUBLIC, name: 'pwa-192.png', size: 192, padding: 0 },
@@ -29,6 +30,13 @@ const targetSets = {
     { dir: IOS_SPLASH, name: 'splash.png', size: 200, padding: 0, opaque: true },
     { dir: IOS_SPLASH, name: 'splash@2x.png', size: 400, padding: 0, opaque: true },
     { dir: IOS_SPLASH, name: 'splash@3x.png', size: 600, padding: 0, opaque: true },
+    // What the app lock shows in place of the app in the app switcher: the
+    // launch screen as one image, a 200pt mark centred on a 430x932pt canvas.
+    // The privacy-screen plugin stretches the image named LaunchImage to fill
+    // the screen, so the bare mark above would come out four times too large.
+    // Not a launch image: the 25 MB limit does not apply to it.
+    { dir: IOS_COVER, name: 'launch-cover@2x.png', size: 400, padding: 0, canvas: [860, 1864], opaque: true },
+    { dir: IOS_COVER, name: 'launch-cover@3x.png', size: 600, padding: 0, canvas: [1290, 2796], opaque: true },
   ],
 };
 
@@ -49,28 +57,30 @@ async function main() {
   if (setName === 'ios') {
     // The asset catalogs come from `npx cap add ios`; never invent them here.
     await access(IOS_SPLASH);
+    await access(IOS_COVER);
   } else {
     await ensureDir(PUBLIC);
   }
 
-  for (const { dir, name, size, padding, opaque } of targets) {
+  for (const { dir, name, size, padding, opaque, canvas } of targets) {
     const inner = size - padding * 2;
+    const [width, height] = canvas || [size, size];
     const rendered = await sharp(svg, { density: 384 })
       .resize(inner, inner, { fit: 'contain', background: BG })
       .png()
       .toBuffer();
 
     let out;
-    if (padding > 0) {
+    if (width > inner || height > inner) {
       out = await sharp({
         create: {
-          width: size,
-          height: size,
+          width,
+          height,
           channels: 4,
           background: BG,
         },
       })
-        .composite([{ input: rendered, top: padding, left: padding }])
+        .composite([{ input: rendered, top: (height - inner) / 2, left: (width - inner) / 2 }])
         .png()
         .toBuffer();
     } else {
@@ -83,7 +93,7 @@ async function main() {
 
     const target = resolve(dir, name);
     await writeFile(target, out);
-    console.log(`wrote ${target} (${size}x${size}${padding ? `, ${padding}px safe-zone` : ''})`);
+    console.log(`wrote ${target} (${width}x${height}${padding ? `, ${padding}px safe-zone` : ''})`);
   }
 }
 

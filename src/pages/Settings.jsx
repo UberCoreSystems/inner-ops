@@ -19,6 +19,7 @@ import {
   readReminderPermission,
   requestReminderPermission,
 } from '../utils/journalReminder';
+import { readLockSupport, verifyDeviceOwner } from '../utils/appLock';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { resetHelp } from '../utils/onboardingHelp';
@@ -40,7 +41,19 @@ const EXPORTABLE_COLLECTIONS = [
   'hardLessonsArchive', 'relapseEntriesArchive',
 ];
 
-export default function Settings({ onEraseAccount }) {
+// What the app lock asks for, by what this iPhone has set up.
+const LOCK_LABELS = {
+  face: 'Require Face ID',
+  touch: 'Require Touch ID',
+  passcode: 'Require passcode',
+};
+const LOCK_ASKS_FOR = {
+  face: 'Face ID, or its passcode,',
+  touch: 'Touch ID, or its passcode,',
+  passcode: 'its passcode',
+};
+
+export default function Settings({ onEraseAccount, appLock }) {
   // Notifications state
   const [notificationPreferences, setNotificationPreferences] = useState(
     DEFAULT_NOTIFICATION_PREFERENCES
@@ -57,6 +70,12 @@ export default function Settings({ onEraseAccount }) {
   const [journalReminder, setJournalReminder] = useState(() => readJournalReminderPreference());
   const [reminderPermission, setReminderPermission] = useState(null);
   const [savingReminder, setSavingReminder] = useState(false);
+
+  // App lock — iOS app only. The setting is this iPhone's and lives in App;
+  // this is what the phone can confirm its owner with ({ available, method },
+  // null until read).
+  const [lockSupport, setLockSupport] = useState(null);
+  const [changingLock, setChangingLock] = useState(false);
 
   // Personal context state — bound to textareas as raw text, parsed on save.
   const [activeSituationsText, setActiveSituationsText] = useState('');
@@ -217,19 +236,42 @@ export default function Settings({ onEraseAccount }) {
   useEffect(() => {
     if (!isNativePlatform()) return undefined;
     let cancelled = false;
-    const readPermission = () => {
+    const readPhone = () => {
       readReminderPermission()
         .then((permission) => { if (!cancelled) setReminderPermission(permission); })
         .catch((err) => logger.warn('Failed to read notification permission:', err?.message));
+      readLockSupport()
+        .then((support) => { if (!cancelled) setLockSupport(support); })
+        .catch((err) => logger.warn('Failed to read lock support:', err?.message));
     };
-    readPermission();
+    readPhone();
     // Capacitor's foreground event: the user may be back from iOS Settings.
-    document.addEventListener('resume', readPermission);
+    document.addEventListener('resume', readPhone);
     return () => {
       cancelled = true;
-      document.removeEventListener('resume', readPermission);
+      document.removeEventListener('resume', readPhone);
     };
   }, []);
+
+  // Turning the lock on takes one confirmation from the device owner, and
+  // anything short of it saves nothing. Turning it off asks nothing.
+  const toggleAppLock = async () => {
+    if (appLock.enabled) {
+      appLock.disable();
+      return;
+    }
+    setChangingLock(true);
+    try {
+      const confirmed = await verifyDeviceOwner();
+      if (confirmed && !appLock.enable()) ouraToast.error('Failed to save. Try again.');
+      // Face ID may have just been allowed or refused for this app.
+      setLockSupport(await readLockSupport());
+    } catch (err) {
+      logger.warn('Failed to read lock support:', err?.message);
+    } finally {
+      setChangingLock(false);
+    }
+  };
 
   // Saving is all Settings does: useJournalReminder sees the write and
   // schedules or cancels on the phone.
@@ -591,6 +633,23 @@ export default function Settings({ onEraseAccount }) {
             >
               How your data is handled →
             </Link>
+
+            {isNativePlatform() && (
+              <div className="border-y border-[#1a1a1a] py-4 space-y-3">
+                <ToggleRow
+                  label={LOCK_LABELS[lockSupport?.method || 'face']}
+                  description={`This iPhone asks for ${LOCK_ASKS_FOR[lockSupport?.method || 'face']} before Inner Ops opens, and the app switcher shows no content. It is a lock on this device, not encryption: your entries are stored as before, and the website is not covered. Signing out turns it off.`}
+                  enabled={appLock.enabled}
+                  disabled={changingLock || (!appLock.enabled && !lockSupport?.available)}
+                  onToggle={toggleAppLock}
+                />
+                {lockSupport?.available === false && (
+                  <p className="text-[#858585] text-xs">
+                    This iPhone has no passcode. Set one in the Settings app to use the lock.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center justify-between gap-4">
               <p className="text-[#858585] text-xs">
