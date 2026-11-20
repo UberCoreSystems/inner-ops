@@ -2,5 +2,10 @@
   "appId": "io.innerops.app",
   "appName": "Inner Ops",
   "webDir": "dist",
-  "backgroundColor": "#000000"
+  "backgroundColor": "#000000",
+  "plugins": {
+    "LocalNotifications": {
+      "presentationOptions": []
+    }
+  }
 }

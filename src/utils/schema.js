@@ -173,6 +173,11 @@ export const USER_SETTINGS_FIELDS = Object.freeze({
   // trigger evaluator re-fires only when the underlying condition re-asserts.
   NOTIFICATION_PREFERENCES: 'notificationPreferences',
   BANNER_DISMISSALS: 'bannerDismissals',
+  // Daily journal reminder, an iOS local notification:
+  // { enabled: boolean, time: 'HH:MM' on the phone's clock }. Off unless
+  // enabled is exactly true. Kept outside notificationPreferences because
+  // Settings writes that map whole, and a stale copy would overwrite it.
+  JOURNAL_REMINDER: 'journalReminder',
   // First-run help. Deliberately NOT folded into bannerDismissals: that map's
   // contract is "re-fire once the condition re-asserts", whereas a module
   // intro is shown exactly once and never returns.

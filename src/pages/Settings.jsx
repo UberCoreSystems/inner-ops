@@ -11,7 +11,14 @@ import { localDateKey } from '../utils/dateUtils';
 import {
   ENGAGEMENT_TRIGGERS,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  USER_SETTINGS_FIELDS,
 } from '../utils/schema';
+import {
+  isReminderTime,
+  readJournalReminderPreference,
+  readReminderPermission,
+  requestReminderPermission,
+} from '../utils/journalReminder';
 import ouraToast from '../utils/toast';
 import logger from '../utils/logger';
 import { resetHelp } from '../utils/onboardingHelp';
@@ -43,6 +50,13 @@ export default function Settings({ onEraseAccount }) {
   // The Reckoning — optional periodic auto-generation (off by default).
   const [reckoningAuto, setReckoningAuto] = useState(false);
   const [savingReckoning, setSavingReckoning] = useState(false);
+
+  // Daily journal reminder — iOS app only. The preference follows the
+  // account; the permission is this iPhone's ('granted' | 'denied' | 'prompt',
+  // null until read).
+  const [journalReminder, setJournalReminder] = useState(() => readJournalReminderPreference());
+  const [reminderPermission, setReminderPermission] = useState(null);
+  const [savingReminder, setSavingReminder] = useState(false);
 
   // Personal context state — bound to textareas as raw text, parsed on save.
   const [activeSituationsText, setActiveSituationsText] = useState('');
@@ -122,6 +136,7 @@ export default function Settings({ onEraseAccount }) {
             ...(settings.notificationPreferences || {}),
           });
           setReckoningAuto(!!settings.reckoningAuto);
+          setJournalReminder(readJournalReminderPreference(settings));
         }
 
         if (profile) {
@@ -197,6 +212,72 @@ export default function Settings({ onEraseAccount }) {
     } finally {
       setSavingReckoning(false);
     }
+  };
+
+  useEffect(() => {
+    if (!isNativePlatform()) return undefined;
+    let cancelled = false;
+    const readPermission = () => {
+      readReminderPermission()
+        .then((permission) => { if (!cancelled) setReminderPermission(permission); })
+        .catch((err) => logger.warn('Failed to read notification permission:', err?.message));
+    };
+    readPermission();
+    // Capacitor's foreground event: the user may be back from iOS Settings.
+    document.addEventListener('resume', readPermission);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('resume', readPermission);
+    };
+  }, []);
+
+  // Saving is all Settings does: useJournalReminder sees the write and
+  // schedules or cancels on the phone.
+  const saveJournalReminder = async (next) => {
+    setSavingReminder(true);
+    try {
+      await upsertUserSettings({ [USER_SETTINGS_FIELDS.JOURNAL_REMINDER]: next });
+      setJournalReminder(next);
+      return true;
+    } catch (err) {
+      logger.error('Failed to save journal reminder:', err);
+      ouraToast.error('Failed to save. Try again.');
+      return false;
+    } finally {
+      setSavingReminder(false);
+    }
+  };
+
+  // The one place notification permission is asked for. A refusal saves nothing.
+  const allowJournalReminder = async () => {
+    setSavingReminder(true);
+    let permission;
+    try {
+      permission = await requestReminderPermission();
+      setReminderPermission(permission);
+    } catch (err) {
+      logger.error('Notification permission request failed:', err?.message);
+      ouraToast.error('Could not ask iOS for notifications. Try again.');
+    } finally {
+      setSavingReminder(false);
+    }
+    if (permission === 'granted') await saveJournalReminder({ ...journalReminder, enabled: true });
+  };
+
+  const toggleJournalReminder = () => (
+    journalReminder.enabled
+      ? saveJournalReminder({ ...journalReminder, enabled: false })
+      : allowJournalReminder()
+  );
+
+  // Runs when the iOS time picker closes. If nothing was saved (an empty
+  // field, or a failed save), the field goes back to showing the stored time.
+  const commitReminderTime = async (input) => {
+    const time = input.value;
+    const saved = isReminderTime(time)
+      && time !== journalReminder.time
+      && await saveJournalReminder({ ...journalReminder, time });
+    if (!saved) input.value = journalReminder.time;
   };
 
   const saveContext = async () => {
@@ -360,6 +441,53 @@ export default function Settings({ onEraseAccount }) {
             disabled={savingReckoning || !loaded}
             onToggle={toggleReckoningAuto}
           />
+
+          {isNativePlatform() && (
+            <div className="border-t border-[#1a1a1a] mt-5 pt-5 space-y-4">
+              <ToggleRow
+                label="Daily journal reminder"
+                description="One notification a day on this iPhone at the time you set. None on a day this iPhone already knows has an entry."
+                enabled={journalReminder.enabled}
+                disabled={savingReminder || !loaded}
+                onToggle={toggleJournalReminder}
+              />
+
+              {journalReminder.enabled && (
+                <div className="flex items-center justify-between gap-4">
+                  <label htmlFor="journal-reminder-time" className="text-white text-sm">Time</label>
+                  {/* Saved when the picker closes, not on every turn of the wheel. */}
+                  <input
+                    id="journal-reminder-time"
+                    key={journalReminder.time}
+                    type="time"
+                    defaultValue={journalReminder.time}
+                    disabled={savingReminder}
+                    onBlur={(e) => commitReminderTime(e.target)}
+                    className="appearance-none min-h-11 px-3 bg-[#050505] text-white rounded-xl border border-[#2a2a2a] focus:border-[#5a5a5a] focus:outline-none text-sm transition-colors disabled:opacity-40"
+                  />
+                </div>
+              )}
+
+              {journalReminder.enabled && reminderPermission === 'prompt' && (
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-[#858585] text-xs">Not active on this iPhone.</p>
+                  <button
+                    onClick={allowJournalReminder}
+                    disabled={savingReminder}
+                    className="shrink-0 px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors min-h-11"
+                  >
+                    Allow notifications
+                  </button>
+                </div>
+              )}
+
+              {reminderPermission === 'denied' && (
+                <p className="text-[#858585] text-xs">
+                  Notifications are off for Inner Ops on this iPhone. Turn them on in the Settings app: Notifications, Inner Ops, Allow Notifications.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* First-run help — the only way back to anything dismissed once.

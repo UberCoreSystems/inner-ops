@@ -7,6 +7,7 @@ import logger from './utils/logger';
 import { checkFirebaseConnection } from './firebase';
 import { identify } from './utils/analytics';
 import { useSynthesisAutoGenerate } from './hooks/useSynthesisAutoGenerate';
+import { useJournalReminder } from './hooks/useJournalReminder';
 import SynthesisGuard from './components/SynthesisGuard';
 import './App.css';
 
@@ -20,6 +21,7 @@ import AccountErasure from './components/AccountErasure';
 import { eraseAccount } from './utils/eraseAccount';
 import BannerStack from './components/banner/BannerStack';
 import ScrollToTop from './components/ScrollToTop';
+import PendingRoute from './components/PendingRoute';
 
 // Oura Ring is deferred (post-v1), gated behind an env flag.
 // When false: the /oura/callback route is not mounted and the Oura UI in
@@ -77,6 +79,13 @@ function App() {
 
   // Unverified sessions must not touch Firestore (rules deny the read anyway).
   useSynthesisAutoGenerate(user && user.emailVerified ? user.uid : null);
+
+  // iOS app only. Unknown until auth resolves; nobody while signed out,
+  // unverified, or erasing the account.
+  const reminderUserId = loading
+    ? undefined
+    : (user && user.emailVerified && !erasure ? user.uid : null);
+  const [reminderRoute, setReminderRoute] = useJournalReminder(reminderUserId);
 
   useEffect(() => {
     // Finding 9: boot-time env diagnostic removed. firebase.js fails fast on
@@ -372,6 +381,7 @@ function App() {
         </OnboardingGate>
         </SynthesisGuard>
       </div>
+      <PendingRoute route={reminderRoute} signedIn={!!user} onTaken={setReminderRoute} />
     </Router>
   );
 }
