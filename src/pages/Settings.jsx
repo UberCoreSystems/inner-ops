@@ -483,7 +483,7 @@ export default function Settings({ onEraseAccount }) {
 
               {reminderPermission === 'denied' && (
                 <p className="text-[#858585] text-xs">
-                  Notifications are off for Inner Ops on this iPhone. Turn them on in the Settings app: Notifications, Inner Ops, Allow Notifications.
+                  Notifications are off for Inner Ops on this iPhone. Turn them on in the Settings app: Apps, Inner Ops, Allow Notifications.
                 </p>
               )}
             </div>
