@@ -2,6 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Chunks built purely from Capacitor packages: the plugins' JS, reached only
+// through a dynamic import that runs inside the iOS shell.
+const isCapacitorOnly = (chunk) =>
+  chunk.moduleIds.length > 0 &&
+  chunk.moduleIds.every((id) => id.includes('node_modules/@capacitor/'))
+
 export default defineConfig({
   plugins: [
     react(),
@@ -27,7 +33,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        globIgnores: ['**/og-image.png'],
+        // Capacitor chunks are requested only inside the iOS shell, where no
+        // service worker runs. Web clients never fetch them.
+        globIgnores: ['**/og-image.png', '**/capacitor-*.js'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/__\//, /^\/api\//],
         skipWaiting: true,
@@ -68,6 +76,10 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
+        // Naming only. A manualChunks rule for Capacitor would pull Vite's
+        // shared preload helper into that chunk and make every page load it.
+        chunkFileNames: (chunk) =>
+          isCapacitorOnly(chunk) ? 'assets/capacitor-[name]-[hash].js' : 'assets/[name]-[hash].js',
         manualChunks: (id) => {
           // Firebase core and essential modules
           if (id.includes('node_modules/firebase/app')) return 'firebase-core';

@@ -6,6 +6,7 @@ import { readUserData, upsertUserSettings } from '../utils/firebaseUtils';
 import { getUserProfile, saveUserProfile } from '../utils/userProfile';
 import { readMemoryDocs } from '../utils/updateMemory';
 import { buildExportPayload } from '../utils/exportData';
+import { shareExportFile } from '../utils/shareExportFile';
 import { localDateKey } from '../utils/dateUtils';
 import {
   ENGAGEMENT_TRIGGERS,
@@ -248,15 +249,22 @@ export default function Settings({ onEraseAccount }) {
         userProfile,
         errors,
       });
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `inner-ops-export-${localDateKey()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const json = JSON.stringify(data, null, 2);
+      const filename = `inner-ops-export-${localDateKey()}.json`;
+      if (isNativePlatform()) {
+        // Dismissing the share sheet is not a failure: nothing left the app.
+        if (!(await shareExportFile({ filename, json }))) return;
+      } else {
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
       if (data.manifest.partial) {
         ouraToast.error('Exported, but some data failed to load — see "partial" in the file.');
       } else {
@@ -456,23 +464,18 @@ export default function Settings({ onEraseAccount }) {
               How your data is handled →
             </Link>
 
-            {/* The native web view cancels browser downloads, so the export
-                would report records it never saved. Hidden there until it
-                goes through the share sheet. */}
-            {!isNativePlatform() && (
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-[#858585] text-xs">
-                  Download everything you have written as a JSON file.
-                </p>
-                <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  className="shrink-0 px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
-                >
-                  {exporting ? 'Exporting…' : 'Export my data'}
-                </button>
-              </div>
-            )}
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-[#858585] text-xs">
+                Download everything you have written as a JSON file.
+              </p>
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="shrink-0 px-4 py-2 text-xs bg-[#1a1a1a] text-[#ababab] hover:text-white border border-[#2a2a2a] disabled:opacity-40 rounded-xl transition-colors"
+              >
+                {exporting ? 'Exporting…' : 'Export my data'}
+              </button>
+            </div>
 
             <div className="border-t border-[#1a1a1a] pt-4">
               {!showDelete ? (
